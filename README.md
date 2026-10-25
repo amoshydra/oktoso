@@ -12,6 +12,7 @@ Design phase. The architecture, delivery plan, and UI/IA design are in `docs/`.
 
 - [`docs/design.md`](docs/design.md) - architecture, domain model, provider adapters, API, security, deployment
 - [`docs/plan.md`](docs/plan.md) - phased delivery plan and acceptance criteria
+- [`docs/code-structure.md`](docs/code-structure.md) - implementation systems, repository layout, API additions, and task sequencing
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
@@ -46,4 +47,4 @@ Open `http://127.0.0.1:4174`. Resize the window to see the mobile layout.
 
 ## Next
 
-Milestone 1 starts with the hub core, the OpenCode V2 adapter, and the web client. See `docs/plan.md`.
+Milestone 1 starts with the hub core, the OpenCode V2 adapter, and the web client. The implementation shape is in `docs/code-structure.md`.

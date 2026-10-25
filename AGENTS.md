@@ -98,6 +98,16 @@ Before calling UI work complete:
 - Update `docs/ui-ia.md` and `docs/visual-audit.md` when the system changes.
 - Keep the prototype and the written design contract in sync.
 
+## Implementation work
+
+Before adding packages, routes, provider code, storage, or client data layers, read:
+
+- [`docs/design.md`](docs/design.md) for the architecture and provider model.
+- [`docs/plan.md`](docs/plan.md) for milestones and acceptance criteria.
+- [`docs/code-structure.md`](docs/code-structure.md) for the repository layout, module boundaries, API additions, and task order.
+
+Keep the dependency rules and vertical-slice order from the code structure document. Do not build all three provider adapters before the OpenCode web slice works.
+
 ## Product constraints
 
 - The hub is the product; clients are thin and replaceable.

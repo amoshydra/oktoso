@@ -2,6 +2,8 @@
 
 The plan starts with the hub API and the web client. Glasses and VR come after the API and the web client prove the model.
 
+The concrete repository layout, runtime systems, API additions, and vertical-slice order are in [`code-structure.md`](code-structure.md).
+
 ## Milestone 0: Foundation
 
 Status: complete.
@@ -27,9 +29,10 @@ Goal: prove the hub with one provider and one client.
 
 Deliverables:
 
-- Node/TypeScript workspace with `packages/shared`, `packages/hub`, `packages/providers`.
+- Node/TypeScript workspace with `packages/contracts`, `packages/providers`, `packages/storage`, `packages/hub`, `packages/client`, `packages/ui`, and `apps/web`.
 - Config loader with environment substitution.
 - Provider registry and health checks.
+- Provider options endpoint for agents, models, and directories.
 - OpenCode V2 adapter:
   - list sessions
   - get session
@@ -47,7 +50,7 @@ Deliverables:
   - `/api/v1/sessions/:ref/messages` POST
   - `/api/v1/sessions` POST
   - `/api/v1/events`
-- Bearer auth, error shape, request logging with redaction.
+- Bearer auth, auth check endpoint, error shape, request logging with redaction.
 - Web client shell:
   - session list
   - filters by provider and status
