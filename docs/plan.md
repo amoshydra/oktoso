@@ -4,7 +4,7 @@ The plan starts with the hub API and the web client. Glasses and VR come after t
 
 ## Milestone 0: Foundation
 
-Status: in progress.
+Status: complete.
 
 Deliverables:
 
