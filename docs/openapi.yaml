@@ -1,0 +1,751 @@
+openapi: 3.1.0
+info:
+  title: Agent Hub API
+  version: 0.1.0
+  description: |
+    Draft contract for the Agent Hub. The hub normalizes sessions from OpenCode V2,
+    Open WebUI, Hermes, and future providers. Clients use one bearer token and one
+    resumable event stream.
+
+    Session references are `providerID:nativeID` and must be URL-encoded in paths.
+
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local hub
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: health
+  - name: providers
+  - name: sessions
+  - name: attention
+  - name: events
+  - name: search
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [health]
+      security: []
+      summary: Hub health
+      responses:
+        "200":
+          description: Hub is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, version]
+                properties:
+                  ok:
+                    type: boolean
+                  version:
+                    type: string
+
+  /api/v1/providers:
+    get:
+      tags: [providers]
+      summary: List configured providers
+      responses:
+        "200":
+          description: Providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Provider"
+
+  /api/v1/providers/{providerID}/check:
+    post:
+      tags: [providers]
+      summary: Check provider health
+      parameters:
+        - $ref: "#/components/parameters/ProviderID"
+      responses:
+        "200":
+          description: Health result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderHealth"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions:
+    get:
+      tags: [sessions]
+      summary: List sessions across providers
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionStatus"
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Session page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionPage"
+    post:
+      tags: [sessions]
+      summary: Create a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{ref}:
+    get:
+      tags: [sessions]
+      summary: Get one session
+      parameters:
+        - $ref: "#/components/parameters/SessionRef"
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{ref}/messages:
+    get:
+      tags: [sessions]
+      summary: List messages
+      parameters:
+        - $ref: "#/components/parameters/SessionRef"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        "200":
+          description: Message page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [sessions]
+      summary: Send a user message
+      parameters:
+        - $ref: "#/components/parameters/SessionRef"
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInput"
+      responses:
+        "202":
+          description: Prompt accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted:
+                    type: boolean
+                  messageID:
+                    type: string
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+
+  /api/v1/sessions/{ref}/interrupt:
+    post:
+      tags: [sessions]
+      summary: Interrupt a running session
+      parameters:
+        - $ref: "#/components/parameters/SessionRef"
+      responses:
+        "204":
+          description: Interrupted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+
+  /api/v1/attention:
+    get:
+      tags: [attention]
+      summary: List attention items
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/AttentionType"
+        - name: sessionRef
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attention items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Attention"
+
+  /api/v1/attention/{attentionID}/actions/{action}:
+    post:
+      tags: [attention]
+      summary: Act on an attention item
+      parameters:
+        - name: attentionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [approve_once, approve_always, deny, answer, mark_read, retry, dismiss]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttentionActionInput"
+      responses:
+        "204":
+          description: Action accepted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+
+  /api/v1/events:
+    get:
+      tags: [events]
+      summary: Resumable event stream
+      parameters:
+        - name: after
+          in: query
+          description: Last event sequence number the client received.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Server-sent events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/v1/search:
+    get:
+      tags: [search]
+      summary: Search sessions and messages
+      description: Session search ships first. Message search is planned.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [sessions, messages, all]
+            default: sessions
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchResult"
+                  cursor:
+                    $ref: "#/components/schemas/Cursor"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    ProviderID:
+      name: providerID
+      in: path
+      required: true
+      schema:
+        type: string
+    SessionRef:
+      name: ref
+      in: path
+      required: true
+      description: URL-encoded `providerID:nativeID`.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProviderFailure:
+      description: Provider unavailable or rejected the request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Cursor:
+      type: object
+      properties:
+        next:
+          type: [string, "null"]
+        previous:
+          type: [string, "null"]
+
+    ProviderCapabilities:
+      type: object
+      required: [list, read, send, create, stream]
+      properties:
+        list:
+          type: boolean
+        read:
+          type: boolean
+        send:
+          type: boolean
+        create:
+          type: boolean
+        stream:
+          type: boolean
+        interrupt:
+          type: boolean
+        permissions:
+          type: boolean
+        forms:
+          type: boolean
+        attachments:
+          type: boolean
+        search:
+          type: boolean
+
+    Provider:
+      type: object
+      required: [id, type, name, baseUrl, enabled, status, capabilities]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        baseUrl:
+          type: string
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [online, offline, auth-error, unknown]
+        version:
+          type: string
+        lastCheckedAt:
+          type: number
+        capabilities:
+          $ref: "#/components/schemas/ProviderCapabilities"
+
+    ProviderHealth:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [online, offline, auth-error, unknown]
+        version:
+          type: string
+        latencyMs:
+          type: number
+        message:
+          type: string
+
+    SessionStatus:
+      type: string
+      enum: [running, idle, error, offline]
+
+    AttentionSummary:
+      type: object
+      required: [type, priority]
+      properties:
+        type:
+          $ref: "#/components/schemas/AttentionType"
+        priority:
+          $ref: "#/components/schemas/AttentionPriority"
+
+    Session:
+      type: object
+      required: [ref, providerID, nativeID, title, status, unread, updatedAt, createdAt]
+      properties:
+        ref:
+          type: string
+        providerID:
+          type: string
+        nativeID:
+          type: string
+        title:
+          type: string
+        project:
+          type: string
+        directory:
+          type: string
+        parentRef:
+          type: string
+        agent:
+          type: string
+        model:
+          type: string
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        unread:
+          type: boolean
+        updatedAt:
+          type: number
+        createdAt:
+          type: number
+        cost:
+          type: number
+        tokens:
+          type: string
+        attention:
+          $ref: "#/components/schemas/AttentionSummary"
+        nativeUrl:
+          type: string
+
+    SessionPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        cursor:
+          $ref: "#/components/schemas/Cursor"
+
+    MessagePart:
+      oneOf:
+        - type: object
+          required: [type, text]
+          properties:
+            type:
+              type: string
+              enum: [text]
+            text:
+              type: string
+        - type: object
+          required: [type, text]
+          properties:
+            type:
+              type: string
+              enum: [reasoning]
+            text:
+              type: string
+        - type: object
+          required: [type, id, name, status]
+          properties:
+            type:
+              type: string
+              enum: [tool]
+            id:
+              type: string
+            name:
+              type: string
+            status:
+              type: string
+            input: {}
+            output: {}
+        - type: object
+          required: [type, name]
+          properties:
+            type:
+              type: string
+              enum: [file]
+            name:
+              type: string
+            mimeType:
+              type: string
+            url:
+              type: string
+
+    Message:
+      type: object
+      required: [id, sessionRef, role, parts, createdAt]
+      properties:
+        id:
+          type: string
+        sessionRef:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessagePart"
+        createdAt:
+          type: number
+        completedAt:
+          type: number
+        streaming:
+          type: boolean
+        metadata:
+          type: object
+
+    MessagePage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        cursor:
+          $ref: "#/components/schemas/Cursor"
+
+    SendInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+
+    CreateSessionInput:
+      type: object
+      required: [providerID]
+      properties:
+        providerID:
+          type: string
+        title:
+          type: string
+        directory:
+          type: string
+        agent:
+          type: string
+        model:
+          type: string
+        text:
+          type: string
+
+    AttentionType:
+      type: string
+      enum: [permission, approval, question, unread, error]
+
+    AttentionPriority:
+      type: string
+      enum: [blocking, high, normal]
+
+    AttentionAction:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        style:
+          type: string
+          enum: [primary, danger, default]
+
+    Attention:
+      type: object
+      required: [id, sessionRef, type, priority, title, summary, createdAt, actions]
+      properties:
+        id:
+          type: string
+        sessionRef:
+          type: string
+        type:
+          $ref: "#/components/schemas/AttentionType"
+        priority:
+          $ref: "#/components/schemas/AttentionPriority"
+        title:
+          type: string
+        summary:
+          type: string
+        createdAt:
+          type: number
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttentionAction"
+        payload:
+          type: object
+
+    AttentionActionInput:
+      type: object
+      properties:
+        answer:
+          type: object
+          additionalProperties: true
+        message:
+          type: string
+
+    SearchResult:
+      type: object
+      required: [sessionRef, title]
+      properties:
+        sessionRef:
+          type: string
+        title:
+          type: string
+        providerID:
+          type: string
+        project:
+          type: string
+        excerpt:
+          type: string
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+    Event:
+      type: object
+      required: [seq, type, at]
+      properties:
+        seq:
+          type: integer
+        type:
+          type: string
+          enum:
+            - session.created
+            - session.updated
+            - session.deleted
+            - message.created
+            - message.updated
+            - message.delta
+            - attention.created
+            - attention.updated
+            - attention.resolved
+            - provider.status
+            - error
+        sessionRef:
+          type: string
+        attentionID:
+          type: string
+        data: {}
+        at:
+          type: number

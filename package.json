@@ -1,0 +1,13 @@
+{
+  "name": "agent-hub",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prototype": "python3 -m http.server 4173 --directory docs/prototypes"
+  }
+}
