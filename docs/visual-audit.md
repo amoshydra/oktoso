@@ -102,6 +102,37 @@ Faint text now clears 4.5:1 on cards and the canvas. Timestamps, labels, and hin
 - Muted and faint text remain distinct from primary text.
 - Primary actions, option buttons, and icon-only controls use 44px targets on mobile. The bottom navigation is 54px.
 
+## Design-lead review: what mattered next
+
+The first pass fixed the contrast failure. The second pass treated contrast as a floor, not the goal.
+
+The remaining problems were hierarchy, rhythm, and semantics:
+
+1. **Hierarchy was flat.** Page title, card title, session title, metadata, and badge text were all within a few pixels of one another. The interface was readable but the eye had no clear entry point.
+2. **Color carried conflicting meanings.** OpenCode used a mint close to success, Hermes used the warning amber, and Open WebUI used an accent-like blue. Provider identity, session status, attention, and unread could all appear as tiny dots in the same row.
+3. **Typography was a continuum.** The stylesheet used 17 font sizes, including 8px, 9.5px, 10.5px, 12.5px, and 13.5px. That is accumulation, not a system.
+4. **Spacing was locally tuned.** More than 50 padding combinations made cards and controls feel subtly uneven.
+5. **Edge cases broke the polish.** Inputs had a double focus ring. Mobile filters clipped a chip. The mobile modal pushed its primary action below the fold.
+
+### Second-pass changes
+
+- **Six type roles:** 10, 11, 12, 14, 16, and 20px. Body and chat prose are 14px. Page and card titles are 16px. Only 400, 500, 600, and 700 weights remain.
+- **A stronger page frame:** the topbar owns the page title. Duplicate content headings were removed, and page content now aligns to the topbar instead of floating in a centered column.
+- **State color is exclusive:** provider marks are neutral in lists. Provider accents appear only on the Providers screen. Unread is title weight, not a second dot. Attention has one amber marker.
+- **A spacing and radius system:** 4, 8, 12, 16, 24, and 32px spacing; 4, 8, 12, 16, and pill radii. Optical 2px exceptions remain for rails and count badges.
+- **One focus language:** buttons and links get a 2px accent outline. Inputs get the same outline at a tighter offset. Their old box-shadow rings were removed.
+- **Responsive containment:** details becomes a right-side overlay below 1320px and a column above it. Filter chips wrap below 420px. Provider machine names drop below 480px. The external chat action drops below 360px. Form fields are 16px to avoid browser zoom. Modal footers are pinned while the form body scrolls.
+- **Accessibility labels:** session status, unread, and needs-attention states now have screen-reader text instead of relying on a colored dot.
+
+The card border remains softer than the control border. Cards are structural; controls must clear 3:1. Pushing every card edge to 3:1 would turn the interface into a wireframe.
+
+### Still worth a follow-up
+
+- The details overlay transition is intentionally immediate. If the implementation animates it, use transform and opacity only.
+- Search result and session-table rows are clickable `div`s in the prototype. They need button semantics and full keyboard focus behavior before implementation.
+- The modal closes with Escape but does not yet trap focus; add a focus loop before shipping.
+- Real provider content will stress this system with long titles, images, and wide code. The type and spacing rules are ready for that pass.
+
 ## After measurements
 
 | Pair | After (dark) | After (light) |
@@ -132,7 +163,7 @@ Tinted labels and controls remain above 4.5:1 in both themes. The lowest light-m
 - **Status:** pill with a tinted border and a label.
 - **Dividers:** `border-subtle`.
 - **Modal and sheets:** `surface`, `border-strong`, `shadow-lg`.
-- **Focus:** 2px accent outline, 2px offset.
+- **Focus:** 2px accent outline. Buttons use a 2px offset; inputs use 1px; the composer owns the focus ring for its textarea.
 
 ## What did not change
 
@@ -152,6 +183,7 @@ Tinted labels and controls remain above 4.5:1 in both themes. The lowest light-m
 ## Files changed
 
 - `docs/prototypes/styles.css`: tokens, surfaces, borders, controls, attention cards, chat, details, providers, settings, mobile nav.
-- `docs/ui-ia.md`: visual tokens and component rules updated to match the audit.
+- `docs/ui-ia.md`: visual tokens, type scale, spacing, responsive rules, and provider/state semantics updated.
+- `docs/prototypes/app.js`: neutral provider labels, unread-by-weight, single page headings, pinned modal form, and screen-reader state labels.
 - `docs/visual-audit.md`: this audit and the before/after measurements.
 - `README.md`: link to the audit.

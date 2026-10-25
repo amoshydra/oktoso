@@ -526,8 +526,8 @@ function renderSessionListInner(groups) {
             const item = attentionForSession(session.ref);
             const active = state.selectedRef === session.ref;
             return `
-              <button class="session-row ${active ? 'active' : ''}" data-session="${esc(session.ref)}">
-                <span class="session-dot ${esc(session.status)}"></span>
+              <button class="session-row ${active ? 'active' : ''} ${session.unread ? 'unread' : ''}" data-session="${esc(session.ref)}">
+                <span class="session-dot ${esc(session.status)}" aria-hidden="true"></span>
                 <span class="session-main">
                   <span class="session-title">${esc(session.title)}</span>
                   <span class="session-meta">
@@ -537,9 +537,9 @@ function renderSessionListInner(groups) {
                 </span>
                 <span class="session-flags">
                   <span class="session-time">${relative(session.updated)}</span>
-                  ${item ? '<span class="attention-mini" title="Needs attention"></span>' : ''}
-                  ${session.unread ? '<span class="unread-dot" title="Unread"></span>' : ''}
+                  ${item ? '<span class="attention-mini" role="img" aria-label="Needs attention" title="Needs attention"></span>' : ''}
                 </span>
+                <span class="sr-only">${esc(session.status)}${session.unread ? ', unread' : ''}${item ? ', needs attention' : ''}</span>
               </button>`;
           })
           .join('')}
@@ -553,7 +553,7 @@ function topbar(title, sub, actions = '', back = false) {
     <div class="topbar">
       ${back ? `<button class="icon-btn mobile-back" data-view="sessions" aria-label="Back">${icon('back', 17)}</button>` : ''}
       <div style="min-width:0">
-        <div class="topbar-title">${esc(title)}</div>
+        <h1 class="topbar-title">${esc(title)}</h1>
         ${sub ? `<div class="topbar-sub">${esc(sub)}</div>` : ''}
       </div>
       <div class="topbar-spacer"></div>
@@ -651,7 +651,7 @@ function renderAttentionCard(item) {
     <article class="attention-card ${item.priority === 'blocking' ? 'blocking' : ''}">
       <div class="attention-top">
         <span class="type-badge ${esc(item.type)}">${typeLabel}</span>
-        <span class="attention-provider">${esc(providerLabel(provider))} · ${esc(provider?.name || '')}</span>
+        <span class="attention-provider">${esc(providerLabel(provider))}<span class="provider-host"> · ${esc(provider?.name || '')}</span></span>
         <span class="attention-age">${relative(item.createdAt)}</span>
       </div>
       <div class="attention-title">${esc(item.title)}</div>
@@ -674,30 +674,13 @@ function renderAttentionCard(item) {
 function renderSessions() {
   const list = filteredSessions();
   const sub = `${list.length} session${list.length === 1 ? '' : 's'}`;
-  const filters = [
-    ['all', 'All'],
-    ['opencode', 'OpenCode'],
-    ['openwebui', 'Open WebUI'],
-    ['hermes', 'Hermes'],
-  ];
 
   return `
     ${topbar('Sessions', sub, `<button class="btn small" data-new-session>${icon('plus', 14)} New session</button>`)}
     <div class="content">
       <div class="page wide">
         <div class="page-head">
-          <div>
-            <h1 class="page-title">All sessions</h1>
-            <p class="page-desc">Every session across your providers. Open one to read the transcript, reply, or inspect details.</p>
-          </div>
-          <div class="page-actions">
-            ${filters
-              .map(
-                ([value, label]) =>
-                  `<button class="chip ${state.providerFilter === value ? 'active' : ''}" data-provider-filter="${value}">${label}</button>`,
-              )
-              .join('')}
-          </div>
+          <p class="page-desc">Every session across your providers. Open one to read the transcript, reply, or inspect details.</p>
         </div>
         <div class="session-table">
           <div class="session-table-head">
@@ -708,15 +691,15 @@ function renderSessions() {
               const provider = providerByID(session.providerID);
               const item = attentionForSession(session.ref);
               return `
-                <div class="session-table-row" data-session="${esc(session.ref)}">
+                <div class="session-table-row ${session.unread ? 'unread' : ''}" data-session="${esc(session.ref)}">
                   <div class="session-table-title">
-                    <span class="session-dot ${esc(session.status)}"></span>
+                    <span class="session-dot ${esc(session.status)}" aria-hidden="true"></span>
                     <strong>${esc(session.title)}</strong>
-                    ${item ? '<span class="attention-mini" title="Needs attention"></span>' : ''}
-                    ${session.unread ? '<span class="unread-dot" title="Unread"></span>' : ''}
+                    ${item ? '<span class="attention-mini" role="img" aria-label="Needs attention" title="Needs attention"></span>' : ''}
+                    ${session.unread ? '<span class="sr-only">Unread</span>' : ''}
                   </div>
                   <span class="provider-badge ${providerClass(provider?.type || '')} hide-mobile"><i></i>${esc(providerLabel(provider))}</span>
-                  <span class="status-chip hide-mobile">${esc(session.project)}</span>
+                  <span class="project-label hide-mobile">${esc(session.project)}</span>
                   <span class="status-chip ${esc(session.status)}"><i></i>${esc(session.status)}</span>
                   <span class="session-time">${relative(session.updated)}</span>
                 </div>`;
@@ -741,7 +724,7 @@ function renderInlineAttention(item) {
     return `
       <div class="inline-attention">
         <div class="label">Permission requested</div>
-        <div style="font-size:12.5px;font-weight:550">${esc(item.title)}</div>
+        <div class="title">${esc(item.title)}</div>
         <div class="command">${esc(item.summary)}</div>
         <div class="attention-actions">
           ${item.actions
@@ -757,8 +740,8 @@ function renderInlineAttention(item) {
     return `
       <div class="inline-attention">
         <div class="label">Question</div>
-        <div style="font-size:12.5px;font-weight:550">${esc(item.title)}</div>
-        <div class="question-options" style="margin-top:9px">
+        <div class="title">${esc(item.title)}</div>
+        <div class="question-options" style="margin-top:var(--space-3)">
           ${(item.options || [])
             .map(
               (option, index) =>
@@ -772,8 +755,8 @@ function renderInlineAttention(item) {
     return `
       <div class="inline-attention" style="border-color:color-mix(in srgb,var(--danger) 34%,var(--border))">
         <div class="label" style="color:var(--danger)">Run failed</div>
-        <div style="font-size:12.5px;font-weight:550">${esc(item.summary)}</div>
-        <div class="attention-actions" style="margin-top:9px">
+        <div class="title">${esc(item.summary)}</div>
+        <div class="attention-actions" style="margin-top:var(--space-3)">
           <button class="btn small" data-attention-action="retry" data-attention="${esc(item.id)}">Retry</button>
         </div>
       </div>`;
@@ -823,7 +806,7 @@ function renderChat() {
       <div class="transcript" id="transcript">
         <div class="transcript-inner">
           <div class="chat-session-head">
-            <h1 class="chat-session-title">${esc(session.title)}</h1>
+            <div class="chat-session-title">${esc(session.title)}</div>
             <div class="chat-session-meta">
               <span class="provider-badge ${providerClass(provider?.type || '')}"><i></i>${esc(providerLabel(provider))}</span>
               <span class="dot-sep">·</span><span>${esc(session.project)}</span>
@@ -905,10 +888,9 @@ function renderProviders() {
   return `
     ${topbar('Providers', `${providers.filter((provider) => provider.status === 'online').length} online`, `<button class="btn small" data-add-provider>${icon('plus', 14)} Add provider</button>`)}
     <div class="content">
-      <div class="page">
+      <div class="page wide">
         <div class="page-head">
           <div>
-            <h1 class="page-title">Providers</h1>
             <p class="page-desc">The hub connects to each provider over the URL you configure. Credentials stay on the hub. Networking and TLS are yours to manage.</p>
           </div>
         </div>
@@ -946,10 +928,9 @@ function renderSettings() {
   return `
     ${topbar('Settings', 'Hub and client preferences')}
     <div class="content">
-      <div class="page">
+      <div class="page wide">
         <div class="page-head">
           <div>
-            <h1 class="page-title">Settings</h1>
             <p class="page-desc">Client preferences and hub information. Provider connections live under Providers.</p>
           </div>
         </div>
@@ -1005,7 +986,6 @@ function renderSearch() {
     <div class="content">
       <div class="page">
         <div class="search-page">
-          <h1 class="page-title">Search</h1>
           <p class="page-desc">Search sessions by title, project, directory, or provider. Message search is planned for a later milestone.</p>
           <input id="search-input" placeholder="Search sessions…" value="${esc(state.searchQuery)}" autofocus />
           <div class="search-results" id="search-results">
@@ -1026,12 +1006,13 @@ function renderSearchResults(results, query) {
       const provider = providerByID(session.providerID);
       return `
         <div class="search-row" data-session="${esc(session.ref)}">
-          <span class="session-dot ${esc(session.status)}"></span>
+          <span class="session-dot ${esc(session.status)}" aria-hidden="true"></span>
           <div class="search-row-main">
             <div class="search-row-title">${esc(session.title)}</div>
             <div class="search-row-meta">${esc(providerLabel(provider))} · ${esc(session.project)} · ${esc(session.directory)}</div>
           </div>
           <span class="session-time">${relative(session.updated)}</span>
+          <span class="sr-only">${esc(session.status)}</span>
         </div>`;
     })
     .join('');
@@ -1283,13 +1264,17 @@ document.addEventListener('click', (event) => {
     return;
   }
   if (target.matches('[data-open-details]')) {
-    if (window.matchMedia('(max-width: 760px)').matches) state.detailsOpen = true;
-    else state.detailsClosed = false;
+    if (window.matchMedia('(max-width: 1320px)').matches) {
+      state.detailsOpen = true;
+      state.detailsClosed = false;
+    } else {
+      state.detailsClosed = false;
+    }
     renderApp();
     return;
   }
   if (target.matches('[data-close-details]')) {
-    if (window.matchMedia('(max-width: 760px)').matches) state.detailsOpen = false;
+    if (window.matchMedia('(max-width: 1320px)').matches) state.detailsOpen = false;
     else state.detailsClosed = true;
     renderApp();
     return;

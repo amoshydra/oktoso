@@ -149,10 +149,10 @@ The global navigation has five destinations: Inbox, Sessions, Search, Providers,
 - Left rail width: 64 px collapsed, 200 px expanded. Default 64 px.
 - Session sidebar: 300 to 360 px, resizable.
 - Details panel: 280 to 340 px, collapsible.
-- Main area minimum width: 480 px.
-- At widths below 1100 px, hide the details panel behind a button.
-- At widths below 800 px, hide the session sidebar when a session is open.
-- At widths below 640 px, use the mobile layout.
+- Main area minimum width: about 400 px.
+- At widths below 1320 px, details becomes a right-side overlay behind a button. At 1320 px and above it is a column.
+- At widths below 761 px, use the mobile layout: single column, bottom navigation, and full-screen chat.
+- At 761–1100 px, the session sidebar narrows to 300 px and the project column drops from the sessions table.
 
 ## 5. Inbox
 
@@ -398,11 +398,13 @@ The visual system uses a layered neutral palette. Borders and surface shifts car
 | `warning` | `#ffd166` | `#8a5200` | Needs attention |
 | `danger` | `#ff9292` | `#b91c1c` | Deny, error, destructive |
 
-Provider accents are small badges, not full backgrounds:
+Provider identity and state are separate systems. In session lists and inbox cards, provider badges use a neutral mark and the provider name. Provider accents appear only on the Providers screen, where they identify a connection rather than a state:
 
 - OpenCode: mint `#7ee2b8` dark, `#0b6b3a` light
 - Open WebUI: blue `#9cc0ff` dark, `#2f4fb5` light
 - Hermes: amber `#ffd166` dark, `#8a5200` light
+
+State color is reserved for status and attention. Unread is shown by title weight, not another dot. A session has one status dot; attention has one amber marker.
 
 ### Contrast and elevation
 
@@ -411,26 +413,38 @@ Provider accents are small badges, not full backgrounds:
 - Card edges use `border`; dividers use `border-subtle`.
 - Controls use `surface-2`; active rows use `surface-2` plus an accent inset bar.
 - Cards use a small shadow. Hovered cards and the composer use a medium shadow. Modals and sheets use a large shadow.
-- Focus uses a 2px accent outline with a 2px offset.
+- Focus uses one 2px accent outline. Inputs use a tight offset; the composer owns its own focus ring.
 - Status uses a label, a dot, and a tinted pill. Color is never the only cue.
+- The topbar owns the page title and renders it as the page `h1`. Pages do not repeat it as a second content heading.
 
 The full audit and before/after measurements are in [`visual-audit.md`](visual-audit.md).
 
 ### Typography
 
-- UI: system sans stack, 13px base on desktop, 14px on mobile.
-- Session titles: 14px, medium weight.
-- Metadata: 11 to 12px, muted.
+The type scale has six roles, not a continuum of half-steps:
+
+| Token | Size | Role |
+|---|---:|---|
+| `text-2xs` | 10px | Badges, counts, uppercase section labels |
+| `text-xs` | 11px | Timestamps, provider badges, status pills, filter chips |
+| `text-sm` | 12px | Buttons, detail values, compact controls |
+| `text-base` | 14px | Body, chat prose, session titles |
+| `text-lg` | 16px | Topbar/page titles, inbox card titles |
+| `text-xl` | 20px | Chat document title |
+
+- UI: system sans stack, 14px base.
+- Weights: 400, 500, 600, 700 only.
+- Line height: 1.6 for chat prose, 1.5 for UI copy, 1.3 for titles.
+- Numeric metadata uses tabular figures.
 - Code and identifiers: system monospace.
-- Line height: 1.5 for prose, 1.4 for compact rows.
 
 ### Spacing and shape
 
 - Base spacing unit: 4px.
-- Common gaps: 8, 12, 16, 24.
-- Radius: 8px for inputs, 12px for panels, 999px for badges.
+- Scale: 4, 8, 12, 16, 24, 32px. Optical 2px exceptions remain for rails and count badges.
+- Radius: 4px for badges, 8px for controls, 12px for cards, 16px for sheets, 999px for pills.
 - Borders carry structure. Shadows are minimal and functional.
-- Icons: 16 or 18px line icons, 1.5px stroke.
+- Icons: 16 or 18px line icons, 1.7px stroke.
 
 ## 14. Mobile layout
 
@@ -478,6 +492,11 @@ Chat on mobile:
 - Chat is a full-screen route with a back button.
 - Details open as a sheet.
 - Composer stays above the safe area and keyboard.
+- Filters wrap below 420px so no chip is clipped or hidden.
+- Provider machine names drop below 480px; the provider remains identifiable by name.
+- The external chat action drops below 360px; the details sheet still exposes it.
+- Form fields use 16px text on mobile to avoid browser zoom.
+- Modal content scrolls inside the sheet while the footer actions stay pinned.
 - Long press a session row for pin, mark read, copy ref, and open in provider.
 - Pull to refresh on the list.
 
