@@ -619,7 +619,7 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 Open `docs/prototypes/index.html` through a local server:
 
 ```sh
-python3 -m http.server 4173 --directory docs/prototypes
+python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes
 ```
 
 The prototype includes:

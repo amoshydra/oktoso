@@ -7,10 +7,10 @@ Static prototype for the Agent Hub web client. It uses mock providers and sessio
 From the repository root:
 
 ```sh
-python3 -m http.server 4173 --directory docs/prototypes
+python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes
 ```
 
-Open <http://127.0.0.1:4173>.
+Open <http://127.0.0.1:4174>.
 
 ## What to try
 

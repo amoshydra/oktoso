@@ -14,6 +14,7 @@ Design phase. The architecture, delivery plan, and UI/IA design are in `docs/`.
 - [`docs/plan.md`](docs/plan.md) - phased delivery plan and acceptance criteria
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
+- [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - draft API contract
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data
 
@@ -29,10 +30,10 @@ Design phase. The architecture, delivery plan, and UI/IA design are in `docs/`.
 ## Prototype
 
 ```sh
-python3 -m http.server 4173 --directory docs/prototypes
+python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes
 ```
 
-Open `http://127.0.0.1:4173`. Resize the window to see the mobile layout.
+Open `http://127.0.0.1:4174`. Resize the window to see the mobile layout.
 
 ## Stack
 
