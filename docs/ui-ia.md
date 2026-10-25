@@ -376,25 +376,45 @@ Quiet, precise, and work-focused. The interface should disappear behind the conv
 
 ### Color
 
+The visual system uses a layered neutral palette. Borders and surface shifts carry structure. Color is reserved for state and action.
+
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `bg` | `#0b0c0e` | `#f7f7f8` | App background |
-| `surface` | `#111316` | `#ffffff` | Panels and sheets |
-| `surface-2` | `#171a1e` | `#f1f2f4` | Raised rows and cards |
-| `border` | `#24272c` | `#e3e4e7` | Dividers and inputs |
-| `text` | `#e8eaed` | `#17181a` | Primary text |
-| `muted` | `#8b919a` | `#666b73` | Secondary text |
-| `faint` | `#5b616a` | `#9aa0a8` | Timestamps and hints |
-| `accent` | `#7c9cff` | `#4a63d8` | Primary actions and focus |
-| `success` | `#4ade80` | `#15803d` | Running and approved |
-| `warning` | `#fbbf24` | `#b45309` | Needs attention |
-| `danger` | `#f87171` | `#dc2626` | Deny, error, destructive |
+| `bg` | `#08090b` | `#eef1f5` | Canvas |
+| `rail` | `#0d0f13` | `#f7f9fc` | Nav rail and top bar |
+| `sidebar` | `#111419` | `#ffffff` | Sidebar and details |
+| `surface` | `#16191f` | `#ffffff` | Cards |
+| `surface-2` | `#1d2129` | `#f5f7fa` | Inputs, chips, raised rows |
+| `surface-3` | `#272c36` | `#e8edf4` | Active and pressed |
+| `border-subtle` | `#2a2f38` | `#d6dce5` | Internal dividers |
+| `border` | `#3f4652` | `#c3cbd6` | Card edges |
+| `border-strong` | `#5f6878` | `#808a99` | Inputs, buttons, active rows |
+| `text` | `#f4f6f9` | `#111318` | Primary text |
+| `muted` | `#b5bcc8` | `#4f5764` | Secondary text |
+| `faint` | `#8f97a5` | `#626b78` | Timestamps and hints |
+| `accent` | `#a9bdff` | `#3550c8` | Primary actions and focus |
+| `on-accent` | `#07080b` | `#ffffff` | Text and icons on accent fills |
+| `success` | `#63e39a` | `#0b6b3a` | Running and approved |
+| `warning` | `#ffd166` | `#8a5200` | Needs attention |
+| `danger` | `#ff9292` | `#b91c1c` | Deny, error, destructive |
 
 Provider accents are small badges, not full backgrounds:
 
-- OpenCode: mint `#7ad7a1`
-- Open WebUI: blue `#8ab4ff`
-- Hermes: amber `#f4c56a`
+- OpenCode: mint `#7ee2b8` dark, `#0b6b3a` light
+- Open WebUI: blue `#9cc0ff` dark, `#2f4fb5` light
+- Hermes: amber `#ffd166` dark, `#8a5200` light
+
+### Contrast and elevation
+
+- Faint text stays above 4.5:1 on cards and the canvas.
+- Interactive controls use `border-strong`, which clears 3:1 on the card surface.
+- Card edges use `border`; dividers use `border-subtle`.
+- Controls use `surface-2`; active rows use `surface-2` plus an accent inset bar.
+- Cards use a small shadow. Hovered cards and the composer use a medium shadow. Modals and sheets use a large shadow.
+- Focus uses a 2px accent outline with a 2px offset.
+- Status uses a label, a dot, and a tinted pill. Color is never the only cue.
+
+The full audit and before/after measurements are in [`visual-audit.md`](visual-audit.md).
 
 ### Typography
 
@@ -409,7 +429,7 @@ Provider accents are small badges, not full backgrounds:
 - Base spacing unit: 4px.
 - Common gaps: 8, 12, 16, 24.
 - Radius: 8px for inputs, 12px for panels, 999px for badges.
-- Borders carry structure. Shadows are minimal.
+- Borders carry structure. Shadows are minimal and functional.
 - Icons: 16 or 18px line icons, 1.5px stroke.
 
 ## 14. Mobile layout

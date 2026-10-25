@@ -13,6 +13,7 @@ Design phase. The architecture, delivery plan, and UI/IA design are in `docs/`.
 - [`docs/design.md`](docs/design.md) - architecture, domain model, provider adapters, API, security, deployment
 - [`docs/plan.md`](docs/plan.md) - phased delivery plan and acceptance criteria
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
+- [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
 - [`docs/openapi.yaml`](docs/openapi.yaml) - draft API contract
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data
 
