@@ -39,7 +39,7 @@ The hub is the product. The clients are views over one HTTP API.
 4. **Capabilities over assumptions.** Providers declare what they support. The UI hides actions that a provider cannot perform.
 5. **No ACP requirement.** The first release speaks REST and SSE to providers. ACP is an optional future adapter for agents with no stable HTTP API.
 6. **No networking assumptions.** Provider URLs, bind address, CORS, and TLS are configuration. The hub does not create tunnels or VPNs.
-7. **Portable runtime.** Node.js 22+, pure JavaScript dependencies, no native modules, no platform-specific process handling.
+7. **Portable runtime.** Node.js 24+, pure JavaScript dependencies, no native modules, no platform-specific process handling.
 8. **Attention is a first-class object.** A session can need approval, an answer, a read, or a retry. The hub models those states once.
 9. **Plain JSON over the wire.** The API contract is language-neutral so a Rust server can replace the TypeScript server later.
 10. **Measure before rewriting.** The hub is I/O-bound. Fix blocking calls, pagination, caching, and rendering before changing languages.
@@ -566,7 +566,7 @@ Supported targets:
 - Docker
 - A VPS
 
-No native modules. Bundle to `dist/hub.js` on a build machine and copy it to the target. The target needs Node 22+ only.
+No native modules. Bundle to `dist/hub.js` on a build machine and copy it to the target. The target needs Node 24+ only.
 
 Termux notes:
 

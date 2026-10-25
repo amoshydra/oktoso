@@ -38,7 +38,7 @@ Open `http://127.0.0.1:4174`. Resize the window to see the mobile layout.
 
 ## Stack
 
-- Node.js 22+
+- Node.js 24+
 - TypeScript
 - Hono or `node:http`
 - Pure JavaScript dependencies, no native modules

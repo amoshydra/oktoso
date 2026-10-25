@@ -163,7 +163,7 @@ Deliverables:
 
 Acceptance:
 
-- The hub runs on Termux with Node 22+.
+- The hub runs on Termux with Node 24+.
 - It connects to OpenCode on a laptop, Hermes on a Pi, and Open WebUI over HTTPS.
 - An offline provider appears as offline without blocking other providers.
 - Restarting the hub recovers sessions and attention state.
@@ -255,7 +255,7 @@ Acceptance:
 
 - The hub survives provider restarts and client reconnects.
 - No secrets appear in logs.
-- The bundle runs on a clean Node 22 install.
+- The bundle runs on a clean Node 24 install.
 - A Rust prototype can serve the same session and message endpoints.
 
 ## Work breakdown

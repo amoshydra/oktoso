@@ -114,4 +114,4 @@ Keep the dependency rules and vertical-slice order from the code structure docum
 - Provider APIs are the source of truth.
 - No ACP requirement and no local agent processes on the hub.
 - No networking, tunnel, TLS, or discovery logic in the hub. The operator owns reachability.
-- Run on Node 22+, including Termux. Prefer pure JavaScript dependencies and no native modules.
+- Run on Node 24+, including Termux. Prefer pure JavaScript dependencies and no native modules.

@@ -35,7 +35,7 @@ Recommended defaults:
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| Server HTTP layer | Hono on Node 22 | Small, typed, streaming-friendly, pure JavaScript |
+| Server HTTP layer | Hono on Node 24 | Small, typed, streaming-friendly, pure JavaScript |
 | Contract source | Zod schemas in `packages/contracts`; generate OpenAPI | One source for validation, types, and the Rust-facing contract |
 | Persistence | JSON state store first, behind `StateStore`; optional `node:sqlite` adapter later | Portable, no native modules, enough for single-owner state |
 | Web client | Preact + Vite + TypeScript | Small bundle, component model, future WebXR reuse |
@@ -47,6 +47,15 @@ Recommended defaults:
 | Deployment | One Node process serving API and built web assets | Same origin, no CORS by default, easy Termux deployment |
 
 If React, node:http, or SQLite-first is preferred, change it now. The package boundaries below survive either choice.
+
+Why these two:
+
+- **Hono** is chosen for routing, middleware, streaming/SSE, and tests through `app.request`, while staying small and Web-Standards based. It is not a performance claim over raw `node:http`; it removes plumbing we would otherwise own.
+- **Preact** is chosen for a React-like component model at a much smaller bundle size, with Vite, signals, and a Preact Query adapter. It is not a constraint on the API. If the team is React-first, React can replace it without touching the hub.
+
+Both are implementation choices, not part of the client contract. The OpenAPI/SSE boundary is what matters.
+
+Runtime policy: Node 24 is the minimum supported floor. CI also runs Node 26, which becomes Active LTS on 2026-10-28. Do not target Node 22; it is in Maintenance LTS and reaches end of life in April 2027. Node 24 remains supported through April 2028, which is the safer Termux baseline while 26 packaging catches up.
 
 The current `docs/openapi.yaml` is still the hand-authored draft. If the Zod-generated contract is accepted, the generated file becomes the checked-in artifact and `design.md` gets updated to say so. Do not maintain two independently edited contracts.
 
@@ -681,7 +690,7 @@ The milestones in [`plan.md`](plan.md) remain the product phases. Build them as 
 | 4. Open WebUI | Chat list, tree resolver, completion stream, write-back, models, provider health | 2 | At least 50 chats list; current branch reads correctly; reply persists |
 | 5. Hermes | API server, TUI gateway, sessions, runs, approvals, existing-session resume | 2 | Existing Hermes session reads; approval works; restart keeps refs |
 | 6. Workspace features | Search, read sync across clients, drafts, PWA, device polish | 3 | Read on one client clears unread on another; drafts survive reload |
-| 7. Hardening | Contract tests, integration, E2E, visual matrix, load, security, diagnostics, packaging, Termux/systemd/Docker docs | 1–6 | Restart/reconnect tests pass; no secrets in logs; clean Node 22 install runs |
+| 7. Hardening | Contract tests, integration, E2E, visual matrix, load, security, diagnostics, packaging, Termux/systemd/Docker docs | 1–6 | Restart/reconnect tests pass; no secrets in logs; clean Node 24 install runs |
 | 8. Other clients | Glasses, VR, native desktop | 3–5 | Same API, same attention actions, no provider credentials in client |
 
 Do not build all three provider adapters before the web slice works. OpenCode plus the fake provider is the proving ground.
@@ -709,7 +718,7 @@ Do not build all three provider adapters before the web slice works. OpenCode pl
 - **E2E:** login, list, read, send, approve, create, reconnect.
 - **Visual:** 1440, 1024, 390, 320 in dark and light; inbox, chat, details, providers, settings, search, modal.
 - **Load:** 10 clients, bursty deltas, provider churn, memory ceiling.
-- **CI:** typecheck, lint, test, build, OpenAPI drift, built-hub smoke test, Playwright.
+- **CI:** Node 24 and 26 matrix; typecheck, lint, test, build, OpenAPI drift, built-hub smoke test, Playwright.
 
 ## 11. Build and deployment
 
@@ -731,7 +740,7 @@ Build outputs:
 - `dist/web/` — built web assets served by the hub at `/`.
 - `dist/openapi.yaml` — generated contract artifact (also committed at `docs/openapi.yaml`).
 
-Runtime requirements: Node 22+, read/write access to `dataDir`, and network reachability to configured providers. No database server, native module, or background daemon required.
+Runtime requirements: Node 24+, read/write access to `dataDir`, and network reachability to configured providers. No database server, native module, or background daemon required.
 
 Termux, systemd, Docker, and reverse-proxy examples stay operator documentation. The hub does not create tunnels, terminate TLS, or discover providers.
 
