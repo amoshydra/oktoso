@@ -1,0 +1,21 @@
+{
+  "name": "@agent-hub/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@agent-hub/client": "workspace:*",
+    "@agent-hub/contracts": "workspace:*",
+    "@agent-hub/ui": "workspace:*",
+    "@preact/signals": "^2.11.3",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "vite": "^8.3.5"
+  }
+}

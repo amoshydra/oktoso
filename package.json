@@ -1,6 +1,6 @@
 {
   "name": "agent-hub",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.2",
@@ -8,6 +8,31 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "build": "pnpm build:hub && pnpm build:web",
+    "build:hub": "tsup",
+    "build:web": "pnpm --filter @agent-hub/web build",
+    "start": "node dist/hub.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "openapi:generate": "tsx scripts/generate-openapi.ts",
+    "openapi:check": "tsx scripts/generate-openapi.ts --check",
     "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
+    "tsup": "^9.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7",
+    "@asteasolutions/zod-to-openapi": "^9.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

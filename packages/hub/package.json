@@ -1,0 +1,19 @@
+{
+  "name": "@agent-hub/hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-hub/contracts": "workspace:*",
+    "@agent-hub/providers": "workspace:*",
+    "@agent-hub/storage": "workspace:*",
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.14"
+  },
+  "devDependencies": {
+    "@agent-hub/testing": "workspace:*"
+  }
+}

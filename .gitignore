@@ -6,3 +6,8 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# Runtime state
+.data/
+hub.config.json
+hub.config.local.json

@@ -1,0 +1,89 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { createApp } from "./app";
+import { loadConfig } from "./config/load";
+import { createLogger } from "./lib/logger";
+import { EventBus } from "./services/event-bus";
+import { ProviderRegistry } from "./services/provider-registry";
+import { MemoryStateStore } from "@agent-hub/storage";
+import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
+
+const token = "test-token-long-enough";
+const logger = createLogger({ level: "silent" });
+const servers: FakeProviderServer[] = [];
+
+async function createTestApp() {
+  const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
+  servers.push(fake);
+  const config = await loadConfig(
+    new URL("../test/fixtures/hub.config.json", import.meta.url).pathname,
+    { HUB_TOKEN: token, OPENCODE_PASSWORD: "secret" },
+  );
+  config.providers[0]!.baseUrl = fake.url;
+  const store = new MemoryStateStore();
+  const eventBus = new EventBus(store, logger, { heartbeatMs: 10 });
+  await eventBus.init();
+  const registry = new ProviderRegistry(config.providers, logger);
+  const app = createApp({ config, store, eventBus, registry, logger, startedAt: Date.now() });
+  return { app, eventBus, store, registry };
+}
+
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((server) => server.close()));
+});
+
+describe("hub app", () => {
+  it("serves public health", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/api/v1/health");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, version: "0.1.0" });
+  });
+
+  it("requires the bearer token for API routes", async () => {
+    const { app } = await createTestApp();
+    expect((await app.request("/api/v1/auth/check")).status).toBe(401);
+    const response = await app.request("/api/v1/auth/check", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true });
+  });
+
+  it("lists providers and diagnostics with auth", async () => {
+    const { app, registry } = await createTestApp();
+    await registry.check("desktop-opencode");
+    const providers = await app.request("/api/v1/providers", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(providers.status).toBe(200);
+    expect(await providers.json()).toMatchObject({
+      data: [{ id: "desktop-opencode", status: "online" }],
+    });
+
+    const diagnostics = await app.request("/api/v1/diagnostics", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(diagnostics.status).toBe(200);
+    expect(await diagnostics.json()).toMatchObject({
+      events: { lastSeq: 0 },
+      storage: { kind: "memory" },
+    });
+  });
+
+  it("opens an authenticated SSE stream and replay", async () => {
+    const { app, eventBus } = await createTestApp();
+    const response = await app.request("/api/v1/events?after=0", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    const first = await reader!.read();
+    expect(new TextDecoder().decode(first.value)).toContain("retry: 3000");
+    await eventBus.publish("provider.status", { id: "desktop-opencode" });
+    const next = await reader!.read();
+    expect(new TextDecoder().decode(next.value)).toContain("provider.status");
+    await reader!.cancel();
+  });
+});

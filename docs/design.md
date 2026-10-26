@@ -352,7 +352,7 @@ The adapter interface covers future providers without changing clients:
 
 ## 9. Hub API
 
-The draft contract lives in `docs/openapi.yaml`. The source of truth for field names and shapes is that file, not this prose.
+The contract is generated from `packages/contracts` and written to `docs/openapi.yaml`. The generated file is the field-name and shape contract for clients and the future Rust port. Run `pnpm openapi:generate`; CI checks for drift with `pnpm openapi:check`.
 
 Base path: `/api/v1`.
 
@@ -583,7 +583,7 @@ Configuration:
   "host": "127.0.0.1",
   "port": 8787,
   "token": "hub-client-token",
-  "cors": ["http://localhost:5173"],
+  "cors": ["http://localhost:5175"],
   "providers": [
     {
       "id": "desktop-opencode",

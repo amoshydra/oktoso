@@ -57,7 +57,7 @@ Both are implementation choices, not part of the client contract. The OpenAPI/SS
 
 Runtime policy: Node 24 is the minimum supported floor. CI also runs Node 26, which becomes Active LTS on 2026-10-28. Do not target Node 22; it is in Maintenance LTS and reaches end of life in April 2027. Node 24 remains supported through April 2028, which is the safer Termux baseline while 26 packaging catches up.
 
-The current `docs/openapi.yaml` is still the hand-authored draft. If the Zod-generated contract is accepted, the generated file becomes the checked-in artifact and `design.md` gets updated to say so. Do not maintain two independently edited contracts.
+The contract is generated from the Zod schemas and checked into `docs/openapi.yaml`. Do not edit the YAML by hand; run `pnpm openapi:generate` after schema changes and `pnpm openapi:check` in CI.
 
 ## 3. Repository tree
 
@@ -265,7 +265,6 @@ agent-hub/
     generate-openapi.ts
     dev.ts
     build.ts
-    check-openapi.ts
 
   docs/
   AGENTS.md
@@ -738,7 +737,7 @@ Build outputs:
 
 - `dist/hub.js` — bundled Node server.
 - `dist/web/` — built web assets served by the hub at `/`.
-- `dist/openapi.yaml` — generated contract artifact (also committed at `docs/openapi.yaml`).
+- `docs/openapi.yaml` — generated contract artifact committed with the repository.
 
 Runtime requirements: Node 24+, read/write access to `dataDir`, and network reachability to configured providers. No database server, native module, or background daemon required.
 

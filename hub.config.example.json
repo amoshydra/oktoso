@@ -1,0 +1,43 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "token": "${HUB_TOKEN}",
+  "dataDir": ".data",
+  "cors": [],
+  "providers": [
+    {
+      "id": "desktop-opencode",
+      "type": "opencode",
+      "name": "desktop-opencode",
+      "baseUrl": "http://192.0.2.2:4096",
+      "auth": {
+        "kind": "basic",
+        "username": "opencode",
+        "password": "${OPENCODE_PASSWORD}"
+      },
+      "enabled": true
+    },
+    {
+      "id": "openwebui",
+      "type": "openwebui",
+      "name": "openwebui",
+      "baseUrl": "https://openwebui.example",
+      "auth": {
+        "kind": "bearer",
+        "token": "${OPENWEBUI_API_KEY}"
+      },
+      "enabled": true
+    },
+    {
+      "id": "rpi-hermes",
+      "type": "hermes",
+      "name": "rpi-hermes",
+      "baseUrl": "http://192.0.2.4:8642",
+      "auth": {
+        "kind": "bearer",
+        "token": "${HERMES_API_KEY}"
+      },
+      "enabled": true
+    }
+  ]
+}
