@@ -9,9 +9,12 @@
   },
   "scripts": {
     "dev": "tsx scripts/dev.ts",
-    "build": "pnpm build:hub && pnpm build:web",
+    "dev:even-g2": "pnpm --filter @agent-hub/even-realities-g2 dev",
+    "simulate:even-g2": "pnpm --filter @agent-hub/even-realities-g2 simulate",
+    "build": "pnpm build:hub && pnpm build:web && pnpm build:even-g2",
     "build:hub": "tsup",
     "build:web": "pnpm --filter @agent-hub/web build",
+    "build:even-g2": "pnpm --filter @agent-hub/even-realities-g2 build",
     "start": "node dist/hub.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_ASSISTANT_CONFIG, zAssistantConfig } from "@agent-hub/contracts";
 
 export const zReadMarker = z.object({
   readAt: z.number().int().nonnegative(),
@@ -27,6 +28,7 @@ export const zHubState = z.object({
   attention: z.record(z.string(), zAttentionState),
   drafts: z.record(z.string(), zDraftState),
   idempotency: z.record(z.string(), zIdempotencyState),
+  settings: zAssistantConfig.default(DEFAULT_ASSISTANT_CONFIG),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -40,6 +42,7 @@ export function createInitialState(): HubState {
     attention: {},
     drafts: {},
     idempotency: {},
+    settings: structuredClone(DEFAULT_ASSISTANT_CONFIG),
   };
 }
 

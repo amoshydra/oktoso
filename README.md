@@ -6,7 +6,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. OpenCode read/write and attention are live, and Open WebUI now uses a real provider adapter. Session index, transcript, composer, new-session creation, provider permissions/forms, attention inbox, live badges, and background reconciliation are in place. Desktop notifications remain pending. The approved UI reference is frozen as `design-v1.1` (transcript revision of `design-v1`).
+Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, and the newest-first transcript, and the Even G2 client has its first inbox/chat/reply slice. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
 
 ## Documents
 
@@ -43,6 +43,7 @@ pnpm dev
 - Open WebUI: chats, current branches, models, new chats, and prompt sends
 - Providers: OpenCode and Open WebUI adapters; Hermes remains a health-only fake
 - Attention: permissions, forms, unread sessions, failures, provider-backed actions, and live navigation badges
+- Wearables: `apps/even-realities-g2` (Agent Hub G2), shared wearable core, phone pairing/keyboard, and hub-side reply assistance settings
 
 `pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. Real provider credentials belong in the ignored `.env.local` file:
 

@@ -1067,7 +1067,35 @@
   gap: var(--space-1);
 }
 
-.form-field.span-2 {
+.form-field.span-2,
+.check-field.span-2,
+.form-note.span-2,
+.form-error.span-2 {
+  grid-column: span 2;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.check-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.settings-assistant {
+  margin-bottom: var(--space-4);
+}
+
+.settings-assistant > .form-note,
+.settings-assistant > .form-error {
+  margin: 0;
   grid-column: span 2;
 }
 
@@ -1735,7 +1763,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .form-field.span-2 {
+  .form-field.span-2,
+  .check-field.span-2,
+  .form-note.span-2,
+  .form-error.span-2,
+  .settings-assistant > .form-note,
+  .settings-assistant > .form-error {
     grid-column: span 1;
   }
 

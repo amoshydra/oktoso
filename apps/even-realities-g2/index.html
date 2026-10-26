@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+    <title>Agent Hub for Even G2</title>
+    <style>
+      :root { color-scheme: dark; --ink: #f2f5f8; --muted: #98a2b3; --line: #2b3442; --panel: #121820; --bg: #080b10; --accent: #a9bdff; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      body { padding: 20px; max-width: 640px; margin: 0 auto; }
+      h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.02em; }
+      p { margin: 0; color: var(--muted); }
+      .brand { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(145deg, #b8c8ff, #7e98f4); color: #080b10; font-weight: 800; margin-bottom: 16px; }
+      .panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+      .panel h2 { margin: 0 0 4px; font-size: 15px; }
+      .panel .hint { font-size: 12px; }
+      label { display: block; margin-top: 12px; font-size: 12px; color: var(--muted); }
+      input, textarea { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d131b; color: var(--ink); font: inherit; font-size: 16px; }
+      textarea { min-height: 72px; resize: vertical; }
+      button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
+      button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 650; }
+      button:disabled { opacity: .5; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .status { color: var(--accent); font-size: 12px; margin-top: 8px; min-height: 18px; }
+      .status.error { color: #ff9292; }
+      .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--muted); }
+      .composer { margin-top: 16px; }
+      .composer-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+      .composer-head strong { font-size: 12px; color: var(--muted); font-weight: 600; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font: 11px/1.5 ui-monospace, monospace; }
+      .glasses-preview { min-height: 150px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid #24452c; border-radius: 8px; background: #07130a; color: #71f28a; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div class="brand">AH</div>
+    <h1>Agent Hub for Even G2</h1>
+    <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge.</p>
+
+    <section class="panel">
+      <h2>Hub connection</h2>
+      <p class="hint">Leave the URL blank when using the local Vite proxy.</p>
+      <label for="hub-url">Hub URL</label>
+      <input id="hub-url" type="url" placeholder="https://hub.example" autocomplete="off" spellcheck="false" />
+      <label for="hub-token">Hub bearer token</label>
+      <input id="hub-token" type="password" placeholder="Paste the hub token" autocomplete="off" spellcheck="false" />
+      <div class="row" style="margin-top:12px">
+        <button id="connect" class="primary" type="button">Connect</button>
+        <span id="connection" class="pill">Not connected</span>
+      </div>
+      <div id="connection-status" class="status"></div>
+    </section>
+
+    <section class="panel composer">
+      <div class="composer-head">
+        <h2>Phone keyboard</h2>
+        <strong id="phone-session">No session open</strong>
+      </div>
+      <p class="hint">Use this when the glasses ask you to type a longer reply.</p>
+      <textarea id="phone-text" placeholder="Type a reply…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="phone-send" class="primary" type="button" disabled>Send to session</button>
+        <button id="phone-refresh" type="button">Refresh glasses</button>
+      </div>
+      <div id="phone-status" class="status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Glasses preview</h2>
+      <p class="hint">The exact text/list content sent to the G2 containers.</p>
+      <pre id="glasses-preview" class="glasses-preview">(waiting for a screen)</pre>
+    </section>
+
+    <section class="panel">
+      <h2>Glasses bridge</h2>
+      <p id="bridge-status" class="hint">Waiting for Even Hub…</p>
+      <pre id="debug"></pre>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

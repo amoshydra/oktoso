@@ -1,4 +1,6 @@
 import type {
+  AssistantInput,
+  AssistantView,
   AttentionActionInput,
   AttentionPage,
   AttentionType,
@@ -13,6 +15,8 @@ import type {
   MessagesQuery,
   Provider,
   ProviderOptions,
+  ReplyMode,
+  ReplyOptions,
   SendInput,
   SendResult,
   Session,
@@ -148,6 +152,36 @@ export class HubClient {
   async options(providerID: string): Promise<ProviderOptions> {
     return this.request<ProviderOptions>(
       `/api/v1/providers/${encodeURIComponent(providerID)}/options`,
+    );
+  }
+
+  async assistantSettings(): Promise<AssistantView> {
+    const response = await this.request<{ data: AssistantView }>(
+      "/api/v1/settings/assistant",
+    );
+    return response.data;
+  }
+
+  async saveAssistantSettings(input: AssistantInput): Promise<AssistantView> {
+    const response = await this.request<{ data: AssistantView }>(
+      "/api/v1/settings/assistant",
+      { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async assistantModels(
+    target: "reply" | "transcription",
+  ): Promise<{ data: string[]; baseUrl: string }> {
+    const response = await this.request<{
+      data: { data: string[]; baseUrl: string };
+    }>(`/api/v1/settings/assistant/${target}/models`);
+    return response.data;
+  }
+
+  async replyOptions(ref: string, mode: ReplyMode = "reply"): Promise<ReplyOptions> {
+    return this.request<ReplyOptions>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/reply-options?mode=${mode}`,
     );
   }
 

@@ -5,6 +5,8 @@ import {
 import { z } from "zod";
 import {
   zAgentOption,
+  zAssistantInput,
+  zAssistantView,
   zAttention,
   zAttentionAction,
   zAttentionActionInput,
@@ -30,6 +32,7 @@ import {
   zProviderCapabilities,
   zProviderHealth,
   zProviderOptions,
+  zReplyOptions,
   zSearchResult,
   zSendInput,
   zSendResult,
@@ -66,6 +69,18 @@ const CreateSessionInputSchema = registry.register(
 const DraftSchema = registry.register("Draft", zDraft);
 const DraftInputSchema = registry.register("DraftInput", zDraftInput);
 const DraftResponseSchema = registry.register("DraftResponse", zDraftResponse);
+const AssistantViewSchema = registry.register("AssistantView", zAssistantView);
+const AssistantInputSchema = registry.register("AssistantInput", zAssistantInput);
+const AssistantModelsSchema = registry.register(
+  "AssistantModels",
+  z.object({
+    data: z.object({
+      data: z.array(z.string()),
+      baseUrl: z.string(),
+    }),
+  }),
+);
+const ReplyOptionsSchema = registry.register("ReplyOptions", zReplyOptions);
 const MessagePartSchema = registry.register("MessagePart", zMessagePart);
 const MessageSchema = registry.register("Message", zMessage);
 const MessagePageSchema = registry.register("MessagePage", zMessagePage);
@@ -105,6 +120,9 @@ const errorResponse = (description: string) => ({
 
 const params = z.object({ ref: z.string() });
 const providerParams = z.object({ providerID: z.string() });
+const assistantTargetParams = z.object({
+  target: z.enum(["reply", "transcription"]),
+});
 const attentionParams = z.object({
   attentionID: z.string(),
   action: z.enum([
@@ -331,6 +349,58 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/v1/settings/assistant",
+  tags: ["settings"],
+  summary: "Get assistant settings",
+  responses: {
+    200: { description: "Assistant settings", content: json(z.object({ data: AssistantViewSchema })) },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/settings/assistant",
+  tags: ["settings"],
+  summary: "Update assistant settings",
+  request: {
+    body: { content: json(AssistantInputSchema), required: true },
+  },
+  responses: {
+    200: { description: "Updated assistant settings", content: json(z.object({ data: AssistantViewSchema })) },
+    400: errorResponse("Invalid settings"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/settings/assistant/{target}/models",
+  tags: ["settings"],
+  summary: "List models from an assistant endpoint",
+  request: { params: assistantTargetParams },
+  responses: {
+    200: { description: "Available models", content: json(AssistantModelsSchema) },
+    400: errorResponse("Endpoint unavailable or invalid target"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/reply-options",
+  tags: ["replies"],
+  summary: "List short reply options for a session",
+  request: {
+    params,
+    query: z.object({ mode: z.enum(["reply", "choices"]).optional() }),
+  },
+  responses: {
+    200: { description: "Reply options", content: json(ReplyOptionsSchema) },
+    404: errorResponse("Session not found"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/v1/attention",
   tags: ["attention"],
   summary: "List attention items",
@@ -425,6 +495,8 @@ export function buildOpenApiDocument() {
       { name: "sessions" },
       { name: "drafts" },
       { name: "attention" },
+      { name: "replies" },
+      { name: "settings" },
       { name: "events" },
       { name: "search" },
       { name: "diagnostics" },
