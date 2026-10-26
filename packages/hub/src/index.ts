@@ -7,3 +7,4 @@ export * from "./lib/logger";
 export * from "./lib/redact";
 export * from "./services/event-bus";
 export * from "./services/provider-registry";
+export * from "./services/provider-events";

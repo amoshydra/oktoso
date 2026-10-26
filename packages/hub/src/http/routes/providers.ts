@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ProviderRegistry } from "../../services/provider-registry";
 import type { AppEnv } from "../types";
-import { notFound, notImplemented } from "../../domain/errors";
+import { notFound } from "../../domain/errors";
 
 export function registerProviderRoutes(
   app: Hono<AppEnv>,
@@ -13,11 +13,5 @@ export function registerProviderRoutes(
     const providerID = c.req.param("providerID");
     if (!registry.get(providerID)) throw notFound("Provider not found");
     return c.json(await registry.check(providerID));
-  });
-
-  app.get("/api/v1/providers/:providerID/options", (c) => {
-    const providerID = c.req.param("providerID");
-    if (!registry.get(providerID)) throw notFound("Provider not found");
-    throw notImplemented("Provider options are not implemented until the provider adapter lands");
   });
 }

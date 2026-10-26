@@ -16,7 +16,20 @@ interface FakeServerOptions {
   host?: string;
 }
 
-const OPENCODE_SESSIONS = [
+interface FakeOpenCodeSession {
+  id: string;
+  projectID: string;
+  agent: string;
+  model: { id: string; providerID: string; variant?: string };
+  cost: number;
+  tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } };
+  outcome?: string;
+  time: { created: number; updated: number; idle?: number; viewed?: number };
+  title: string;
+  location: { directory: string };
+}
+
+const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
   {
     id: "ses_auth",
     projectID: "project-agent-hub",
@@ -55,7 +68,7 @@ const OPENCODE_SESSIONS = [
   },
 ];
 
-const OPENCODE_MESSAGES: Record<string, unknown[]> = {
+const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
   ses_auth: [
     {
       id: "msg_auth_user",
@@ -153,6 +166,17 @@ const OPENCODE_MESSAGES: Record<string, unknown[]> = {
   ],
 };
 
+const fakeEventClients = new Set<ServerResponse>();
+
+function broadcastEvent(type: string, data: unknown): void {
+  const payload = `data: ${JSON.stringify({
+    id: `evt_${Date.now().toString(36)}`,
+    type,
+    data,
+  })}\n\n`;
+  for (const response of fakeEventClients) response.write(payload);
+}
+
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
   response.writeHead(status, {
     "content-type": "application/json",
@@ -172,10 +196,83 @@ function page<T>(items: T[], url: URL): { data: T[]; cursor: { previous: string 
   return { data, cursor: { previous: offset > 0 ? String(Math.max(0, offset - limit)) : null, next } };
 }
 
-function handle(request: IncomingMessage, response: ServerResponse): void {
+async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  if (chunks.length === 0) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   const path = url.pathname;
 
+  if (path === "/api/event" && request.method === "GET") {
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    });
+    response.write(`data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`);
+    fakeEventClients.add(response);
+    const timer = setInterval(() => response.write(": heartbeat\n\n"), 15_000);
+    request.on("close", () => {
+      clearInterval(timer);
+      fakeEventClients.delete(response);
+    });
+    return;
+  }
+  if (path === "/api/agent" && request.method === "GET") {
+    sendJson(response, 200, {
+      data: [{ id: "build", name: "Build" }],
+      location: { directory: "/home/me/agent-hub" },
+    });
+    return;
+  }
+  if (path === "/api/model" && request.method === "GET") {
+    sendJson(response, 200, {
+      data: [
+        {
+          id: "claude-sonnet",
+          modelID: "claude-sonnet",
+          providerID: "commandcode",
+          name: "Claude Sonnet",
+        },
+      ],
+      location: { directory: "/home/me/agent-hub" },
+    });
+    return;
+  }
+  if (path === "/api/session" && request.method === "POST") {
+    const body = await readBody(request);
+    const now = Date.now();
+    const location = body.location && typeof body.location === "object"
+      ? (body.location as { directory?: string })
+      : {};
+    const session = {
+      id: `ses_fake_${now.toString(36)}`,
+      projectID: "project-agent-hub",
+      agent: typeof body.agent === "string" ? body.agent : "build",
+      model:
+        body.model && typeof body.model === "object"
+          ? (body.model as { id: string; providerID: string; variant?: string })
+          : { id: "claude-sonnet", providerID: "commandcode" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: now, updated: now },
+      title: typeof body.title === "string" && body.title ? body.title : "Untitled session",
+      location: { directory: location.directory ?? "/home/me/agent-hub" },
+    };
+    OPENCODE_SESSIONS.unshift(session);
+    OPENCODE_MESSAGES[session.id] = [];
+    broadcastEvent("session.created", { sessionID: session.id });
+    sendJson(response, 200, { data: session });
+    return;
+  }
   if (path === "/api/info") {
     sendJson(response, 200, { version: "0.0.0-fake-opencode" });
     return;
@@ -202,6 +299,49 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
       return;
     }
     sendJson(response, 200, page(messages, url));
+    return;
+  }
+  const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/);
+  if (promptMatch && request.method === "POST") {
+    const sessionID = promptMatch[1] ?? "";
+    const body = await readBody(request);
+    const messages = OPENCODE_MESSAGES[sessionID];
+    if (!messages) {
+      sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
+      return;
+    }
+    const text = typeof body.text === "string" ? body.text : "";
+    const now = Date.now();
+    const userID = `msg_fake_${now.toString(36)}`;
+    messages.push({
+      id: userID,
+      type: "user",
+      time: { created: now },
+      text,
+      files: [],
+      agents: [],
+    });
+    messages.push({
+      id: `msg_fake_reply_${now.toString(36)}`,
+      type: "assistant",
+      time: { created: now + 1, completed: now + 2 },
+      agent: "build",
+      model: { id: "claude-sonnet", providerID: "commandcode" },
+      content: [{ type: "text", text: `Fake reply: ${text}` }],
+    });
+    const session = OPENCODE_SESSIONS.find((item) => item.id === sessionID);
+    if (session) {
+      session.time.updated = now + 2;
+      session.time.idle = now + 2;
+      session.outcome = "succeeded";
+    }
+    broadcastEvent("session.updated", { sessionID });
+    sendJson(response, 200, { data: { id: userID } });
+    return;
+  }
+  const interruptMatch = path.match(/^\/api\/session\/([^/]+)\/interrupt$/);
+  if (interruptMatch && request.method === "POST") {
+    sendJson(response, 200, { interrupted: true });
     return;
   }
   const viewMatch = path.match(/^\/api\/session\/([^/]+)\/view$/);
@@ -250,13 +390,11 @@ export async function createFakeProviderServer(
 ): Promise<FakeProviderServer> {
   const host = options.host ?? "127.0.0.1";
   const server = createServer((request, response) => {
-    try {
-      handle(request, response);
-    } catch (error) {
+    void handle(request, response).catch((error) => {
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : String(error),
       });
-    }
+    });
   });
 
   await new Promise<void>((resolve, reject) => {

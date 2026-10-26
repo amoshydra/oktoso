@@ -1,0 +1,88 @@
+import type { ProviderEvent } from "@agent-hub/providers";
+import type { EventBus } from "./event-bus";
+import type { ProviderRegistry } from "./provider-registry";
+import type { SessionService } from "./session-service";
+import type { Logger } from "../lib/logger";
+
+export class ProviderEventService {
+  private readonly controller = new AbortController();
+  private readonly unsubscribes: Array<() => void> = [];
+  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private started = false;
+
+  constructor(
+    private readonly registry: ProviderRegistry,
+    private readonly eventBus: EventBus,
+    private readonly sessions: SessionService,
+    private readonly logger: Logger,
+    private readonly coalesceMs = 200,
+  ) {}
+
+  async start(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+
+    for (const adapter of this.registry.adapters()) {
+      if (!adapter.subscribe) continue;
+      try {
+        const unsubscribe = await adapter.subscribe(
+          (event) => this.handle(event),
+          this.controller.signal,
+        );
+        this.unsubscribes.push(unsubscribe);
+      } catch (error) {
+        this.logger.warn("Provider event subscription failed", {
+          providerID: adapter.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  stop(): void {
+    this.controller.abort();
+    for (const unsubscribe of this.unsubscribes.splice(0)) {
+      try {
+        unsubscribe();
+      } catch {
+        // Ignore provider shutdown errors.
+      }
+    }
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    this.started = false;
+  }
+
+  private handle(event: ProviderEvent): void {
+    this.sessions.invalidate();
+
+    const providerID = event.sessionRef.slice(0, event.sessionRef.indexOf(":"));
+    const pending = this.timers.get(event.sessionRef);
+    if (pending) clearTimeout(pending);
+
+    const timer = setTimeout(() => {
+      this.timers.delete(event.sessionRef);
+      void this.eventBus
+        .publish(
+          "session.updated",
+          {
+            providerID,
+            eventType:
+              event.data && typeof event.data === "object" && "eventType" in event.data
+                ? (event.data as { eventType?: unknown }).eventType
+                : event.type,
+          },
+          { sessionRef: event.sessionRef },
+        )
+        .catch((error) => {
+          this.logger.warn("Failed to publish provider update", {
+            providerID,
+            sessionRef: event.sessionRef,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }, this.coalesceMs);
+
+    this.timers.set(event.sessionRef, timer);
+  }
+}

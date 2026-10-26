@@ -7,6 +7,7 @@ import { loadConfig } from "./config/load";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
+import { ProviderEventService } from "./services/provider-events";
 import { createApp } from "./app";
 import { VERSION } from "./version";
 
@@ -30,6 +31,12 @@ try {
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
   const sessions = new SessionService(registry, logger);
+  const providerEvents = new ProviderEventService(
+    registry,
+    eventBus,
+    sessions,
+    logger,
+  );
 
   const configuredWebRoot = config.webRoot
     ? resolve(config.webRoot)
@@ -78,12 +85,18 @@ try {
       error: error instanceof Error ? error.message : String(error),
     });
   });
+  void providerEvents.start().catch((error) => {
+    logger.warn("provider event startup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info("shutting down", { signal });
+    providerEvents.stop();
     server.close();
     await store.close();
     process.exit(0);

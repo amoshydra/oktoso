@@ -3,10 +3,14 @@ import type {
   ProviderHealth,
   Diagnostics,
   ErrorResponse,
+  CreateSessionInput,
   Health,
   MessagePage,
   MessagesQuery,
   Provider,
+  ProviderOptions,
+  SendInput,
+  SendResult,
   Session,
   SessionListQuery,
   SessionPage,
@@ -94,6 +98,33 @@ export class HubClient {
     });
   }
 
+  async sendMessage(ref: string, input: SendInput): Promise<SendResult> {
+    return this.request<SendResult>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/messages`,
+      { method: "POST", body: input },
+    );
+  }
+
+  async createSession(input: CreateSessionInput): Promise<Session> {
+    return this.request<Session>("/api/v1/sessions", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  async interrupt(ref: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/interrupt`,
+      { method: "POST" },
+    );
+  }
+
+  async options(providerID: string): Promise<ProviderOptions> {
+    return this.request<ProviderOptions>(
+      `/api/v1/providers/${encodeURIComponent(providerID)}/options`,
+    );
+  }
+
   startEvents(options: {
     after?: number;
     signal: AbortSignal;
@@ -113,16 +144,18 @@ export class HubClient {
 
   private async request<T>(
     path: string,
-    options: { auth?: boolean; method?: string } = {},
+    options: { auth?: boolean; method?: string; body?: unknown } = {},
   ): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (options.auth !== false) headers.Authorization = `Bearer ${this.token}`;
+    if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         headers,
         method: options.method ?? "GET",
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       });
     } catch (error) {
       throw new HubError("network_error", "Unable to reach the hub", {

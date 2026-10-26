@@ -6,6 +6,7 @@ import type {
   MessagesQuery,
   ProviderCapabilities,
   ProviderHealth,
+  ProviderOptions,
   SendInput,
   SendResult,
   Session,
@@ -15,6 +16,7 @@ import type {
 } from "@agent-hub/contracts";
 import type { ProviderAdapter } from "../types";
 import { ProviderError } from "../errors";
+import { readSse } from "../http/sse";
 
 export interface OpenCodeAdapterOptions {
   id: string;
@@ -71,18 +73,30 @@ interface OpenCodeMessagesResponse {
   cursor: { previous?: string | null; next?: string | null };
 }
 
+interface OpenCodeAgent {
+  id: string;
+  name: string;
+}
+
+interface OpenCodeModel {
+  id: string;
+  modelID: string;
+  providerID: string;
+  name: string;
+}
+
 const openCodeCapabilities: ProviderCapabilities = {
   list: true,
   read: true,
-  send: false,
-  create: false,
-  stream: false,
-  interrupt: false,
+  send: true,
+  create: true,
+  stream: true,
+  interrupt: true,
   permissions: false,
   forms: false,
   attachments: false,
   search: false,
-  options: false,
+  options: true,
   markRead: true,
 };
 
@@ -179,18 +193,68 @@ export class OpenCodeAdapter implements ProviderAdapter {
   }
 
   async sendMessage(
-    _ref: string,
-    _input: SendInput,
-    _signal: AbortSignal,
+    ref: string,
+    input: SendInput,
+    signal: AbortSignal,
   ): Promise<SendResult> {
-    throw new ProviderError("unsupported", "OpenCode prompt sending is not enabled yet");
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<{ data?: { id?: string } }>(
+      `/api/session/${encodeURIComponent(nativeID)}/prompt`,
+      {},
+      signal,
+      "POST",
+      { text: input.text },
+    );
+    return {
+      accepted: true,
+      ...(response.data?.id ? { messageID: response.data.id } : {}),
+    };
   }
 
   async createSession(
-    _input: CreateSessionInput,
-    _signal: AbortSignal,
+    input: CreateSessionInput,
+    signal: AbortSignal,
   ): Promise<Session> {
-    throw new ProviderError("unsupported", "OpenCode session creation is not enabled yet");
+    const model = parseModel(input.model);
+    const response = await this.request<OpenCodeSessionResponse>(
+      "/api/session",
+      {},
+      signal,
+      "POST",
+      {
+        title: input.title,
+        ...(input.agent ? { agent: input.agent } : {}),
+        ...(model ? { model } : {}),
+        ...(input.directory ? { location: { directory: input.directory } } : {}),
+      },
+    );
+    return this.toSession(response.data);
+  }
+
+  async interrupt(ref: string, signal: AbortSignal): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    await this.request(
+      `/api/session/${encodeURIComponent(nativeID)}/interrupt`,
+      {},
+      signal,
+      "POST",
+    );
+  }
+
+  async getOptions(signal: AbortSignal): Promise<ProviderOptions> {
+    const [agents, models] = await Promise.all([
+      this.request<{ data: OpenCodeAgent[] }>("/api/agent", {}, signal),
+      this.request<{ data: OpenCodeModel[] }>("/api/model", {}, signal),
+    ]);
+    return {
+      agents: agents.data.map((agent) => ({ id: agent.id, label: agent.name })),
+      models: models.data.map((model) => ({
+        id: `${model.providerID}/${model.modelID}`,
+        label: model.name,
+        provider: model.providerID,
+      })),
+      directories: [],
+    };
   }
 
   async markRead(ref: string, signal: AbortSignal): Promise<void> {
@@ -208,6 +272,66 @@ export class OpenCodeAdapter implements ProviderAdapter {
       "POST",
       { idle },
     );
+  }
+
+  async subscribe(
+    onEvent: Parameters<NonNullable<ProviderAdapter["subscribe"]>>[0],
+    signal: AbortSignal,
+  ): Promise<() => void> {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    void this.consumeEvents(onEvent, controller.signal).catch(() => undefined);
+    return () => {
+      controller.abort();
+      signal.removeEventListener("abort", abort);
+    };
+  }
+
+  private async consumeEvents(
+    onEvent: Parameters<NonNullable<ProviderAdapter["subscribe"]>>[0],
+    signal: AbortSignal,
+  ): Promise<void> {
+    while (!signal.aborted) {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/event`, {
+          headers: {
+            Authorization: this.authorization,
+            Accept: "text/event-stream",
+          },
+          signal,
+        });
+        if (!response.ok || !response.body) {
+          throw new Error(`OpenCode event stream returned HTTP ${response.status}`);
+        }
+
+        await readSse(
+          response.body,
+          (message) => {
+            let parsed: { type?: unknown; data?: unknown };
+            try {
+              parsed = JSON.parse(message.data) as { type?: unknown; data?: unknown };
+            } catch {
+              return;
+            }
+            if (typeof parsed.type !== "string") return;
+            const sessionID = findSessionID(parsed.data);
+            if (!sessionID) return;
+            onEvent({
+              type: "session.updated",
+              sessionRef: `${this.id}:${sessionID}`,
+              data: { eventType: parsed.type },
+              at: Date.now(),
+            });
+          },
+          signal,
+        );
+      } catch {
+        if (signal.aborted) return;
+      }
+
+      await delay(2_000, signal);
+    }
   }
 
   private nativeID(ref: string): string {
@@ -347,6 +471,12 @@ export class OpenCodeAdapter implements ProviderAdapter {
           retryable: false,
         });
       }
+      if (response.status === 409) {
+        throw new ProviderError("conflict", "OpenCode rejected the request because it conflicts with the current session state", {
+          status: 409,
+          retryable: false,
+        });
+      }
       if (response.status === 429) {
         throw new ProviderError("rate_limited", "OpenCode rate limit reached", {
           status: 429,
@@ -375,7 +505,24 @@ function projectName(directory: string): string {
 }
 
 function modelRef(model: { id: string; providerID: string; variant?: string }): string {
-  return `${model.providerID}/${model.id}${model.variant ? `#${model.variant}` : ""}`;
+  const value = model.id.startsWith(`${model.providerID}/`)
+    ? model.id
+    : `${model.providerID}/${model.id}`;
+  return model.variant ? `${value}#${model.variant}` : value;
+}
+
+function parseModel(
+  model: string | undefined,
+): { providerID: string; id: string; variant?: string } | undefined {
+  if (!model) return undefined;
+  const [value, variant] = model.split("#", 2);
+  const slash = value?.indexOf("/") ?? -1;
+  if (!value || slash <= 0 || slash === value.length - 1) return undefined;
+  return {
+    providerID: value.slice(0, slash),
+    id: value.slice(slash + 1),
+    ...(variant ? { variant } : {}),
+  };
 }
 
 function sessionStatus(raw: OpenCodeSessionRaw): SessionStatus {
@@ -387,4 +534,38 @@ function sessionStatus(raw: OpenCodeSessionRaw): SessionStatus {
 function sessionUnread(raw: OpenCodeSessionRaw): boolean {
   if (raw.time.viewed === undefined) return true;
   return raw.time.idle !== undefined && raw.time.viewed < raw.time.idle;
+}
+
+function findSessionID(value: unknown, depth = 0): string | undefined {
+  if (depth > 5 || !value || typeof value !== "object") return undefined;
+  if (
+    "sessionID" in value &&
+    typeof (value as { sessionID?: unknown }).sessionID === "string"
+  ) {
+    const id = (value as { sessionID: string }).sessionID;
+    if (id.startsWith("ses")) return id;
+  }
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    const found = findSessionID(child, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+async function delay(ms: number, signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }

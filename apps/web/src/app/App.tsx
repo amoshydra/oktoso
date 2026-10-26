@@ -6,6 +6,7 @@ import type {
   Message,
   MessagePart,
   Provider,
+  ProviderOptions,
   Session,
 } from "@agent-hub/contracts";
 import {
@@ -41,9 +42,9 @@ const VIEW_META: Record<
   sessions: {
     label: "Sessions",
     mark: "S",
-    sub: "Session index · Phase 1",
-    phase: "1",
-    description: "The provider-backed session index and read-only chat.",
+    sub: "OpenCode read/write · Phase 2",
+    phase: "2",
+    description: "The provider-backed session index, transcript, and composer.",
   },
   search: {
     label: "Search",
@@ -488,11 +489,14 @@ export function App() {
                 <SessionDetail
                   client={client as HubClient}
                   sessionRef={selectedSessionRef}
+                  events={events}
                   onBack={() => setSelectedSessionRef(undefined)}
                 />
               ) : (
                 <SessionsView
                   client={client as HubClient}
+                  events={events}
+                  providers={providers}
                   onOpen={setSelectedSessionRef}
                 />
               )
@@ -653,8 +657,14 @@ function Login(props: {
   );
 }
 
-function SessionsView(props: { client: HubClient; onOpen: (ref: string) => void }) {
+function SessionsView(props: {
+  client: HubClient;
+  events: HubEvent[];
+  providers: Provider[];
+  onOpen: (ref: string) => void;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [showNew, setShowNew] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -684,21 +694,55 @@ function SessionsView(props: { client: HubClient; onOpen: (ref: string) => void 
     void load();
   }, [props.client]);
 
+  const liveSeq = props.events[0]?.seq ?? 0;
+  useEffect(() => {
+    if (!liveSeq) return;
+    const timer = setTimeout(() => void load(), 500);
+    return () => clearTimeout(timer);
+  }, [liveSeq]);
+
   return (
     <>
       <section class="hero">
         <div>
-          <p class="eyebrow">Phase 1</p>
+          <p class="eyebrow">Phase 2</p>
           <h2>OpenCode sessions</h2>
           <p>
-            Live session index and read-only transcript. Sending prompts, creating
-            sessions, and attention arrive in the next slices.
+            Live session index, transcript, and follow-up composer. New-session
+            creation and attention arrive in the next slices.
           </p>
         </div>
-        <button class="btn small" type="button" disabled={loading} onClick={() => void load()}>
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+        <div class="hero-actions">
+          <button
+            class="btn small"
+            type="button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+          <button
+            class="btn primary small"
+            type="button"
+            disabled={props.providers.every((provider) => !provider.capabilities.create)}
+            onClick={() => setShowNew(true)}
+          >
+            New session
+          </button>
+        </div>
       </section>
+
+      {showNew ? (
+        <NewSessionForm
+          client={props.client}
+          providers={props.providers}
+          onClose={() => setShowNew(false)}
+          onCreated={(ref) => {
+            setShowNew(false);
+            props.onOpen(ref);
+          }}
+        />
+      ) : null}
 
       {error ? (
         <div class="alert" role="alert">
@@ -715,7 +759,7 @@ function SessionsView(props: { client: HubClient; onOpen: (ref: string) => void 
             <h2>All sessions</h2>
             <p>{sessions.length} sessions · newest first</p>
           </div>
-          <span class="read-only">Read-only · Phase 1</span>
+          <span class="mode-badge">Read + write · Phase 2</span>
         </div>
         {loading && sessions.length === 0 ? (
           <div class="empty">Loading sessions…</div>
@@ -763,9 +807,183 @@ function SessionsView(props: { client: HubClient; onOpen: (ref: string) => void 
   );
 }
 
+function NewSessionForm(props: {
+  client: HubClient;
+  providers: Provider[];
+  onClose: () => void;
+  onCreated: (ref: string) => void;
+}) {
+  const creatable = props.providers.filter(
+    (provider) => provider.enabled && provider.capabilities.create,
+  );
+  const [providerID, setProviderID] = useState(creatable[0]?.id ?? "");
+  const [options, setOptions] = useState<ProviderOptions>();
+  const [title, setTitle] = useState("");
+  const [directory, setDirectory] = useState("");
+  const [agent, setAgent] = useState("");
+  const [model, setModel] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!providerID) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    setOptions(undefined);
+    props.client
+      .options(providerID)
+      .then((next) => {
+        if (cancelled) return;
+        setOptions(next);
+        setDirectory(next.defaults?.directory ?? next.directories[0] ?? "");
+        setAgent(next.defaults?.agent ?? next.agents[0]?.id ?? "");
+        setModel(next.defaults?.model ?? next.models[0]?.id ?? "");
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Unable to load provider options");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, providerID]);
+
+  const submit = async () => {
+    if (!providerID || !title.trim() || submitting) return;
+    setSubmitting(true);
+    setError(undefined);
+    let session;
+    try {
+      session = await props.client.createSession({
+        providerID,
+        title: title.trim(),
+        ...(directory ? { directory } : {}),
+        ...(agent ? { agent } : {}),
+        ...(model ? { model } : {}),
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to create the session");
+      setSubmitting(false);
+      return;
+    }
+
+    if (prompt.trim()) {
+      try {
+        await props.client.sendMessage(session.ref, { text: prompt.trim() });
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? `Session created, but the first prompt failed: ${reason.message}`
+            : "Session created, but the first prompt failed",
+        );
+      }
+    }
+
+    setSubmitting(false);
+    props.onCreated(session.ref);
+  };
+
+  return (
+    <section class="panel new-session-panel">
+      <div class="panel-head">
+        <div>
+          <h2>New session</h2>
+          <p>Create an OpenCode session and optionally send the first prompt.</p>
+        </div>
+        <button class="btn ghost small" type="button" onClick={props.onClose}>
+          Close
+        </button>
+      </div>
+
+      {creatable.length === 0 ? (
+        <div class="empty">No configured provider supports session creation.</div>
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Provider</span>
+              <select value={providerID} onInput={(event) => setProviderID((event.currentTarget as HTMLSelectElement).value)}>
+                {creatable.map((provider) => (
+                  <option value={provider.id}>{provider.name}</option>
+                ))}
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Title</span>
+              <input
+                value={title}
+                placeholder="Investigate auth race"
+                onInput={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
+              />
+            </label>
+            <label class="form-field span-2">
+              <span>Project directory</span>
+              <input
+                value={directory}
+                list="new-session-directories"
+                placeholder="/home/me/agent-hub"
+                onInput={(event) => setDirectory((event.currentTarget as HTMLInputElement).value)}
+              />
+              <datalist id="new-session-directories">
+                {(options?.directories ?? []).map((item) => <option value={item} />)}
+              </datalist>
+            </label>
+            <label class="form-field">
+              <span>Agent</span>
+              <select value={agent} disabled={loading} onInput={(event) => setAgent((event.currentTarget as HTMLSelectElement).value)}>
+                {(options?.agents ?? []).map((item) => <option value={item.id}>{item.label}</option>)}
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Model</span>
+              <select value={model} disabled={loading} onInput={(event) => setModel((event.currentTarget as HTMLSelectElement).value)}>
+                {(options?.models ?? []).map((item) => <option value={item.id}>{item.label}</option>)}
+              </select>
+            </label>
+            <label class="form-field span-2">
+              <span>First prompt</span>
+              <textarea
+                rows={3}
+                value={prompt}
+                placeholder="Start by reading the auth middleware."
+                onInput={(event) => setPrompt((event.currentTarget as HTMLTextAreaElement).value)}
+              />
+            </label>
+          </div>
+
+          {loading ? <div class="form-note">Loading provider options…</div> : null}
+          {error ? <div class="form-error" role="alert">{error}</div> : null}
+
+          <div class="form-actions">
+            <button class="btn small" type="button" onClick={props.onClose}>
+              Cancel
+            </button>
+            <button class="btn primary small" type="submit" disabled={loading || submitting || !title.trim() || !providerID}>
+              {submitting ? "Creating…" : "Create session"}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
+  events: HubEvent[];
   onBack: () => void;
 }) {
   const [session, setSession] = useState<Session>();
@@ -773,7 +991,52 @@ function SessionDetail(props: {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [interrupting, setInterrupting] = useState(false);
+  const [draft, setDraft] = useState("");
   const [error, setError] = useState<string>();
+  const [sendError, setSendError] = useState<string>();
+
+  const refresh = async () => {
+    const [nextSession, page] = await Promise.all([
+      props.client.session(props.sessionRef),
+      props.client.messages(props.sessionRef, { limit: 100, order: "asc" }),
+    ]);
+    setSession(nextSession);
+    setMessages(page.data);
+    setCursor(page.cursor.next);
+  };
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setSendError(undefined);
+    try {
+      await props.client.sendMessage(props.sessionRef, { text });
+      setDraft("");
+      setSession((current) => (current ? { ...current, status: "running" } : current));
+      window.setTimeout(() => void refresh().catch(() => undefined), 500);
+    } catch (reason) {
+      setSendError(reason instanceof Error ? reason.message : "Unable to send the prompt");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const interrupt = async () => {
+    if (interrupting) return;
+    setInterrupting(true);
+    setSendError(undefined);
+    try {
+      await props.client.interrupt(props.sessionRef);
+      await refresh();
+    } catch (reason) {
+      setSendError(reason instanceof Error ? reason.message : "Unable to interrupt");
+    } finally {
+      setInterrupting(false);
+    }
+  };
 
   const loadMore = async () => {
     if (!cursor) return;
@@ -793,16 +1056,11 @@ function SessionDetail(props: {
     let cancelled = false;
     setLoading(true);
     setError(undefined);
-    Promise.all([
-      props.client.session(props.sessionRef),
-      props.client.messages(props.sessionRef, { limit: 100, order: "asc" }),
-    ])
-      .then(([nextSession, page]) => {
-        if (cancelled) return;
-        setSession(nextSession);
-        setMessages(page.data);
-        setCursor(page.cursor.next);
-        void props.client.markRead(props.sessionRef).catch(() => undefined);
+    refresh()
+      .then(() => {
+        if (!cancelled) {
+          void props.client.markRead(props.sessionRef).catch(() => undefined);
+        }
       })
       .catch((reason) => {
         if (!cancelled) {
@@ -817,13 +1075,35 @@ function SessionDetail(props: {
     };
   }, [props.client, props.sessionRef]);
 
+  const liveSeq =
+    props.events.find((event) => event.sessionRef === props.sessionRef)?.seq ?? 0;
+  useEffect(() => {
+    if (!liveSeq) return;
+    const timer = setTimeout(() => {
+      void refresh().catch(() => undefined);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [liveSeq, props.client, props.sessionRef]);
+
   return (
     <>
       <div class="chat-view-head">
         <button class="btn ghost small" type="button" onClick={props.onBack}>
           ← Sessions
         </button>
-        <span class="read-only">Read-only · Phase 1</span>
+        <div class="chat-head-actions">
+          <span class="mode-badge">Writable · Phase 2</span>
+          {session?.status === "running" ? (
+            <button
+              class="btn small"
+              type="button"
+              disabled={interrupting}
+              onClick={() => void interrupt()}
+            >
+              {interrupting ? "Interrupting…" : "Interrupt"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {loading && !session ? (
@@ -871,6 +1151,12 @@ function SessionDetail(props: {
             </div>
           ) : null}
 
+          {sendError ? (
+            <div class="alert" role="alert">
+              {sendError}
+            </div>
+          ) : null}
+
           <section class="chat-panel" aria-label="Session transcript">
             {messages.length === 0 ? (
               <div class="empty">No messages returned by the provider.</div>
@@ -883,6 +1169,11 @@ function SessionDetail(props: {
                     {message.streaming ? <span class="streaming-label">streaming</span> : null}
                   </div>
                   <div class="chat-message-parts">
+                    {message.metadata?.error ? (
+                      <div class="form-error" role="alert">
+                        Provider error: {formatJson(message.metadata.error)}
+                      </div>
+                    ) : null}
                     {message.parts.map((part, index) => (
                       <MessagePartView part={part} key={index} />
                     ))}
@@ -901,6 +1192,37 @@ function SessionDetail(props: {
               </button>
             ) : null}
           </section>
+
+          <form
+            class="chat-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void send();
+            }}
+          >
+            <textarea
+              rows={2}
+              value={draft}
+              placeholder={`Reply to ${session.title}…`}
+              onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+            <div class="chat-composer-bar">
+              <span class="composer-hint">Ctrl/⌘ Enter to send</span>
+              <button
+                class="btn primary small"
+                type="submit"
+                disabled={sending || !draft.trim()}
+              >
+                {sending ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </form>
         </>
       ) : null}
     </>

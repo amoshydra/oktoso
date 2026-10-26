@@ -110,6 +110,65 @@ describe("hub app", () => {
     });
   });
 
+  it("exposes options, creates sessions, sends prompts, and interrupts", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const optionsResponse = await app.request(
+      "/api/v1/providers/desktop-opencode/options",
+      { headers },
+    );
+    expect(optionsResponse.status).toBe(200);
+    expect(await optionsResponse.json()).toMatchObject({
+      agents: [{ id: "build" }],
+      models: [{ id: "commandcode/claude-sonnet" }],
+    });
+
+    const createResponse = await app.request("/api/v1/sessions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        providerID: "desktop-opencode",
+        title: "Adapter smoke test",
+        directory: "/home/me/agent-hub",
+        agent: "build",
+        model: "commandcode/claude-sonnet",
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as { ref: string; title: string };
+    expect(created.title).toBe("Adapter smoke test");
+
+    const sendResponse = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/messages`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: "Reply with exactly OK." }),
+      },
+    );
+    expect(sendResponse.status).toBe(202);
+    expect(await sendResponse.json()).toMatchObject({ accepted: true });
+
+    const messagesResponse = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/messages?order=asc`,
+      { headers },
+    );
+    const messages = (await messagesResponse.json()) as {
+      data: Array<{ role: string; parts: unknown[] }>;
+    };
+    expect(messages.data.some((message) => message.role === "assistant")).toBe(true);
+
+    const interruptResponse = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/interrupt`,
+      { method: "POST", headers },
+    );
+    expect(interruptResponse.status).toBe(204);
+  });
+
   it("opens an authenticated SSE stream and replay", async () => {
     const { app, eventBus } = await createTestApp();
     const response = await app.request("/api/v1/events?after=0", {

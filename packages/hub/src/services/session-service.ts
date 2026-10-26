@@ -1,12 +1,16 @@
 import type {
+  CreateSessionInput,
   MessagePage,
   MessagesQuery,
+  ProviderOptions,
+  SendInput,
+  SendResult,
   Session,
   SessionListQuery,
   SessionPage,
 } from "@agent-hub/contracts";
 import type { ProviderAdapter } from "@agent-hub/providers";
-import { badRequest, notFound } from "../domain/errors";
+import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { ProviderRegistry } from "./provider-registry";
 
@@ -144,6 +148,88 @@ export class SessionService {
       return { data: [], cursor: { next: null, previous: null } };
     }
     return adapter.getMessages(ref, query, AbortSignal.timeout(15_000));
+  }
+
+  async sendMessage(ref: string, input: SendInput): Promise<SendResult> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter?.capabilities.send) {
+      throw notImplemented("This provider does not support sending messages");
+    }
+    const result = await adapter.sendMessage(
+      ref,
+      input,
+      AbortSignal.timeout(30_000),
+    );
+    const session = this.sessions.get(ref);
+    if (session) this.sessions.set(ref, { ...session, status: "running" });
+    return result;
+  }
+
+  async create(input: CreateSessionInput): Promise<Session> {
+    const adapter = this.registry.adapter(input.providerID);
+    if (!adapter?.capabilities.create) {
+      throw notImplemented("This provider does not support creating sessions");
+    }
+    const session = await adapter.createSession(
+      input,
+      AbortSignal.timeout(30_000),
+    );
+    this.sessions.set(session.ref, session);
+    return session;
+  }
+
+  async interrupt(ref: string): Promise<void> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter?.interrupt) {
+      throw notImplemented("This provider does not support interrupting sessions");
+    }
+    await adapter.interrupt(ref, AbortSignal.timeout(15_000));
+    const session = this.sessions.get(ref);
+    if (session) this.sessions.set(ref, { ...session, status: "idle" });
+  }
+
+  async options(providerID: string): Promise<ProviderOptions> {
+    await this.ensureFresh();
+    const adapter = this.registry.adapter(providerID);
+    if (!adapter?.getOptions) {
+      throw notImplemented("This provider does not expose creation options");
+    }
+    const options = await adapter.getOptions(AbortSignal.timeout(15_000));
+    const providerSessions = [...this.sessions.values()]
+      .filter((session) => session.providerID === providerID)
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+    const latest = providerSessions[0];
+    const directories = [
+      ...new Set(
+        providerSessions
+          .map((session) => session.directory)
+          .filter((directory): directory is string => Boolean(directory))
+          .sort(),
+      ),
+    ];
+    const latestModel = latest?.model?.split("#")[0];
+    return {
+      ...options,
+      directories: directories.length > 0 ? directories : options.directories,
+      defaults: {
+        ...options.defaults,
+        ...(latest?.directory ?? directories[0]
+          ? { directory: latest?.directory ?? directories[0] }
+          : {}),
+        ...(options.agents[0] && !options.defaults?.agent
+          ? { agent: latest?.agent ?? options.agents[0].id }
+          : {}),
+        ...(latestModel && options.models.some((model) => model.id === latestModel)
+          ? { model: latestModel }
+          : options.models[0] && !options.defaults?.model
+            ? { model: options.models[0].id }
+            : {}),
+      },
+    };
+  }
+
+  invalidate(): void {
+    this.lastSyncAt = 0;
   }
 
   async markRead(ref: string): Promise<void> {
