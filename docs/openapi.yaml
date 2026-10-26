@@ -905,12 +905,17 @@ components:
           enum:
             - text
             - textarea
+            - number
             - boolean
             - select
+            - multiselect
         required:
           type: boolean
         placeholder:
           type: string
+        description:
+          type: string
+        defaultValue: {}
         options:
           type: array
           items:
@@ -986,12 +991,17 @@ components:
                 enum:
                   - text
                   - textarea
+                  - number
                   - boolean
                   - select
+                  - multiselect
               required:
                 type: boolean
               placeholder:
                 type: string
+              description:
+                type: string
+              defaultValue: {}
               options:
                 type: array
                 items:
@@ -1084,12 +1094,17 @@ components:
                       enum:
                         - text
                         - textarea
+                        - number
                         - boolean
                         - select
+                        - multiselect
                     required:
                       type: boolean
                     placeholder:
                       type: string
+                    description:
+                      type: string
+                    defaultValue: {}
                     options:
                       type: array
                       items:

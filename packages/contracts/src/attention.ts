@@ -18,9 +18,11 @@ export const zAttentionOption = z.object({
 export const zAttentionField = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(["text", "textarea", "boolean", "select"]),
+  type: z.enum(["text", "textarea", "number", "boolean", "select", "multiselect"]),
   required: z.boolean().optional(),
   placeholder: z.string().optional(),
+  description: z.string().optional(),
+  defaultValue: z.unknown().optional(),
   options: z.array(zAttentionOption).optional(),
 });
 
@@ -59,3 +61,5 @@ export type AttentionAction = z.infer<typeof zAttentionAction>;
 export type AttentionField = z.infer<typeof zAttentionField>;
 export type AttentionSummary = z.infer<typeof zAttentionSummary>;
 export type Attention = z.infer<typeof zAttention>;
+export type AttentionPage = z.infer<typeof zAttentionPage>;
+export type AttentionActionInput = z.infer<typeof zAttentionActionInput>;

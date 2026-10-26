@@ -72,6 +72,8 @@ Acceptance:
 
 ## Milestone 2: Attention inbox
 
+Status: core OpenCode attention is implemented: permissions, forms (including select, boolean, number, and multiselect fields), unread sessions, failures, inbox actions, and attention events. In-app notifications, badge counts, retry for failed sessions, and Open WebUI/Hermes attention remain for later slices.
+
 Goal: make the hub useful when you are away from the keyboard.
 
 Deliverables:

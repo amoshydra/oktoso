@@ -8,6 +8,7 @@ import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
 import { ProviderEventService } from "./services/provider-events";
+import { AttentionService } from "./services/attention-service";
 import { createApp } from "./app";
 import { VERSION } from "./version";
 
@@ -31,11 +32,13 @@ try {
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
   const sessions = new SessionService(registry, logger);
+  const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const providerEvents = new ProviderEventService(
     registry,
     eventBus,
     sessions,
     logger,
+    attention,
   );
 
   const configuredWebRoot = config.webRoot
@@ -50,6 +53,7 @@ try {
     eventBus,
     registry,
     sessions,
+    attention,
     logger,
     startedAt,
     webRoot: configuredWebRoot,
@@ -82,6 +86,11 @@ try {
   });
   void sessions.refresh().catch((error) => {
     logger.warn("initial session sync failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  void attention.refresh().catch((error) => {
+    logger.warn("initial attention sync failed", {
       error: error instanceof Error ? error.message : String(error),
     });
   });

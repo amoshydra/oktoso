@@ -1,4 +1,7 @@
 import type {
+  AttentionActionInput,
+  AttentionPage,
+  AttentionType,
   AuthCheck,
   ProviderHealth,
   Diagnostics,
@@ -122,6 +125,25 @@ export class HubClient {
   async options(providerID: string): Promise<ProviderOptions> {
     return this.request<ProviderOptions>(
       `/api/v1/providers/${encodeURIComponent(providerID)}/options`,
+    );
+  }
+
+  async attention(query: { type?: AttentionType; sessionRef?: string } = {}): Promise<AttentionPage> {
+    const params = new URLSearchParams();
+    if (query.type) params.set("type", query.type);
+    if (query.sessionRef) params.set("sessionRef", query.sessionRef);
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request<AttentionPage>(`/api/v1/attention${suffix}`);
+  }
+
+  async actOnAttention(
+    id: string,
+    action: string,
+    input: AttentionActionInput = {},
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/attention/${encodeURIComponent(id)}/actions/${encodeURIComponent(action)}`,
+      { method: "POST", body: input },
     );
   }
 

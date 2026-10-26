@@ -6,7 +6,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. OpenCode session read/write is live: session index, transcript, composer, new-session creation, read markers, and provider event forwarding. The approved UI reference is frozen as `design-v1`.
+Implementation phase. The OpenCode read/write and attention slices are live: session index, transcript, composer, new-session creation, read markers, live events, provider permissions/forms, and the unified attention inbox. Notifications and attention badges are still pending. The approved UI reference is frozen as `design-v1`.
 
 ## Documents
 
@@ -40,6 +40,7 @@ pnpm dev
 - Hub API: `http://127.0.0.1:8787`
 - Development token: `dev-token-agent-hub` (prefilled in the dev login)
 - OpenCode read/write: session index, transcript, composer, new sessions, and interrupt
+- Attention: permissions, forms, unread sessions, failures, and provider-backed actions
 
 `pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. If `.env.local` exists with `OPENCODE_BASE_URL` and `OPENCODE_PASSWORD`, the OpenCode provider uses the real instance instead of the fake one:
 

@@ -1,4 +1,6 @@
 import type {
+  Attention,
+  AttentionField,
   CreateSessionInput,
   Message,
   MessagePage,
@@ -73,6 +75,34 @@ interface OpenCodeMessagesResponse {
   cursor: { previous?: string | null; next?: string | null };
 }
 
+interface OpenCodePermissionRequest {
+  id: string;
+  sessionID: string;
+  action: string;
+  resources: string[];
+  message?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface OpenCodeFormField {
+  key: string;
+  type: string;
+  title?: string;
+  description?: string;
+  required?: boolean;
+  hidden?: boolean;
+  options?: Array<{ value: string; label: string; description?: string }>;
+  placeholder?: string;
+  default?: unknown;
+}
+
+interface OpenCodeFormInfo {
+  id: string;
+  sessionID: string;
+  title: string;
+  fields: OpenCodeFormField[];
+}
+
 interface OpenCodeAgent {
   id: string;
   name: string;
@@ -92,8 +122,8 @@ const openCodeCapabilities: ProviderCapabilities = {
   create: true,
   stream: true,
   interrupt: true,
-  permissions: false,
-  forms: false,
+  permissions: true,
+  forms: true,
   attachments: false,
   search: false,
   options: true,
@@ -257,6 +287,122 @@ export class OpenCodeAdapter implements ProviderAdapter {
     };
   }
 
+  async listAttention(
+    directories: string[],
+    signal: AbortSignal,
+  ): Promise<Attention[]> {
+    const locations = [...new Set(directories.filter(Boolean))];
+    const scope: Array<string | undefined> = locations.length > 0 ? locations : [undefined];
+    const results = await Promise.allSettled(
+      scope.map(async (directory) => {
+        const query = directory ? { "location[directory]": directory } : {};
+        const [permissions, forms] = await Promise.all([
+          this.request<{ data: OpenCodePermissionRequest[] }>(
+            "/api/permission/request",
+            query,
+            signal,
+          ),
+          this.request<{ data: OpenCodeFormInfo[] }>("/api/form", query, signal),
+        ]);
+        return [
+          ...permissions.data.map((request) => this.permissionAttention(request)),
+          ...forms.data.map((form) => this.formAttention(form)),
+        ];
+      }),
+    );
+    const byID = new Map<string, Attention>();
+    let failures = 0;
+    let firstFailure: unknown;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        failures += 1;
+        firstFailure ??= result.reason;
+        continue;
+      }
+      for (const item of result.value) byID.set(item.id, item);
+    }
+    if (results.length > 0 && failures === results.length) {
+      throw firstFailure instanceof Error
+        ? firstFailure
+        : new Error(String(firstFailure));
+    }
+    return [...byID.values()];
+  }
+
+  async actOnAttention(
+    id: string,
+    action: string,
+    payload: unknown,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const [providerID, kind, sessionID, nativeID] = id.split(":");
+    if (providerID !== this.id || !sessionID || !nativeID) {
+      throw new ProviderError("invalid_request", `Invalid OpenCode attention ID: ${id}`);
+    }
+
+    if (kind === "permission") {
+      const decision =
+        action === "approve_once"
+          ? "once"
+          : action === "approve_always"
+            ? "always"
+            : action === "deny"
+              ? "reject"
+              : undefined;
+      if (!decision) {
+        throw new ProviderError("unsupported", `Unsupported permission action: ${action}`);
+      }
+      await this.request(
+        `/api/session/${encodeURIComponent(sessionID)}/permission/${encodeURIComponent(nativeID)}/reply`,
+        {},
+        signal,
+        "POST",
+        { decision },
+      );
+      return;
+    }
+
+    if (kind === "form") {
+      if (action === "answer") {
+        const fields =
+          payload && typeof payload === "object" && "fields" in payload
+            ? (payload as { fields?: unknown }).fields
+            : undefined;
+        if (!fields || typeof fields !== "object") {
+          throw new ProviderError("invalid_request", "Form answer fields are required");
+        }
+        const answer = Object.fromEntries(
+          Object.entries(fields as Record<string, unknown>).filter(
+            ([, value]) =>
+              value !== undefined &&
+              value !== "" &&
+              !(Array.isArray(value) && value.length === 0),
+          ),
+        );
+        await this.request(
+          `/api/session/${encodeURIComponent(sessionID)}/form/${encodeURIComponent(nativeID)}/reply`,
+          {},
+          signal,
+          "POST",
+          { answer },
+        );
+        return;
+      }
+      if (action === "dismiss") {
+        await this.request(
+          `/api/session/${encodeURIComponent(sessionID)}/form/${encodeURIComponent(nativeID)}`,
+          {},
+          signal,
+          "DELETE",
+        );
+        return;
+      }
+      throw new ProviderError("unsupported", `Unsupported form action: ${action}`);
+    }
+
+    throw new ProviderError("unsupported", `Unsupported attention kind: ${kind}`);
+  }
+
   async markRead(ref: string, signal: AbortSignal): Promise<void> {
     const nativeID = this.nativeID(ref);
     const raw = await this.request<OpenCodeSessionResponse>(
@@ -332,6 +478,106 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
       await delay(2_000, signal);
     }
+  }
+
+  private permissionAttention(request: OpenCodePermissionRequest): Attention {
+    const summary =
+      request.message ??
+      `${request.action}: ${request.resources.join(", ")}`;
+    return {
+      id: `${this.id}:permission:${request.sessionID}:${request.id}`,
+      sessionRef: `${this.id}:${request.sessionID}`,
+      type: "permission",
+      priority: "blocking",
+      title: `Permission: ${request.action}`,
+      summary,
+      createdAt: Date.now(),
+      actions: [
+        { id: "approve_once", label: "Allow once", style: "primary" },
+        { id: "approve_always", label: "Always allow" },
+        { id: "deny", label: "Deny", style: "danger" },
+      ],
+      payload: request,
+    };
+  }
+
+  private formAttention(form: OpenCodeFormInfo): Attention {
+    const fields: AttentionField[] = [];
+    let supported = true;
+    for (const field of form.fields) {
+      if (field.hidden) continue;
+      const base = {
+        id: field.key,
+        label: field.title ?? field.key,
+        required: field.required,
+        ...(field.description ? { description: field.description } : {}),
+      };
+      if (field.type === "string") {
+        if (field.options && field.options.length > 0) {
+          fields.push({
+            ...base,
+            type: "select",
+            defaultValue: field.default,
+            options: field.options.map((option) => ({
+              value: option.value,
+              label: option.label,
+            })),
+          });
+        } else {
+          fields.push({
+            ...base,
+            type: "text",
+            defaultValue: field.default,
+            placeholder: field.placeholder,
+          });
+        }
+      } else if (field.type === "number" || field.type === "integer") {
+        fields.push({
+          ...base,
+          type: "number",
+          defaultValue: field.default,
+          placeholder: field.placeholder,
+        });
+      } else if (field.type === "boolean") {
+        fields.push({
+          ...base,
+          type: "boolean",
+          defaultValue: field.default,
+        });
+      } else if (field.type === "multiselect") {
+        fields.push({
+          ...base,
+          type: "multiselect",
+          defaultValue: field.default,
+          options: field.options?.map((option) => ({
+            value: option.value,
+            label: option.label,
+          })),
+        });
+      } else {
+        supported = false;
+      }
+    }
+
+    return {
+      id: `${this.id}:form:${form.sessionID}:${form.id}`,
+      sessionRef: `${this.id}:${form.sessionID}`,
+      type: "question",
+      priority: "blocking",
+      title: form.title,
+      summary: supported
+        ? `${fields.length} field${fields.length === 1 ? "" : "s"} need an answer`
+        : "This form needs the provider UI",
+      createdAt: Date.now(),
+      actions: [
+        ...(supported
+          ? [{ id: "answer", label: "Submit answer", style: "primary" as const }]
+          : []),
+        { id: "dismiss", label: "Cancel request", style: "danger" as const },
+      ],
+      ...(fields.length > 0 ? { fields } : {}),
+      payload: form,
+    };
   }
 
   private nativeID(ref: string): string {

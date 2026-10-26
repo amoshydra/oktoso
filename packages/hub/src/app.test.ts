@@ -5,6 +5,7 @@ import { createLogger } from "./lib/logger";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
+import { AttentionService } from "./services/attention-service";
 import { MemoryStateStore } from "@agent-hub/storage";
 import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
 
@@ -25,16 +26,18 @@ async function createTestApp() {
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
   const sessions = new SessionService(registry, logger);
+  const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const app = createApp({
     config,
     store,
     eventBus,
     registry,
     sessions,
+    attention,
     logger,
     startedAt: Date.now(),
   });
-  return { app, eventBus, store, registry, sessions };
+  return { app, eventBus, store, registry, sessions, attention, fake };
 }
 
 afterEach(async () => {
@@ -167,6 +170,94 @@ describe("hub app", () => {
       { method: "POST", headers },
     );
     expect(interruptResponse.status).toBe(204);
+  });
+
+  it("lists and resolves provider attention", async () => {
+    const { app, eventBus } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const listResponse = await app.request("/api/v1/attention", { headers });
+    expect(listResponse.status).toBe(200);
+    const page = (await listResponse.json()) as {
+      data: Array<{ id: string; type: string; sessionRef: string; fields?: unknown[] }>;
+    };
+    const permission = page.data.find((item) => item.type === "permission");
+    const question = page.data.find((item) => item.type === "question");
+    expect(permission).toBeDefined();
+    expect(question).toBeDefined();
+    expect(page.data.some((item) => item.type === "unread")).toBe(true);
+    expect(page.data.some((item) => item.type === "error")).toBe(true);
+    const created = eventBus
+      .replay(0)
+      .events.filter((event) => event.type === "attention.created");
+    expect(created.some((event) => event.attentionID === permission!.id)).toBe(true);
+    expect(created.some((event) => event.attentionID === question!.id)).toBe(true);
+
+    const permissionResponse = await app.request(
+      `/api/v1/attention/${encodeURIComponent(permission!.id)}/actions/approve_once`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    expect(permissionResponse.status).toBe(204);
+    expect(
+      eventBus
+        .replay(0)
+        .events.some(
+          (event) =>
+            event.type === "attention.resolved" &&
+            event.attentionID === permission!.id,
+        ),
+    ).toBe(true);
+
+    const answerResponse = await app.request(
+      `/api/v1/attention/${encodeURIComponent(question!.id)}/actions/answer`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ fields: { model: "claude-sonnet", remember: true } }),
+      },
+    );
+    expect(answerResponse.status).toBe(204);
+    expect(
+      eventBus
+        .replay(0)
+        .events.some(
+          (event) =>
+            event.type === "attention.resolved" &&
+            event.attentionID === question!.id,
+        ),
+    ).toBe(true);
+
+    const after = await app.request("/api/v1/attention", { headers });
+    const afterPage = (await after.json()) as { data: Array<{ id: string }> };
+    expect(afterPage.data.some((item) => item.id === permission!.id)).toBe(false);
+    expect(afterPage.data.some((item) => item.id === question!.id)).toBe(false);
+  });
+
+  it("drops cached sessions when the provider no longer reports them", async () => {
+    const { sessions, fake } = await createTestApp();
+    const created = await sessions.create({
+      providerID: "desktop-opencode",
+      title: "Ephemeral provider session",
+      directory: "/home/me/agent-hub",
+    });
+    expect(
+      (await sessions.list({ limit: 200 })).data.some(
+        (session) => session.ref === created.ref,
+      ),
+    ).toBe(true);
+
+    const deleteResponse = await fetch(
+      `${fake.url}/api/session/${encodeURIComponent(created.nativeID)}`,
+      { method: "DELETE" },
+    );
+    expect(deleteResponse.status).toBe(204);
+    await sessions.refresh();
+
+    expect(
+      (await sessions.list({ limit: 200 })).data.some(
+        (session) => session.ref === created.ref,
+      ),
+    ).toBe(false);
   });
 
   it("opens an authenticated SSE stream and replay", async () => {

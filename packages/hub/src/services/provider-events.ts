@@ -2,6 +2,7 @@ import type { ProviderEvent } from "@agent-hub/providers";
 import type { EventBus } from "./event-bus";
 import type { ProviderRegistry } from "./provider-registry";
 import type { SessionService } from "./session-service";
+import type { AttentionService } from "./attention-service";
 import type { Logger } from "../lib/logger";
 
 export class ProviderEventService {
@@ -15,6 +16,7 @@ export class ProviderEventService {
     private readonly eventBus: EventBus,
     private readonly sessions: SessionService,
     private readonly logger: Logger,
+    private readonly attention?: AttentionService,
     private readonly coalesceMs = 200,
   ) {}
 
@@ -55,6 +57,7 @@ export class ProviderEventService {
 
   private handle(event: ProviderEvent): void {
     this.sessions.invalidate();
+    this.attention?.invalidate();
 
     const providerID = event.sessionRef.slice(0, event.sessionRef.indexOf(":"));
     const pending = this.timers.get(event.sessionRef);

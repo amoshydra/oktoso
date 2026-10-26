@@ -1,6 +1,5 @@
 import type {
   Attention,
-  AttentionAction,
   CreateSessionInput,
   MessagePage,
   MessagesQuery,
@@ -52,10 +51,10 @@ export interface ProviderAdapter {
   createSession(input: CreateSessionInput, signal: AbortSignal): Promise<Session>;
 
   interrupt?(ref: string, signal: AbortSignal): Promise<void>;
-  listAttention?(signal: AbortSignal): Promise<Attention[]>;
+  listAttention?(directories: string[], signal: AbortSignal): Promise<Attention[]>;
   actOnAttention?(
     id: string,
-    action: AttentionAction,
+    action: string,
     payload: unknown,
     signal: AbortSignal,
   ): Promise<void>;

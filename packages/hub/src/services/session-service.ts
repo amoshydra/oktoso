@@ -66,11 +66,15 @@ export class SessionService {
         })),
       );
 
+      const successfulProviders = new Map<string, Set<string>>();
       for (const result of results) {
         if (result.status === "fulfilled") {
+          const refs = new Set<string>();
           for (const session of result.value.page.data) {
+            refs.add(session.ref);
             this.sessions.set(session.ref, session);
           }
+          successfulProviders.set(result.value.adapter.id, refs);
         } else {
           this.logger.warn("Session sync failed", {
             error:
@@ -78,6 +82,16 @@ export class SessionService {
                 ? result.reason.message
                 : String(result.reason),
           });
+        }
+      }
+
+      // Providers are authoritative: drop cached sessions they no longer
+      // report, but only for providers whose sync succeeded.
+      for (const [providerID, refs] of successfulProviders) {
+        for (const [ref, session] of this.sessions) {
+          if (session.providerID === providerID && !refs.has(ref)) {
+            this.sessions.delete(ref);
+          }
         }
       }
 

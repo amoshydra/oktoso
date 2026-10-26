@@ -9,6 +9,7 @@ import type { HubConfig } from "./config/schema";
 import type { EventBus } from "./services/event-bus";
 import type { ProviderRegistry } from "./services/provider-registry";
 import type { SessionService } from "./services/session-service";
+import type { AttentionService } from "./services/attention-service";
 import type { StateStore } from "@agent-hub/storage";
 import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
@@ -20,6 +21,7 @@ import { requestLimits, securityHeaders } from "./http/middleware/security";
 import { registerHealthRoutes } from "./http/routes/health";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerSessionRoutes } from "./http/routes/sessions";
+import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 
@@ -29,6 +31,7 @@ export interface AppDependencies {
   eventBus: EventBus;
   registry: ProviderRegistry;
   sessions: SessionService;
+  attention: AttentionService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -63,6 +66,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   });
   registerProviderRoutes(app, deps.registry);
   registerSessionRoutes(app, deps.sessions);
+  registerAttentionRoutes(app, deps.attention);
   registerEventRoutes(app, deps.eventBus);
   registerDiagnosticsRoute(app, {
     startedAt,

@@ -166,6 +166,38 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
   ],
 };
 
+let fakePermission: Record<string, unknown> | undefined = {
+  id: "per_1",
+  sessionID: "ses_auth",
+  action: "shell",
+  resources: ["git push origin main"],
+  message: "Allow the agent to push the branch?",
+};
+
+let fakeForm: Record<string, unknown> | undefined = {
+  id: "frm_1",
+  sessionID: "ses_index",
+  title: "Choose the next model",
+  fields: [
+    {
+      key: "model",
+      title: "Model",
+      type: "string",
+      required: true,
+      options: [
+        { value: "claude-sonnet", label: "Claude Sonnet" },
+        { value: "deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash" },
+      ],
+    },
+    {
+      key: "remember",
+      title: "Remember this choice",
+      type: "boolean",
+      required: false,
+    },
+  ],
+};
+
 const fakeEventClients = new Set<ServerResponse>();
 
 function broadcastEvent(type: string, data: unknown): void {
@@ -211,6 +243,41 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   const path = url.pathname;
 
+  if (path === "/api/permission/request" && request.method === "GET") {
+    sendJson(response, 200, {
+      location: { directory: "/home/me/agent-hub" },
+      data: fakePermission ? [fakePermission] : [],
+    });
+    return;
+  }
+  if (path === "/api/form" && request.method === "GET") {
+    sendJson(response, 200, {
+      location: { directory: "/home/me/agent-hub" },
+      data: fakeForm ? [fakeForm] : [],
+    });
+    return;
+  }
+  const permissionReply = path.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/);
+  if (permissionReply && request.method === "POST") {
+    fakePermission = undefined;
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const formReply = path.match(/^\/api\/session\/([^/]+)\/form\/([^/]+)\/reply$/);
+  if (formReply && request.method === "POST") {
+    fakeForm = undefined;
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const formDelete = path.match(/^\/api\/session\/([^/]+)\/form\/([^/]+)$/);
+  if (formDelete && request.method === "DELETE") {
+    fakeForm = undefined;
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   if (path === "/api/event" && request.method === "GET") {
     response.writeHead(200, {
       "content-type": "text/event-stream",
@@ -282,7 +349,21 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     return;
   }
   const sessionMatch = path.match(/^\/api\/session\/([^/]+)$/);
-  if (sessionMatch) {
+  if (sessionMatch && request.method === "DELETE") {
+    const sessionID = sessionMatch[1] ?? "";
+    const index = OPENCODE_SESSIONS.findIndex((item) => item.id === sessionID);
+    if (index === -1) {
+      sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
+      return;
+    }
+    OPENCODE_SESSIONS.splice(index, 1);
+    delete OPENCODE_MESSAGES[sessionID];
+    broadcastEvent("session.deleted", { sessionID });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  if (sessionMatch && request.method === "GET") {
     const session = OPENCODE_SESSIONS.find((item) => item.id === sessionMatch[1]);
     if (!session) {
       sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });

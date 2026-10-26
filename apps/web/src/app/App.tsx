@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type {
+  Attention,
+  AttentionType,
   Diagnostics,
   Health,
   HubEvent,
@@ -107,6 +109,11 @@ export function App() {
   const selectView = (next: View) => {
     if (next === "sessions") setSelectedSessionRef(undefined);
     setView(next);
+  };
+
+  const openSession = (ref: string) => {
+    setSelectedSessionRef(ref);
+    setView("sessions");
   };
 
   const signOut = useCallback(() => {
@@ -484,6 +491,12 @@ export function App() {
 
                 {diagnosticsPanel}
               </>
+            ) : view === "inbox" ? (
+              <InboxView
+                client={client as HubClient}
+                events={events}
+                onOpen={openSession}
+              />
             ) : view === "sessions" ? (
               selectedSessionRef ? (
                 <SessionDetail
@@ -497,7 +510,7 @@ export function App() {
                   client={client as HubClient}
                   events={events}
                   providers={providers}
-                  onOpen={setSelectedSessionRef}
+                  onOpen={openSession}
                 />
               )
             ) : view === "providers" ? (
@@ -657,6 +670,344 @@ function Login(props: {
   );
 }
 
+const ATTENTION_FILTERS: Array<[string, string]> = [
+  ["all", "All"],
+  ["approval", "Approvals"],
+  ["question", "Questions"],
+  ["unread", "Unread"],
+  ["error", "Errors"],
+];
+
+const ATTENTION_LABELS: Record<AttentionType, string> = {
+  permission: "Permission",
+  approval: "Approval",
+  question: "Question",
+  unread: "Unread",
+  error: "Error",
+};
+
+function InboxView(props: {
+  client: HubClient;
+  events: HubEvent[];
+  onOpen: (ref: string) => void;
+}) {
+  const [items, setItems] = useState<Attention[]>([]);
+  const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [busyID, setBusyID] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(undefined);
+    try {
+      const page = await props.client.attention();
+      setItems(page.data);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load attention");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(true), 15_000);
+    return () => clearInterval(timer);
+  }, [props.client]);
+
+  const liveSeq = props.events[0]?.seq ?? 0;
+  useEffect(() => {
+    if (!liveSeq) return;
+    const timer = setTimeout(() => void load(true), 600);
+    return () => clearTimeout(timer);
+  }, [liveSeq]);
+
+  const count = (value: string) => {
+    if (value === "all") return items.length;
+    if (value === "approval") {
+      return items.filter((item) => item.type === "permission" || item.type === "approval").length;
+    }
+    return items.filter((item) => item.type === value).length;
+  };
+
+  const visible = items.filter((item) => {
+    if (filter === "all") return true;
+    if (filter === "approval") return item.type === "permission" || item.type === "approval";
+    return item.type === filter;
+  });
+
+  const groups = [
+    ["Blocking", visible.filter((item) => item.priority === "blocking")],
+    ["Unread", visible.filter((item) => item.type === "unread")],
+    ["Errors", visible.filter((item) => item.type === "error")],
+    [
+      "Other",
+      visible.filter(
+        (item) => item.priority !== "blocking" && item.type !== "unread" && item.type !== "error",
+      ),
+    ],
+  ] as const;
+
+  const act = async (item: Attention, action: string, input = {}) => {
+    setBusyID(item.id);
+    setError(undefined);
+    try {
+      await props.client.actOnAttention(item.id, action, input);
+      setItems((current) => current.filter((candidate) => candidate.id !== item.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to complete the action");
+    } finally {
+      setBusyID(undefined);
+    }
+  };
+
+  return (
+    <>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Attention · Phase 3</p>
+          <h2>What needs you now</h2>
+          <p>
+            Approvals, questions, unread sessions, and failures. Actions are sent
+            through the provider and never auto-approved.
+          </p>
+        </div>
+        <button class="btn small" type="button" disabled={loading} onClick={() => void load()}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </section>
+
+      {error ? (
+        <div class="alert" role="alert">
+          {error}
+          <button class="text-button" type="button" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <div class="inbox-tabs">
+        {ATTENTION_FILTERS.map(([value, label]) => (
+          <button
+            class={`chip ${filter === value ? "active" : ""}`}
+            type="button"
+            onClick={() => setFilter(value)}
+          >
+            {label} {count(value)}
+          </button>
+        ))}
+      </div>
+
+      {loading && items.length === 0 ? (
+        <div class="empty">Loading attention…</div>
+      ) : visible.length === 0 ? (
+        <div class="empty">Nothing needs you right now.</div>
+      ) : (
+        groups
+          .filter(([, groupItems]) => groupItems.length > 0)
+          .map(([label, groupItems]) => (
+            <section class="inbox-group" key={label}>
+              <div class="inbox-group-head">
+                <span>{label}</span>
+                <span class="line" />
+                <span>{groupItems.length}</span>
+              </div>
+              {groupItems.map((item) => (
+                <AttentionCard
+                  item={item}
+                  key={item.id}
+                  busy={busyID === item.id}
+                  onAction={(action, input) => void act(item, action, input)}
+                  onOpen={() => props.onOpen(item.sessionRef)}
+                />
+              ))}
+            </section>
+          ))
+      )}
+    </>
+  );
+}
+
+function AttentionCard(props: {
+  item: Attention;
+  busy: boolean;
+  onAction: (action: string, input?: Record<string, unknown>) => void;
+  onOpen: () => void;
+}) {
+  const item = props.item;
+  const [values, setValues] = useState<Record<string, unknown>>(() =>
+    Object.fromEntries(
+      (item.fields ?? []).map((field) => [
+        field.id,
+        field.defaultValue ??
+          (field.type === "boolean" ? false : field.type === "multiselect" ? [] : ""),
+      ]),
+    ),
+  );
+  const hasFields = (item.fields?.length ?? 0) > 0;
+  const answerAction = item.actions.find((action) => action.id === "answer");
+  const missingRequired = (item.fields ?? []).filter((field) => {
+    if (!field.required) return false;
+    const value = values[field.id];
+    return value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  });
+  const actionInput = () => (hasFields ? { fields: values } : {});
+
+  return (
+    <article class={`attention-card ${item.priority === "blocking" ? "blocking" : ""}`}>
+      <div class="attention-top">
+        <span class={`type-badge ${item.type}`}>{ATTENTION_LABELS[item.type]}</span>
+        <span class="attention-provider">{providerLabel(item.sessionRef.split(":")[0] ?? "")}</span>
+        <span class="attention-age">{relativeTime(item.createdAt)}</span>
+      </div>
+      <div class="attention-title">{item.title}</div>
+      <div class="attention-summary">{item.summary}</div>
+
+      {hasFields ? (
+        <div class="attention-fields">
+          {item.fields?.map((field) => (
+            <AttentionFieldInput
+              field={field}
+              value={values[field.id]}
+              onValue={(value) => setValues((current) => ({ ...current, [field.id]: value }))}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      <div class="attention-actions">
+        {item.actions
+          .filter((action) => action.id !== "answer")
+          .map((action) => (
+            <button
+              class={`btn small ${action.style === "primary" ? "primary" : action.style === "danger" ? "danger" : ""}`}
+              type="button"
+              key={action.id}
+              disabled={props.busy}
+              onClick={() => props.onAction(action.id)}
+            >
+              {action.label}
+            </button>
+          ))}
+        {answerAction ? (
+          <button
+            class="btn primary small"
+            type="button"
+            disabled={props.busy || missingRequired.length > 0}
+            onClick={() => props.onAction("answer", actionInput())}
+          >
+            {answerAction.label}
+          </button>
+        ) : null}
+        {answerAction && missingRequired.length > 0 ? (
+          <span class="attention-required">
+            Complete {missingRequired.map((field) => field.label).join(", ")}
+          </span>
+        ) : null}
+        <button class="attention-open" type="button" onClick={props.onOpen}>
+          Open session
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function AttentionFieldInput(props: {
+  field: NonNullable<Attention["fields"]>[number];
+  value: unknown;
+  onValue: (value: unknown) => void;
+}) {
+  const { field } = props;
+  if (field.type === "boolean") {
+    return (
+      <label class="attention-check">
+        <input
+          type="checkbox"
+          checked={Boolean(props.value)}
+          onInput={(event) => props.onValue((event.currentTarget as HTMLInputElement).checked)}
+        />
+        <span>{field.label}</span>
+        {field.description ? <small class="attention-help">{field.description}</small> : null}
+      </label>
+    );
+  }
+  if (field.type === "select") {
+    return (
+      <label class="attention-field">
+        <span>{field.label}</span>
+        <select
+          value={typeof props.value === "string" ? props.value : ""}
+          onInput={(event) => props.onValue((event.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">Choose…</option>
+          {(field.options ?? []).map((option) => (
+            <option value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        {field.description ? <small class="attention-help">{field.description}</small> : null}
+      </label>
+    );
+  }
+  if (field.type === "multiselect") {
+    const selected = Array.isArray(props.value) ? (props.value as string[]) : [];
+    return (
+      <fieldset class="attention-field attention-multi">
+        <legend>{field.label}</legend>
+        {(field.options ?? []).map((option) => (
+          <label class="attention-check" key={option.value}>
+            <input
+              type="checkbox"
+              checked={selected.includes(option.value)}
+              onInput={(event) => {
+                const checked = (event.currentTarget as HTMLInputElement).checked;
+                props.onValue(
+                  checked
+                    ? [...selected, option.value]
+                    : selected.filter((value) => value !== option.value),
+                );
+              }}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+        {field.description ? <small class="attention-help">{field.description}</small> : null}
+      </fieldset>
+    );
+  }
+  if (field.type === "textarea") {
+    return (
+      <label class="attention-field attention-field-wide">
+        <span>{field.label}</span>
+        <textarea
+          rows={3}
+          value={typeof props.value === "string" ? props.value : ""}
+          placeholder={field.placeholder}
+          onInput={(event) => props.onValue((event.currentTarget as HTMLTextAreaElement).value)}
+        />
+        {field.description ? <small class="attention-help">{field.description}</small> : null}
+      </label>
+    );
+  }
+  return (
+    <label class={`attention-field ${field.type === "number" ? "" : "attention-field-wide"}`}>
+      <span>{field.label}</span>
+      <input
+        type={field.type === "number" ? "number" : "text"}
+        value={typeof props.value === "string" || typeof props.value === "number" ? props.value : ""}
+        placeholder={field.placeholder}
+        onInput={(event) => {
+          const value = (event.currentTarget as HTMLInputElement).value;
+          props.onValue(
+            field.type === "number" ? (value === "" ? "" : Number(value)) : value,
+          );
+        }}
+      />
+      {field.description ? <small class="attention-help">{field.description}</small> : null}
+    </label>
+  );
+}
+
 function SessionsView(props: {
   client: HubClient;
   events: HubEvent[];
@@ -708,8 +1059,8 @@ function SessionsView(props: {
           <p class="eyebrow">Phase 2</p>
           <h2>OpenCode sessions</h2>
           <p>
-            Live session index, transcript, and follow-up composer. New-session
-            creation and attention arrive in the next slices.
+            Live session index, transcript, and follow-up composer. The separate
+            inbox handles approvals, questions, unread sessions, and failures.
           </p>
         </div>
         <div class="hero-actions">
