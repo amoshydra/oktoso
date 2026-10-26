@@ -231,6 +231,7 @@ export class AttentionService {
       if (item.type === "unread" || item.type === "error") {
         if (action === "mark_read") {
           await this.sessions.markRead(item.sessionRef);
+          await this.acknowledge(id);
         } else if (action === "dismiss") {
           await this.acknowledge(id);
         } else {

@@ -44,7 +44,7 @@ const VIEW_META: Record<
   sessions: {
     label: "Sessions",
     mark: "S",
-    sub: "OpenCode read/write · Phase 2",
+    sub: "All providers · Phase 2",
     phase: "2",
     description: "The provider-backed session index, transcript, and composer.",
   },
@@ -322,7 +322,7 @@ export function App() {
       <div class="panel-head">
         <div>
           <h2>Providers</h2>
-          <p>Configured endpoints and health checks. Adapters arrive in Phase 1.</p>
+          <p>Configured endpoints, health, versions, and normalized capabilities.</p>
         </div>
         <button
           class="btn small"
@@ -444,9 +444,9 @@ export function App() {
                     <p class="eyebrow">Agent Hub</p>
                     <h2>Runtime online</h2>
                     <p>
-                      The hub API, authentication, durable state, event bus, and
-                      development provider harness are connected. Product screens arrive
-                      in the next slice.
+                      The hub API, authentication, durable state, event bus, and provider
+                      adapters are connected. Sessions and attention are live; search and
+                      deployment hardening are next.
                     </p>
                   </div>
                   <div class="hero-badge">
@@ -552,11 +552,11 @@ export function App() {
               <>
                 <section class="hero">
                   <div>
-                    <p class="eyebrow">Phase 0</p>
+                    <p class="eyebrow">Providers</p>
                     <h2>Provider health</h2>
                     <p>
-                      These are the configured provider endpoints. The health checks are
-                      live; sessions, messages, and capabilities are the next slice.
+                      Configured provider endpoints, health, versions, and normalized
+                      capabilities. Provider credentials remain on the hub.
                     </p>
                   </div>
                 </section>
@@ -1102,10 +1102,10 @@ function SessionsView(props: {
       <section class="hero">
         <div>
           <p class="eyebrow">Phase 2</p>
-          <h2>OpenCode sessions</h2>
+          <h2>All sessions</h2>
           <p>
-            Live session index, transcript, and follow-up composer. The separate
-            inbox handles approvals, questions, unread sessions, and failures.
+            Sessions from every connected provider, with a live transcript and
+            follow-up composer. The separate inbox handles unread work and failures.
           </p>
         </div>
         <div class="hero-actions">
@@ -1174,7 +1174,10 @@ function SessionsView(props: {
                 <span class="session-list-main">
                   <strong>{session.title}</strong>
                   <span class="session-list-meta">
-                    {providerLabel(session.providerID)} · {session.project ?? session.directory ?? "unknown project"}
+                    {providerLabel(session.providerID)}
+                    {session.project || session.directory ? (
+                      <> · {session.project ?? session.directory}</>
+                    ) : null}
                   </span>
                 </span>
                 <span class="session-list-side">
@@ -1519,8 +1522,12 @@ function SessionDetail(props: {
               <h2>{session.title}</h2>
               <div class="chat-meta">
                 <span>{providerLabel(session.providerID)}</span>
-                <span>·</span>
-                <span>{session.project ?? session.directory ?? "unknown project"}</span>
+                {session.project || session.directory ? (
+                  <>
+                    <span>·</span>
+                    <span>{session.project ?? session.directory}</span>
+                  </>
+                ) : null}
                 {session.agent ? (
                   <>
                     <span>·</span>

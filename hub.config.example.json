@@ -21,7 +21,7 @@
       "id": "openwebui",
       "type": "openwebui",
       "name": "openwebui",
-      "baseUrl": "https://openwebui.example",
+      "baseUrl": "${OPENWEBUI_BASE_URL}",
       "auth": {
         "kind": "bearer",
         "token": "${OPENWEBUI_API_KEY}"

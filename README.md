@@ -6,7 +6,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. The OpenCode read/write and attention slices are live: session index, transcript, composer, new-session creation, read markers, live events, provider permissions/forms, the unified attention inbox, live badge counts, and background attention reconciliation. Desktop notifications remain pending. The approved UI reference is frozen as `design-v1`.
+Implementation phase. OpenCode read/write and attention are live, and Open WebUI now uses a real provider adapter. Session index, transcript, composer, new-session creation, provider permissions/forms, attention inbox, live badges, and background reconciliation are in place. Desktop notifications remain pending. The approved UI reference is frozen as `design-v1`.
 
 ## Documents
 
@@ -40,17 +40,21 @@ pnpm dev
 - Hub API: `http://127.0.0.1:8787`
 - Development token: `dev-token-agent-hub` (prefilled in the dev login)
 - OpenCode read/write: session index, transcript, composer, new sessions, and interrupt
+- Open WebUI: chats, current branches, models, new chats, and prompt sends
+- Providers: OpenCode and Open WebUI adapters; Hermes remains a health-only fake
 - Attention: permissions, forms, unread sessions, failures, provider-backed actions, and live navigation badges
 
-`pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. If `.env.local` exists with `OPENCODE_BASE_URL` and `OPENCODE_PASSWORD`, the OpenCode provider uses the real instance instead of the fake one:
+`pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. Real provider credentials belong in the ignored `.env.local` file:
 
-```sh
+```bash
 OPENCODE_BASE_URL=http://127.0.0.1:4096
 OPENCODE_USERNAME=opencode
 OPENCODE_PASSWORD=...
+OPENWEBUI_BASE_URL=https://openwebui.example
+OPENWEBUI_API_KEY=...
 ```
 
-The dev command does not start the frozen prototype.
+When those variables are present, the matching providers use the real instances instead of the fake ones. Omitting a provider's base URL leaves that provider on its local fake endpoint. The dev command does not start the frozen prototype.
 
 ## Prototype
 

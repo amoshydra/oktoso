@@ -183,9 +183,10 @@ describe("hub app", () => {
     };
     const permission = page.data.find((item) => item.type === "permission");
     const question = page.data.find((item) => item.type === "question");
+    const unread = page.data.find((item) => item.type === "unread");
     expect(permission).toBeDefined();
     expect(question).toBeDefined();
-    expect(page.data.some((item) => item.type === "unread")).toBe(true);
+    expect(unread).toBeDefined();
     expect(page.data.some((item) => item.type === "error")).toBe(true);
     const created = eventBus
       .replay(0)
@@ -227,10 +228,17 @@ describe("hub app", () => {
         ),
     ).toBe(true);
 
+    const unreadResponse = await app.request(
+      `/api/v1/attention/${encodeURIComponent(unread!.id)}/actions/mark_read`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    expect(unreadResponse.status).toBe(204);
+
     const after = await app.request("/api/v1/attention", { headers });
     const afterPage = (await after.json()) as { data: Array<{ id: string }> };
     expect(afterPage.data.some((item) => item.id === permission!.id)).toBe(false);
     expect(afterPage.data.some((item) => item.id === question!.id)).toBe(false);
+    expect(afterPage.data.some((item) => item.id === unread!.id)).toBe(false);
   });
 
   it("drops cached sessions when the provider no longer reports them", async () => {

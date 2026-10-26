@@ -6,6 +6,7 @@ import type {
 import {
   emptyCapabilities,
   OpenCodeAdapter,
+  OpenWebUIAdapter,
   type ProviderAdapter,
 } from "@agent-hub/providers";
 import type { ProviderConfig } from "../config/schema";
@@ -47,7 +48,15 @@ export class ProviderRegistry {
                 password: config.auth?.kind === "basic" ? config.auth.password : "",
               }),
             }
-          : {}),
+          : config.type === "openwebui"
+            ? {
+                adapter: new OpenWebUIAdapter({
+                  id: config.id,
+                  baseUrl: config.baseUrl,
+                  token: config.auth?.kind === "bearer" ? config.auth.token : "",
+                }),
+              }
+            : {}),
       });
     }
   }

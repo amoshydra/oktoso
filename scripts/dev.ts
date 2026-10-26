@@ -23,6 +23,7 @@ const env = {
   OPENCODE_BASE_URL: process.env.OPENCODE_BASE_URL ?? "http://127.0.0.1:4101",
   OPENCODE_USERNAME: process.env.OPENCODE_USERNAME ?? "opencode",
   OPENCODE_PASSWORD: process.env.OPENCODE_PASSWORD ?? "dev-opencode-password",
+  OPENWEBUI_BASE_URL: process.env.OPENWEBUI_BASE_URL ?? "http://127.0.0.1:4102",
   OPENWEBUI_API_KEY: process.env.OPENWEBUI_API_KEY ?? "dev-openwebui-key",
   HERMES_API_KEY: process.env.HERMES_API_KEY ?? "dev-hermes-key",
   LOG_LEVEL: process.env.LOG_LEVEL ?? "debug",
@@ -30,6 +31,9 @@ const env = {
 
 console.log(
   `OpenCode: ${env.OPENCODE_BASE_URL === "http://127.0.0.1:4101" ? "fake" : env.OPENCODE_BASE_URL}`,
+);
+console.log(
+  `Open WebUI: ${env.OPENWEBUI_BASE_URL === "http://127.0.0.1:4102" ? "fake" : env.OPENWEBUI_BASE_URL}`,
 );
 
 const hub = spawn(

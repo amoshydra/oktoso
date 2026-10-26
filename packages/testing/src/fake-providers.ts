@@ -198,6 +198,120 @@ let fakeForm: Record<string, unknown> | undefined = {
   ],
 };
 
+interface FakeOwuiMessage {
+  id: string;
+  role: string;
+  content: string;
+  parentId: string | null;
+  childrenIds: string[];
+  timestamp: number;
+  model?: string;
+  done?: boolean;
+  error?: unknown;
+}
+
+interface FakeOwuiChat {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  last_read_at: number;
+  active: boolean;
+  chat: {
+    title: string;
+    models: string[];
+    history: {
+      currentId: string | null;
+      messages: Record<string, FakeOwuiMessage>;
+    };
+  };
+}
+
+function makeFakeOwuiChat(options: {
+  id: string;
+  title: string;
+  assistantContent: string;
+  error?: unknown;
+}): FakeOwuiChat {
+  const now = Math.floor(Date.now() / 1000);
+  const userID = `${options.id}-user`;
+  const assistantID = `${options.id}-assistant`;
+  return {
+    id: options.id,
+    title: options.title,
+    created_at: now - 120,
+    updated_at: now,
+    last_read_at: 0,
+    active: false,
+    chat: {
+      title: options.title,
+      models: ["fake-model"],
+      history: {
+        currentId: assistantID,
+        messages: {
+          [userID]: {
+            id: userID,
+            role: "user",
+            content: `Hello from ${options.title}`,
+            parentId: null,
+            childrenIds: [assistantID],
+            timestamp: now - 2,
+          },
+          [assistantID]: {
+            id: assistantID,
+            role: "assistant",
+            content: options.assistantContent,
+            parentId: userID,
+            childrenIds: [],
+            timestamp: now - 1,
+            model: "fake-model",
+            done: options.error ? false : true,
+            ...(options.error ? { error: options.error } : {}),
+          },
+        },
+      },
+    },
+  };
+}
+
+const OWUI_CHATS = new Map<string, FakeOwuiChat>([
+  [
+    "chat_fake_openwebui",
+    makeFakeOwuiChat({
+      id: "chat_fake_openwebui",
+      title: "Fake Open WebUI chat",
+      assistantContent: "Fake Open WebUI reply.",
+    }),
+  ],
+  [
+    "chat_fake_error",
+    makeFakeOwuiChat({
+      id: "chat_fake_error",
+      title: "Fake Open WebUI failed chat",
+      assistantContent: "",
+      error: { message: "Fake model failure" },
+    }),
+  ],
+]);
+
+function owuiSummary(chat: FakeOwuiChat): Record<string, unknown> {
+  return {
+    id: chat.id,
+    title: chat.title,
+    updated_at: chat.updated_at,
+    created_at: chat.created_at,
+    last_read_at: chat.last_read_at,
+    snippet: null,
+    active: chat.active,
+  };
+}
+
+function sortedOwuiChats(): FakeOwuiChat[] {
+  return [...OWUI_CHATS.values()].sort(
+    (left, right) => right.updated_at - left.updated_at,
+  );
+}
+
 const fakeEventClients = new Set<ServerResponse>();
 
 function broadcastEvent(type: string, data: unknown): void {
@@ -437,18 +551,129 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     });
     return;
   }
-  if (path === "/api/v1/chats/list") {
+  if (path === "/api/config") {
+    sendJson(response, 200, { name: "Open WebUI", version: "0.0.0-fake-openwebui" });
+    return;
+  }
+  if (path === "/api/v1/chats/list" && request.method === "GET") {
+    const page = Number(url.searchParams.get("page") ?? "0");
+    const rows = page > 1 ? [] : sortedOwuiChats().map(owuiSummary);
+    sendJson(response, 200, rows);
+    return;
+  }
+  if (path === "/api/v1/chats/search" && request.method === "GET") {
+    const text = (url.searchParams.get("text") ?? "").toLowerCase();
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const rows =
+      page > 1
+        ? []
+        : sortedOwuiChats()
+            .filter((chat) => chat.title.toLowerCase().includes(text))
+            .map(owuiSummary);
+    sendJson(response, 200, rows);
+    return;
+  }
+  if (path === "/api/v1/chats/new" && request.method === "POST") {
+    const body = await readBody(request);
+    const chatInput = body.chat && typeof body.chat === "object"
+      ? (body.chat as Record<string, unknown>)
+      : {};
+    const now = Math.floor(Date.now() / 1000);
+    const id = `chat_fake_${Date.now().toString(36)}`;
+    const title = typeof chatInput.title === "string" ? chatInput.title : "New Chat";
+    const models = Array.isArray(chatInput.models)
+      ? chatInput.models.filter((model): model is string => typeof model === "string")
+      : ["fake-model"];
+    const chat: FakeOwuiChat = {
+      id,
+      title,
+      created_at: now,
+      updated_at: now,
+      last_read_at: now,
+      active: false,
+      chat: {
+        title,
+        models: models.length > 0 ? models : ["fake-model"],
+        history: { currentId: null, messages: {} },
+      },
+    };
+    OWUI_CHATS.set(id, chat);
+    sendJson(response, 200, { ...chat, user_id: "fake-user" });
+    return;
+  }
+  if (path === "/api/chat/completions" && request.method === "POST") {
+    const body = await readBody(request);
+    const chatID = typeof body.chat_id === "string" ? body.chat_id : "";
+    const assistantID = typeof body.id === "string" ? body.id : "";
+    const chat = OWUI_CHATS.get(chatID);
+    if (!chat) {
+      sendJson(response, 404, { detail: "Chat not found" });
+      return;
+    }
+    const assistant = chat.chat.history.messages[assistantID];
+    const userText = chat.chat.history.messages[
+      typeof (body.user_message as { id?: unknown } | undefined)?.id === "string"
+        ? ((body.user_message as { id: string }).id)
+        : ""
+    ]?.content;
+    if (assistant) {
+      assistant.content = `Fake Open WebUI reply: ${userText ?? ""}`;
+      assistant.done = true;
+      assistant.timestamp = Math.floor(Date.now() / 1000);
+    }
+    chat.updated_at = Math.floor(Date.now() / 1000);
     sendJson(response, 200, {
-      data: [
-        {
-          id: "chat_fake",
-          title: "Fake Open WebUI chat",
-          updated_at: 2,
-          created_at: 1,
-        },
-      ],
-      cursor: { next: null },
+      status: true,
+      task_ids: [`task_${chatID}`],
+      chat_id: chatID,
     });
+    return;
+  }
+  const owuiChatMatch = path.match(/^\/api\/v1\/chats\/([^/]+)$/);
+  if (owuiChatMatch && request.method === "GET") {
+    const chat = OWUI_CHATS.get(owuiChatMatch[1] ?? "");
+    if (!chat) {
+      sendJson(response, 401, { detail: "Not found" });
+      return;
+    }
+    sendJson(response, 200, { ...chat, user_id: "fake-user" });
+    return;
+  }
+  if (owuiChatMatch && request.method === "DELETE") {
+    OWUI_CHATS.delete(owuiChatMatch[1] ?? "");
+    response.writeHead(200);
+    response.end();
+    return;
+  }
+  if (owuiChatMatch && request.method === "POST") {
+    const chat = OWUI_CHATS.get(owuiChatMatch[1] ?? "");
+    if (!chat) {
+      sendJson(response, 401, { detail: "Not found" });
+      return;
+    }
+    const body = await readBody(request);
+    const incoming = body.chat && typeof body.chat === "object"
+      ? (body.chat as Record<string, unknown>)
+      : {};
+    const incomingHistory = incoming.history && typeof incoming.history === "object"
+      ? (incoming.history as Record<string, unknown>)
+      : {};
+    const incomingMessages = incomingHistory.messages && typeof incomingHistory.messages === "object"
+      ? (incomingHistory.messages as Record<string, FakeOwuiMessage>)
+      : {};
+    Object.assign(chat.chat.history.messages, incomingMessages);
+    if (typeof incomingHistory.currentId === "string" || incomingHistory.currentId === null) {
+      chat.chat.history.currentId = incomingHistory.currentId as string | null;
+    }
+    if (Array.isArray(incoming.models)) {
+      chat.chat.models = incoming.models.filter((model): model is string => typeof model === "string");
+    }
+    chat.updated_at = Math.floor(Date.now() / 1000);
+    sendJson(response, 200, { ...chat, user_id: "fake-user" });
+    return;
+  }
+  if (path.match(/^\/api\/tasks\/chat\/[^/]+\/stop$/) && request.method === "POST") {
+    sendJson(response, 200, { message: "Stopped" });
     return;
   }
   if (path === "/v1/capabilities") {

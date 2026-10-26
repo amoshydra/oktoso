@@ -172,7 +172,7 @@ export class SessionService {
     const result = await adapter.sendMessage(
       ref,
       input,
-      AbortSignal.timeout(30_000),
+      AbortSignal.timeout(180_000),
     );
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });

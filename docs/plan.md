@@ -100,6 +100,8 @@ Acceptance:
 
 ## Milestone 3: Open WebUI
 
+Status: in progress. The adapter lists chats, resolves the current branch, maps messages, creates chats, sends prompts, waits for the asynchronous completion task, and lists models. Live validation is against Open WebUI 0.11.1. Provider-native mark-read, token-level streaming, and full failure discovery for old chats remain.
+
 Goal: add the second provider and validate the normalized chat model.
 
 Deliverables:
