@@ -266,7 +266,7 @@ The session view is the core reading and reply surface.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label.
 - Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
 - Tool calls render as compact, collapsed rows with a humanized name, status, and hidden input/output.
-- Reasoning renders as a compact collapsed row with a character count.
+- Reasoning renders as a compact collapsed row with a character count; its Markdown is sanitized through the same renderer as message prose.
 - Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps.
 - Permission requests render inline as a blocking card with actions.
 - Question requests render inline as a form card.

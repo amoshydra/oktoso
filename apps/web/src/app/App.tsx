@@ -1856,7 +1856,7 @@ function MessagePartView(props: { part: MessagePart }) {
           <span class="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
         </summary>
         <div class="message-aux-body">
-          <pre>{part.text}</pre>
+          <Markdown text={part.text} />
         </div>
       </details>
     );
