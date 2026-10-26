@@ -161,6 +161,9 @@ async function refreshInbox(): Promise<void> {
     render();
     return;
   }
+  const previousScreen = state.screen;
+  const previousSignature = attentionListSignature(state.attention);
+  const previousError = state.error;
   try {
     const page = await client.attention();
     state.attention = page.data.slice(0, 5);
@@ -168,14 +171,27 @@ async function refreshInbox(): Promise<void> {
     if (state.screen === "pairing" || state.screen === "inbox") {
       state.screen = "inbox";
     }
-    render();
+    const changed =
+      previousScreen !== state.screen ||
+      previousSignature !== attentionListSignature(state.attention) ||
+      Boolean(previousError) !== false;
     updatePhoneState();
+    if (changed) render();
   } catch (error) {
     state.error = errorMessage(error);
     if (state.screen === "pairing") state.screen = "inbox";
-    render();
+    const changed =
+      previousScreen !== state.screen ||
+      previousError !== state.error;
+    if (changed) render();
     log(`Inbox refresh failed: ${state.error}`);
   }
+}
+
+function attentionListSignature(items: Attention[]): string {
+  return items
+    .map((item) => `${attentionLabel(item)}|${item.title}`)
+    .join("\n");
 }
 
 async function openAttention(index: number): Promise<void> {

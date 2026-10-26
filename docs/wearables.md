@@ -20,6 +20,7 @@ The first slice is deliberately narrow:
 - numbered-choice extraction for agent replies
 - phone keyboard fallback
 - offline/retry polling
+- unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 
 Voice capture, inline forms, session browsing, and long-running stream updates are follow-ups.
 
