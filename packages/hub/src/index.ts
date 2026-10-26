@@ -9,3 +9,4 @@ export * from "./services/event-bus";
 export * from "./services/provider-registry";
 export * from "./services/provider-events";
 export * from "./services/attention-service";
+export * from "./services/draft-service";

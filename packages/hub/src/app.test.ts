@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createApp } from "./app";
 import { loadConfig } from "./config/load";
 import { createLogger } from "./lib/logger";
@@ -6,14 +9,26 @@ import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
 import { AttentionService } from "./services/attention-service";
-import { MemoryStateStore } from "@agent-hub/storage";
+import { DraftService } from "./services/draft-service";
+import {
+  JsonStateStore,
+  MemoryStateStore,
+  type StateStore,
+} from "@agent-hub/storage";
 import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
 
 const token = "test-token-long-enough";
 const logger = createLogger({ level: "silent" });
 const servers: FakeProviderServer[] = [];
+const roots: string[] = [];
 
-async function createTestApp() {
+async function tempRoot(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "agent-hub-app-"));
+  roots.push(root);
+  return root;
+}
+
+async function createTestApp(options: { store?: StateStore } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
   const config = await loadConfig(
@@ -21,12 +36,13 @@ async function createTestApp() {
     { HUB_TOKEN: token, OPENCODE_PASSWORD: "secret" },
   );
   config.providers[0]!.baseUrl = fake.url;
-  const store = new MemoryStateStore();
+  const store = options.store ?? new MemoryStateStore();
   const eventBus = new EventBus(store, logger, { heartbeatMs: 10 });
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
   const sessions = new SessionService(registry, logger);
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
+  const drafts = new DraftService(store);
   const app = createApp({
     config,
     store,
@@ -34,14 +50,18 @@ async function createTestApp() {
     registry,
     sessions,
     attention,
+    drafts,
     logger,
     startedAt: Date.now(),
   });
-  return { app, eventBus, store, registry, sessions, attention, fake };
+  return { app, eventBus, store, registry, sessions, attention, drafts, fake };
 }
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
+  await Promise.all(
+    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
 });
 
 describe("hub app", () => {
@@ -111,6 +131,152 @@ describe("hub app", () => {
       events: { lastSeq: 0 },
       storage: { kind: "memory" },
     });
+  });
+
+  it("searches session metadata across the hub cache", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const byTitle = await app.request("/api/v1/sessions?q=auth", { headers });
+    expect(byTitle.status).toBe(200);
+    const titlePage = (await byTitle.json()) as {
+      data: Array<{ ref: string; title: string }>;
+    };
+    expect(titlePage.data).toHaveLength(1);
+    expect(titlePage.data[0]).toMatchObject({
+      ref: "desktop-opencode:ses_auth",
+      title: "Fix auth race in gateway",
+    });
+
+    const filtered = await app.request(
+      "/api/v1/sessions?q=agent-hub&status=error&provider=desktop-opencode",
+      { headers },
+    );
+    expect(filtered.status).toBe(200);
+    const filteredPage = (await filtered.json()) as {
+      data: Array<{ ref: string; status: string }>;
+    };
+    expect(filteredPage.data).toHaveLength(1);
+    expect(filteredPage.data[0]).toMatchObject({
+      ref: "desktop-opencode:ses_rust",
+      status: "error",
+    });
+
+    const wrongProvider = await app.request(
+      "/api/v1/sessions?q=auth&provider=missing-provider",
+      { headers },
+    );
+    expect(
+      ((await wrongProvider.json()) as { data: unknown[] }).data,
+    ).toHaveLength(0);
+
+    // Message bodies stay out of the hub cache search.
+    const messageOnly = await app.request(
+      "/api/v1/sessions?q=double-refresh",
+      { headers },
+    );
+    expect(
+      ((await messageOnly.json()) as { data: unknown[] }).data,
+    ).toHaveLength(0);
+  });
+
+  it("stores, updates, and clears per-session drafts", async () => {
+    const { app, store } = await createTestApp();
+    const ref = "desktop-opencode:ses_auth";
+    const path = `/api/v1/sessions/${encodeURIComponent(ref)}/draft`;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const empty = await app.request(path, { headers });
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual({ data: null });
+
+    const created = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ text: "half-written reply" }),
+    });
+    expect(created.status).toBe(200);
+    const createdBody = (await created.json()) as {
+      data: { sessionRef: string; text: string; updatedAt: number };
+    };
+    expect(createdBody.data).toMatchObject({
+      sessionRef: ref,
+      text: "half-written reply",
+    });
+    expect(createdBody.data.updatedAt).toBeGreaterThan(0);
+    expect(store.getState().drafts[ref]?.text).toBe("half-written reply");
+
+    const loaded = await app.request(path, { headers });
+    expect(await loaded.json()).toMatchObject({
+      data: { sessionRef: ref, text: "half-written reply" },
+    });
+
+    const updated = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ text: "revised reply" }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      data: { sessionRef: ref, text: "revised reply" },
+    });
+
+    const invalid = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ text: 42 }),
+    });
+    expect(invalid.status).toBe(400);
+
+    const oversized = await app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ text: "x".repeat(100_001) }),
+    });
+    expect(oversized.status).toBe(400);
+
+    const removed = await app.request(path, { method: "DELETE", headers });
+    expect(removed.status).toBe(204);
+    expect(store.getState().drafts[ref]).toBeUndefined();
+
+    const afterDelete = await app.request(path, { headers });
+    expect(await afterDelete.json()).toEqual({ data: null });
+
+    const removedAgain = await app.request(path, { method: "DELETE", headers });
+    expect(removedAgain.status).toBe(204);
+  });
+
+  it("persists drafts across a JSON state reload", async () => {
+    const root = await tempRoot();
+    const filePath = join(root, "state.json");
+    const firstStore = await JsonStateStore.open({ filePath });
+    const first = await createTestApp({ store: firstStore });
+    const ref = "desktop-opencode:ses_index";
+    const path = `/api/v1/sessions/${encodeURIComponent(ref)}/draft`;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const saved = await first.app.request(path, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ text: "survives a restart" }),
+    });
+    expect(saved.status).toBe(200);
+    await firstStore.close();
+
+    const reopened = await JsonStateStore.open({ filePath });
+    const second = await createTestApp({ store: reopened });
+    const loaded = await second.app.request(path, { headers });
+    expect(loaded.status).toBe(200);
+    expect(await loaded.json()).toMatchObject({
+      data: { sessionRef: ref, text: "survives a restart" },
+    });
+    await reopened.close();
   });
 
   it("exposes options, creates sessions, sends prompts, and interrupts", async () => {

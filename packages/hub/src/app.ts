@@ -10,6 +10,7 @@ import type { EventBus } from "./services/event-bus";
 import type { ProviderRegistry } from "./services/provider-registry";
 import type { SessionService } from "./services/session-service";
 import type { AttentionService } from "./services/attention-service";
+import type { DraftService } from "./services/draft-service";
 import type { StateStore } from "@agent-hub/storage";
 import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
@@ -21,6 +22,7 @@ import { requestLimits, securityHeaders } from "./http/middleware/security";
 import { registerHealthRoutes } from "./http/routes/health";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerSessionRoutes } from "./http/routes/sessions";
+import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
@@ -32,6 +34,7 @@ export interface AppDependencies {
   registry: ProviderRegistry;
   sessions: SessionService;
   attention: AttentionService;
+  drafts: DraftService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -50,7 +53,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
       "*",
       cors({
         origin: deps.config.cors,
-        allowMethods: ["GET", "POST", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
         exposeHeaders: ["X-Request-Id"],
         maxAge: 600,
@@ -66,6 +69,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   });
   registerProviderRoutes(app, deps.registry);
   registerSessionRoutes(app, deps.sessions);
+  registerDraftRoutes(app, deps.drafts);
   registerAttentionRoutes(app, deps.attention);
   registerEventRoutes(app, deps.eventBus);
   registerDiagnosticsRoute(app, {

@@ -7,6 +7,7 @@ import type {
   Diagnostics,
   ErrorResponse,
   CreateSessionInput,
+  Draft,
   Health,
   MessagePage,
   MessagesQuery,
@@ -99,6 +100,28 @@ export class HubClient {
     await this.request<void>(`/api/v1/sessions/${encodeURIComponent(ref)}/read`, {
       method: "POST",
     });
+  }
+
+  async draft(ref: string): Promise<Draft | null> {
+    const response = await this.request<{ data: Draft | null }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/draft`,
+    );
+    return response.data;
+  }
+
+  async saveDraft(ref: string, text: string): Promise<Draft> {
+    const response = await this.request<{ data: Draft }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/draft`,
+      { method: "PUT", body: { text } },
+    );
+    return response.data;
+  }
+
+  async deleteDraft(ref: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/draft`,
+      { method: "DELETE" },
+    );
   }
 
   async sendMessage(ref: string, input: SendInput): Promise<SendResult> {

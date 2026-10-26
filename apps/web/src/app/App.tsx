@@ -10,6 +10,7 @@ import type {
   Provider,
   ProviderOptions,
   Session,
+  SessionStatus,
 } from "@agent-hub/contracts";
 import {
   HubClient,
@@ -108,6 +109,18 @@ export function App() {
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
   }, [view, selectedSessionRef]);
+
+  useEffect(() => {
+    if (auth !== "signed-in") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setView("search");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [auth]);
 
   const selectView = (next: View) => {
     if (next === "sessions") setSelectedSessionRef(undefined);
@@ -536,6 +549,7 @@ export function App() {
             ) : view === "sessions" ? (
               selectedSessionRef ? (
                 <SessionDetail
+                  key={selectedSessionRef}
                   client={client as HubClient}
                   sessionRef={selectedSessionRef}
                   events={events}
@@ -549,6 +563,12 @@ export function App() {
                   onOpen={openSession}
                 />
               )
+            ) : view === "search" ? (
+              <SearchView
+                client={client as HubClient}
+                providers={providers}
+                onOpen={openSession}
+              />
             ) : view === "providers" ? (
               <>
                 <section class="hero">
@@ -1054,6 +1074,259 @@ function AttentionFieldInput(props: {
   );
 }
 
+function SearchView(props: {
+  client: HubClient;
+  providers: Provider[];
+  onOpen: (ref: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [provider, setProvider] = useState("all");
+  const [status, setStatus] = useState<SessionStatus | "all">("all");
+  const [results, setResults] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const requestRef = useRef(0);
+
+  const trimmed = query.trim();
+  const hasFilters = provider !== "all" || status !== "all";
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const request = ++requestRef.current;
+    setError(undefined);
+
+    if (!trimmed && !hasFilters) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const timer = setTimeout(() => {
+      props.client
+        .sessions({
+          ...(trimmed ? { q: trimmed } : {}),
+          ...(provider !== "all" ? { provider } : {}),
+          ...(status !== "all" ? { status } : {}),
+          limit: 100,
+        })
+        .then((page) => {
+          if (request !== requestRef.current) return;
+          setResults(page.data);
+        })
+        .catch((reason) => {
+          if (request !== requestRef.current) return;
+          setResults([]);
+          setError(
+            reason instanceof Error ? reason.message : "Unable to search sessions",
+          );
+        })
+        .finally(() => {
+          if (request !== requestRef.current) return;
+          setLoading(false);
+        });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [props.client, trimmed, provider, status, hasFilters, attempt]);
+
+  const resultSummary = loading
+    ? "Searching sessions…"
+    : `${results.length} session${results.length === 1 ? "" : "s"} matched`;
+
+  return (
+    <>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Search · Phase 6</p>
+          <h2>Search sessions</h2>
+          <p>
+            Find sessions across every provider by title, project, directory, or
+            agent. Message content is not searched yet.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel search-panel">
+        <label class="sr-only" for="session-search">
+          Search sessions
+        </label>
+        <input
+          id="session-search"
+          ref={inputRef}
+          class="search-input"
+          type="search"
+          value={query}
+          placeholder="Search sessions…"
+          autocomplete="off"
+          spellcheck={false}
+          onInput={(event) =>
+            setQuery((event.currentTarget as HTMLInputElement).value)
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setQuery("");
+            }
+          }}
+        />
+
+        <div class="search-filters" role="group" aria-label="Provider filter">
+          <span class="search-filter-label">Provider</span>
+          <button
+            class={`chip ${provider === "all" ? "active" : ""}`}
+            type="button"
+            aria-pressed={provider === "all"}
+            onClick={() => setProvider("all")}
+          >
+            All
+          </button>
+          {props.providers.map((item) => (
+            <button
+              class={`chip ${provider === item.id ? "active" : ""}`}
+              type="button"
+              key={item.id}
+              aria-pressed={provider === item.id}
+              onClick={() => setProvider(item.id)}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+
+        <div class="search-filters" role="group" aria-label="Status filter">
+          <span class="search-filter-label">Status</span>
+          <button
+            class={`chip ${status === "all" ? "active" : ""}`}
+            type="button"
+            aria-pressed={status === "all"}
+            onClick={() => setStatus("all")}
+          >
+            Any
+          </button>
+          {(["running", "idle", "error", "offline"] as const).map((value) => (
+            <button
+              class={`chip ${status === value ? "active" : ""}`}
+              type="button"
+              key={value}
+              aria-pressed={status === value}
+              onClick={() => setStatus(value)}
+            >
+              {statusLabel(value)}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {error ? (
+        <div class="alert" role="alert">
+          {error}
+          <button
+            class="text-button"
+            type="button"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {!trimmed && !hasFilters ? (
+        <div class="empty">
+          Type a query or choose a provider or status filter to search the hub
+          session cache.
+        </div>
+      ) : loading && results.length === 0 ? (
+        <div class="empty">Searching sessions…</div>
+      ) : !loading && results.length === 0 && !error ? (
+        <div class="empty">
+          No sessions match {trimmed ? `“${trimmed}”` : "these filters"}.
+        </div>
+      ) : results.length > 0 ? (
+        <section class="panel search-results-panel" aria-busy={loading}>
+          <div class="panel-head">
+            <div>
+              <h2>Results</h2>
+              <p role="status">{resultSummary}</p>
+            </div>
+            <span class="mode-badge">Session metadata</span>
+          </div>
+          <div class={`session-list ${loading ? "search-loading" : ""}`}>
+            {results.map((session) => (
+              <button
+                class={`session-list-item ${session.unread ? "unread" : ""}`}
+                type="button"
+                key={session.ref}
+                onClick={() => props.onOpen(session.ref)}
+                aria-label={searchResultLabel(session)}
+              >
+                <span class={`session-status-dot ${session.status}`} />
+                <span class="session-list-main">
+                  <strong>{session.title}</strong>
+                  <span class="session-list-meta">
+                    {providerLabel(session.providerID)}
+                    {session.project || session.directory ? (
+                      <> · {session.project ?? session.directory}</>
+                    ) : null}
+                    {session.agent ? <> · {session.agent}</> : null}
+                  </span>
+                </span>
+                <span class="session-list-side">
+                  {session.attention ? (
+                    <span class={`type-badge ${session.attention.type}`}>
+                      {ATTENTION_LABELS[session.attention.type]}
+                    </span>
+                  ) : null}
+                  {session.unread ? <span class="sr-only">Unread</span> : null}
+                  <span class="mono">{relativeTime(session.updatedAt)}</span>
+                  <span class={`status-chip ${session.status}`}>
+                    <i />
+                    {session.status}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function searchResultLabel(session: Session): string {
+  const cues = [
+    session.unread ? "unread" : undefined,
+    session.attention
+      ? `${ATTENTION_LABELS[session.attention.type]} needs attention`
+      : undefined,
+  ].filter(Boolean);
+  return [
+    session.title,
+    providerLabel(session.providerID),
+    session.project ?? session.directory,
+    session.status,
+    ...cues,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 function SessionsView(props: {
   client: HubClient;
   events: HubEvent[];
@@ -1386,6 +1659,179 @@ type PendingScroll =
 
 const MESSAGE_PAGE_SIZE = 200;
 
+type DraftStatus = "idle" | "saving" | "saved" | "error";
+
+function useSessionDraft(client: HubClient, sessionRef: string) {
+  const [text, setTextState] = useState("");
+  const [status, setStatus] = useState<DraftStatus>("idle");
+  const textRef = useRef("");
+  const revisionRef = useRef(0);
+  const lastSavedRef = useRef<string | null>(null);
+  const activeRef = useRef(sessionRef);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  activeRef.current = sessionRef;
+
+  const setText = useCallback((value: string) => {
+    textRef.current = value;
+    setTextState(value);
+  }, []);
+
+  const enqueue = useCallback(
+    (ref: string, value: string): Promise<void> => {
+      const request = queueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (value === "") {
+            await client.deleteDraft(ref);
+          } else {
+            await client.saveDraft(ref, value);
+          }
+        });
+      queueRef.current = request;
+      return request;
+    },
+    [client],
+  );
+
+  const showSaved = useCallback(() => {
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    setStatus("saved");
+    statusTimerRef.current = setTimeout(() => {
+      statusTimerRef.current = undefined;
+      setStatus("idle");
+    }, 2_000);
+  }, []);
+
+  const persist = useCallback(
+    (ref: string, value: string) => {
+      if (value === lastSavedRef.current) return;
+      setStatus("saving");
+      void enqueue(ref, value)
+        .then(() => {
+          if (activeRef.current !== ref || textRef.current !== value) return;
+          lastSavedRef.current = value === "" ? null : value;
+          showSaved();
+        })
+        .catch(() => {
+          if (activeRef.current === ref) setStatus("error");
+        });
+    },
+    [enqueue, showSaved],
+  );
+
+  const scheduleSave = useCallback(
+    (value: string) => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+      }
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = undefined;
+      }
+      setStatus("idle");
+      if (value === lastSavedRef.current) return;
+      const ref = activeRef.current;
+      timerRef.current = setTimeout(() => {
+        timerRef.current = undefined;
+        persist(ref, value);
+      }, 600);
+    },
+    [persist],
+  );
+
+  const update = useCallback(
+    (value: string) => {
+      revisionRef.current += 1;
+      setText(value);
+      scheduleSave(value);
+    },
+    [scheduleSave, setText],
+  );
+
+  useEffect(() => {
+    activeRef.current = sessionRef;
+    revisionRef.current = 0;
+    lastSavedRef.current = null;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
+    }
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = undefined;
+    }
+    setText("");
+    setStatus("idle");
+    let cancelled = false;
+
+    void client
+      .draft(sessionRef)
+      .then((saved) => {
+        if (cancelled || revisionRef.current > 0) return;
+        const value = saved?.text ?? "";
+        setText(value);
+        lastSavedRef.current = saved ? saved.text : null;
+        if (saved) showSaved();
+      })
+      .catch(() => {
+        if (cancelled || revisionRef.current > 0) return;
+        setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+      }
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = undefined;
+      }
+      const value = textRef.current;
+      if (value !== lastSavedRef.current) {
+        void enqueue(sessionRef, value).catch(() => undefined);
+      }
+    };
+  }, [client, sessionRef, enqueue, setText, showSaved]);
+
+  const discard = useCallback(async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
+    }
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = undefined;
+    }
+    revisionRef.current += 1;
+    lastSavedRef.current = null;
+    setText("");
+    setStatus("idle");
+    await queueRef.current.catch(() => undefined);
+    setStatus("saving");
+    try {
+      await client.deleteDraft(sessionRef);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+    }
+  }, [client, sessionRef, setText]);
+
+  return { text, status, update, discard };
+}
+
+function draftStatusLabel(status: DraftStatus): string {
+  if (status === "saving") return "Saving draft…";
+  if (status === "saved") return "Draft saved";
+  if (status === "error") return "Draft not saved";
+  return "Ctrl/⌘ Enter to send";
+}
+
 function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
@@ -1399,7 +1845,8 @@ function SessionDetail(props: {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
-  const [draft, setDraft] = useState("");
+  const { text: draft, status: draftStatus, update: updateDraft, discard: discardDraft } =
+    useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
   const transcriptRef = useRef<HTMLElement | null>(null);
@@ -1487,7 +1934,7 @@ function SessionDetail(props: {
     setSendError(undefined);
     try {
       await props.client.sendMessage(props.sessionRef, { text });
-      setDraft("");
+      await discardDraft();
       setSession((current) => (current ? { ...current, status: "running" } : current));
       window.setTimeout(() => void refreshLatest(true).catch(() => undefined), 500);
     } catch (reason) {
@@ -1708,7 +2155,7 @@ function SessionDetail(props: {
               rows={2}
               value={draft}
               placeholder={`Reply to ${session.title}…`}
-              onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)}
+              onInput={(event) => updateDraft((event.currentTarget as HTMLTextAreaElement).value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault();
@@ -1717,7 +2164,9 @@ function SessionDetail(props: {
               }}
             />
             <div class="chat-composer-bar">
-              <span class="composer-hint">Ctrl/⌘ Enter to send</span>
+              <span class={`composer-hint ${draftStatus === "error" ? "error" : ""}`}>
+                {draftStatusLabel(draftStatus)}
+              </span>
               <button
                 class="btn primary small"
                 type="submit"
@@ -1989,6 +2438,13 @@ function providerLabel(providerID: string): string {
   if (providerID.includes("openwebui")) return "Open WebUI";
   if (providerID.includes("hermes")) return "Hermes";
   return providerID;
+}
+
+function statusLabel(status: SessionStatus): string {
+  if (status === "running") return "Running";
+  if (status === "idle") return "Idle";
+  if (status === "error") return "Error";
+  return "Offline";
 }
 
 function isFakeProvider(baseUrl: string): boolean {

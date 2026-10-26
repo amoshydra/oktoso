@@ -281,7 +281,8 @@ The session view is the core reading and reply surface.
 - Agent and model selectors when the provider supports them.
 - Slash commands later.
 - Voice button on mobile and glasses. Desktop can use the browser microphone later.
-- Drafts persist per session and device.
+- Drafts persist per session on the hub and follow the session across clients and reloads.
+- Drafts autosave shortly after typing and clear after a successful send.
 - While the agent is running, show an interrupt button and allow queueing a follow-up if the provider supports it.
 
 ### Details panel
@@ -348,11 +349,12 @@ The session view is the core reading and reply surface.
 
 ## 10. Search
 
-- Global search input in the top bar on desktop, a destination on mobile.
-- First release searches session titles, projects, and provider names.
-- Results group by provider and show a matching excerpt when message search lands.
-- Filters mirror the Sessions view.
-- Keyboard: `Cmd/Ctrl+K` opens search from any screen.
+- Search is a rail destination on desktop and a bottom-navigation destination on mobile.
+- First release searches session titles, projects, directories, and agents through the hub session cache.
+- Provider and status filters mirror the Sessions view.
+- Results show title, provider, project or directory, status, and unread or attention cues.
+- Message-content search is not implemented yet; it is not implied by the session search copy.
+- Keyboard: `Cmd/Ctrl+K` opens search from any signed-in screen, Tab moves through filters and results, and Escape clears the query.
 
 ## 11. Settings
 

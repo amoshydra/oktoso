@@ -370,6 +370,9 @@ GET    /api/v1/sessions/:ref/messages?cursor=&limit=&order=
 POST   /api/v1/sessions/:ref/messages
 POST   /api/v1/sessions
 POST   /api/v1/sessions/:ref/interrupt
+GET    /api/v1/sessions/:ref/draft
+PUT    /api/v1/sessions/:ref/draft
+DELETE /api/v1/sessions/:ref/draft
 GET    /api/v1/attention
 POST   /api/v1/attention/:id/actions/:action
 GET    /api/v1/events?after=

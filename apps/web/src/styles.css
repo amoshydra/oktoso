@@ -665,6 +665,66 @@
   background: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
 }
 
+.search-panel {
+  margin-bottom: var(--space-4);
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-lg);
+  outline: 0;
+}
+
+.search-input::placeholder {
+  color: var(--faint);
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.search-filter-label {
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.search-filters .chip {
+  min-height: 32px;
+}
+
+.search-loading {
+  opacity: 0.6;
+}
+
+.search-results-panel .session-list-item {
+  align-items: center;
+}
+
+.search-results-panel .session-list-side {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+
 .inbox-group {
   margin-bottom: var(--space-5);
 }
@@ -1195,6 +1255,10 @@
 .composer-hint {
   color: var(--faint);
   font-size: var(--text-xs);
+}
+
+.composer-hint.error {
+  color: var(--danger);
 }
 
 .chat-message {

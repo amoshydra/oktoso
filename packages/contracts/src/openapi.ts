@@ -16,6 +16,9 @@ import {
   zCreateSessionInput,
   zCursor,
   zDiagnostics,
+  zDraft,
+  zDraftInput,
+  zDraftResponse,
   zError,
   zHealth,
   zHubEvent,
@@ -60,6 +63,9 @@ const CreateSessionInputSchema = registry.register(
   "CreateSessionInput",
   zCreateSessionInput,
 );
+const DraftSchema = registry.register("Draft", zDraft);
+const DraftInputSchema = registry.register("DraftInput", zDraftInput);
+const DraftResponseSchema = registry.register("DraftResponse", zDraftResponse);
 const MessagePartSchema = registry.register("MessagePart", zMessagePart);
 const MessageSchema = registry.register("Message", zMessage);
 const MessagePageSchema = registry.register("MessagePage", zMessagePage);
@@ -286,6 +292,45 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/v1/sessions/{ref}/draft",
+  tags: ["drafts"],
+  summary: "Get the saved draft for a session",
+  request: { params },
+  responses: {
+    200: { description: "Saved draft or null", content: json(DraftResponseSchema) },
+    400: errorResponse("Invalid session reference"),
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/sessions/{ref}/draft",
+  tags: ["drafts"],
+  summary: "Save a draft for a session",
+  request: {
+    params,
+    body: { content: json(DraftInputSchema), required: true },
+  },
+  responses: {
+    200: { description: "Saved draft", content: json(DraftResponseSchema) },
+    400: errorResponse("Invalid draft input"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/sessions/{ref}/draft",
+  tags: ["drafts"],
+  summary: "Delete the saved draft for a session",
+  request: { params },
+  responses: {
+    204: { description: "Draft deleted" },
+    400: errorResponse("Invalid session reference"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/v1/attention",
   tags: ["attention"],
   summary: "List attention items",
@@ -370,7 +415,7 @@ export function buildOpenApiDocument() {
       title: "Agent Hub API",
       version: "0.2.0",
       description:
-        "Hub API for sessions, messages, attention, provider options, diagnostics, and a resumable event stream.",
+        "Hub API for sessions, drafts, messages, attention, provider options, diagnostics, and a resumable event stream.",
     },
     servers: [{ url: "http://127.0.0.1:8787", description: "Local hub" }],
     tags: [
@@ -378,6 +423,7 @@ export function buildOpenApiDocument() {
       { name: "auth" },
       { name: "providers" },
       { name: "sessions" },
+      { name: "drafts" },
       { name: "attention" },
       { name: "events" },
       { name: "search" },

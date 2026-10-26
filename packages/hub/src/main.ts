@@ -9,6 +9,7 @@ import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
 import { ProviderEventService } from "./services/provider-events";
 import { AttentionService } from "./services/attention-service";
+import { DraftService } from "./services/draft-service";
 import { createApp } from "./app";
 import { VERSION } from "./version";
 
@@ -33,6 +34,7 @@ try {
   const registry = new ProviderRegistry(config.providers, logger);
   const sessions = new SessionService(registry, logger);
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
+  const drafts = new DraftService(store);
   const providerEvents = new ProviderEventService(
     registry,
     eventBus,
@@ -54,6 +56,7 @@ try {
     registry,
     sessions,
     attention,
+    drafts,
     logger,
     startedAt,
     webRoot: configuredWebRoot,
