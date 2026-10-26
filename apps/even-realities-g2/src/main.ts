@@ -38,7 +38,8 @@ interface AppState {
   selectedAttention?: Attention;
   sessionRef?: string;
   sessionTitle?: string;
-  chatText: string;
+  chatLines: string[];
+  chatOffset: number;
   replyOptions: ReplyOption[];
   replyPage: number;
   choiceOptions: ReplyOption[];
@@ -50,7 +51,8 @@ interface AppState {
 const state: AppState = {
   screen: "pairing",
   attention: [],
-  chatText: "",
+  chatLines: [],
+  chatOffset: 0,
   replyOptions: [],
   replyPage: 0,
   choiceOptions: [],
@@ -62,6 +64,7 @@ let client: HubClient | undefined;
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let storedBaseURL = localStorage.getItem(URL_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
+const CHAT_VISIBLE_LINES = 6;
 let eventQueue: any[] = [];
 let eventBusy = false;
 
@@ -246,14 +249,32 @@ async function loadChat(quiet: boolean): Promise<void> {
   if (!client || !state.sessionRef) return;
   try {
     const page = await client.messages(state.sessionRef, {
-      limit: 8,
+      limit: 12,
       order: "desc",
     });
     const messages = [...page.data].reverse();
-    state.chatText = formatChat(messages);
+    const built = buildChat(messages);
+    const previousLines = state.chatLines;
+    const previousOffset = state.chatOffset;
+    const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
+    const wasAtBottom =
+      previousLines.length === 0 || previousOffset >= previousMax;
+    state.chatLines = built.lines;
+    const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
+    state.chatOffset = quiet
+      ? wasAtBottom
+        ? nextMax
+        : Math.min(previousOffset, nextMax)
+      : Math.min(built.contextStart, nextMax);
     state.error = undefined;
+    const changed =
+      previousLines.length !== state.chatLines.length ||
+      previousLines.some((line, index) => line !== state.chatLines[index]);
     if (quiet && bridge && state.screen === "chat") {
-      await updateChatBody();
+      if (changed || previousOffset !== state.chatOffset) {
+        await updateChatView();
+      }
+      updatePhoneState();
       return;
     }
     render();
@@ -265,19 +286,83 @@ async function loadChat(quiet: boolean): Promise<void> {
   }
 }
 
-function formatChat(messages: Message[]): string {
-  if (messages.length === 0) return "No messages yet.";
-  const recent = messages.slice(-4);
-  const blocks = recent.map((message) => {
+function buildChat(messages: Message[]): {
+  lines: string[];
+  contextStart: number;
+} {
+  if (messages.length === 0) return { lines: ["No messages yet."], contextStart: 0 };
+  const lines: string[] = [];
+  let contextStart = 0;
+  for (const message of messages) {
     const text = message.parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n")
       .trim();
-    if (!text) return "";
-    return `${message.role.toUpperCase()}\n${wrapText(text, 52, 3).join("\n")}`;
-  });
-  return blocks.filter(Boolean).join("\n\n").slice(0, 1_100) || "No readable text.";
+    if (!text) continue;
+    if (message.role === "user") contextStart = lines.length;
+    lines.push(message.role.toUpperCase());
+    lines.push(...wrapText(text, 52, Number.MAX_SAFE_INTEGER));
+    lines.push("");
+  }
+  if (lines.length === 0) return { lines: ["No readable text."], contextStart: 0 };
+  return { lines, contextStart };
+}
+
+function chatView(): { header: string; body: string; footer: string } {
+  const total = state.chatLines.length;
+  const maxOffset = Math.max(0, total - CHAT_VISIBLE_LINES);
+  const offset = Math.min(Math.max(0, state.chatOffset), maxOffset);
+  state.chatOffset = offset;
+  const visible = state.chatLines.slice(offset, offset + CHAT_VISIBLE_LINES);
+  const first = total === 0 ? 0 : offset + 1;
+  const last = Math.min(total, offset + CHAT_VISIBLE_LINES);
+  const footer =
+    total <= CHAT_VISIBLE_LINES
+      ? "Swipe up/down · Back ×2"
+      : offset >= maxOffset
+        ? `${first}-${last}/${total} · Swipe up`
+        : offset === 0
+          ? `${first}-${last}/${total} · Swipe down`
+          : `${first}-${last}/${total} · Swipe`;
+  return {
+    header: clampLine(state.sessionTitle ?? "Session", 40),
+    body: visible.join("\n"),
+    footer,
+  };
+}
+
+async function updateChatView(): Promise<void> {
+  if (!bridge) return;
+  const view = chatView();
+  setPreview(view.header, view.body, view.footer);
+  try {
+    await bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: 2,
+        containerName: "body",
+        content: view.body,
+      }),
+    );
+    await bridge.textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: 3,
+        containerName: "footer",
+        content: view.footer,
+      }),
+    );
+  } catch (error) {
+    log(`Chat view update failed: ${errorMessage(error)}`);
+  }
+}
+
+function moveChatLine(delta: number): void {
+  if (state.screen !== "chat") return;
+  const maxOffset = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
+  const next = Math.min(maxOffset, Math.max(0, state.chatOffset + delta));
+  if (next === state.chatOffset) return;
+  state.chatOffset = next;
+  void updateChatView();
 }
 
 async function openReply(): Promise<void> {
@@ -510,6 +595,13 @@ async function processEvents(): Promise<void> {
       event?.listEvent?.eventType;
     if (type === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       back();
+    } else if (
+      type === OsEventTypeList.SCROLL_TOP_EVENT ||
+      type === OsEventTypeList.SCROLL_BOTTOM_EVENT
+    ) {
+      if (state.screen === "chat") {
+        moveChatLine(type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
+      }
     } else if (event?.listEvent) {
       const eventType = event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT;
       if (eventType === OsEventTypeList.CLICK_EVENT) {
@@ -577,14 +669,9 @@ function render(): void {
     return;
   }
   if (state.screen === "chat") {
-    const header = clampLine(state.sessionTitle ?? "Session", 40);
-    const footer = state.notice
-      ? clampLine(`✓ ${state.notice}`, 54)
-      : state.error
-        ? clampLine(`Offline: ${state.error}`, 54)
-        : "Tap reply   Back ×2";
-    setPreview(header, state.chatText, footer);
-    void showPage(textPage(state.chatText, footer, header));
+    const view = chatView();
+    setPreview(view.header, view.body, view.footer);
+    void showPage(textPage(view.body, view.footer, view.header));
     return;
   }
   if (state.screen === "reply") {
@@ -625,21 +712,6 @@ async function showPage(page: RebuildPageContainer): Promise<void> {
     await bridge.rebuildPageContainer(page);
   } catch (error) {
     log(`Display update failed: ${errorMessage(error)}`);
-  }
-}
-
-async function updateChatBody(): Promise<void> {
-  if (!bridge) return;
-  try {
-    await bridge.textContainerUpgrade(
-      new TextContainerUpgrade({
-        containerID: 2,
-        containerName: "body",
-        content: state.chatText,
-      }),
-    );
-  } catch (error) {
-    log(`Transcript update failed: ${errorMessage(error)}`);
   }
 }
 
