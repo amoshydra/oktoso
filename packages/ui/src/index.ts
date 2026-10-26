@@ -1,1 +1,1 @@
-export const DESIGN_VERSION = "design-v1";
+export const DESIGN_VERSION = "design-v1.1";

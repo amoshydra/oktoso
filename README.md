@@ -6,7 +6,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. OpenCode read/write and attention are live, and Open WebUI now uses a real provider adapter. Session index, transcript, composer, new-session creation, provider permissions/forms, attention inbox, live badges, and background reconciliation are in place. Desktop notifications remain pending. The approved UI reference is frozen as `design-v1`.
+Implementation phase. OpenCode read/write and attention are live, and Open WebUI now uses a real provider adapter. Session index, transcript, composer, new-session creation, provider permissions/forms, attention inbox, live badges, and background reconciliation are in place. Desktop notifications remain pending. The approved UI reference is frozen as `design-v1.1` (transcript revision of `design-v1`).
 
 ## Documents
 
@@ -15,7 +15,7 @@ Implementation phase. OpenCode read/write and attention are live, and Open WebUI
 - [`docs/code-structure.md`](docs/code-structure.md) - implementation systems, repository layout, API additions, and task sequencing
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
-- [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1` reference and change policy
+- [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.1` reference and change policy
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data

@@ -1,6 +1,6 @@
 # Agent Hub UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
@@ -260,14 +260,19 @@ The session view is the core reading and reply surface.
 ### Transcript
 
 - Full-width rows with a role label and content.
+- On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
+- A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
+- The transcript header stays sticky so back, session context, and interrupt remain available after starting at the bottom.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label.
-- Tool calls render as compact cards with name, status, and collapsible input/output.
-- Reasoning renders as a collapsed block labeled "Reasoning".
+- Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
+- Tool calls render as compact, collapsed rows with a humanized name, status, and hidden input/output.
+- Reasoning renders as a compact collapsed row with a character count.
+- Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps.
 - Permission requests render inline as a blocking card with actions.
 - Question requests render inline as a form card.
 - Errors render as a red-tinted card with retry and open actions.
-- Streaming text appends into the current assistant message. The view does not re-render the whole transcript.
-- Code blocks use a monospace font and a copy button.
+- Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
+- Code blocks use a monospace font with horizontal scrolling; syntax highlighting and copy actions are follow-ups.
 
 ### Composer
 

@@ -206,8 +206,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
       `/api/session/${encodeURIComponent(nativeID)}/message`,
       {
         limit: query.limit ?? 50,
-        order: query.order ?? "asc",
-        cursor: query.cursor,
+        ...(query.cursor
+          ? { cursor: query.cursor }
+          : { order: query.order ?? "asc" }),
       },
       signal,
     );

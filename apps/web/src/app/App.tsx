@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
   Attention,
   AttentionType,
@@ -16,6 +16,7 @@ import {
   HubError,
   type ConnectionStatus,
 } from "@agent-hub/client";
+import { renderMarkdown } from "./markdown";
 
 const TOKEN_KEY = "agent-hub-token";
 const THEME_KEY = "agent-hub-theme";
@@ -606,7 +607,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span class="mono">design-v1 · v{health?.version ?? "0.1.0"}</span>
+                    <span class="mono">design-v1.1 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 {diagnosticsPanel}
@@ -616,7 +617,7 @@ export function App() {
             )}
 
             <footer class="page-footer">
-              <span>Design reference: design-v1</span>
+              <span>Design reference: design-v1.1</span>
               <span>{current.sub}</span>
             </footer>
           </div>
@@ -1379,6 +1380,12 @@ function NewSessionForm(props: {
   );
 }
 
+type PendingScroll =
+  | { mode: "bottom" }
+  | { mode: "preserve"; height: number; top: number };
+
+const MESSAGE_PAGE_SIZE = 200;
+
 function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
@@ -1387,24 +1394,91 @@ function SessionDetail(props: {
 }) {
   const [session, setSession] = useState<Session>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
+  const transcriptRef = useRef<HTMLElement | null>(null);
+  const pendingScroll = useRef<PendingScroll>();
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
 
-  const refresh = async () => {
-    const [nextSession, page] = await Promise.all([
-      props.client.session(props.sessionRef),
-      props.client.messages(props.sessionRef, { limit: 100, order: "asc" }),
-    ]);
-    setSession(nextSession);
-    setMessages(page.data);
-    setCursor(page.cursor.next);
+  const getScroller = () =>
+    (transcriptRef.current?.closest(".content") as HTMLElement | null) ?? null;
+
+  const nearBottom = () => {
+    const scroller = getScroller();
+    if (!scroller) return true;
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
   };
+
+  const refreshLatest = useCallback(
+    async (forceBottom = false) => {
+      const [nextSession, page] = await Promise.all([
+        props.client.session(props.sessionRef),
+        props.client.messages(props.sessionRef, {
+          limit: MESSAGE_PAGE_SIZE,
+          order: "desc",
+        }),
+      ]);
+      const latest = [...page.data].reverse();
+      const stick = forceBottom || nearBottom();
+      setSession(nextSession);
+      setMessages((current) => {
+        if (current.length === 0) return latest;
+        const latestByID = new Map(latest.map((message) => [message.id, message]));
+        const merged = current.map((message) => latestByID.get(message.id) ?? message);
+        const seen = new Set(merged.map((message) => message.id));
+        for (const message of latest) {
+          if (seen.has(message.id)) continue;
+          seen.add(message.id);
+          merged.push(message);
+        }
+        return merged;
+      });
+      setOlderCursor((current) => current ?? page.cursor.next);
+      if (stick) pendingScroll.current = { mode: "bottom" };
+    },
+    [props.client, props.sessionRef],
+  );
+
+  const loadOlder = useCallback(async () => {
+    if (!olderCursor || loadingOlder) return;
+    const scroller = getScroller();
+    if (scroller) {
+      pendingScroll.current = {
+        mode: "preserve",
+        height: scroller.scrollHeight,
+        top: scroller.scrollTop,
+      };
+    }
+    setLoadingOlder(true);
+    setError(undefined);
+    try {
+      const page = await props.client.messages(props.sessionRef, {
+        limit: MESSAGE_PAGE_SIZE,
+        order: "desc",
+        cursor: olderCursor,
+      });
+      const older = [...page.data].reverse();
+      if (older.length === 0) pendingScroll.current = undefined;
+      setMessages((current) => {
+        const seen = new Set(current.map((message) => message.id));
+        const prepend = older.filter((message) => !seen.has(message.id));
+        return prepend.length > 0 ? [...prepend, ...current] : current;
+      });
+      setOlderCursor(page.cursor.next);
+    } catch (reason) {
+      pendingScroll.current = undefined;
+      setError(reason instanceof Error ? reason.message : "Unable to load older messages");
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [olderCursor, loadingOlder, props.client, props.sessionRef]);
 
   const send = async () => {
     const text = draft.trim();
@@ -1415,7 +1489,7 @@ function SessionDetail(props: {
       await props.client.sendMessage(props.sessionRef, { text });
       setDraft("");
       setSession((current) => (current ? { ...current, status: "running" } : current));
-      window.setTimeout(() => void refresh().catch(() => undefined), 500);
+      window.setTimeout(() => void refreshLatest(true).catch(() => undefined), 500);
     } catch (reason) {
       setSendError(reason instanceof Error ? reason.message : "Unable to send the prompt");
     } finally {
@@ -1429,7 +1503,7 @@ function SessionDetail(props: {
     setSendError(undefined);
     try {
       await props.client.interrupt(props.sessionRef);
-      await refresh();
+      await refreshLatest();
     } catch (reason) {
       setSendError(reason instanceof Error ? reason.message : "Unable to interrupt");
     } finally {
@@ -1437,25 +1511,15 @@ function SessionDetail(props: {
     }
   };
 
-  const loadMore = async () => {
-    if (!cursor) return;
-    setLoadingMore(true);
-    try {
-      const page = await props.client.messages(props.sessionRef, { cursor, limit: 50 });
-      setMessages((current) => [...current, ...page.data]);
-      setCursor(page.cursor.next);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load more messages");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
+    pendingScroll.current = undefined;
+    setSession(undefined);
+    setMessages([]);
+    setOlderCursor(null);
     setLoading(true);
     setError(undefined);
-    refresh()
+    refreshLatest(true)
       .then(() => {
         if (!cancelled) {
           void props.client.markRead(props.sessionRef).catch(() => undefined);
@@ -1472,17 +1536,51 @@ function SessionDetail(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.client, props.sessionRef]);
+  }, [props.client, props.sessionRef, refreshLatest]);
 
   const liveSeq =
     props.events.find((event) => event.sessionRef === props.sessionRef)?.seq ?? 0;
   useEffect(() => {
     if (!liveSeq) return;
     const timer = setTimeout(() => {
-      void refresh().catch(() => undefined);
+      void refreshLatest().catch(() => undefined);
     }, 600);
     return () => clearTimeout(timer);
-  }, [liveSeq, props.client, props.sessionRef]);
+  }, [liveSeq, refreshLatest]);
+
+  useEffect(() => {
+    const pending = pendingScroll.current;
+    const scroller = getScroller();
+    if (!pending || !scroller) return;
+    pendingScroll.current = undefined;
+    const frame = requestAnimationFrame(() => {
+      if (pending.mode === "bottom") {
+        scroller.scrollTop = scroller.scrollHeight;
+      } else {
+        scroller.scrollTop =
+          pending.top + (scroller.scrollHeight - pending.height);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages]);
+
+  useEffect(() => {
+    const scroller = getScroller();
+    if (!scroller || !olderCursor || loadingOlder) return;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (scroller.scrollTop < 120) void loadOlder();
+      });
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", onScroll);
+    };
+  }, [session, olderCursor, loadingOlder, loadOlder]);
 
   return (
     <>
@@ -1490,6 +1588,14 @@ function SessionDetail(props: {
         <button class="btn ghost small" type="button" onClick={props.onBack}>
           ← Sessions
         </button>
+        <div class="chat-view-title-block">
+          <span class="chat-view-title">{session?.title ?? "Session"}</span>
+          {session ? (
+            <span class="chat-view-sub">
+              {providerLabel(session.providerID)} · {session.status}
+            </span>
+          ) : null}
+        </div>
         <div class="chat-head-actions">
           <span class="mode-badge">Writable · Phase 2</span>
           {session?.status === "running" ? (
@@ -1560,40 +1666,35 @@ function SessionDetail(props: {
             </div>
           ) : null}
 
-          <section class="chat-panel" aria-label="Session transcript">
+          <section class="chat-panel" aria-label="Session transcript" ref={transcriptRef}>
+            {olderCursor ? (
+              <div class="chat-history-control">
+                <button
+                  class="btn small"
+                  type="button"
+                  disabled={loadingOlder}
+                  onClick={() => void loadOlder()}
+                >
+                  {loadingOlder ? "Loading older…" : "Load older messages"}
+                </button>
+              </div>
+            ) : messages.length > 0 ? (
+              <div class="chat-history-control">
+                <span class="chat-history-note">Beginning of session</span>
+              </div>
+            ) : null}
+
             {messages.length === 0 ? (
               <div class="empty">No messages returned by the provider.</div>
             ) : (
-              messages.map((message) => (
-                <article class={`chat-message ${message.role}`} key={message.id}>
-                  <div class="chat-message-role">
-                    <span>{message.role}</span>
-                    <time>{formatTime(message.createdAt)}</time>
-                    {message.streaming ? <span class="streaming-label">streaming</span> : null}
-                  </div>
-                  <div class="chat-message-parts">
-                    {message.metadata?.error ? (
-                      <div class="form-error" role="alert">
-                        Provider error: {formatJson(message.metadata.error)}
-                      </div>
-                    ) : null}
-                    {message.parts.map((part, index) => (
-                      <MessagePartView part={part} key={index} />
-                    ))}
-                  </div>
-                </article>
-              ))
+              groupTranscript(messages).map((item) =>
+                item.kind === "message" ? (
+                  <TranscriptMessage message={item.message} key={item.message.id} />
+                ) : (
+                  <AgentActivity messages={item.messages} key={item.key} />
+                ),
+              )
             )}
-            {cursor ? (
-              <button
-                class="btn small load-more"
-                type="button"
-                disabled={loadingMore}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore ? "Loading…" : "Load more messages"}
-              </button>
-            ) : null}
           </section>
 
           <form
@@ -1632,36 +1733,211 @@ function SessionDetail(props: {
   );
 }
 
+type TranscriptItem =
+  | { kind: "message"; message: Message }
+  | { kind: "activity"; messages: Message[]; key: string };
+
+function groupTranscript(messages: Message[]): TranscriptItem[] {
+  const items: TranscriptItem[] = [];
+  let activity: Message[] = [];
+  const flush = () => {
+    if (activity.length === 0) return;
+    items.push({
+      kind: "activity",
+      messages: activity,
+      key: `activity:${activity[0]!.id}:${activity[activity.length - 1]!.id}`,
+    });
+    activity = [];
+  };
+  for (const message of messages) {
+    if (isActivityMessage(message)) {
+      activity.push(message);
+    } else {
+      flush();
+      items.push({ kind: "message", message });
+    }
+  }
+  flush();
+  return items;
+}
+
+function isActivityMessage(message: Message): boolean {
+  return (
+    message.role === "assistant" &&
+    !message.metadata?.error &&
+    message.parts.length > 0 &&
+    message.parts.every(
+      (part) => part.type === "reasoning" || part.type === "tool" || part.type === "unknown",
+    )
+  );
+}
+
+function TranscriptMessage(props: { message: Message }) {
+  const message = props.message;
+  return (
+    <article class={`chat-message ${message.role}`}>
+      <div class="chat-message-role">
+        <span>{message.role}</span>
+        <time>{formatTime(message.createdAt)}</time>
+        {message.streaming ? <span class="streaming-label">streaming</span> : null}
+      </div>
+      <div class="chat-message-parts">
+        {message.metadata?.error ? (
+          <div class="form-error" role="alert">
+            Provider error: {formatJson(message.metadata.error)}
+          </div>
+        ) : null}
+        {message.parts.length === 0 && !message.metadata?.error ? (
+          <div class="message-empty">No content</div>
+        ) : (
+          message.parts.map((part, index) => (
+            <MessagePartView part={part} key={index} />
+          ))
+        )}
+      </div>
+    </article>
+  );
+}
+
+function AgentActivity(props: { messages: Message[] }) {
+  const working = props.messages.some((message) => message.streaming);
+  const failed = props.messages.some((message) =>
+    message.parts.some((part) => part.type === "tool" && part.status === "error"),
+  );
+  const events = props.messages.reduce((total, message) => total + message.parts.length, 0);
+  return (
+    <article class="chat-activity">
+      <details class="message-aux chat-activity-details">
+        <summary>
+          <span class="message-aux-label">Agent activity</span>
+          <span class="message-aux-meta">
+            {props.messages.length} steps · {events} events
+          </span>
+          {failed ? <span class="tool-status error">error</span> : null}
+          {working ? <span class="streaming-label">working</span> : null}
+        </summary>
+        <div class="chat-activity-body">
+          {props.messages.map((message) => (
+            <div class="activity-step" key={message.id}>
+              <div class="activity-step-time">{formatTime(message.createdAt)}</div>
+              <div class="chat-message-parts">
+                {message.parts.map((part, index) => (
+                  <MessagePartView part={part} key={index} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function Markdown(props: { text: string }) {
+  const html = useMemo(() => renderMarkdown(props.text), [props.text]);
+  return (
+    <div
+      class="message-markdown"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 function MessagePartView(props: { part: MessagePart }) {
   const part = props.part;
   if (part.type === "text") {
-    return <div class="message-text">{part.text}</div>;
+    return <Markdown text={part.text} />;
   }
   if (part.type === "reasoning") {
     return (
-      <details class="message-reasoning">
-        <summary>Reasoning</summary>
-        <pre>{part.text}</pre>
+      <details class="message-aux message-reasoning">
+        <summary>
+          <span class="message-aux-label">Reasoning</span>
+          <span class="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
+        </summary>
+        <div class="message-aux-body">
+          <pre>{part.text}</pre>
+        </div>
       </details>
     );
   }
   if (part.type === "tool") {
     return (
-      <details class="message-tool">
+      <details class="message-aux message-tool">
         <summary>
-          <span class="mono">{part.name}</span>
+          <span class="message-aux-label">{toolLabel(part.name)}</span>
           <span class={`tool-status ${part.status}`}>{part.status}</span>
         </summary>
-        {part.input !== undefined ? (
-          <pre>{formatJson(part.input)}</pre>
-        ) : null}
-        {part.output !== undefined ? (
-          <pre>{formatJson(part.output)}</pre>
-        ) : null}
+        <div class="message-aux-body">
+          {part.input !== undefined ? (
+            <>
+              <span class="tool-section-label">Input</span>
+              <pre>{formatJson(part.input)}</pre>
+            </>
+          ) : null}
+          {part.output !== undefined ? (
+            <>
+              <span class="tool-section-label">Output</span>
+              <pre>{formatJson(part.output)}</pre>
+            </>
+          ) : null}
+        </div>
       </details>
     );
   }
-  return null;
+  if (part.type === "file") {
+    const href = safeExternalURL(part.url);
+    return (
+      <div class="message-file">
+        <span class="message-file-name">{part.name}</span>
+        {part.mimeType ? <span class="message-file-meta">{part.mimeType}</span> : null}
+        {href ? (
+          <a href={href} target="_blank" rel="noreferrer">
+            Open
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <details class="message-aux message-unknown">
+      <summary>
+        <span class="message-aux-label">Unsupported content</span>
+      </summary>
+      <div class="message-aux-body">
+        <pre>{formatJson(part.raw)}</pre>
+      </div>
+    </details>
+  );
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  bash: "Shell",
+  shell: "Shell",
+  execute: "Execute",
+  edit: "Edit",
+  write: "Write",
+  read: "Read",
+  grep: "Search files",
+  glob: "Find files",
+  task: "Task",
+  webfetch: "Fetch",
+  websearch: "Web search",
+  apply_patch: "Patch",
+};
+
+function toolLabel(name: string): string {
+  return TOOL_LABELS[name.toLowerCase()] ?? name;
+}
+
+function safeExternalURL(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function formatJson(value: unknown): string {

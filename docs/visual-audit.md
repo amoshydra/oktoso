@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
@@ -181,6 +181,18 @@ Tinted labels and controls remain above 4.5:1 in both themes. The lowest light-m
 - Decorative dividers use the subtle border. They are not the only cue for a boundary.
 - A future high-contrast theme can raise `border` and `border-subtle` without changing layout.
 - The prototype is mock data. Real provider content may include longer text, images, and code, which will need a second pass after the API is live.
+
+## Session transcript revision (design-v1.1)
+
+The transcript reading model changed after live providers exposed 1,000+ message sessions:
+
+- Initial load is newest-first and starts at the latest message.
+- Older pages load at the top with scroll anchoring; the oldest message is never the initial page.
+- Message prose renders sanitized Markdown.
+- Tool/reasoning rows are compact disclosures; consecutive tool-only assistant turns collapse into an "Agent activity" block.
+- The session title, back action, and interrupt control stay in a sticky transcript header.
+
+The type scale, spacing, radii, palette, semantic color rules, navigation, and all other screens remain `design-v1`. The pre-existing prototype remains the visual reference for those surfaces.
 
 ## Files changed
 
