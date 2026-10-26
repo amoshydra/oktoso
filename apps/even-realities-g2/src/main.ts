@@ -248,11 +248,7 @@ async function openChat(ref: string, title: string): Promise<void> {
 async function loadChat(quiet: boolean): Promise<void> {
   if (!client || !state.sessionRef) return;
   try {
-    const page = await client.messages(state.sessionRef, {
-      limit: 12,
-      order: "desc",
-    });
-    const messages = [...page.data].reverse();
+    const messages = await loadReadableMessages(state.sessionRef);
     const built = buildChat(messages);
     const previousLines = state.chatLines;
     const previousOffset = state.chatOffset;
@@ -286,13 +282,38 @@ async function loadChat(quiet: boolean): Promise<void> {
   }
 }
 
+async function loadReadableMessages(ref: string): Promise<Message[]> {
+  if (!client) return [];
+  const collected: Message[] = [];
+  let cursor: string | undefined;
+  for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
+    const page = await client.messages(ref, {
+      limit: 50,
+      order: "desc",
+      ...(cursor ? { cursor } : {}),
+    });
+    collected.push(...page.data);
+    if (hasReadableText(collected)) break;
+    if (!page.cursor.next) break;
+    cursor = page.cursor.next;
+  }
+  return [...collected].reverse();
+}
+
+function hasReadableText(messages: Message[]): boolean {
+  return messages.some((message) =>
+    message.parts.some((part) => part.type === "text" && part.text.trim()),
+  );
+}
+
 function buildChat(messages: Message[]): {
   lines: string[];
   contextStart: number;
 } {
   if (messages.length === 0) return { lines: ["No messages yet."], contextStart: 0 };
   const lines: string[] = [];
-  let contextStart = 0;
+  let latestUserStart = 0;
+  let latestAssistantStart: number | undefined;
   for (const message of messages) {
     const text = message.parts
       .filter((part) => part.type === "text")
@@ -300,13 +321,17 @@ function buildChat(messages: Message[]): {
       .join("\n")
       .trim();
     if (!text) continue;
-    if (message.role === "user") contextStart = lines.length;
+    if (message.role === "user") latestUserStart = lines.length;
+    if (message.role === "assistant") latestAssistantStart = lines.length;
     lines.push(message.role.toUpperCase());
     lines.push(...wrapText(text, 52, Number.MAX_SAFE_INTEGER));
     lines.push("");
   }
   if (lines.length === 0) return { lines: ["No readable text."], contextStart: 0 };
-  return { lines, contextStart };
+  return {
+    lines,
+    contextStart: latestAssistantStart ?? latestUserStart,
+  };
 }
 
 function chatView(): { header: string; body: string; footer: string } {
