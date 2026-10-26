@@ -190,11 +190,19 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  width: 100%;
   min-height: 48px;
   padding: 6px 2px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--faint);
+  text-align: center;
+}
+
+.rail-item:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .rail-item.active {
@@ -608,6 +616,14 @@
   font-size: var(--text-xs);
 }
 
+.bottom-nav {
+  display: none;
+}
+
+.placeholder {
+  align-items: center;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -748,6 +764,55 @@
   .icon-btn {
     width: 44px;
     height: 44px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 54px;
+    align-items: stretch;
+    background: var(--rail);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
+    z-index: 40;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bottom-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: var(--text-xs);
+    position: relative;
+  }
+
+  .bottom-mark {
+    font-size: var(--text-xs);
+    font-weight: 700;
+  }
+
+  .bottom-btn.active {
+    color: var(--accent);
+  }
+
+  .bottom-btn.active::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 24%;
+    right: 24%;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+    background: var(--accent);
   }
 }
 

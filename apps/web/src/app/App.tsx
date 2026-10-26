@@ -15,20 +15,71 @@ const TOKEN_KEY = "agent-hub-token";
 const THEME_KEY = "agent-hub-theme";
 
 type AuthState = "checking" | "signed-out" | "signed-in";
+type View = "foundation" | "inbox" | "sessions" | "search" | "providers" | "settings";
 
-const NAV_ITEMS = [
-  ["Foundation", "F"],
-  ["Inbox", "I"],
-  ["Sessions", "S"],
-  ["Search", "/"],
-  ["Providers", "P"],
-  ["Settings", "G"],
-] as const;
+const VIEW_META: Record<
+  View,
+  { label: string; mark: string; sub: string; phase: string; description: string }
+> = {
+  foundation: {
+    label: "Foundation",
+    mark: "F",
+    sub: "Hub runtime · Phase 0",
+    phase: "0",
+    description: "Hub runtime, authentication, state, and the event stream.",
+  },
+  inbox: {
+    label: "Inbox",
+    mark: "I",
+    sub: "Attention · Phase 3",
+    phase: "3",
+    description: "The unified approval, question, unread, and error inbox.",
+  },
+  sessions: {
+    label: "Sessions",
+    mark: "S",
+    sub: "Session index · Phase 1",
+    phase: "1",
+    description: "The provider-backed session index and read-only chat.",
+  },
+  search: {
+    label: "Search",
+    mark: "/",
+    sub: "Search · Phase 6",
+    phase: "6",
+    description: "Session, project, and message search across providers.",
+  },
+  providers: {
+    label: "Providers",
+    mark: "P",
+    sub: "Provider health · Phase 0",
+    phase: "0",
+    description: "Configured endpoints, health, and capability discovery.",
+  },
+  settings: {
+    label: "Settings",
+    mark: "G",
+    sub: "Runtime and preferences · Phase 0",
+    phase: "0",
+    description: "Theme, client preferences, diagnostics, and hub information.",
+  },
+};
+
+const RAIL_VIEWS: View[] = [
+  "foundation",
+  "inbox",
+  "sessions",
+  "search",
+  "providers",
+  "settings",
+];
+const BOTTOM_VIEWS: View[] = ["foundation", "inbox", "sessions", "search", "settings"];
 
 export function App() {
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme === "light" ? "light" : "dark",
   );
+  const [view, setView] = useState<View>("foundation");
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [auth, setAuth] = useState<AuthState>(token ? "checking" : "signed-out");
   const [client, setClient] = useState<HubClient | null>(null);
@@ -42,6 +93,11 @@ export function App() {
   const [loginError, setLoginError] = useState<string>();
   const [loginBusy, setLoginBusy] = useState(false);
   const lastSeq = useRef(0);
+  const contentRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [view]);
 
   const signOut = useCallback(() => {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -87,7 +143,7 @@ export function App() {
             }
           }),
         );
-        if (results.length > 0) setProviders(results);
+        setProviders(results);
       } finally {
         setCheckingProviders(false);
       }
@@ -192,6 +248,8 @@ export function App() {
     localStorage.setItem(THEME_KEY, next);
   };
 
+  const current = VIEW_META[view];
+
   if (auth === "signed-out") {
     return (
       <Login
@@ -217,6 +275,63 @@ export function App() {
     );
   }
 
+  const providerPanel = (
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Providers</h2>
+          <p>Configured endpoints and health checks. Adapters arrive in Phase 1.</p>
+        </div>
+        <button
+          class="btn small"
+          type="button"
+          disabled={checkingProviders}
+          onClick={() => client && void checkProviders(client)}
+        >
+          {checkingProviders ? "Checking…" : "Recheck"}
+        </button>
+      </div>
+      <div class="provider-list">
+        {providers.length === 0 ? (
+          <div class="empty">No providers configured.</div>
+        ) : (
+          providers.map((provider) => (
+            <div class="provider-row" key={provider.id}>
+              <div class="provider-mark">{providerMark(provider.type)}</div>
+              <div class="provider-main">
+                <strong>{provider.name}</strong>
+                <span class="mono">{provider.baseUrl}</span>
+              </div>
+              <span class={`status-chip ${provider.status}`}>
+                <i />
+                {provider.status}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </article>
+  );
+
+  const diagnosticsPanel = (
+    <section class="panel diagnostics">
+      <div class="panel-head">
+        <div>
+          <h2>Diagnostics</h2>
+          <p>Safe operational state. No provider credentials or message bodies.</p>
+        </div>
+      </div>
+      <div class="details-grid">
+        <Detail label="Version" value={health?.version ?? "—"} />
+        <Detail label="Event sequence" value={String(health?.eventSeq ?? 0)} />
+        <Detail label="Subscribers" value={String(diagnostics?.events.subscribers ?? 0)} />
+        <Detail label="Replay buffer" value={String(diagnostics?.events.bufferSize ?? 0)} />
+        <Detail label="Storage" value={diagnostics?.storage.kind ?? "—"} />
+        <Detail label="Node" value={diagnostics?.node ?? "—"} />
+      </div>
+    </section>
+  );
+
   return (
     <div class="app-shell">
       <aside class="rail" aria-label="Primary navigation">
@@ -224,16 +339,21 @@ export function App() {
           AH
         </div>
         <nav class="rail-nav">
-          {NAV_ITEMS.map(([label, mark], index) => (
-            <span
-              class={`rail-item ${index === 0 ? "active" : ""}`}
-              aria-disabled="true"
-              title={`${label} arrives in a later phase`}
-            >
-              <span class="rail-mark">{mark}</span>
-              <span class="rail-label">{label}</span>
-            </span>
-          ))}
+          {RAIL_VIEWS.map((id) => {
+            const item = VIEW_META[id];
+            return (
+              <button
+                class={`rail-item ${view === id ? "active" : ""}`}
+                type="button"
+                aria-current={view === id ? "page" : undefined}
+                onClick={() => setView(id)}
+                title={item.label}
+              >
+                <span class="rail-mark">{item.mark}</span>
+                <span class="rail-label">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
         <div class="rail-footer">
           <span class={`status-dot ${connection === "open" ? "online" : "offline"}`} />
@@ -244,8 +364,8 @@ export function App() {
       <div class="main-column">
         <header class="topbar">
           <div class="topbar-title-block">
-            <h1 class="topbar-title">Foundation</h1>
-            <span class="topbar-sub">Hub runtime · Phase 0</span>
+            <h1 class="topbar-title">{current.label}</h1>
+            <span class="topbar-sub">{current.sub}</span>
           </div>
           <div class="topbar-spacer" />
           <span class={`status-chip ${connectionClass(connection)}`}>
@@ -260,150 +380,187 @@ export function App() {
           </button>
         </header>
 
-        <main class="content">
+        <main class="content" ref={contentRef}>
           <div class="page">
-            <section class="hero">
-              <div>
-                <p class="eyebrow">Agent Hub</p>
-                <h2>Runtime online</h2>
-                <p>
-                  The hub API, authentication, durable state, event bus, and development
-                  provider harness are connected. Product screens arrive in the next slice.
-                </p>
-              </div>
-              <div class="hero-badge">
-                <span class="status-dot online" />
-                v{health?.version ?? "0.1.0"}
-              </div>
-            </section>
-
-            {error ? (
-              <div class="alert" role="alert">
-                {error}
-                <button class="text-button" type="button" onClick={() => setError(undefined)}>
-                  Dismiss
-                </button>
-              </div>
-            ) : null}
-
-            <section class="status-grid" aria-label="Runtime status">
-              <article class="card">
-                <div class="card-label">Hub</div>
-                <strong class="card-value">{health ? "Connected" : "Waiting"}</strong>
-                <span class="card-meta">
-                  Uptime {formatUptime(health?.uptimeMs ?? 0)} · seq {health?.eventSeq ?? 0}
-                </span>
-              </article>
-              <article class="card">
-                <div class="card-label">Event stream</div>
-                <strong class="card-value">{connectionLabel(connection)}</strong>
-                <span class="card-meta">
-                  {events.length} received · cursor {lastSeq.current}
-                </span>
-              </article>
-              <article class="card">
-                <div class="card-label">Providers</div>
-                <strong class="card-value">
-                  {providers.filter((provider) => provider.status === "online").length} /{" "}
-                  {providers.length} online
-                </strong>
-                <span class="card-meta">
-                  {checkingProviders ? "Checking health…" : "Adapter phase next"}
-                </span>
-              </article>
-              <article class="card">
-                <div class="card-label">State</div>
-                <strong class="card-value">{diagnostics?.storage.kind ?? "—"}</strong>
-                <span class="card-meta">Node {diagnostics?.node ?? "—"}</span>
-              </article>
-            </section>
-
-            <section class="grid-two">
-              <article class="panel">
-                <div class="panel-head">
+            {view === "foundation" ? (
+              <>
+                <section class="hero">
                   <div>
-                    <h2>Providers</h2>
-                    <p>Configured endpoints and health checks.</p>
+                    <p class="eyebrow">Agent Hub</p>
+                    <h2>Runtime online</h2>
+                    <p>
+                      The hub API, authentication, durable state, event bus, and
+                      development provider harness are connected. Product screens arrive
+                      in the next slice.
+                    </p>
                   </div>
-                  <button
-                    class="btn small"
-                    type="button"
-                    disabled={checkingProviders}
-                    onClick={() => client && void checkProviders(client)}
-                  >
-                    {checkingProviders ? "Checking…" : "Recheck"}
-                  </button>
-                </div>
-                <div class="provider-list">
-                  {providers.length === 0 ? (
-                    <div class="empty">No providers configured.</div>
-                  ) : (
-                    providers.map((provider) => (
-                      <div class="provider-row" key={provider.id}>
-                        <div class="provider-mark">{providerMark(provider.type)}</div>
-                        <div class="provider-main">
-                          <strong>{provider.name}</strong>
-                          <span class="mono">{provider.baseUrl}</span>
-                        </div>
-                        <span class={`status-chip ${provider.status}`}>
-                          <i />
-                          {provider.status}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </article>
+                  <div class="hero-badge">
+                    <span class="status-dot online" />
+                    v{health?.version ?? "0.1.0"}
+                  </div>
+                </section>
 
-              <article class="panel">
-                <div class="panel-head">
+                {error ? (
+                  <div class="alert" role="alert">
+                    {error}
+                    <button class="text-button" type="button" onClick={() => setError(undefined)}>
+                      Dismiss
+                    </button>
+                  </div>
+                ) : null}
+
+                <section class="status-grid" aria-label="Runtime status">
+                  <article class="card">
+                    <div class="card-label">Hub</div>
+                    <strong class="card-value">{health ? "Connected" : "Waiting"}</strong>
+                    <span class="card-meta">
+                      Uptime {formatUptime(health?.uptimeMs ?? 0)} · seq {health?.eventSeq ?? 0}
+                    </span>
+                  </article>
+                  <article class="card">
+                    <div class="card-label">Event stream</div>
+                    <strong class="card-value">{connectionLabel(connection)}</strong>
+                    <span class="card-meta">
+                      {events.length} received · cursor {lastSeq.current}
+                    </span>
+                  </article>
+                  <article class="card">
+                    <div class="card-label">Providers</div>
+                    <strong class="card-value">
+                      {providers.filter((provider) => provider.status === "online").length} /{" "}
+                      {providers.length} online
+                    </strong>
+                    <span class="card-meta">
+                      {checkingProviders ? "Checking health…" : "Dev harness"}
+                    </span>
+                  </article>
+                  <article class="card">
+                    <div class="card-label">State</div>
+                    <strong class="card-value">{diagnostics?.storage.kind ?? "—"}</strong>
+                    <span class="card-meta">Node {diagnostics?.node ?? "—"}</span>
+                  </article>
+                </section>
+
+                <section class="grid-two">
+                  {providerPanel}
+                  <article class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Event stream</h2>
+                        <p>Authenticated SSE with replay and heartbeat.</p>
+                      </div>
+                      <span class="mono">after={lastSeq.current}</span>
+                    </div>
+                    {events.length === 0 ? (
+                      <div class="empty">
+                        Connected. New hub events will appear here as the provider slices land.
+                      </div>
+                    ) : (
+                      <div class="event-list">
+                        {events.map((event) => (
+                          <div class="event-row" key={`${event.seq}-${event.type}`}>
+                            <span class="event-seq">#{event.seq}</span>
+                            <span class="event-type">{event.type}</span>
+                            <span class="event-time">{formatTime(event.at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                </section>
+
+                {diagnosticsPanel}
+              </>
+            ) : view === "providers" ? (
+              <>
+                <section class="hero">
                   <div>
-                    <h2>Event stream</h2>
-                    <p>Authenticated SSE with replay and heartbeat.</p>
+                    <p class="eyebrow">Phase 0</p>
+                    <h2>Provider health</h2>
+                    <p>
+                      These are the configured provider endpoints. The health checks are
+                      live; sessions, messages, and capabilities are the next slice.
+                    </p>
                   </div>
-                  <span class="mono">after={lastSeq.current}</span>
-                </div>
-                {events.length === 0 ? (
-                  <div class="empty">
-                    Connected. New hub events will appear here as the provider slices land.
-                  </div>
-                ) : (
-                  <div class="event-list">
-                    {events.map((event) => (
-                      <div class="event-row" key={`${event.seq}-${event.type}`}>
-                        <span class="event-seq">#{event.seq}</span>
-                        <span class="event-type">{event.type}</span>
-                        <span class="event-time">{formatTime(event.at)}</span>
+                </section>
+                {providerPanel}
+                {diagnosticsPanel}
+              </>
+            ) : view === "settings" ? (
+              <>
+                <section class="grid-two">
+                  <article class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Appearance</h2>
+                        <p>Theme is stored locally in this browser.</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-            </section>
-
-            <section class="panel diagnostics">
-              <div class="panel-head">
-                <div>
-                  <h2>Diagnostics</h2>
-                  <p>Safe operational state. No provider credentials or message bodies.</p>
-                </div>
-              </div>
-              <div class="details-grid">
-                <Detail label="Version" value={health?.version ?? "—"} />
-                <Detail label="Event sequence" value={String(health?.eventSeq ?? 0)} />
-                <Detail label="Subscribers" value={String(diagnostics?.events.subscribers ?? 0)} />
-                <Detail label="Replay buffer" value={String(diagnostics?.events.bufferSize ?? 0)} />
-                <Detail label="Storage" value={diagnostics?.storage.kind ?? "—"} />
-                <Detail label="Node" value={diagnostics?.node ?? "—"} />
-              </div>
-            </section>
+                    </div>
+                    <button class="btn small" type="button" onClick={toggleTheme}>
+                      Use {theme === "dark" ? "light" : "dark"} theme
+                    </button>
+                  </article>
+                  <article class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Providers</h2>
+                        <p>Provider connections move under Providers.</p>
+                      </div>
+                    </div>
+                    <button class="btn small" type="button" onClick={() => setView("providers")}>
+                      Open providers
+                    </button>
+                  </article>
+                  <article class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Session</h2>
+                        <p>The hub token is held only for this tab.</p>
+                      </div>
+                    </div>
+                    <button class="btn small" type="button" onClick={signOut}>
+                      Disconnect
+                    </button>
+                  </article>
+                  <article class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>About</h2>
+                        <p>Frozen reference and runtime build.</p>
+                      </div>
+                    </div>
+                    <span class="mono">design-v1 · v{health?.version ?? "0.1.0"}</span>
+                  </article>
+                </section>
+                {diagnosticsPanel}
+              </>
+            ) : (
+              <Placeholder view={view} onBack={() => setView("foundation")} />
+            )}
 
             <footer class="page-footer">
               <span>Design reference: design-v1</span>
-              <span>Foundation build</span>
+              <span>{current.sub}</span>
             </footer>
           </div>
         </main>
+
+        <nav class="bottom-nav" aria-label="Mobile navigation">
+          {BOTTOM_VIEWS.map((id) => {
+            const item = VIEW_META[id];
+            return (
+              <button
+                class={`bottom-btn ${view === id ? "active" : ""}`}
+                type="button"
+                aria-current={view === id ? "page" : undefined}
+                onClick={() => setView(id)}
+              >
+                <span class="bottom-mark">{item.mark}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
@@ -468,6 +625,22 @@ function Login(props: {
         </p>
       </div>
     </div>
+  );
+}
+
+function Placeholder(props: { view: View; onBack: () => void }) {
+  const item = VIEW_META[props.view];
+  return (
+    <section class="hero placeholder">
+      <div>
+        <p class="eyebrow">Phase {item.phase}</p>
+        <h2>{item.label} is next</h2>
+        <p>{item.description} The Foundation shell is live; this screen will be wired to the hub in its phase.</p>
+      </div>
+      <button class="btn small" type="button" onClick={props.onBack}>
+        Back to Foundation
+      </button>
+    </section>
   );
 }
 
