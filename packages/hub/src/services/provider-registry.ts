@@ -3,7 +3,11 @@ import type {
   ProviderHealth,
   ProviderStatus,
 } from "@agent-hub/contracts";
-import { emptyCapabilities } from "@agent-hub/providers";
+import {
+  emptyCapabilities,
+  OpenCodeAdapter,
+  type ProviderAdapter,
+} from "@agent-hub/providers";
 import type { ProviderConfig } from "../config/schema";
 import { buildProviderEndpoint } from "../config/load";
 import type { Logger } from "../lib/logger";
@@ -11,6 +15,7 @@ import type { Logger } from "../lib/logger";
 interface ProviderRuntimeState {
   config: ProviderConfig;
   status: ProviderStatus;
+  adapter?: ProviderAdapter;
   version?: string;
   lastCheckedAt?: number;
   lastError?: string;
@@ -30,8 +35,31 @@ export class ProviderRegistry {
     private readonly logger: Logger,
   ) {
     for (const config of providers) {
-      this.runtimes.set(config.id, { config, status: "unknown" });
+      this.runtimes.set(config.id, {
+        config,
+        status: "unknown",
+        ...(config.type === "opencode"
+          ? {
+              adapter: new OpenCodeAdapter({
+                id: config.id,
+                baseUrl: config.baseUrl,
+                username: config.auth?.kind === "basic" ? config.auth.username : undefined,
+                password: config.auth?.kind === "basic" ? config.auth.password : "",
+              }),
+            }
+          : {}),
+      });
     }
+  }
+
+  adapters(): ProviderAdapter[] {
+    return [...this.runtimes.values()]
+      .map((runtime) => runtime.adapter)
+      .filter((adapter): adapter is ProviderAdapter => Boolean(adapter));
+  }
+
+  adapter(id: string): ProviderAdapter | undefined {
+    return this.runtimes.get(id)?.adapter;
   }
 
   list(): Provider[] {
@@ -64,6 +92,18 @@ export class ProviderRegistry {
     if (!runtime) throw new Error(`Unknown provider ${id}`);
     const { config } = runtime;
     const started = Date.now();
+    if (runtime.adapter) {
+      const health = await runtime.adapter.health(AbortSignal.timeout(5_000));
+      const latencyMs = Date.now() - started;
+      return this.update(
+        runtime,
+        health.status,
+        latencyMs,
+        health.message,
+        health.version,
+      );
+    }
+
     const url = buildProviderEndpoint(
       config.baseUrl,
       HEALTH_PATHS[config.type] ?? "/",
@@ -147,7 +187,7 @@ export class ProviderRegistry {
       status: runtime.status,
       ...(runtime.version ? { version: runtime.version } : {}),
       ...(runtime.lastCheckedAt ? { lastCheckedAt: runtime.lastCheckedAt } : {}),
-      capabilities: emptyCapabilities,
+      capabilities: runtime.adapter?.capabilities ?? emptyCapabilities,
     };
   }
 }

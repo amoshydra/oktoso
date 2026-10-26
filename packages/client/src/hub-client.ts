@@ -4,7 +4,12 @@ import type {
   Diagnostics,
   ErrorResponse,
   Health,
+  MessagePage,
+  MessagesQuery,
   Provider,
+  Session,
+  SessionListQuery,
+  SessionPage,
 } from "@agent-hub/contracts";
 import { HubError } from "./errors";
 import {
@@ -55,6 +60,38 @@ export class HubClient {
       `/api/v1/providers/${encodeURIComponent(id)}/check`,
       { method: "POST" },
     );
+  }
+
+  async sessions(query: SessionListQuery = {}): Promise<SessionPage> {
+    const params = new URLSearchParams();
+    if (query.provider) params.set("provider", query.provider);
+    if (query.status) params.set("status", query.status);
+    if (query.q) params.set("q", query.q);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request<SessionPage>(`/api/v1/sessions${suffix}`);
+  }
+
+  async session(ref: string): Promise<Session> {
+    return this.request<Session>(`/api/v1/sessions/${encodeURIComponent(ref)}`);
+  }
+
+  async messages(ref: string, query: MessagesQuery = {}): Promise<MessagePage> {
+    const params = new URLSearchParams();
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit) params.set("limit", String(query.limit));
+    if (query.order) params.set("order", query.order);
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request<MessagePage>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/messages${suffix}`,
+    );
+  }
+
+  async markRead(ref: string): Promise<void> {
+    await this.request<void>(`/api/v1/sessions/${encodeURIComponent(ref)}/read`, {
+      method: "POST",
+    });
   }
 
   startEvents(options: {

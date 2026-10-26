@@ -1,5 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { loadEnvFile } from "node:process";
 import { createFakeProviderServers } from "@agent-hub/testing";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // .env.local is optional; the fake OpenCode provider is the default.
+}
 
 const token = "dev-token-agent-hub";
 const providers = await createFakeProviderServers();
@@ -13,11 +20,17 @@ for (const provider of providers) {
 const env = {
   ...process.env,
   HUB_TOKEN: token,
-  OPENCODE_PASSWORD: "dev-opencode-password",
-  OPENWEBUI_API_KEY: "dev-openwebui-key",
-  HERMES_API_KEY: "dev-hermes-key",
+  OPENCODE_BASE_URL: process.env.OPENCODE_BASE_URL ?? "http://127.0.0.1:4101",
+  OPENCODE_USERNAME: process.env.OPENCODE_USERNAME ?? "opencode",
+  OPENCODE_PASSWORD: process.env.OPENCODE_PASSWORD ?? "dev-opencode-password",
+  OPENWEBUI_API_KEY: process.env.OPENWEBUI_API_KEY ?? "dev-openwebui-key",
+  HERMES_API_KEY: process.env.HERMES_API_KEY ?? "dev-hermes-key",
   LOG_LEVEL: process.env.LOG_LEVEL ?? "debug",
 };
+
+console.log(
+  `OpenCode: ${env.OPENCODE_BASE_URL === "http://127.0.0.1:4101" ? "fake" : env.OPENCODE_BASE_URL}`,
+);
 
 const hub = spawn(
   "pnpm",

@@ -8,7 +8,9 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { HubConfig } from "./config/schema";
 import type { EventBus } from "./services/event-bus";
 import type { ProviderRegistry } from "./services/provider-registry";
+import type { SessionService } from "./services/session-service";
 import type { StateStore } from "@agent-hub/storage";
+import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
 import type { AppEnv } from "./http/types";
 import { AppError } from "./domain/errors";
@@ -17,6 +19,7 @@ import { requestContext } from "./http/middleware/request";
 import { requestLimits, securityHeaders } from "./http/middleware/security";
 import { registerHealthRoutes } from "./http/routes/health";
 import { registerProviderRoutes } from "./http/routes/providers";
+import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 
@@ -25,6 +28,7 @@ export interface AppDependencies {
   store: StateStore;
   eventBus: EventBus;
   registry: ProviderRegistry;
+  sessions: SessionService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -58,6 +62,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     eventSeq: () => deps.eventBus.lastSeq,
   });
   registerProviderRoutes(app, deps.registry);
+  registerSessionRoutes(app, deps.sessions);
   registerEventRoutes(app, deps.eventBus);
   registerDiagnosticsRoute(app, {
     startedAt,
@@ -100,7 +105,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     const appError =
       error instanceof AppError
         ? error
-        : new AppError("internal", "Internal server error", 500);
+        : error instanceof ProviderError
+          ? providerAppError(error)
+          : new AppError("internal", "Internal server error", 500);
 
     logger.error("request failed", {
       code: appError.code,
@@ -124,4 +131,23 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   });
 
   return app;
+}
+
+function providerAppError(error: ProviderError): AppError {
+  const status =
+    error.code === "not_found"
+      ? 404
+      : error.code === "conflict"
+        ? 409
+        : error.code === "rate_limited"
+          ? 429
+          : error.code === "invalid_request"
+            ? 400
+            : error.code === "unsupported"
+              ? 501
+              : 502;
+  return new AppError(error.code, error.message, status, {
+    retryable: error.retryable,
+    details: error.details,
+  });
 }

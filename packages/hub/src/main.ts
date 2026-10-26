@@ -6,6 +6,7 @@ import { createLogger, type LogLevel } from "./lib/logger";
 import { loadConfig } from "./config/load";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
+import { SessionService } from "./services/session-service";
 import { createApp } from "./app";
 import { VERSION } from "./version";
 
@@ -28,6 +29,7 @@ try {
   const eventBus = new EventBus(store, logger);
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
+  const sessions = new SessionService(registry, logger);
 
   const configuredWebRoot = config.webRoot
     ? resolve(config.webRoot)
@@ -40,6 +42,7 @@ try {
     store,
     eventBus,
     registry,
+    sessions,
     logger,
     startedAt,
     webRoot: configuredWebRoot,
@@ -67,6 +70,11 @@ try {
   // re-check on demand and the provider adapters take over in Phase 1.
   void registry.checkAll().catch((error) => {
     logger.warn("initial provider checks failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  void sessions.refresh().catch((error) => {
+    logger.warn("initial session sync failed", {
       error: error instanceof Error ? error.message : String(error),
     });
   });

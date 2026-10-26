@@ -4,6 +4,7 @@ import { loadConfig } from "./config/load";
 import { createLogger } from "./lib/logger";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
+import { SessionService } from "./services/session-service";
 import { MemoryStateStore } from "@agent-hub/storage";
 import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
 
@@ -23,8 +24,17 @@ async function createTestApp() {
   const eventBus = new EventBus(store, logger, { heartbeatMs: 10 });
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
-  const app = createApp({ config, store, eventBus, registry, logger, startedAt: Date.now() });
-  return { app, eventBus, store, registry };
+  const sessions = new SessionService(registry, logger);
+  const app = createApp({
+    config,
+    store,
+    eventBus,
+    registry,
+    sessions,
+    logger,
+    startedAt: Date.now(),
+  });
+  return { app, eventBus, store, registry, sessions };
 }
 
 afterEach(async () => {
@@ -59,6 +69,36 @@ describe("hub app", () => {
     expect(await providers.json()).toMatchObject({
       data: [{ id: "desktop-opencode", status: "online" }],
     });
+
+    const sessionsResponse = await app.request("/api/v1/sessions", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(sessionsResponse.status).toBe(200);
+    const sessionsBody = (await sessionsResponse.json()) as { data: Array<{ ref: string }> };
+    expect(sessionsBody.data).toHaveLength(3);
+    expect(sessionsBody.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ref: "desktop-opencode:ses_auth" })]),
+    );
+
+    const sessionResponse = await app.request("/api/v1/sessions/desktop-opencode%3Ases_auth", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(sessionResponse.status).toBe(200);
+    expect(await sessionResponse.json()).toMatchObject({
+      ref: "desktop-opencode:ses_auth",
+      title: "Fix auth race in gateway",
+    });
+
+    const messagesResponse = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages?order=asc",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = (await messagesResponse.json()) as {
+      data: Array<{ role: string }>;
+    };
+    expect(messagesBody.data).toHaveLength(3);
+    expect(messagesBody.data[0]?.role).toBe("user");
 
     const diagnostics = await app.request("/api/v1/diagnostics", {
       headers: { Authorization: `Bearer ${token}` },

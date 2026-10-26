@@ -3,7 +3,10 @@ import type {
   Diagnostics,
   Health,
   HubEvent,
+  Message,
+  MessagePart,
   Provider,
+  Session,
 } from "@agent-hub/contracts";
 import {
   HubClient,
@@ -92,12 +95,18 @@ export function App() {
   const [error, setError] = useState<string>();
   const [loginError, setLoginError] = useState<string>();
   const [loginBusy, setLoginBusy] = useState(false);
+  const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const lastSeq = useRef(0);
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
-  }, [view]);
+  }, [view, selectedSessionRef]);
+
+  const selectView = (next: View) => {
+    if (next === "sessions") setSelectedSessionRef(undefined);
+    setView(next);
+  };
 
   const signOut = useCallback(() => {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -302,6 +311,9 @@ export function App() {
                 <strong>{provider.name}</strong>
                 <span class="mono">{provider.baseUrl}</span>
               </div>
+              {import.meta.env.DEV && isFakeProvider(provider.baseUrl) ? (
+                <span class="dev-badge">fake</span>
+              ) : null}
               <span class={`status-chip ${provider.status}`}>
                 <i />
                 {provider.status}
@@ -346,7 +358,7 @@ export function App() {
                 class={`rail-item ${view === id ? "active" : ""}`}
                 type="button"
                 aria-current={view === id ? "page" : undefined}
-                onClick={() => setView(id)}
+                onClick={() => selectView(id)}
                 title={item.label}
               >
                 <span class="rail-mark">{item.mark}</span>
@@ -471,6 +483,19 @@ export function App() {
 
                 {diagnosticsPanel}
               </>
+            ) : view === "sessions" ? (
+              selectedSessionRef ? (
+                <SessionDetail
+                  client={client as HubClient}
+                  sessionRef={selectedSessionRef}
+                  onBack={() => setSelectedSessionRef(undefined)}
+                />
+              ) : (
+                <SessionsView
+                  client={client as HubClient}
+                  onOpen={setSelectedSessionRef}
+                />
+              )
             ) : view === "providers" ? (
               <>
                 <section class="hero">
@@ -507,7 +532,7 @@ export function App() {
                         <p>Provider connections move under Providers.</p>
                       </div>
                     </div>
-                    <button class="btn small" type="button" onClick={() => setView("providers")}>
+                    <button class="btn small" type="button" onClick={() => selectView("providers")}>
                       Open providers
                     </button>
                   </article>
@@ -553,7 +578,7 @@ export function App() {
                 class={`bottom-btn ${view === id ? "active" : ""}`}
                 type="button"
                 aria-current={view === id ? "page" : undefined}
-                onClick={() => setView(id)}
+                onClick={() => selectView(id)}
               >
                 <span class="bottom-mark">{item.mark}</span>
                 <span>{item.label}</span>
@@ -628,6 +653,311 @@ function Login(props: {
   );
 }
 
+function SessionsView(props: { client: HubClient; onOpen: (ref: string) => void }) {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const load = async (next?: string) => {
+    if (next) setLoadingMore(true);
+    else setLoading(true);
+    setError(undefined);
+    try {
+      const page = await props.client.sessions({ limit: 50, cursor: next });
+      setSessions((current) => {
+        if (!next) return page.data;
+        const seen = new Set(current.map((session) => session.ref));
+        return [...current, ...page.data.filter((session) => !seen.has(session.ref))];
+      });
+      setCursor(page.cursor.next);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load sessions");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [props.client]);
+
+  return (
+    <>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Phase 1</p>
+          <h2>OpenCode sessions</h2>
+          <p>
+            Live session index and read-only transcript. Sending prompts, creating
+            sessions, and attention arrive in the next slices.
+          </p>
+        </div>
+        <button class="btn small" type="button" disabled={loading} onClick={() => void load()}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </section>
+
+      {error ? (
+        <div class="alert" role="alert">
+          {error}
+          <button class="text-button" type="button" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>All sessions</h2>
+            <p>{sessions.length} sessions · newest first</p>
+          </div>
+          <span class="read-only">Read-only · Phase 1</span>
+        </div>
+        {loading && sessions.length === 0 ? (
+          <div class="empty">Loading sessions…</div>
+        ) : sessions.length === 0 ? (
+          <div class="empty">No sessions returned by the provider.</div>
+        ) : (
+          <div class="session-list">
+            {sessions.map((session) => (
+              <button
+                class={`session-list-item ${session.unread ? "unread" : ""}`}
+                type="button"
+                key={session.ref}
+                onClick={() => props.onOpen(session.ref)}
+              >
+                <span class={`session-status-dot ${session.status}`} />
+                <span class="session-list-main">
+                  <strong>{session.title}</strong>
+                  <span class="session-list-meta">
+                    {providerLabel(session.providerID)} · {session.project ?? session.directory ?? "unknown project"}
+                  </span>
+                </span>
+                <span class="session-list-side">
+                  <span class="mono">{relativeTime(session.updatedAt)}</span>
+                  <span class={`status-chip ${session.status}`}>
+                    <i />
+                    {session.status}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {cursor ? (
+          <button
+            class="btn small load-more"
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void load(cursor)}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        ) : null}
+      </section>
+    </>
+  );
+}
+
+function SessionDetail(props: {
+  client: HubClient;
+  sessionRef: string;
+  onBack: () => void;
+}) {
+  const [session, setSession] = useState<Session>();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const loadMore = async () => {
+    if (!cursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await props.client.messages(props.sessionRef, { cursor, limit: 50 });
+      setMessages((current) => [...current, ...page.data]);
+      setCursor(page.cursor.next);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load more messages");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    Promise.all([
+      props.client.session(props.sessionRef),
+      props.client.messages(props.sessionRef, { limit: 100, order: "asc" }),
+    ])
+      .then(([nextSession, page]) => {
+        if (cancelled) return;
+        setSession(nextSession);
+        setMessages(page.data);
+        setCursor(page.cursor.next);
+        void props.client.markRead(props.sessionRef).catch(() => undefined);
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Unable to load the session");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, props.sessionRef]);
+
+  return (
+    <>
+      <div class="chat-view-head">
+        <button class="btn ghost small" type="button" onClick={props.onBack}>
+          ← Sessions
+        </button>
+        <span class="read-only">Read-only · Phase 1</span>
+      </div>
+
+      {loading && !session ? (
+        <div class="empty">Loading session…</div>
+      ) : error && !session ? (
+        <div class="alert" role="alert">
+          {error}
+          <button class="text-button" type="button" onClick={props.onBack}>
+            Back
+          </button>
+        </div>
+      ) : session ? (
+        <>
+          <section class="hero chat-hero">
+            <div>
+              <p class="eyebrow">Session</p>
+              <h2>{session.title}</h2>
+              <div class="chat-meta">
+                <span>{providerLabel(session.providerID)}</span>
+                <span>·</span>
+                <span>{session.project ?? session.directory ?? "unknown project"}</span>
+                {session.agent ? (
+                  <>
+                    <span>·</span>
+                    <span>{session.agent}</span>
+                  </>
+                ) : null}
+                {session.model ? (
+                  <>
+                    <span>·</span>
+                    <span class="mono">{session.model}</span>
+                  </>
+                ) : null}
+                <span class={`status-chip ${session.status}`}>
+                  <i />
+                  {session.status}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {error ? (
+            <div class="alert" role="alert">
+              {error}
+            </div>
+          ) : null}
+
+          <section class="chat-panel" aria-label="Session transcript">
+            {messages.length === 0 ? (
+              <div class="empty">No messages returned by the provider.</div>
+            ) : (
+              messages.map((message) => (
+                <article class={`chat-message ${message.role}`} key={message.id}>
+                  <div class="chat-message-role">
+                    <span>{message.role}</span>
+                    <time>{formatTime(message.createdAt)}</time>
+                    {message.streaming ? <span class="streaming-label">streaming</span> : null}
+                  </div>
+                  <div class="chat-message-parts">
+                    {message.parts.map((part, index) => (
+                      <MessagePartView part={part} key={index} />
+                    ))}
+                  </div>
+                </article>
+              ))
+            )}
+            {cursor ? (
+              <button
+                class="btn small load-more"
+                type="button"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? "Loading…" : "Load more messages"}
+              </button>
+            ) : null}
+          </section>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function MessagePartView(props: { part: MessagePart }) {
+  const part = props.part;
+  if (part.type === "text") {
+    return <div class="message-text">{part.text}</div>;
+  }
+  if (part.type === "reasoning") {
+    return (
+      <details class="message-reasoning">
+        <summary>Reasoning</summary>
+        <pre>{part.text}</pre>
+      </details>
+    );
+  }
+  if (part.type === "tool") {
+    return (
+      <details class="message-tool">
+        <summary>
+          <span class="mono">{part.name}</span>
+          <span class={`tool-status ${part.status}`}>{part.status}</span>
+        </summary>
+        {part.input !== undefined ? (
+          <pre>{formatJson(part.input)}</pre>
+        ) : null}
+        {part.output !== undefined ? (
+          <pre>{formatJson(part.output)}</pre>
+        ) : null}
+      </details>
+    );
+  }
+  return null;
+}
+
+function formatJson(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function relativeTime(at: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
 function Placeholder(props: { view: View; onBack: () => void }) {
   const item = VIEW_META[props.view];
   return (
@@ -651,6 +981,17 @@ function Detail(props: { label: string; value: string }) {
       <strong class="mono">{props.value}</strong>
     </div>
   );
+}
+
+function providerLabel(providerID: string): string {
+  if (providerID.includes("opencode")) return "OpenCode";
+  if (providerID.includes("openwebui")) return "Open WebUI";
+  if (providerID.includes("hermes")) return "Hermes";
+  return providerID;
+}
+
+function isFakeProvider(baseUrl: string): boolean {
+  return /^http:\/\/127\.0\.0\.1:410[1-3]$/.test(baseUrl);
 }
 
 function providerMark(type: string): string {

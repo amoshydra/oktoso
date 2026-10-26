@@ -39,9 +39,16 @@ pnpm dev
 - Web: `http://localhost:5175`
 - Hub API: `http://127.0.0.1:8787`
 - Development token: `dev-token-agent-hub` (prefilled in the dev login)
-- Fake providers: `http://127.0.0.1:4101`–`4103`
 
-The dev command starts the fake provider servers, the hub, and Vite. It does not start the frozen prototype.
+`pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. If `.env.local` exists with `OPENCODE_BASE_URL` and `OPENCODE_PASSWORD`, the OpenCode provider uses the real instance instead of the fake one:
+
+```sh
+OPENCODE_BASE_URL=http://127.0.0.1:4096
+OPENCODE_USERNAME=opencode
+OPENCODE_PASSWORD=...
+```
+
+The dev command does not start the frozen prototype.
 
 ## Prototype
 

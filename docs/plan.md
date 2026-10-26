@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation is in place: contracts, config, auth, state, event bus, fake providers, and the authenticated web shell.
+Status: in progress. Phase 0 foundation and the OpenCode read slice are in place: contracts, config, auth, state, event bus, fake providers, authenticated shell, real OpenCode session index, and read-only transcript.
 
 Goal: prove the hub with one provider and one client.
 
