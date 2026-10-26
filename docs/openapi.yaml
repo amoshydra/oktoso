@@ -13,6 +13,8 @@ tags:
   - name: sessions
   - name: drafts
   - name: attention
+  - name: replies
+  - name: settings
   - name: events
   - name: search
   - name: diagnostics
@@ -610,6 +612,157 @@ components:
             - updatedAt
       required:
         - data
+    AssistantView:
+      type: object
+      properties:
+        reply:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            timeoutMs:
+              type: integer
+            hasApiKey:
+              type: boolean
+            disableThinking:
+              type: boolean
+          required:
+            - enabled
+            - baseUrl
+            - model
+            - timeoutMs
+            - hasApiKey
+            - disableThinking
+        transcription:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            timeoutMs:
+              type: integer
+            hasApiKey:
+              type: boolean
+          required:
+            - enabled
+            - baseUrl
+            - model
+            - timeoutMs
+            - hasApiKey
+      required:
+        - reply
+        - transcription
+    AssistantInput:
+      type: object
+      properties:
+        reply:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            apiKey:
+              type:
+                - string
+                - "null"
+            disableThinking:
+              type: boolean
+            timeoutMs:
+              type: integer
+              minimum: 1000
+              maximum: 60000
+        transcription:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            apiKey:
+              type:
+                - string
+                - "null"
+            timeoutMs:
+              type: integer
+              minimum: 1000
+              maximum: 120000
+    AssistantModels:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: string
+            baseUrl:
+              type: string
+          required:
+            - data
+            - baseUrl
+      required:
+        - data
+    ReplyOptions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+                maxLength: 80
+              text:
+                type: string
+              source:
+                type: string
+                enum:
+                  - canned
+                  - model
+                  - agent
+              action:
+                type: string
+                enum:
+                  - send
+                  - interrupt
+                  - phone
+                  - voice
+                  - choices
+                default: send
+            required:
+              - id
+              - label
+              - text
+              - source
+        generatedAt:
+          type: integer
+        model:
+          type: string
+        mode:
+          type: string
+          enum:
+            - reply
+            - choices
+      required:
+        - data
+        - generatedAt
+        - mode
     MessagePart:
       oneOf:
         - type: object
@@ -1679,6 +1832,116 @@ paths:
           description: Draft deleted
         "400":
           description: Invalid session reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/settings/assistant:
+    get:
+      tags:
+        - settings
+      summary: Get assistant settings
+      responses:
+        "200":
+          description: Assistant settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AssistantView"
+                required:
+                  - data
+    put:
+      tags:
+        - settings
+      summary: Update assistant settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantInput"
+      responses:
+        "200":
+          description: Updated assistant settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AssistantView"
+                required:
+                  - data
+        "400":
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/settings/assistant/{target}/models:
+    get:
+      tags:
+        - settings
+      summary: List models from an assistant endpoint
+      parameters:
+        - schema:
+            type: string
+            enum:
+              - reply
+              - transcription
+          required: true
+          name: target
+          in: path
+      responses:
+        "200":
+          description: Available models
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantModels"
+        "400":
+          description: Endpoint unavailable or invalid target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/reply-options:
+    get:
+      tags:
+        - replies
+      summary: List short reply options for a session
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+            enum:
+              - reply
+              - choices
+          required: false
+          name: mode
+          in: query
+      responses:
+        "200":
+          description: Reply options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyOptions"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
           content:
             application/json:
               schema:

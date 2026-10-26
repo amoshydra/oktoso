@@ -281,6 +281,7 @@ The session view is the core reading and reply surface.
 - Agent and model selectors when the provider supports them.
 - Slash commands later.
 - Voice button on mobile and glasses. Desktop can use the browser microphone later.
+- Wearable clients can show short reply options from deterministic steering, a configured 4B model, or extracted agent choices.
 - Drafts persist per session on the hub and follow the session across clients and reloads.
 - Drafts autosave shortly after typing and clear after a successful send.
 - While the agent is running, show an interrupt button and allow queueing a follow-up if the provider supports it.

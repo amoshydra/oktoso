@@ -2,16 +2,19 @@ import type { Hono } from "hono";
 import {
   zCreateSessionInput,
   zMessagesQuery,
+  zReplyMode,
   zSendInput,
   zSessionListQuery,
 } from "@agent-hub/contracts";
 import type { SessionService } from "../../services/session-service";
+import type { ReplyService } from "../../services/reply-service";
 import type { AppEnv } from "../types";
 import { badRequest, notFound } from "../../domain/errors";
 
 export function registerSessionRoutes(
   app: Hono<AppEnv>,
   sessions: SessionService,
+  replies: ReplyService,
 ): void {
   app.get("/api/v1/sessions", async (c) => {
     const parsed = zSessionListQuery.safeParse(c.req.query());
@@ -37,6 +40,13 @@ export function registerSessionRoutes(
 
   app.get("/api/v1/sessions/:ref", async (c) => {
     return c.json(await sessions.get(c.req.param("ref")));
+  });
+
+  app.get("/api/v1/sessions/:ref/reply-options", async (c) => {
+    const ref = c.req.param("ref");
+    const mode = zReplyMode.safeParse(c.req.query("mode") ?? "reply");
+    if (!mode.success) throw badRequest("Invalid reply-option mode");
+    return c.json(await replies.list(ref, mode.data));
   });
 
   app.get("/api/v1/sessions/:ref/messages", async (c) => {

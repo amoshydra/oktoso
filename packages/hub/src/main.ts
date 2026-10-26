@@ -10,6 +10,8 @@ import { SessionService } from "./services/session-service";
 import { ProviderEventService } from "./services/provider-events";
 import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
+import { AssistantSettingsService } from "./services/assistant-settings";
+import { ReplyService } from "./services/reply-service";
 import { createApp } from "./app";
 import { VERSION } from "./version";
 
@@ -35,6 +37,8 @@ try {
   const sessions = new SessionService(registry, logger);
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
+  const assistantSettings = new AssistantSettingsService(store);
+  const replies = new ReplyService(assistantSettings, sessions, logger);
   const providerEvents = new ProviderEventService(
     registry,
     eventBus,
@@ -57,6 +61,8 @@ try {
     sessions,
     attention,
     drafts,
+    settings: assistantSettings,
+    replies,
     logger,
     startedAt,
     webRoot: configuredWebRoot,

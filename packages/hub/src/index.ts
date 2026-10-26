@@ -10,3 +10,5 @@ export * from "./services/provider-registry";
 export * from "./services/provider-events";
 export * from "./services/attention-service";
 export * from "./services/draft-service";
+export * from "./services/assistant-settings";
+export * from "./services/reply-service";

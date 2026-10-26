@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
+  AssistantView,
   Attention,
   AttentionType,
   Diagnostics,
@@ -630,6 +631,7 @@ export function App() {
                     <span class="mono">design-v1.1 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
+                <AssistantSettingsPanel client={client as HubClient} />
                 {diagnosticsPanel}
               </>
             ) : (
@@ -751,6 +753,316 @@ const ATTENTION_LABELS: Record<AttentionType, string> = {
   unread: "Unread",
   error: "Error",
 };
+
+function AssistantSettingsPanel(props: { client: HubClient }) {
+  const [view, setView] = useState<AssistantView>();
+  const [replyModels, setReplyModels] = useState<string[]>([]);
+  const [transcriptionModels, setTranscriptionModels] = useState<string[]>([]);
+  const [reply, setReply] = useState({
+    enabled: false,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 8000,
+    apiKey: "",
+    disableThinking: true,
+  });
+  const [transcription, setTranscription] = useState({
+    enabled: false,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 20000,
+    apiKey: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<"reply" | "transcription">();
+  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+
+  const load = async () => {
+    setLoading(true);
+    setError(undefined);
+    try {
+      const next = await props.client.assistantSettings();
+      setView(next);
+      setReply({
+        enabled: next.reply.enabled,
+        baseUrl: next.reply.baseUrl,
+        model: next.reply.model,
+        timeoutMs: next.reply.timeoutMs,
+        apiKey: "",
+        disableThinking: next.reply.disableThinking,
+      });
+      setTranscription({
+        enabled: next.transcription.enabled,
+        baseUrl: next.transcription.baseUrl,
+        model: next.transcription.model,
+        timeoutMs: next.transcription.timeoutMs,
+        apiKey: "",
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load assistant settings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [props.client]);
+
+  const save = async (target: "reply" | "transcription") => {
+    setSaving(target);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const value = target === "reply" ? reply : transcription;
+      const next = await props.client.saveAssistantSettings({
+        [target]: {
+          enabled: value.enabled,
+          baseUrl: value.baseUrl.trim(),
+          model: value.model.trim(),
+          timeoutMs: value.timeoutMs,
+          ...(target === "reply"
+            ? { disableThinking: reply.disableThinking }
+            : {}),
+          ...(value.apiKey.trim() ? { apiKey: value.apiKey.trim() } : {}),
+        },
+      });
+      setView(next);
+      setNotice(`${target === "reply" ? "Reply assistance" : "Voice transcription"} saved.`);
+      if (target === "reply") setReply((current) => ({ ...current, apiKey: "" }));
+      else setTranscription((current) => ({ ...current, apiKey: "" }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save settings");
+    } finally {
+      setSaving(undefined);
+    }
+  };
+
+  const loadModels = async (target: "reply" | "transcription") => {
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const result = await props.client.assistantModels(target);
+      if (target === "reply") {
+        setReplyModels(result.data);
+        setNotice(`Loaded ${result.data.length} reply model${result.data.length === 1 ? "" : "s"}.`);
+      } else {
+        setTranscriptionModels(result.data);
+        setNotice(`Loaded ${result.data.length} transcription model${result.data.length === 1 ? "" : "s"}.`);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to reach the endpoint");
+    }
+  };
+
+  return (
+    <section class="grid-two settings-assistant">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Reply assistance</h2>
+            <p>Short next-reply suggestions for wearable clients. Generated on the hub.</p>
+          </div>
+          <span class="mode-badge">{view?.reply.hasApiKey ? "key saved" : "server-side"}</span>
+        </div>
+        <div class="form-grid">
+          <label class="check-field span-2">
+            <input
+              type="checkbox"
+              checked={reply.enabled}
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  enabled: (event.currentTarget as HTMLInputElement).checked,
+                }))
+              }
+            />
+            <span>Enable contextual reply suggestions</span>
+          </label>
+          <label class="check-field span-2">
+            <input
+              type="checkbox"
+              checked={reply.disableThinking}
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  disableThinking: (event.currentTarget as HTMLInputElement).checked,
+                }))
+              }
+            />
+            <span>Disable model thinking (recommended for short suggestions)</span>
+          </label>
+          <label class="form-field span-2">
+            <span>OpenAI-compatible base URL</span>
+            <input
+              value={reply.baseUrl}
+              placeholder="https://host/llamacpp/v1"
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  baseUrl: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+          </label>
+          <label class="form-field">
+            <span>Model</span>
+            <input
+              value={reply.model}
+              list="reply-model-options"
+              placeholder="4B model"
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  model: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+            <datalist id="reply-model-options">
+              {replyModels.map((model) => <option value={model} />)}
+            </datalist>
+          </label>
+          <label class="form-field">
+            <span>Timeout (ms)</span>
+            <input
+              type="number"
+              min={1000}
+              max={60000}
+              value={reply.timeoutMs}
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
+                }))
+              }
+            />
+          </label>
+          <label class="form-field span-2">
+            <span>API key {view?.reply.hasApiKey ? "(saved; leave blank to keep)" : "(optional)"}</span>
+            <input
+              type="password"
+              value={reply.apiKey}
+              autocomplete="off"
+              placeholder={view?.reply.hasApiKey ? "••••••••" : "No key required"}
+              onInput={(event) =>
+                setReply((current) => ({
+                  ...current,
+                  apiKey: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn small" type="button" onClick={() => void loadModels("reply")}>
+            Load models
+          </button>
+          <button class="btn primary small" type="button" disabled={saving === "reply"} onClick={() => void save("reply")}>
+            {saving === "reply" ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Voice transcription</h2>
+            <p>Optional speech-to-text path for G2 and future wearable microphone input.</p>
+          </div>
+          <span class="mode-badge">{view?.transcription.hasApiKey ? "key saved" : "optional"}</span>
+        </div>
+        <div class="form-grid">
+          <label class="check-field span-2">
+            <input
+              type="checkbox"
+              checked={transcription.enabled}
+              onInput={(event) =>
+                setTranscription((current) => ({
+                  ...current,
+                  enabled: (event.currentTarget as HTMLInputElement).checked,
+                }))
+              }
+            />
+            <span>Enable voice transcription</span>
+          </label>
+          <label class="form-field span-2">
+            <span>OpenAI-compatible STT base URL</span>
+            <input
+              value={transcription.baseUrl}
+              placeholder="https://host/v1"
+              onInput={(event) =>
+                setTranscription((current) => ({
+                  ...current,
+                  baseUrl: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+          </label>
+          <label class="form-field">
+            <span>Model</span>
+            <input
+              value={transcription.model}
+              list="transcription-model-options"
+              placeholder="whisper-large-v3"
+              onInput={(event) =>
+                setTranscription((current) => ({
+                  ...current,
+                  model: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+            <datalist id="transcription-model-options">
+              {transcriptionModels.map((model) => <option value={model} />)}
+            </datalist>
+          </label>
+          <label class="form-field">
+            <span>Timeout (ms)</span>
+            <input
+              type="number"
+              min={1000}
+              max={120000}
+              value={transcription.timeoutMs}
+              onInput={(event) =>
+                setTranscription((current) => ({
+                  ...current,
+                  timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
+                }))
+              }
+            />
+          </label>
+          <label class="form-field span-2">
+            <span>API key {view?.transcription.hasApiKey ? "(saved; leave blank to keep)" : "(optional)"}</span>
+            <input
+              type="password"
+              value={transcription.apiKey}
+              autocomplete="off"
+              placeholder={view?.transcription.hasApiKey ? "••••••••" : "No key required"}
+              onInput={(event) =>
+                setTranscription((current) => ({
+                  ...current,
+                  apiKey: (event.currentTarget as HTMLInputElement).value,
+                }))
+              }
+            />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn small" type="button" onClick={() => void loadModels("transcription")}>
+            Load models
+          </button>
+          <button class="btn primary small" type="button" disabled={saving === "transcription"} onClick={() => void save("transcription")}>
+            {saving === "transcription" ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </article>
+
+      {loading ? <div class="form-note">Loading assistant settings…</div> : null}
+      {notice ? <div class="form-note">{notice}</div> : null}
+      {error ? <div class="form-error span-2" role="alert">{error}</div> : null}
+    </section>
+  );
+}
 
 function InboxView(props: {
   client: HubClient;

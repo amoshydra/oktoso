@@ -1,0 +1,24 @@
+{
+  "name": "@agent-hub/even-realities-g2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "simulate": "evenhub-simulator http://localhost:5176",
+    "pack": "evenhub pack app.json dist"
+  },
+  "dependencies": {
+    "@agent-hub/client": "workspace:*",
+    "@agent-hub/contracts": "workspace:*",
+    "@agent-hub/wearable-core": "workspace:*",
+    "@evenrealities/even_hub_sdk": "^0.0.16"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.14",
+    "@evenrealities/evenhub-simulator": "^0.7.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5"
+  }
+}

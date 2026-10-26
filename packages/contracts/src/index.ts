@@ -6,3 +6,4 @@ export * from "./messages";
 export * from "./events";
 export * from "./health";
 export * from "./search";
+export * from "./settings";

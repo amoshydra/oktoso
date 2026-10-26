@@ -11,6 +11,8 @@ import type { ProviderRegistry } from "./services/provider-registry";
 import type { SessionService } from "./services/session-service";
 import type { AttentionService } from "./services/attention-service";
 import type { DraftService } from "./services/draft-service";
+import type { AssistantSettingsService } from "./services/assistant-settings";
+import type { ReplyService } from "./services/reply-service";
 import type { StateStore } from "@agent-hub/storage";
 import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
@@ -23,6 +25,7 @@ import { registerHealthRoutes } from "./http/routes/health";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerDraftRoutes } from "./http/routes/drafts";
+import { registerSettingsRoutes } from "./http/routes/settings";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
@@ -35,6 +38,8 @@ export interface AppDependencies {
   sessions: SessionService;
   attention: AttentionService;
   drafts: DraftService;
+  settings: AssistantSettingsService;
+  replies: ReplyService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -68,8 +73,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     eventSeq: () => deps.eventBus.lastSeq,
   });
   registerProviderRoutes(app, deps.registry);
-  registerSessionRoutes(app, deps.sessions);
+  registerSessionRoutes(app, deps.sessions, deps.replies);
   registerDraftRoutes(app, deps.drafts);
+  registerSettingsRoutes(app, deps.settings);
   registerAttentionRoutes(app, deps.attention);
   registerEventRoutes(app, deps.eventBus);
   registerDiagnosticsRoute(app, {

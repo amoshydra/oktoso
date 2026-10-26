@@ -10,6 +10,8 @@ import { ProviderRegistry } from "./services/provider-registry";
 import { SessionService } from "./services/session-service";
 import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
+import { AssistantSettingsService } from "./services/assistant-settings";
+import { ReplyService } from "./services/reply-service";
 import {
   JsonStateStore,
   MemoryStateStore,
@@ -43,6 +45,8 @@ async function createTestApp(options: { store?: StateStore } = {}) {
   const sessions = new SessionService(registry, logger);
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
+  const settings = new AssistantSettingsService(store);
+  const replies = new ReplyService(settings, sessions, logger);
   const app = createApp({
     config,
     store,
@@ -51,10 +55,12 @@ async function createTestApp(options: { store?: StateStore } = {}) {
     sessions,
     attention,
     drafts,
+    settings,
+    replies,
     logger,
     startedAt: Date.now(),
   });
-  return { app, eventBus, store, registry, sessions, attention, drafts, fake };
+  return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, fake };
 }
 
 afterEach(async () => {
@@ -247,6 +253,61 @@ describe("hub app", () => {
 
     const removedAgain = await app.request(path, { method: "DELETE", headers });
     expect(removedAgain.status).toBe(204);
+  });
+
+  it("exposes assistant settings and canned reply options", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const initial = await app.request("/api/v1/settings/assistant", { headers });
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({
+      data: {
+        reply: {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:8080/v1",
+          model: "gemma-3-4b-it",
+          hasApiKey: false,
+        },
+        transcription: { enabled: false },
+      },
+    });
+
+    const updated = await app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        reply: { enabled: false, model: "small-4b" },
+        transcription: { enabled: true, baseUrl: "https://stt.example/v1" },
+      }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      data: {
+        reply: { enabled: false, model: "small-4b" },
+        transcription: { enabled: true, baseUrl: "https://stt.example/v1" },
+      },
+    });
+
+    const options = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=reply",
+      { headers },
+    );
+    expect(options.status).toBe(200);
+    const payload = (await options.json()) as {
+      data: Array<{ id: string; action: string; source: string }>;
+    };
+    expect(payload.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "continue", action: "send", source: "canned" }),
+        expect.objectContaining({ id: "alternatives", action: "send" }),
+        expect.objectContaining({ id: "stop", action: "interrupt" }),
+      ]),
+    );
+    expect(payload.data.some((item) => item.source === "model")).toBe(false);
   });
 
   it("persists drafts across a JSON state reload", async () => {
