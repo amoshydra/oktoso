@@ -213,8 +213,29 @@
 }
 
 .rail-mark {
+  position: relative;
+  display: inline-block;
   font-size: var(--text-sm);
   font-weight: 700;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -7px;
+  right: -22px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--rail) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: var(--rail);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 .rail-label {
@@ -1501,6 +1522,8 @@
   }
 
   .bottom-mark {
+    position: relative;
+    display: inline-block;
     font-size: var(--text-xs);
     font-weight: 700;
   }

@@ -100,11 +100,23 @@ try {
     });
   });
 
+  // Reconcile provider attention even when no inbox is open so badges and
+  // attention events stay fresh for every connected client.
+  const attentionRefreshTimer = setInterval(() => {
+    attention.invalidate();
+    void attention.refresh().catch((error) => {
+      logger.warn("background attention sync failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, 15_000);
+
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info("shutting down", { signal });
+    clearInterval(attentionRefreshTimer);
     providerEvents.stop();
     server.close();
     await store.close();

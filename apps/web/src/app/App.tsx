@@ -92,6 +92,7 @@ export function App() {
   const [health, setHealth] = useState<Health>();
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [attentionCount, setAttentionCount] = useState(0);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
   const [events, setEvents] = useState<HubEvent[]>([]);
   const [checkingProviders, setCheckingProviders] = useState(false);
@@ -100,6 +101,7 @@ export function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const lastSeq = useRef(0);
+  const attentionTimer = useRef<ReturnType<typeof setTimeout>>();
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -124,20 +126,28 @@ export function App() {
     setHealth(undefined);
     setDiagnostics(undefined);
     setProviders([]);
+    setAttentionCount(0);
     setEvents([]);
     setError(undefined);
   }, []);
 
   const loadSnapshot = useCallback(async (hub: HubClient) => {
-    const [nextHealth, nextProviders, nextDiagnostics] = await Promise.all([
-      hub.health(),
-      hub.providers(),
-      hub.diagnostics(),
-    ]);
+    const [nextHealth, nextProviders, nextDiagnostics, nextAttention] =
+      await Promise.all([
+        hub.health(),
+        hub.providers(),
+        hub.diagnostics(),
+        hub.attention().catch(() => undefined),
+      ]);
     setHealth(nextHealth);
     setProviders(nextProviders);
     setDiagnostics(nextDiagnostics);
-    return { health: nextHealth, providers: nextProviders, diagnostics: nextDiagnostics };
+    if (nextAttention) setAttentionCount(nextAttention.data.length);
+    return {
+      health: nextHealth,
+      providers: nextProviders,
+      diagnostics: nextDiagnostics,
+    };
   }, []);
 
   const checkProviders = useCallback(
@@ -225,6 +235,15 @@ export function App() {
           if (event.type === "resync") {
             void loadSnapshot(client).catch(() => undefined);
           }
+          if (event.type.startsWith("attention.")) {
+            if (attentionTimer.current) clearTimeout(attentionTimer.current);
+            attentionTimer.current = setTimeout(() => {
+              void client
+                .attention()
+                .then((page) => setAttentionCount(page.data.length))
+                .catch(() => undefined);
+            }, 250);
+          }
         },
       })
       .catch((reason: unknown) => {
@@ -234,7 +253,10 @@ export function App() {
         else setError(reason instanceof Error ? reason.message : "Event stream failed");
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (attentionTimer.current) clearTimeout(attentionTimer.current);
+    };
   }, [auth, client, loadSnapshot, signOut]);
 
   const handleConnect = async (nextToken: string) => {
@@ -266,6 +288,9 @@ export function App() {
   };
 
   const current = VIEW_META[view];
+  const badge = attentionCount > 99 ? "99+" : String(attentionCount);
+  const attentionAria =
+    attentionCount === 1 ? "1 item needs attention" : `${attentionCount} items need attention`;
 
   if (auth === "signed-out") {
     return (
@@ -368,8 +393,18 @@ export function App() {
                 aria-current={view === id ? "page" : undefined}
                 onClick={() => selectView(id)}
                 title={item.label}
+                aria-label={
+                  id === "inbox" && attentionCount > 0
+                    ? `${item.label}, ${attentionAria}`
+                    : item.label
+                }
               >
-                <span class="rail-mark">{item.mark}</span>
+                <span class="rail-mark">
+                  {item.mark}
+                  {id === "inbox" && attentionCount > 0 ? (
+                    <span class="nav-badge">{badge}</span>
+                  ) : null}
+                </span>
                 <span class="rail-label">{item.label}</span>
               </button>
             );
@@ -596,8 +631,18 @@ export function App() {
                 type="button"
                 aria-current={view === id ? "page" : undefined}
                 onClick={() => selectView(id)}
+                aria-label={
+                  id === "inbox" && attentionCount > 0
+                    ? `${item.label}, ${attentionAria}`
+                    : item.label
+                }
               >
-                <span class="bottom-mark">{item.mark}</span>
+                <span class="bottom-mark">
+                  {item.mark}
+                  {id === "inbox" && attentionCount > 0 ? (
+                    <span class="nav-badge">{badge}</span>
+                  ) : null}
+                </span>
                 <span>{item.label}</span>
               </button>
             );
