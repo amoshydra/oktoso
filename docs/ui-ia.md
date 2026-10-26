@@ -1,5 +1,7 @@
 # Agent Hub UI and Information Architecture
 
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Changes to this document follow the design lock policy.
+
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
 The interactive prototype lives in `docs/prototypes/index.html`.

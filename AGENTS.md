@@ -4,8 +4,9 @@
 
 Any change that affects UI, layout, styling, copy, responsive behavior, accessibility, design tokens, or the prototype must first read:
 
-1. [`docs/ui-ia.md`](docs/ui-ia.md) — the source of truth for information architecture, screens, flows, visual language, type scale, spacing, and responsive behavior.
-2. [`docs/visual-audit.md`](docs/visual-audit.md) — the design rationale, contrast measurements, component rules, and known follow-ups.
+1. [`docs/design-lock.md`](docs/design-lock.md) — the approved `design-v1` freeze and change policy.
+2. [`docs/ui-ia.md`](docs/ui-ia.md) — the source of truth for information architecture, screens, flows, visual language, type scale, spacing, and responsive behavior.
+3. [`docs/visual-audit.md`](docs/visual-audit.md) — the design rationale, contrast measurements, component rules, and known follow-ups.
 
 If implementation and documentation disagree, treat the documentation as the design intent and update both in the same change.
 

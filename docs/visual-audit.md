@@ -1,5 +1,7 @@
 # Visual Design Audit
 
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26.
+
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
 ## What was wrong
