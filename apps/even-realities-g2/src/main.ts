@@ -73,6 +73,7 @@ let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
+let lastGlassSignature = "";
 let chatLoadSequence = 0;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
@@ -450,7 +451,7 @@ async function updateChatView(): Promise<void> {
   chatUpdateInFlight = true;
   try {
     const view = chatView();
-    setPreview(view.header, view.body, view.footer);
+    if (!setPreview(view.header, view.body, view.footer)) return;
     await bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: 2,
@@ -741,8 +742,9 @@ function render(): void {
   if (!bridge) return;
   if (!client) {
     const body = "AGENT HUB\n\nPair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto enter the hub token.";
-    setPreview("AGENT HUB", body, "Phone setup");
-    void showPage(textPage(body, "Phone setup"));
+    if (setPreview("AGENT HUB", body, "Phone setup")) {
+      void showPage(textPage(body, "Phone setup"));
+    }
     return;
   }
   if (state.screen === "inbox") {
@@ -755,14 +757,22 @@ function render(): void {
         )
       : [state.error ? "Offline · double-tap to retry" : "Nothing needs you"];
     if (state.error) items.push("Retry connection");
-    setPreview(`ATTENTION ${state.attention.length}`, items.join("\n"), "Tap open   Swipe move   Back ×2", items);
-    void showPage(
-      listPage(
+    if (
+      setPreview(
         `ATTENTION ${state.attention.length}`,
-        items,
+        items.join("\n"),
         "Tap open   Swipe move   Back ×2",
-      ),
-    );
+        items,
+      )
+    ) {
+      void showPage(
+        listPage(
+          `ATTENTION ${state.attention.length}`,
+          items,
+          "Tap open   Swipe move   Back ×2",
+        ),
+      );
+    }
     return;
   }
   if (state.screen === "attention") {
@@ -774,53 +784,73 @@ function render(): void {
     }
     const actions = attentionActions(item);
     const summary = wrapText(item.summary, 54, 2).join("\n");
-    setPreview(
-      `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
-      [summary, ...actions.map((action) => clampLine(action.label, 54))].join("\n"),
-      "Tap choose   Back ×2",
-      actions.map((action) => clampLine(action.label, 54)),
-    );
-    void showPage(
-      listPage(
+    if (
+      setPreview(
         `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
-        actions.map((action) => clampLine(action.label, 54)),
+        [summary, ...actions.map((action) => clampLine(action.label, 54))].join("\n"),
         "Tap choose   Back ×2",
-        summary,
-      ),
-    );
+        actions.map((action) => clampLine(action.label, 54)),
+      )
+    ) {
+      void showPage(
+        listPage(
+          `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
+          actions.map((action) => clampLine(action.label, 54)),
+          "Tap choose   Back ×2",
+          summary,
+        ),
+      );
+    }
     return;
   }
   if (state.screen === "chat") {
     const view = chatView();
-    setPreview(view.header, view.body, view.footer);
-    void showPage(textPage(view.body, view.footer, view.header));
+    if (setPreview(view.header, view.body, view.footer)) {
+      void showPage(textPage(view.body, view.footer, view.header));
+    }
     return;
   }
   if (state.screen === "reply") {
     const view = replyView();
     const items = view.items.map((item) => clampLine(item, 54));
-    setPreview(`REPLY ${view.page + 1}/${view.pages}`, items.join("\n"), "Tap select   Back ×2", items);
-    void showPage(
-      listPage(
+    if (
+      setPreview(
         `REPLY ${view.page + 1}/${view.pages}`,
-        items,
+        items.join("\n"),
         "Tap select   Back ×2",
-        state.notice,
-      ),
-    );
+        items,
+      )
+    ) {
+      void showPage(
+        listPage(
+          `REPLY ${view.page + 1}/${view.pages}`,
+          items,
+          "Tap select   Back ×2",
+          state.notice,
+        ),
+      );
+    }
     return;
   }
   if (state.screen === "choices") {
     const view = choiceView();
     const items = view.items.map((item) => clampLine(item, 54));
-    setPreview(`CHOOSE ${view.items.length}`, items.join("\n"), "Tap select   Back ×2", items);
-    void showPage(
-      listPage(
+    if (
+      setPreview(
         `CHOOSE ${view.items.length}`,
-        items,
+        items.join("\n"),
         "Tap select   Back ×2",
-      ),
-    );
+        items,
+      )
+    ) {
+      void showPage(
+        listPage(
+          `CHOOSE ${view.items.length}`,
+          items,
+          "Tap select   Back ×2",
+        ),
+      );
+    }
   }
 }
 
@@ -829,7 +859,16 @@ function setPreview(
   body: string,
   footer: string,
   listItems?: string[],
-): void {
+): boolean {
+  const signature = [
+    listItems ? "list" : "text",
+    header,
+    body,
+    footer,
+    listItems?.join("\u001f") ?? "",
+  ].join("\u001e");
+  if (signature === lastGlassSignature) return false;
+  lastGlassSignature = signature;
   glassesPreview.textContent = [header, "", body, "", footer].join("\n");
   if (listItems) {
     previewListItems = listItems;
@@ -839,6 +878,7 @@ function setPreview(
     previewListItems = undefined;
     previewSelection.textContent = "No list selection";
   }
+  return true;
 }
 
 function updatePreviewSelection(): void {

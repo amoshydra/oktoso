@@ -25,6 +25,7 @@ The first slice is deliberately narrow:
 - phone keyboard fallback
 - offline/retry polling
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
+- a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 
 Voice capture, inline forms, session browsing, and long-running stream updates are follow-ups.
 
