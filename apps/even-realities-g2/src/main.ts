@@ -67,6 +67,8 @@ let pollTimer: ReturnType<typeof setInterval> | undefined;
 const CHAT_VISIBLE_LINES = 6;
 let eventQueue: any[] = [];
 let eventBusy = false;
+let previewListItems: string[] | undefined;
+let previewCursor = 0;
 
 const phoneSession = byId<HTMLSpanElement>("phone-session");
 const phoneText = byId<HTMLTextAreaElement>("phone-text");
@@ -77,6 +79,7 @@ const connectionStatus = byId<HTMLDivElement>("connection-status");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
 const debug = byId<HTMLPreElement>("debug");
 const glassesPreview = byId<HTMLPreElement>("glasses-preview");
+const previewSelection = byId<HTMLDivElement>("preview-selection");
 
 function log(message: string): void {
   debug.textContent = `${new Date().toLocaleTimeString()}  ${message}\n${debug.textContent ?? ""}`.slice(0, 4_000);
@@ -659,7 +662,7 @@ function render(): void {
         )
       : [state.error ? "Offline · double-tap to retry" : "Nothing needs you"];
     if (state.error) items.push("Retry connection");
-    setPreview(`ATTENTION ${state.attention.length}`, items.join("\n"), "Tap open   Swipe move   Back ×2");
+    setPreview(`ATTENTION ${state.attention.length}`, items.join("\n"), "Tap open   Swipe move   Back ×2", items);
     void showPage(
       listPage(
         `ATTENTION ${state.attention.length}`,
@@ -682,6 +685,7 @@ function render(): void {
       `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
       [summary, ...actions.map((action) => clampLine(action.label, 54))].join("\n"),
       "Tap choose   Back ×2",
+      actions.map((action) => clampLine(action.label, 54)),
     );
     void showPage(
       listPage(
@@ -702,7 +706,7 @@ function render(): void {
   if (state.screen === "reply") {
     const view = replyView();
     const items = view.items.map((item) => clampLine(item, 54));
-    setPreview(`REPLY ${view.page + 1}/${view.pages}`, items.join("\n"), "Tap select   Back ×2");
+    setPreview(`REPLY ${view.page + 1}/${view.pages}`, items.join("\n"), "Tap select   Back ×2", items);
     void showPage(
       listPage(
         `REPLY ${view.page + 1}/${view.pages}`,
@@ -716,7 +720,7 @@ function render(): void {
   if (state.screen === "choices") {
     const view = choiceView();
     const items = view.items.map((item) => clampLine(item, 54));
-    setPreview(`CHOOSE ${view.items.length}`, items.join("\n"), "Tap select   Back ×2");
+    setPreview(`CHOOSE ${view.items.length}`, items.join("\n"), "Tap select   Back ×2", items);
     void showPage(
       listPage(
         `CHOOSE ${view.items.length}`,
@@ -727,8 +731,60 @@ function render(): void {
   }
 }
 
-function setPreview(header: string, body: string, footer: string): void {
+function setPreview(
+  header: string,
+  body: string,
+  footer: string,
+  listItems?: string[],
+): void {
   glassesPreview.textContent = [header, "", body, "", footer].join("\n");
+  if (listItems) {
+    previewListItems = listItems;
+    previewCursor = 0;
+    updatePreviewSelection();
+  } else {
+    previewListItems = undefined;
+    previewSelection.textContent = "No list selection";
+  }
+}
+
+function updatePreviewSelection(): void {
+  if (!previewListItems || previewListItems.length === 0) {
+    previewSelection.textContent = "No list selection";
+    return;
+  }
+  previewCursor = Math.min(
+    Math.max(0, previewCursor),
+    previewListItems.length - 1,
+  );
+  previewSelection.textContent = `Preview ${previewCursor + 1}/${previewListItems.length} · ${previewListItems[previewCursor]}`;
+}
+
+function simulate(action: "up" | "down" | "click" | "double"): void {
+  if (action === "double") {
+    back();
+    return;
+  }
+  if (state.screen === "chat") {
+    if (action === "up") moveChatLine(-1);
+    else if (action === "down") moveChatLine(1);
+    else void openReply();
+    return;
+  }
+  if (state.screen === "pairing") {
+    phoneText.focus();
+    return;
+  }
+  if (!previewListItems || previewListItems.length === 0) return;
+  if (action === "up" || action === "down") {
+    previewCursor = Math.min(
+      Math.max(0, previewCursor + (action === "up" ? -1 : 1)),
+      previewListItems.length - 1,
+    );
+    updatePreviewSelection();
+    return;
+  }
+  handleListClick(previewCursor);
 }
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
@@ -916,6 +972,10 @@ function setupPhone(): void {
   byId<HTMLButtonElement>("phone-refresh").addEventListener("click", () => {
     void refreshCurrent();
   });
+  byId<HTMLButtonElement>("sim-up").addEventListener("click", () => simulate("up"));
+  byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));
+  byId<HTMLButtonElement>("sim-click").addEventListener("click", () => simulate("click"));
+  byId<HTMLButtonElement>("sim-double").addEventListener("click", () => simulate("double"));
   syncPhoneSession();
 }
 

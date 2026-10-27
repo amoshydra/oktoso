@@ -30,6 +30,8 @@
       .composer-head strong { font-size: 12px; color: var(--muted); font-weight: 600; }
       pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font: 11px/1.5 ui-monospace, monospace; }
       .glasses-preview { min-height: 150px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid #24452c; border-radius: 8px; background: #07130a; color: #71f28a; font-size: 11px; }
+      .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+      .preview-controls button { min-height: 36px; font-size: 12px; }
     </style>
   </head>
   <body>
@@ -69,6 +71,13 @@
       <h2>Glasses preview</h2>
       <p class="hint">The exact text/list content sent to the G2 containers.</p>
       <pre id="glasses-preview" class="glasses-preview">(waiting for a screen)</pre>
+      <div id="preview-selection" class="hint">No list selection</div>
+      <div class="preview-controls">
+        <button id="sim-up" type="button">↑ Up</button>
+        <button id="sim-click" type="button">Select</button>
+        <button id="sim-double" type="button">Back</button>
+        <button id="sim-down" type="button">↓ Down</button>
+      </div>
     </section>
 
     <section class="panel">

@@ -38,6 +38,8 @@ The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The ph
 pnpm simulate:even-g2
 ```
 
+The native EvenHub simulator requires a desktop GTK session. In headless environments, use the phone-side **Glasses preview** controls, which drive the same input handlers (`Up`, `Down`, `Select`, `Back`) against the current screen logic. Hardware/simulator input remains the final validation.
+
 For hardware sideloading, use the Even Hub scanner/QR flow and set the phone connection values. For a private packaged build:
 
 ```sh
