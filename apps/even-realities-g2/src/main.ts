@@ -38,8 +38,10 @@ interface AppState {
   selectedAttention?: Attention;
   sessionRef?: string;
   sessionTitle?: string;
+  chatMessages: Message[];
   chatLines: string[];
   chatOffset: number;
+  chatFollowBottom: boolean;
   replyOptions: ReplyOption[];
   replyPage: number;
   choiceOptions: ReplyOption[];
@@ -51,8 +53,10 @@ interface AppState {
 const state: AppState = {
   screen: "pairing",
   attention: [],
+  chatMessages: [],
   chatLines: [],
   chatOffset: 0,
+  chatFollowBottom: false,
   replyOptions: [],
   replyPage: 0,
   choiceOptions: [],
@@ -69,6 +73,11 @@ let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
+let chatLoadSequence = 0;
+let chatUpdateInFlight = false;
+let chatUpdateQueued = false;
+let eventController: AbortController | undefined;
+let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 const phoneSession = byId<HTMLSpanElement>("phone-session");
 const phoneText = byId<HTMLTextAreaElement>("phone-text");
@@ -130,6 +139,7 @@ async function connect(): Promise<void> {
     tokenInput.placeholder = "Saved token";
     setConnection("Connected");
     log("Hub connected");
+    startEventStream();
     await refreshInbox();
   } catch (error) {
     client = undefined;
@@ -153,6 +163,7 @@ async function restoreConnection(): Promise<void> {
     byId<HTMLInputElement>("hub-token").placeholder = "Saved token";
     setConnection("Connected");
     log("Restored hub session");
+    startEventStream();
     await refreshInbox();
   } catch (error) {
     client = undefined;
@@ -160,6 +171,55 @@ async function restoreConnection(): Promise<void> {
     log(`Restore failed: ${errorMessage(error)}`);
     render();
   }
+}
+
+function startEventStream(): void {
+  eventController?.abort();
+  if (!client) return;
+  const controller = new AbortController();
+  eventController = controller;
+  void client
+    .startEvents({
+      after: 0,
+      signal: controller.signal,
+      onStatus: (status) => log(`Hub events: ${status}`),
+      onEvent: (event) => {
+        if (controller.signal.aborted) return;
+        if (event.type === "resync") {
+          void refreshInbox();
+          if (state.screen === "chat" && state.sessionRef) {
+            void loadChat(true);
+          }
+          return;
+        }
+        if (event.type === "session.updated" && state.screen === "inbox") {
+          scheduleEventRefresh(() => refreshInbox());
+        }
+        if (
+          event.type === "session.updated" &&
+          state.screen === "chat" &&
+          event.sessionRef === state.sessionRef
+        ) {
+          scheduleEventRefresh(() => loadChat(true));
+        }
+        if (event.type.startsWith("attention.") && state.screen === "inbox") {
+          scheduleEventRefresh(() => refreshInbox());
+        }
+      },
+    })
+    .catch((error) => {
+      if (!controller.signal.aborted) {
+        log(`Hub events stopped: ${errorMessage(error)}`);
+      }
+    });
+}
+
+function scheduleEventRefresh(action: () => void | Promise<void>): void {
+  if (eventRefreshTimer) clearTimeout(eventRefreshTimer);
+  eventRefreshTimer = setTimeout(() => {
+    eventRefreshTimer = undefined;
+    void action();
+  }, 500);
 }
 
 async function refreshInbox(): Promise<void> {
@@ -239,8 +299,13 @@ async function performAttention(index: number): Promise<void> {
 }
 
 async function openChat(ref: string, title: string): Promise<void> {
+  chatLoadSequence += 1;
   state.sessionRef = ref;
   state.sessionTitle = title;
+  state.chatMessages = [];
+  state.chatLines = [];
+  state.chatOffset = 0;
+  state.chatFollowBottom = false;
   state.screen = "chat";
   state.error = undefined;
   state.notice = undefined;
@@ -250,18 +315,21 @@ async function openChat(ref: string, title: string): Promise<void> {
 
 async function loadChat(quiet: boolean): Promise<void> {
   if (!client || !state.sessionRef) return;
+  const ref = state.sessionRef;
+  const sequence = ++chatLoadSequence;
   try {
-    const messages = await loadReadableMessages(state.sessionRef);
-    const built = buildChat(messages);
+    const messages = await loadReadableMessages(ref);
+    if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
+    state.chatMessages = mergeChatMessages(state.chatMessages, messages);
+    const built = buildChat(state.chatMessages);
     const previousLines = state.chatLines;
     const previousOffset = state.chatOffset;
     const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
-    const wasAtBottom =
-      previousLines.length === 0 || previousOffset >= previousMax;
     state.chatLines = built.lines;
     const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
+    if (!quiet) state.chatFollowBottom = false;
     state.chatOffset = quiet
-      ? wasAtBottom
+      ? state.chatFollowBottom
         ? nextMax
         : Math.min(previousOffset, nextMax)
       : Math.min(built.contextStart, nextMax);
@@ -279,10 +347,23 @@ async function loadChat(quiet: boolean): Promise<void> {
     render();
     updatePhoneState();
   } catch (error) {
+    if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
     state.error = errorMessage(error);
     render();
     log(`Chat load failed: ${state.error}`);
   }
+}
+
+function mergeChatMessages(
+  current: Message[],
+  incoming: Message[],
+): Message[] {
+  const byID = new Map(current.map((message) => [message.id, message]));
+  for (const message of incoming) byID.set(message.id, message);
+  return [...byID.values()].sort(
+    (left, right) =>
+      left.createdAt - right.createdAt || left.id.localeCompare(right.id),
+  );
 }
 
 async function loadReadableMessages(ref: string): Promise<Message[]> {
@@ -362,9 +443,14 @@ function chatView(): { header: string; body: string; footer: string } {
 
 async function updateChatView(): Promise<void> {
   if (!bridge) return;
-  const view = chatView();
-  setPreview(view.header, view.body, view.footer);
+  if (chatUpdateInFlight) {
+    chatUpdateQueued = true;
+    return;
+  }
+  chatUpdateInFlight = true;
   try {
+    const view = chatView();
+    setPreview(view.header, view.body, view.footer);
     await bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: 2,
@@ -381,6 +467,12 @@ async function updateChatView(): Promise<void> {
     );
   } catch (error) {
     log(`Chat view update failed: ${errorMessage(error)}`);
+  } finally {
+    chatUpdateInFlight = false;
+    if (chatUpdateQueued) {
+      chatUpdateQueued = false;
+      void updateChatView();
+    }
   }
 }
 
@@ -388,6 +480,7 @@ function moveChatLine(delta: number): void {
   if (state.screen !== "chat") return;
   const maxOffset = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
   const next = Math.min(maxOffset, Math.max(0, state.chatOffset + delta));
+  state.chatFollowBottom = next >= maxOffset;
   if (next === state.chatOffset) return;
   state.chatOffset = next;
   void updateChatView();
