@@ -19,6 +19,9 @@ The first slice is deliberately narrow:
 - reply menu with canned and 4B-assisted suggestions
 - numbered-choice extraction for agent replies
 - full chat responses kept in memory and read through a six-line viewport; swipe moves one line and refresh never rebuilds the page or resets the reading position
+- hub SSE updates chat immediately, with a four-second polling fallback
+- stable message retention prevents line shifts when the rolling provider page changes
+- overlapping chat fetches are sequenced, and chat rendering is serialized
 - phone keyboard fallback
 - offline/retry polling
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
