@@ -13,7 +13,7 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 
 The first slice is deliberately narrow:
 
-- phone pairing for hub URL and bearer token
+- phone pairing for the bearer token; the hub is the app origin
 - home with inbox count, recent sessions, and the current session
 - inbox with up to five attention items
 - permission / unread / failure detail and actions
@@ -40,7 +40,7 @@ pnpm dev            # hub + web at 5175
 pnpm dev:even-g2    # Even G2 web app at 5176
 ```
 
-The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The phone must be able to reach the laptop's LAN address. The phone setup screen can also take an absolute hub URL for a packaged/private build.
+The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The phone must be able to reach the laptop's LAN address. The setup screen asks only for the token because the hub is the origin that served the app.
 
 ```sh
 pnpm simulate:even-g2
@@ -61,14 +61,14 @@ The URL is:
 http://<hub-host>:8787/apps/even-g2/
 ```
 
-Leave the Hub URL blank in the app setup. The app and API share an origin.
+Enter only the token. The app and API share an origin.
 
 The hub serves `/apps/<app-id>/` generically, so future glass or watch apps can use `/apps/watch/`, `/apps/vision/`, and so on. Each app is built with its own Vite base and stored under `dist/apps/<app-id>/`.
 
-For a packaged build, pass the origin the phone will reach. The committed `app.json` only contains local and placeholder origins, so a personal IP or hostname never enters Git:
+For the optional packaged build, provide the hub at build time and whitelist its origin. The committed `app.json` only contains local and placeholder origins:
 
 ```sh
-pnpm --filter @agent-hub/even-realities-g2 build
+VITE_HUB_URL=https://hub.example.com pnpm --filter @agent-hub/even-realities-g2 build
 HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
 

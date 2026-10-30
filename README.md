@@ -97,12 +97,12 @@ pnpm build:single-port
 node dist/hub.js --config ./hub.config.json
 ```
 
-Load the glass app from `.../apps/even-g2/` and leave the Hub URL blank. The app uses the same origin for `/api`, so no CORS or separate Vite server is needed.
+Load the glass app from `.../apps/even-g2/` and enter only the token. The app uses the same origin for `/api`, so no CORS or separate Vite server is needed.
 
 The optional `.ehpk` flow still exists:
 
 ```sh
-pnpm --filter @agent-hub/even-realities-g2 build
+VITE_HUB_URL=https://hub.example.com pnpm --filter @agent-hub/even-realities-g2 build
 HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
 
