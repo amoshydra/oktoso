@@ -9,8 +9,8 @@ coverage/
 
 # Runtime state
 .data/
-hub.config.json
-hub.config.local.json
+/hub.config.json
+/hub.config.local.json
 
 # Even Hub build artifacts
 *.ehpk

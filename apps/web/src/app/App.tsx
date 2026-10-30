@@ -873,12 +873,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               type="checkbox"
               checked={reply.enabled}
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  enabled: (event.currentTarget as HTMLInputElement).checked,
-                }))
-              }
+              onChange={(event) => {
+                const enabled = (event.currentTarget as HTMLInputElement).checked;
+                setReply((current) => ({ ...current, enabled }));
+              }}
             />
             <span>Enable contextual reply suggestions</span>
           </label>
@@ -886,12 +884,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               type="checkbox"
               checked={reply.disableThinking}
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  disableThinking: (event.currentTarget as HTMLInputElement).checked,
-                }))
-              }
+              onChange={(event) => {
+                const disableThinking = (event.currentTarget as HTMLInputElement).checked;
+                setReply((current) => ({ ...current, disableThinking }));
+              }}
             />
             <span>Disable model thinking (recommended for short suggestions)</span>
           </label>
@@ -900,12 +896,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               value={reply.baseUrl}
               placeholder="https://host/llamacpp/v1"
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  baseUrl: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const baseUrl = (event.currentTarget as HTMLInputElement).value;
+                setReply((current) => ({ ...current, baseUrl }));
+              }}
             />
           </label>
           <label className="form-field">
@@ -914,12 +908,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               value={reply.model}
               list="reply-model-options"
               placeholder="4B model"
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  model: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const model = (event.currentTarget as HTMLInputElement).value;
+                setReply((current) => ({ ...current, model }));
+              }}
             />
             <datalist id="reply-model-options">
               {replyModels.map((model) => <option value={model} key={model} />)}
@@ -932,12 +924,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               min={1000}
               max={60000}
               value={reply.timeoutMs}
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
-                }))
-              }
+              onChange={(event) => {
+                const timeoutMs = Number((event.currentTarget as HTMLInputElement).value);
+                setReply((current) => ({ ...current, timeoutMs }));
+              }}
             />
           </label>
           <label className="form-field span-2">
@@ -947,12 +937,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               value={reply.apiKey}
               autoComplete="off"
               placeholder={view?.reply.hasApiKey ? "••••••••" : "No key required"}
-              onChange={(event) =>
-                setReply((current) => ({
-                  ...current,
-                  apiKey: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const apiKey = (event.currentTarget as HTMLInputElement).value;
+                setReply((current) => ({ ...current, apiKey }));
+              }}
             />
           </label>
         </div>
@@ -979,12 +967,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               type="checkbox"
               checked={transcription.enabled}
-              onChange={(event) =>
-                setTranscription((current) => ({
-                  ...current,
-                  enabled: (event.currentTarget as HTMLInputElement).checked,
-                }))
-              }
+              onChange={(event) => {
+                const enabled = (event.currentTarget as HTMLInputElement).checked;
+                setTranscription((current) => ({ ...current, enabled }));
+              }}
             />
             <span>Enable voice transcription</span>
           </label>
@@ -993,12 +979,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               value={transcription.baseUrl}
               placeholder="https://host/v1"
-              onChange={(event) =>
-                setTranscription((current) => ({
-                  ...current,
-                  baseUrl: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const baseUrl = (event.currentTarget as HTMLInputElement).value;
+                setTranscription((current) => ({ ...current, baseUrl }));
+              }}
             />
           </label>
           <label className="form-field">
@@ -1007,12 +991,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               value={transcription.model}
               list="transcription-model-options"
               placeholder="whisper-large-v3"
-              onChange={(event) =>
-                setTranscription((current) => ({
-                  ...current,
-                  model: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const model = (event.currentTarget as HTMLInputElement).value;
+                setTranscription((current) => ({ ...current, model }));
+              }}
             />
             <datalist id="transcription-model-options">
               {transcriptionModels.map((model) => <option value={model} key={model} />)}
@@ -1025,12 +1007,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               min={1000}
               max={120000}
               value={transcription.timeoutMs}
-              onChange={(event) =>
-                setTranscription((current) => ({
-                  ...current,
-                  timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
-                }))
-              }
+              onChange={(event) => {
+                const timeoutMs = Number((event.currentTarget as HTMLInputElement).value);
+                setTranscription((current) => ({ ...current, timeoutMs }));
+              }}
             />
           </label>
           <label className="form-field span-2">
@@ -1040,12 +1020,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               value={transcription.apiKey}
               autoComplete="off"
               placeholder={view?.transcription.hasApiKey ? "••••••••" : "No key required"}
-              onChange={(event) =>
-                setTranscription((current) => ({
-                  ...current,
-                  apiKey: (event.currentTarget as HTMLInputElement).value,
-                }))
-              }
+              onChange={(event) => {
+                const apiKey = (event.currentTarget as HTMLInputElement).value;
+                setTranscription((current) => ({ ...current, apiKey }));
+              }}
             />
           </label>
         </div>
