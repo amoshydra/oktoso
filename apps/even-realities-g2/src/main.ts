@@ -18,7 +18,9 @@ import type {
 } from "@agent-hub/contracts";
 import { HubClient, messageFromHubEvent } from "@agent-hub/client";
 import {
+  chatScrollStep,
   clampLine,
+  frameSignature,
   pageChoices,
   plainTextForGlass,
   wrapText,
@@ -32,6 +34,8 @@ type Screen =
   | "inbox"
   | "sessions"
   | "attention"
+  | "glass-form"
+  | "glass-options"
   | "chat"
   | "reply"
   | "choices";
@@ -52,6 +56,11 @@ interface AppState {
   chatMessageCount: number;
   chatOffset: number;
   chatFollowBottom: boolean;
+  chatActivity: string;
+  formValues: Record<string, unknown>;
+  formOptionsField?: AttentionField;
+  formError?: string;
+  formBusy: boolean;
   replyOptions: ReplyOption[];
   replyPage: number;
   choiceOptions: ReplyOption[];
@@ -72,6 +81,11 @@ const state: AppState = {
   chatMessageCount: 0,
   chatOffset: 0,
   chatFollowBottom: false,
+  chatActivity: "",
+  formValues: {},
+  formOptionsField: undefined,
+  formError: undefined,
+  formBusy: false,
   replyOptions: [],
   replyPage: 0,
   choiceOptions: [],
@@ -526,21 +540,131 @@ async function openAttention(index: number): Promise<void> {
   state.selectedAttention = item;
   state.error = undefined;
   state.screen = "attention";
-  if (item.fields?.length) showPhoneForm(item);
+  if (item.fields?.length && !canUseGlassForm(item)) showPhoneForm(item);
   else hidePhoneForm();
   render();
 }
 
+function canUseGlassForm(item: Attention): boolean {
+  const fields = item.fields ?? [];
+  return (
+    fields.length > 0 &&
+    fields.every((field) => field.type === "boolean" || field.type === "select") &&
+    item.actions.some((action) => action.id === "answer")
+  );
+}
+
 function attentionActions(item: Attention): Array<{ id: string; label: string }> {
   const hasFields = (item.fields?.length ?? 0) > 0;
+  const hasAnswer = item.actions.some((action) => action.id === "answer");
   const actions = item.actions
     .filter((action) => action.id !== "answer" || !hasFields)
     .map((action) => ({ id: action.id, label: action.label }));
-  if (hasFields && item.actions.some((action) => action.id === "answer")) {
-    actions.unshift({ id: "phone_form", label: "Answer on phone" });
+  const fieldActions: Array<{ id: string; label: string }> = [];
+  if (canUseGlassForm(item)) {
+    fieldActions.push({ id: "glass_form", label: "Answer on glass" });
+  }
+  if (hasFields && hasAnswer) {
+    fieldActions.push({ id: "phone_form", label: "Answer on phone" });
   }
   actions.push({ id: "open_chat", label: "Open chat" });
-  return actions;
+  return [...fieldActions, ...actions];
+}
+
+function openGlassForm(item: Attention): void {
+  state.formValues = {};
+  state.formOptionsField = undefined;
+  state.formError = undefined;
+  state.formBusy = false;
+  for (const field of item.fields ?? []) {
+    state.formValues[field.id] =
+      field.defaultValue !== undefined
+        ? field.defaultValue
+        : field.type === "boolean"
+          ? undefined
+          : "";
+  }
+  hidePhoneForm();
+  state.screen = "glass-form";
+  render();
+}
+
+function glassFormView(item: Attention): { items: string[]; footer: string } {
+  const fields = item.fields ?? [];
+  const items = fields.map((field) => {
+    const value = state.formValues[field.id];
+    const display =
+      value === undefined || value === ""
+        ? "Choose…"
+        : field.type === "boolean"
+          ? value
+            ? "Yes"
+            : "No"
+          : optionLabel(field, String(value));
+    return clampLine(`${field.label}: ${display}`, 54);
+  });
+  items.push("Submit answer");
+  return {
+    items,
+    footer: state.formError
+      ? clampLine(state.formError, 54)
+      : "Tap change   Back ×2",
+  };
+}
+
+function optionLabel(field: AttentionField, value: string): string {
+  return field.options?.find((option) => option.value === value)?.label ?? value;
+}
+
+function editGlassField(item: Attention, index: number): void {
+  const field = item.fields?.[index];
+  if (!field) return;
+  state.formError = undefined;
+  if (field.type === "boolean") {
+    const current = state.formValues[field.id];
+    state.formValues[field.id] = current === undefined ? true : !current;
+    render();
+    return;
+  }
+  if (field.type === "select") {
+    state.formOptionsField = field;
+    state.screen = "glass-options";
+    render();
+  }
+}
+
+async function submitGlassForm(item: Attention): Promise<void> {
+  if (!client || state.formBusy) return;
+  const missing = (item.fields ?? []).filter((field) => {
+    if (!field.required) return false;
+    const value = state.formValues[field.id];
+    return value === undefined || value === "";
+  });
+  if (missing.length > 0) {
+    state.formError = `Required: ${missing.map((field) => field.label).join(", ")}`;
+    render();
+    return;
+  }
+  state.formBusy = true;
+  state.formError = undefined;
+  try {
+    const fields: Record<string, unknown> = {};
+    for (const field of item.fields ?? []) {
+      fields[field.id] = state.formValues[field.id];
+    }
+    await client.actOnAttention(item.id, "answer", { fields });
+    state.selectedAttention = undefined;
+    state.formValues = {};
+    state.formOptionsField = undefined;
+    state.screen = "inbox";
+    await refreshInbox();
+    render();
+  } catch (error) {
+    state.formError = errorMessage(error);
+    render();
+  } finally {
+    state.formBusy = false;
+  }
 }
 
 async function performAttention(index: number): Promise<void> {
@@ -550,6 +674,10 @@ async function performAttention(index: number): Promise<void> {
   if (!action) return;
   if (action.id === "open_chat") {
     await openChat(item.sessionRef, item.title, "inbox");
+    return;
+  }
+  if (action.id === "glass_form") {
+    openGlassForm(item);
     return;
   }
   if (action.id === "phone_form") {
@@ -584,6 +712,7 @@ async function openChat(
   state.chatMessageCount = 0;
   state.chatOffset = 0;
   state.chatFollowBottom = false;
+  state.chatActivity = "";
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   state.screen = "chat";
@@ -618,6 +747,7 @@ async function loadChat(quiet: boolean): Promise<void> {
     state.chatLines = built.lines;
     state.chatLineMessages = built.lineMessages;
     state.chatMessageCount = built.messageCount;
+    state.chatActivity = activityForMessages(state.chatMessages);
     const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
     if (!quiet) state.chatFollowBottom = true;
     state.chatOffset = quiet
@@ -655,6 +785,7 @@ function applyLiveMessage(message: Message): void {
   state.chatLines = built.lines;
   state.chatLineMessages = built.lineMessages;
   state.chatMessageCount = built.messageCount;
+  state.chatActivity = activityForMessages(state.chatMessages);
   const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
   state.chatOffset = state.chatFollowBottom
     ? nextMax
@@ -739,6 +870,25 @@ function buildChat(messages: Message[]): {
   return { lines, lineMessages, messageCount };
 }
 
+function activityForMessages(messages: Message[]): string {
+  const last = [...messages].reverse().find((message) => message.role === "assistant");
+  if (!last) return "";
+  if (last.metadata?.error) return "Error";
+  const tools = last.parts.filter((part) => part.type === "tool");
+  if (tools.some((part) => part.type === "tool" && part.status === "error")) {
+    return "Tool error";
+  }
+  if (last.streaming) {
+    return tools.length > 0
+      ? `Working · ${tools.length} step${tools.length === 1 ? "" : "s"}`
+      : "Working";
+  }
+  if (tools.length > 0) {
+    return `${tools.length} tool step${tools.length === 1 ? "" : "s"}`;
+  }
+  return last.parts.some((part) => part.type === "reasoning") ? "Reasoning" : "";
+}
+
 function chatView(): { header: string; body: string; footer: string } {
   const total = state.chatLines.length;
   const maxOffset = Math.max(0, total - CHAT_VISIBLE_LINES);
@@ -764,9 +914,12 @@ function chatView(): { header: string; body: string; footer: string } {
         : offset === 0
           ? "Swipe down"
           : "Swipe";
-  const footer = [`${first}-${last}/${total}`, messageLabel, hint]
-    .filter(Boolean)
-    .join(" · ");
+  const footer = clampLine(
+    [`${first}-${last}/${total}`, messageLabel, state.chatActivity, hint]
+      .filter(Boolean)
+      .join(" · "),
+    60,
+  );
   return {
     header: clampLine(
       state.sessionProject
@@ -833,9 +986,7 @@ function scrollChat(direction: -1 | 1): void {
   lastChatScrollAt = now;
   // Require several rapid swipes before accelerating. Deliberate reading
   // stays line-by-line; the fastest step is four lines, not a full page.
-  const step =
-    chatScrollBurst >= 4 ? 4 : chatScrollBurst >= 2 ? 2 : 1;
-  moveChatLine(direction * step);
+  moveChatLine(direction * chatScrollStep(chatScrollBurst));
 }
 
 async function openReply(): Promise<void> {
@@ -1020,6 +1171,19 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "glass-options") {
+    state.screen = "glass-form";
+    state.formOptionsField = undefined;
+    render();
+    return;
+  }
+  if (state.screen === "glass-form") {
+    state.screen = "attention";
+    state.formOptionsField = undefined;
+    state.formError = undefined;
+    render();
+    return;
+  }
   if (state.screen === "attention") {
     state.screen = "inbox";
     state.selectedAttention = undefined;
@@ -1062,6 +1226,28 @@ function handleListClick(index: number): void {
         void openAttention(index);
       }
       break;
+    case "glass-form": {
+      const item = state.selectedAttention;
+      if (!item) break;
+      if (index === (item.fields?.length ?? 0)) {
+        void submitGlassForm(item);
+      } else {
+        editGlassField(item, index);
+      }
+      break;
+    }
+    case "glass-options": {
+      const field = state.formOptionsField;
+      const option = field?.options?.[index];
+      if (field && option) {
+        state.formValues[field.id] = option.value;
+        state.formOptionsField = undefined;
+        state.formError = undefined;
+        state.screen = "glass-form";
+        render();
+      }
+      break;
+    }
     case "attention":
       void performAttention(index);
       break;
@@ -1217,6 +1403,44 @@ function render(): void {
     }
     return;
   }
+  if (state.screen === "glass-form") {
+    const item = state.selectedAttention;
+    if (!item) {
+      state.screen = "inbox";
+      render();
+      return;
+    }
+    const view = glassFormView(item);
+    const header = `FORM · ${clampLine(item.title, 34)}`;
+    if (setPreview(header, view.items.join("\n"), view.footer, view.items)) {
+      void showPage(listPage(header, view.items, view.footer, item.summary));
+    }
+    return;
+  }
+  if (state.screen === "glass-options") {
+    const field = state.formOptionsField;
+    if (!field) {
+      state.screen = "glass-form";
+      render();
+      return;
+    }
+    const items = (field.options ?? []).map((option) =>
+      clampLine(option.label, 54),
+    );
+    if (items.length === 0) items.push("No options");
+    const header = `SELECT · ${clampLine(field.label, 38)}`;
+    if (
+      setPreview(
+        header,
+        items.join("\n"),
+        "Tap select   Back ×2",
+        items,
+      )
+    ) {
+      void showPage(listPage(header, items, "Tap select   Back ×2"));
+    }
+    return;
+  }
   if (state.screen === "attention") {
     const item = state.selectedAttention;
     if (!item) {
@@ -1302,13 +1526,7 @@ function setPreview(
   footer: string,
   listItems?: string[],
 ): boolean {
-  const signature = [
-    listItems ? "list" : "text",
-    header,
-    body,
-    footer,
-    listItems?.join("\u001f") ?? "",
-  ].join("\u001e");
+  const signature = frameSignature(header, body, footer, listItems);
   if (signature === lastGlassSignature) return false;
   lastGlassSignature = signature;
   glassesPreview.textContent = [header, "", body, "", footer].join("\n");

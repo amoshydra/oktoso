@@ -50,8 +50,9 @@ does not expose.
 - Several rapid swipes accelerate within a 500 ms window: `1, 1, 2, 2, 4` lines.
 - Newlines and paragraph breaks are preserved. Multiple spaces within a line are
   collapsed.
-- The footer reports visible line and readable-message position:
-  `L456-461/461 · M30/30`.
+- The footer reports visible line and readable-message position, plus compact
+  agent activity when present:
+  `L456-461/461 · M30/30 · Working · 3 steps`.
 - The header reports `project · session title` so the glass shows which home the session belongs to.
 
 ## Read state
@@ -111,17 +112,22 @@ handlers as hardware. Hardware validation remains authoritative for:
 
 ## Attention forms
 
-Form fields render on the phone surface, including boolean, select, multiselect,
-text, textarea, and number fields. Opening a form attention item shows the form
-automatically. The glass offers `Answer on phone` and never submits a form
-automatically.
+Simple forms with only boolean and select fields can be completed on the glass.
+Tap a field to change it; select fields open a short option list. The glass validates
+required fields and submits explicitly.
 
-Required fields are validated before submission. The provider action is sent with
-the existing `actOnAttention(..., "answer", { fields })` path; successful submission
-removes the attention item and refreshes the inbox.
+Forms with text, textarea, number, or multiselect fields use the phone surface. The
+glass offers `Answer on phone`. The phone form supports every field type, validates
+required fields, and submits through the existing
+`actOnAttention(..., "answer", { fields })` path. Forms are never submitted
+automatically. Successful submission removes the attention item and refreshes the
+inbox.
+
+Frame signatures and scroll acceleration now have unit coverage. Hardware input and
+rendering still require the scripted hardware checklist.
 
 ## Planned order
 
-1. Compact agent activity state.
-2. Voice capture and STT if the SDK exposes microphone input.
-3. Frame snapshot tests and a scripted hardware checklist.
+1. Voice capture and STT if the SDK exposes microphone input.
+2. Frame snapshot tests against recorded hardware frames.
+3. Scripted hardware checklist for input cadence, reconnect, and latency.
