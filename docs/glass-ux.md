@@ -42,10 +42,11 @@ does not expose.
 ## Chat viewport
 
 - Six visible lines.
-- Chat opens at the latest lines and follows new content while the reader is at
-  the bottom.
-- Scrolling up stops following and preserves the reading position through
-  refreshes and streaming updates.
+- Chat opens at the start of the latest readable message.
+- Streaming updates never chase the last line. The reader keeps their line.
+- A new message jumps to its start only when the reader is already at the bottom.
+  Otherwise the position is preserved and the footer shows `New below`.
+- Scrolling to the bottom clears the unseen-message marker.
 - Slow swipes move one line.
 - Several rapid swipes accelerate within a 500 ms window: `1, 1, 2, 2, 4` lines.
 - Newlines and paragraph breaks are preserved. Multiple spaces within a line are

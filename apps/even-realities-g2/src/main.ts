@@ -55,7 +55,7 @@ interface AppState {
   chatLineMessages: number[];
   chatMessageCount: number;
   chatOffset: number;
-  chatFollowBottom: boolean;
+  chatNewBelow: boolean;
   chatActivity: string;
   formValues: Record<string, unknown>;
   formOptionsField?: AttentionField;
@@ -80,7 +80,7 @@ const state: AppState = {
   chatLineMessages: [],
   chatMessageCount: 0,
   chatOffset: 0,
-  chatFollowBottom: false,
+  chatNewBelow: false,
   chatActivity: "",
   formValues: {},
   formOptionsField: undefined,
@@ -711,7 +711,7 @@ async function openChat(
   state.chatLineMessages = [];
   state.chatMessageCount = 0;
   state.chatOffset = 0;
-  state.chatFollowBottom = false;
+  state.chatNewBelow = false;
   state.chatActivity = "";
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
@@ -739,22 +739,33 @@ async function loadChat(quiet: boolean): Promise<void> {
   try {
     const messages = await loadReadableMessages(ref);
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
-    state.chatMessages = mergeChatMessages(state.chatMessages, messages);
-    const built = buildChat(state.chatMessages);
+    const previousIDs = new Set(state.chatMessages.map((message) => message.id));
+    const hasNewMessages = messages.some((message) => !previousIDs.has(message.id));
     const previousLines = state.chatLines;
     const previousOffset = state.chatOffset;
     const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
+    const wasAtBottom = previousOffset >= previousMax;
+    state.chatMessages = mergeChatMessages(state.chatMessages, messages);
+    const built = buildChat(state.chatMessages);
     state.chatLines = built.lines;
     state.chatLineMessages = built.lineMessages;
     state.chatMessageCount = built.messageCount;
     state.chatActivity = activityForMessages(state.chatMessages);
     const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
-    if (!quiet) state.chatFollowBottom = true;
-    state.chatOffset = quiet
-      ? state.chatFollowBottom
-        ? nextMax
-        : Math.min(previousOffset, nextMax)
-      : nextMax;
+    if (!quiet) state.chatNewBelow = false;
+    if (quiet && hasNewMessages) {
+      if (wasAtBottom) {
+        state.chatOffset = Math.min(built.latestMessageStart, nextMax);
+        state.chatNewBelow = false;
+      } else {
+        state.chatOffset = Math.min(previousOffset, nextMax);
+        state.chatNewBelow = true;
+      }
+    } else {
+      state.chatOffset = quiet
+        ? Math.min(previousOffset, nextMax)
+        : Math.min(built.latestMessageStart, nextMax);
+    }
     state.error = undefined;
     const changed =
       previousLines.length !== state.chatLines.length ||
@@ -778,18 +789,28 @@ async function loadChat(quiet: boolean): Promise<void> {
 
 function applyLiveMessage(message: Message): void {
   if (state.screen !== "chat" || message.sessionRef !== state.sessionRef) return;
-  state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
-  const built = buildChat(state.chatMessages);
+  const isNew = !state.chatMessages.some((item) => item.id === message.id);
   const previousLines = state.chatLines;
   const previousOffset = state.chatOffset;
+  const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
+  const wasAtBottom = previousOffset >= previousMax;
+  state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
+  const built = buildChat(state.chatMessages);
   state.chatLines = built.lines;
   state.chatLineMessages = built.lineMessages;
   state.chatMessageCount = built.messageCount;
   state.chatActivity = activityForMessages(state.chatMessages);
   const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
-  state.chatOffset = state.chatFollowBottom
-    ? nextMax
-    : Math.min(previousOffset, nextMax);
+  if (isNew && wasAtBottom) {
+    state.chatOffset = Math.min(
+      built.messageStarts[message.id] ?? nextMax,
+      nextMax,
+    );
+    state.chatNewBelow = false;
+  } else {
+    state.chatOffset = Math.min(previousOffset, nextMax);
+    if (isNew) state.chatNewBelow = true;
+  }
   const changed =
     previousLines.length !== state.chatLines.length ||
     previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -838,14 +859,24 @@ function hasReadableText(messages: Message[]): boolean {
 function buildChat(messages: Message[]): {
   lines: string[];
   lineMessages: number[];
+  messageStarts: Record<string, number>;
   messageCount: number;
+  latestMessageStart: number;
 } {
   if (messages.length === 0) {
-    return { lines: ["No messages yet."], lineMessages: [0], messageCount: 0 };
+    return {
+      lines: ["No messages yet."],
+      lineMessages: [0],
+      messageStarts: {},
+      messageCount: 0,
+      latestMessageStart: 0,
+    };
   }
   const lines: string[] = [];
   const lineMessages: number[] = [];
+  const messageStarts: Record<string, number> = {};
   let messageCount = 0;
+  let latestMessageStart = 0;
   for (const message of messages) {
     const text = plainTextForGlass(
       message.parts
@@ -856,6 +887,9 @@ function buildChat(messages: Message[]): {
     if (!text) continue;
     const messageIndex = messageCount;
     messageCount += 1;
+    const messageStart = lines.length;
+    messageStarts[message.id] = messageStart;
+    latestMessageStart = messageStart;
     const push = (line: string) => {
       lines.push(line);
       lineMessages.push(messageIndex);
@@ -865,9 +899,21 @@ function buildChat(messages: Message[]): {
     push("");
   }
   if (lines.length === 0) {
-    return { lines: ["No readable text."], lineMessages: [0], messageCount: 0 };
+    return {
+      lines: ["No readable text."],
+      lineMessages: [0],
+      messageStarts: {},
+      messageCount: 0,
+      latestMessageStart: 0,
+    };
   }
-  return { lines, lineMessages, messageCount };
+  return {
+    lines,
+    lineMessages,
+    messageStarts,
+    messageCount,
+    latestMessageStart,
+  };
 }
 
 function activityForMessages(messages: Message[]): string {
@@ -915,7 +961,13 @@ function chatView(): { header: string; body: string; footer: string } {
           ? "Swipe down"
           : "Swipe";
   const footer = clampLine(
-    [`${first}-${last}/${total}`, messageLabel, state.chatActivity, hint]
+    [
+      `${first}-${last}/${total}`,
+      messageLabel,
+      state.chatActivity,
+      state.chatNewBelow ? "New below" : "",
+      hint,
+    ]
       .filter(Boolean)
       .join(" · "),
     60,
@@ -971,7 +1023,7 @@ function moveChatLine(delta: number): void {
   if (state.screen !== "chat") return;
   const maxOffset = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
   const next = Math.min(maxOffset, Math.max(0, state.chatOffset + delta));
-  state.chatFollowBottom = next >= maxOffset;
+  if (next >= maxOffset) state.chatNewBelow = false;
   if (next === state.chatOffset) return;
   state.chatOffset = next;
   void updateChatView();
