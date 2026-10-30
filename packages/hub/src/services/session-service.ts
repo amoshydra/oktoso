@@ -12,11 +12,13 @@ import type {
 import type { ProviderAdapter } from "@agent-hub/providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
+import type { StateStore } from "@agent-hub/storage";
 import type { ProviderRegistry } from "./provider-registry";
 
 export interface SessionServiceOptions {
   ttlMs?: number;
   now?: () => number;
+  store?: StateStore;
 }
 
 interface CursorValue {
@@ -31,6 +33,7 @@ export class SessionService {
   private readonly sessions = new Map<string, Session>();
   private readonly ttlMs: number;
   private readonly now: () => number;
+  private readonly store?: StateStore;
   private lastSyncAt = 0;
   private refreshing?: Promise<void>;
 
@@ -41,6 +44,7 @@ export class SessionService {
   ) {
     this.ttlMs = options.ttlMs ?? 30_000;
     this.now = options.now ?? Date.now;
+    this.store = options.store;
   }
 
   get sessionCount(): number {
@@ -72,7 +76,7 @@ export class SessionService {
           const refs = new Set<string>();
           for (const session of result.value.page.data) {
             refs.add(session.ref);
-            this.sessions.set(session.ref, session);
+            this.sessions.set(session.ref, this.applyReadMarker(session));
           }
           successfulProviders.set(result.value.adapter.id, refs);
         } else {
@@ -144,7 +148,9 @@ export class SessionService {
   async get(ref: string): Promise<Session> {
     const adapter = this.adapterForRef(ref);
     if (adapter) {
-      const session = await adapter.getSession(ref, AbortSignal.timeout(15_000));
+      const session = this.applyReadMarker(
+        await adapter.getSession(ref, AbortSignal.timeout(15_000)),
+      );
       this.sessions.set(session.ref, session);
       return session;
     }
@@ -248,16 +254,29 @@ export class SessionService {
 
   async markRead(ref: string): Promise<void> {
     const adapter = this.adapterForRef(ref);
+    const session = this.sessions.get(ref);
     if (!adapter?.markRead) {
-      const session = this.sessions.get(ref);
       if (!session) throw notFound("Session not found");
-      this.sessions.set(ref, { ...session, unread: false });
-      return;
+    } else {
+      await adapter.markRead(ref, AbortSignal.timeout(15_000));
     }
 
-    await adapter.markRead(ref, AbortSignal.timeout(15_000));
-    const session = this.sessions.get(ref);
+    const readAt = this.now();
+    if (this.store) {
+      await this.store.update((state) => {
+        state.readMarkers[ref] = {
+          readAt,
+          updatedAt: session?.updatedAt ?? readAt,
+        };
+      });
+    }
     if (session) this.sessions.set(ref, { ...session, unread: false });
+  }
+
+  private applyReadMarker(session: Session): Session {
+    const marker = this.store?.getState().readMarkers[session.ref];
+    if (!marker || session.updatedAt > marker.updatedAt) return session;
+    return session.unread ? { ...session, unread: false } : session;
   }
 
   private async ensureFresh(): Promise<void> {

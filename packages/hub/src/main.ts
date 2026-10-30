@@ -34,7 +34,7 @@ try {
   const eventBus = new EventBus(store, logger);
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
-  const sessions = new SessionService(registry, logger);
+  const sessions = new SessionService(registry, logger, { store });
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
   const assistantSettings = new AssistantSettingsService(store);

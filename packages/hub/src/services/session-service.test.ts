@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import type { Session } from "@agent-hub/contracts";
+import type { ProviderAdapter } from "@agent-hub/providers";
+import { MemoryStateStore } from "@agent-hub/storage";
+import { createLogger } from "../lib/logger";
+import type { ProviderRegistry } from "./provider-registry";
+import { SessionService } from "./session-service";
+
+const logger = createLogger({ level: "silent" });
+
+describe("SessionService read markers", () => {
+  it("keeps a session read across provider refreshes until new activity", async () => {
+    const session: Session = {
+      ref: "test:ses_1",
+      providerID: "test",
+      nativeID: "ses_1",
+      title: "Read marker test",
+      status: "idle",
+      unread: true,
+      updatedAt: 100,
+      createdAt: 50,
+    };
+    const adapter = {
+      id: "test",
+      listSessions: async () => ({
+        data: [{ ...session }],
+        cursor: { next: null, previous: null },
+      }),
+      getSession: async () => ({ ...session }),
+      markRead: async () => undefined,
+    } as unknown as ProviderAdapter;
+    const registry = {
+      adapters: () => [adapter],
+      adapter: (id: string) => (id === "test" ? adapter : undefined),
+    } as unknown as ProviderRegistry;
+    const store = new MemoryStateStore();
+    const sessions = new SessionService(registry, logger, {
+      store,
+      ttlMs: 0,
+    });
+
+    await sessions.refresh();
+    expect((await sessions.list({})).data[0]?.unread).toBe(true);
+
+    await sessions.markRead(session.ref);
+    expect(store.getState().readMarkers[session.ref]).toMatchObject({
+      updatedAt: 100,
+    });
+
+    sessions.invalidate();
+    await sessions.refresh();
+    expect((await sessions.list({})).data[0]?.unread).toBe(false);
+
+    session.updatedAt = 200;
+    sessions.invalidate();
+    await sessions.refresh();
+    expect((await sessions.list({})).data[0]?.unread).toBe(true);
+  });
+});
