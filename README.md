@@ -93,7 +93,7 @@ HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 - Node.js 24+
 - TypeScript
 - Hono on Node.js 24+
-- Preact + Vite for the reference web client
+- React + Vite for the reference web client
 - Pure JavaScript dependencies, no native modules
 - JSON state store first; optional `node:sqlite` adapter later
 - A bundled `dist/hub.js` for portable deployment

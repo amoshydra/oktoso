@@ -38,20 +38,20 @@ Recommended defaults:
 | Server HTTP layer | Hono on Node 24 | Small, typed, streaming-friendly, pure JavaScript |
 | Contract source | Zod schemas in `packages/contracts`; generate OpenAPI | One source for validation, types, and the Rust-facing contract |
 | Persistence | JSON state store first, behind `StateStore`; optional `node:sqlite` adapter later | Portable, no native modules, enough for single-owner state |
-| Web client | Preact + Vite + TypeScript | Small bundle, component model, future WebXR reuse |
-| Web server state | TanStack Query's Preact adapter | Cache, pagination, mutations, and invalidation are already solved |
-| Local web state | `@preact/signals` | Selected session, filters, sheets, and transient UI |
+| Web client | React + Vite + TypeScript | Mature ecosystem, broad chat/UI libraries, future WebXR reuse |
+| Web server state | TanStack Query's React adapter | Cache, pagination, mutations, and invalidation are already solved |
+| Local web state | React state (`useState` / `useReducer`) | Selected session, filters, sheets, and transient UI |
 | SSE client | `fetch()` streaming, not `EventSource` | `EventSource` cannot send the `Authorization` header |
 | Provider style | Provider adapters behind one interface; capabilities decide UI | No provider-specific logic in the web client |
 | Test runtime | Vitest for unit/integration, Playwright for web/visual | Fast tests plus a real browser matrix |
 | Deployment | One Node process serving API and built web assets | Same origin, no CORS by default, easy Termux deployment |
 
-If React, node:http, or SQLite-first is preferred, change it now. The package boundaries below survive either choice.
+If node:http or SQLite-first is preferred, change it now. The package boundaries below survive either choice.
 
 Why these two:
 
 - **Hono** is chosen for routing, middleware, streaming/SSE, and tests through `app.request`, while staying small and Web-Standards based. It is not a performance claim over raw `node:http`; it removes plumbing we would otherwise own.
-- **Preact** is chosen for a React-like component model at a much smaller bundle size, with Vite, signals, and a Preact Query adapter. It is not a constraint on the API. If the team is React-first, React can replace it without touching the hub.
+- **React** is chosen for ecosystem compatibility, especially chat runtimes such as assistant-ui and TanStack Query. The web client accepts the larger bundle because it is a self-hosted operator surface, not a bundle-sensitive embed. React is not a constraint on the API; the hub and client contract survive a framework change.
 
 Both are implementation choices, not part of the client contract. The OpenAPI/SSE boundary is what matters.
 
@@ -317,7 +317,7 @@ Rules:
 - `packages/providers` never imports `hub`, Hono, storage, or UI.
 - `packages/storage` never imports providers or HTTP code.
 - `packages/hub` is the only place that knows Hono, process lifecycle, and the provider registry.
-- `packages/client` has no DOM and no Preact. It works in web, VR, and a device shell.
+- `packages/client` has no DOM and no React. It works in web, VR, and a device shell.
 - `packages/ui` owns visual tokens and primitives. It does not fetch data.
 - `apps/web` composes client, UI, and route state. It never calls a provider directly.
 - No package imports from `docs/prototypes`.
@@ -627,7 +627,7 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
 
 - `HubClient` from `packages/client` owns HTTP, auth, errors, and SSE parsing.
 - TanStack Query owns server state: sessions, messages, attention, providers, options, search.
-- `@preact/signals` owns selection, filters, modals, and sheet state.
+- React state owns selection, filters, modals, and sheet state.
 - `event-sync.ts` maps hub events into query updates:
   - `message.delta` patches the active message;
   - `message.created/updated` updates the message page;
@@ -640,7 +640,7 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
 ### UI implementation
 
 - Extract tokens from `docs/prototypes/styles.css` into `packages/ui/src/tokens.css` and `base.css`.
-- Rebuild interaction components in Preact; do not copy the prototype's DOM rendering code.
+- Rebuild interaction components in React; do not copy the prototype's DOM rendering code.
 - Keep the existing hierarchy:
   - topbar owns the page `h1`;
   - inbox titles 16px;
@@ -763,7 +763,7 @@ Scaffold Phase 0 only:
 1. Create the workspace packages and dependency graph.
 2. Implement `packages/contracts` with the four new API shapes and generated OpenAPI.
 3. Implement config, auth, error handling, logging, health, storage, event bus, and `createApp`.
-4. Add the fake provider server and the Preact shell with login.
+4. Add the fake provider server and the React shell with login.
 5. Run the first vertical slice against fake OpenCode before touching a live provider.
 
 If those defaults are accepted, the next change should be the Phase 0 scaffold, not another design pass.
