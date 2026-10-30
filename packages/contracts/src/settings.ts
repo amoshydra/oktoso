@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-export const DEFAULT_REPLY_BASE_URL =
-  "http://127.0.0.1:8080/v1";
+export const DEFAULT_REPLY_BASE_URL = "http://127.0.0.1:8080/v1";
 export const DEFAULT_REPLY_MODEL =
   "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive";
 export const DEFAULT_REPLY_TIMEOUT_MS = 8_000;

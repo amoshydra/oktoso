@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "simulate": "evenhub-simulator http://localhost:5176",
-    "pack": "evenhub pack app.json dist"
+    "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
     "@agent-hub/client": "workspace:*",

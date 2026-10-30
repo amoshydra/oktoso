@@ -44,12 +44,14 @@ pnpm simulate:even-g2
 
 The native EvenHub simulator requires a desktop GTK session. In headless environments, use the phone-side **Glasses preview** controls, which drive the same input handlers (`Up`, `Down`, `Select`, `Back`) against the current screen logic. Hardware/simulator input remains the final validation.
 
-For hardware sideloading, use the Even Hub scanner/QR flow and set the phone connection values. For a private packaged build:
+For hardware sideloading, use the Even Hub scanner/QR flow and set the phone connection values. For a packaged build, pass the origin the phone will reach. The committed `app.json` only contains local and placeholder origins, so a personal IP or hostname never enters Git:
 
 ```sh
 pnpm --filter @agent-hub/even-realities-g2 build
-pnpm --filter @agent-hub/even-realities-g2 pack
+HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
+
+`HUB_ORIGIN` must include the scheme and any non-default port. The pack script writes the generated whitelist to an ignored `.app.pack.json`, packs `dist`, and removes the temporary manifest.
 
 ## Hub settings
 
@@ -58,10 +60,10 @@ The web Settings screen configures assistant behavior for wearable clients:
 - **Reply assistance** — OpenAI-compatible endpoint, model, optional key, timeout, model thinking toggle
 - **Voice transcription** — OpenAI-compatible STT endpoint, model, optional key, timeout
 
-The current development defaults are:
+The repository defaults are examples; set your own endpoint and model in Settings:
 
 - Reply endpoint: `http://127.0.0.1:8080/v1`
-- Reply model: `Gemma-4-E4B-Uncensored-HauhauCS-Aggressive`
+- Reply model: configure the model served by that endpoint
 - Thinking disabled through `chat_template_kwargs.enable_thinking = false`
 - Voice transcription disabled until an STT endpoint is configured
 
