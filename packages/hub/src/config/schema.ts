@@ -34,6 +34,7 @@ export const zHubConfig = z.object({
   dataDir: z.string().default(".data"),
   cors: z.array(z.string()).default([]),
   webRoot: z.string().optional(),
+  appsRoot: z.string().optional(),
   providers: z.array(zProviderConfig).default([]),
 });
 

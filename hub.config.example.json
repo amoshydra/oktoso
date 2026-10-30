@@ -4,6 +4,7 @@
   "token": "${HUB_TOKEN}",
   "dataDir": ".data",
   "cors": [],
+  "appsRoot": "dist/apps",
   "providers": [
     {
       "id": "desktop-opencode",

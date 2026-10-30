@@ -5,6 +5,7 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 ## Even G2
 
 - App: `apps/even-realities-g2`
+- Hosted path: `/apps/even-g2/`
 - Package: `@agent-hub/even-realities-g2`
 - Display name: **Agent Hub G2** (manifest limit is 20 characters; the phone surface says “Agent Hub for Even G2”)
 - Target: Even Hub plugin for Even G2
@@ -47,7 +48,24 @@ pnpm simulate:even-g2
 
 The native EvenHub simulator requires a desktop GTK session. In headless environments, use the phone-side **Glasses preview** controls, which drive the same input handlers (`Up`, `Down`, `Select`, `Back`) against the current screen logic. Hardware/simulator input remains the final validation.
 
-For hardware sideloading, use the Even Hub scanner/QR flow and set the phone connection values. For a packaged build, pass the origin the phone will reach. The committed `app.json` only contains local and placeholder origins, so a personal IP or hostname never enters Git:
+For hardware testing without packaging, load the built app from the hub:
+
+```sh
+pnpm build:single-port
+node dist/hub.js --config ./hub.config.json
+```
+
+The URL is:
+
+```text
+http://<hub-host>:8787/apps/even-g2/
+```
+
+Leave the Hub URL blank in the app setup. The app and API share an origin.
+
+The hub serves `/apps/<app-id>/` generically, so future glass or watch apps can use `/apps/watch/`, `/apps/vision/`, and so on. Each app is built with its own Vite base and stored under `dist/apps/<app-id>/`.
+
+For a packaged build, pass the origin the phone will reach. The committed `app.json` only contains local and placeholder origins, so a personal IP or hostname never enters Git:
 
 ```sh
 pnpm --filter @agent-hub/even-realities-g2 build
