@@ -30,7 +30,7 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
-async function createTestApp(options: { store?: StateStore } = {}) {
+async function createTestApp(options: { store?: StateStore; cors?: string[] } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
   const config = await loadConfig(
@@ -38,6 +38,7 @@ async function createTestApp(options: { store?: StateStore } = {}) {
     { HUB_TOKEN: token, OPENCODE_PASSWORD: "secret" },
   );
   config.providers[0]!.baseUrl = fake.url;
+  if (options.cors) config.cors = options.cors;
   const store = options.store ?? new MemoryStateStore();
   const eventBus = new EventBus(store, logger, { heartbeatMs: 10 });
   await eventBus.init();
@@ -71,6 +72,20 @@ afterEach(async () => {
 });
 
 describe("hub app", () => {
+  it("supports wildcard CORS for local hardware clients", async () => {
+    const { app } = await createTestApp({ cors: ["*"] });
+    const response = await app.request("/api/v1/auth/check", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
   it("serves public health", async () => {
     const { app } = await createTestApp();
     const response = await app.request("/api/v1/health");

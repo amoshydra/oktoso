@@ -69,6 +69,7 @@ let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let storedBaseURL = localStorage.getItem(URL_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 const CHAT_VISIBLE_LINES = 6;
+const CHAT_SCROLL_BURST_MS = 800;
 let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
@@ -79,6 +80,8 @@ let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let lastChatScrollAt = 0;
+let chatScrollBurst = 0;
 
 const phoneSession = byId<HTMLSpanElement>("phone-session");
 const phoneText = byId<HTMLTextAreaElement>("phone-text");
@@ -316,6 +319,8 @@ async function openChat(ref: string, title: string): Promise<void> {
   state.chatLines = [];
   state.chatOffset = 0;
   state.chatFollowBottom = false;
+  lastChatScrollAt = 0;
+  chatScrollBurst = 0;
   state.screen = "chat";
   state.error = undefined;
   state.notice = undefined;
@@ -337,12 +342,12 @@ async function loadChat(quiet: boolean): Promise<void> {
     const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
     state.chatLines = built.lines;
     const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
-    if (!quiet) state.chatFollowBottom = false;
+    if (!quiet) state.chatFollowBottom = true;
     state.chatOffset = quiet
       ? state.chatFollowBottom
         ? nextMax
         : Math.min(previousOffset, nextMax)
-      : Math.min(built.contextStart, nextMax);
+      : nextMax;
     state.error = undefined;
     const changed =
       previousLines.length !== state.chatLines.length ||
@@ -420,14 +425,9 @@ function hasReadableText(messages: Message[]): boolean {
   );
 }
 
-function buildChat(messages: Message[]): {
-  lines: string[];
-  contextStart: number;
-} {
-  if (messages.length === 0) return { lines: ["No messages yet."], contextStart: 0 };
+function buildChat(messages: Message[]): { lines: string[] } {
+  if (messages.length === 0) return { lines: ["No messages yet."] };
   const lines: string[] = [];
-  let latestUserStart = 0;
-  let latestAssistantStart: number | undefined;
   for (const message of messages) {
     const text = message.parts
       .filter((part) => part.type === "text")
@@ -435,17 +435,12 @@ function buildChat(messages: Message[]): {
       .join("\n")
       .trim();
     if (!text) continue;
-    if (message.role === "user") latestUserStart = lines.length;
-    if (message.role === "assistant") latestAssistantStart = lines.length;
     lines.push(message.role.toUpperCase());
     lines.push(...wrapText(text, 52, Number.MAX_SAFE_INTEGER));
     lines.push("");
   }
-  if (lines.length === 0) return { lines: ["No readable text."], contextStart: 0 };
-  return {
-    lines,
-    contextStart: latestAssistantStart ?? latestUserStart,
-  };
+  if (lines.length === 0) return { lines: ["No readable text."] };
+  return { lines };
 }
 
 function chatView(): { header: string; body: string; footer: string } {
@@ -514,6 +509,22 @@ function moveChatLine(delta: number): void {
   if (next === state.chatOffset) return;
   state.chatOffset = next;
   void updateChatView();
+}
+
+function scrollChat(direction: -1 | 1): void {
+  const now = Date.now();
+  chatScrollBurst =
+    now - lastChatScrollAt <= CHAT_SCROLL_BURST_MS
+      ? Math.min(chatScrollBurst + 1, 3)
+      : 0;
+  lastChatScrollAt = now;
+  const step =
+    chatScrollBurst >= 2
+      ? CHAT_VISIBLE_LINES
+      : chatScrollBurst === 1
+        ? 2
+        : 1;
+  moveChatLine(direction * step);
 }
 
 async function openReply(): Promise<void> {
@@ -751,7 +762,7 @@ async function processEvents(): Promise<void> {
       type === OsEventTypeList.SCROLL_BOTTOM_EVENT
     ) {
       if (state.screen === "chat") {
-        moveChatLine(type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
+        scrollChat(type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
       }
     } else if (event?.listEvent) {
       const eventType = event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT;
