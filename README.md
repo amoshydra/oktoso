@@ -77,8 +77,15 @@ pnpm typecheck
 pnpm test
 pnpm openapi:check
 pnpm build
-HUB_TOKEN=... node dist/hub.js --config ./hub.config.json
 ```
+
+Starting without a config bootstraps an empty local workspace:
+
+```sh
+pnpm start
+```
+
+It creates `hub.config.json` with no providers, generates a persistent token, prints it once, and starts the hub. Add providers to the config and restart. An explicitly requested `--config` or `HUB_CONFIG` path is never created implicitly.
 
 ## Even G2 URL hosting
 
