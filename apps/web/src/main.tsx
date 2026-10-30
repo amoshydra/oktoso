@@ -1,4 +1,4 @@
-import { render } from "preact";
+import { createRoot } from "react-dom/client";
 import "@agent-hub/ui/tokens.css";
 import "@agent-hub/ui/base.css";
 import "./styles.css";
@@ -9,4 +9,4 @@ document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dar
 
 const root = document.getElementById("app");
 if (!root) throw new Error("Missing #app root");
-render(<App />, root);
+createRoot(root).render(<App />);

@@ -9,6 +9,6 @@
     "./base.css": "./src/base.css"
   },
   "peerDependencies": {
-    "preact": "^10.29.8"
+    "react": "^19.0.0"
   }
 }

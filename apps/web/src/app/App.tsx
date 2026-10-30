@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AssistantView,
   Attention,
@@ -104,7 +104,7 @@ export function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const lastSeq = useRef(0);
-  const attentionTimer = useRef<ReturnType<typeof setTimeout>>();
+  const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -321,26 +321,26 @@ export function App() {
 
   if (auth === "checking") {
     return (
-      <div class="login-page">
-        <div class="login-card boot-card">
-          <div class="brand-mark">AH</div>
+      <div className="login-page">
+        <div className="login-card boot-card">
+          <div className="brand-mark">AH</div>
           <h1>Agent Hub</h1>
           <p>Checking the hub connection…</p>
-          <div class="loading-line" />
+          <div className="loading-line" />
         </div>
       </div>
     );
   }
 
   const providerPanel = (
-    <article class="panel">
-      <div class="panel-head">
+    <article className="panel">
+      <div className="panel-head">
         <div>
           <h2>Providers</h2>
           <p>Configured endpoints, health, versions, and normalized capabilities.</p>
         </div>
         <button
-          class="btn small"
+          className="btn small"
           type="button"
           disabled={checkingProviders}
           onClick={() => client && void checkProviders(client)}
@@ -348,21 +348,21 @@ export function App() {
           {checkingProviders ? "Checking…" : "Recheck"}
         </button>
       </div>
-      <div class="provider-list">
+      <div className="provider-list">
         {providers.length === 0 ? (
-          <div class="empty">No providers configured.</div>
+          <div className="empty">No providers configured.</div>
         ) : (
           providers.map((provider) => (
-            <div class="provider-row" key={provider.id}>
-              <div class="provider-mark">{providerMark(provider.type)}</div>
-              <div class="provider-main">
+            <div className="provider-row" key={provider.id}>
+              <div className="provider-mark">{providerMark(provider.type)}</div>
+              <div className="provider-main">
                 <strong>{provider.name}</strong>
-                <span class="mono">{provider.baseUrl}</span>
+                <span className="mono">{provider.baseUrl}</span>
               </div>
               {import.meta.env.DEV && isFakeProvider(provider.baseUrl) ? (
-                <span class="dev-badge">fake</span>
+                <span className="dev-badge">fake</span>
               ) : null}
-              <span class={`status-chip ${provider.status}`}>
+              <span className={`status-chip ${provider.status}`}>
                 <i />
                 {provider.status}
               </span>
@@ -374,14 +374,14 @@ export function App() {
   );
 
   const diagnosticsPanel = (
-    <section class="panel diagnostics">
-      <div class="panel-head">
+    <section className="panel diagnostics">
+      <div className="panel-head">
         <div>
           <h2>Diagnostics</h2>
           <p>Safe operational state. No provider credentials or message bodies.</p>
         </div>
       </div>
-      <div class="details-grid">
+      <div className="details-grid">
         <Detail label="Version" value={health?.version ?? "—"} />
         <Detail label="Event sequence" value={String(health?.eventSeq ?? 0)} />
         <Detail label="Subscribers" value={String(diagnostics?.events.subscribers ?? 0)} />
@@ -393,18 +393,19 @@ export function App() {
   );
 
   return (
-    <div class="app-shell">
-      <aside class="rail" aria-label="Primary navigation">
-        <div class="rail-logo" aria-label="Agent Hub">
+    <div className="app-shell">
+      <aside className="rail" aria-label="Primary navigation">
+        <div className="rail-logo" aria-label="Agent Hub">
           AH
         </div>
-        <nav class="rail-nav">
+        <nav className="rail-nav">
           {RAIL_VIEWS.map((id) => {
             const item = VIEW_META[id];
             return (
               <button
-                class={`rail-item ${view === id ? "active" : ""}`}
+                className={`rail-item ${view === id ? "active" : ""}`}
                 type="button"
+                key={id}
                 aria-current={view === id ? "page" : undefined}
                 onClick={() => selectView(id)}
                 title={item.label}
@@ -414,49 +415,49 @@ export function App() {
                     : item.label
                 }
               >
-                <span class="rail-mark">
+                <span className="rail-mark">
                   {item.mark}
                   {id === "inbox" && attentionCount > 0 ? (
-                    <span class="nav-badge">{badge}</span>
+                    <span className="nav-badge">{badge}</span>
                   ) : null}
                 </span>
-                <span class="rail-label">{item.label}</span>
+                <span className="rail-label">{item.label}</span>
               </button>
             );
           })}
         </nav>
-        <div class="rail-footer">
-          <span class={`status-dot ${connection === "open" ? "online" : "offline"}`} />
+        <div className="rail-footer">
+          <span className={`status-dot ${connection === "open" ? "online" : "offline"}`} />
           <span>{connection === "open" ? "Live" : "Offline"}</span>
         </div>
       </aside>
 
-      <div class="main-column">
-        <header class="topbar">
-          <div class="topbar-title-block">
-            <h1 class="topbar-title">{current.label}</h1>
-            <span class="topbar-sub">{current.sub}</span>
+      <div className="main-column">
+        <header className="topbar">
+          <div className="topbar-title-block">
+            <h1 className="topbar-title">{current.label}</h1>
+            <span className="topbar-sub">{current.sub}</span>
           </div>
-          <div class="topbar-spacer" />
-          <span class={`status-chip ${connectionClass(connection)}`}>
+          <div className="topbar-spacer" />
+          <span className={`status-chip ${connectionClass(connection)}`}>
             <i />
             {connectionLabel(connection)}
           </span>
-          <button class="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
+          <button className="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? "☀" : "☾"}
           </button>
-          <button class="btn small" type="button" onClick={signOut}>
+          <button className="btn small" type="button" onClick={signOut}>
             Disconnect
           </button>
         </header>
 
-        <main class="content" ref={contentRef}>
-          <div class="page">
+        <main className="content" ref={contentRef}>
+          <div className="page">
             {view === "foundation" ? (
               <>
-                <section class="hero">
+                <section className="hero">
                   <div>
-                    <p class="eyebrow">Agent Hub</p>
+                    <p className="eyebrow">Agent Hub</p>
                     <h2>Runtime online</h2>
                     <p>
                       The hub API, authentication, durable state, event bus, and provider
@@ -464,74 +465,74 @@ export function App() {
                       deployment hardening are next.
                     </p>
                   </div>
-                  <div class="hero-badge">
-                    <span class="status-dot online" />
+                  <div className="hero-badge">
+                    <span className="status-dot online" />
                     v{health?.version ?? "0.1.0"}
                   </div>
                 </section>
 
                 {error ? (
-                  <div class="alert" role="alert">
+                  <div className="alert" role="alert">
                     {error}
-                    <button class="text-button" type="button" onClick={() => setError(undefined)}>
+                    <button className="text-button" type="button" onClick={() => setError(undefined)}>
                       Dismiss
                     </button>
                   </div>
                 ) : null}
 
-                <section class="status-grid" aria-label="Runtime status">
-                  <article class="card">
-                    <div class="card-label">Hub</div>
-                    <strong class="card-value">{health ? "Connected" : "Waiting"}</strong>
-                    <span class="card-meta">
+                <section className="status-grid" aria-label="Runtime status">
+                  <article className="card">
+                    <div className="card-label">Hub</div>
+                    <strong className="card-value">{health ? "Connected" : "Waiting"}</strong>
+                    <span className="card-meta">
                       Uptime {formatUptime(health?.uptimeMs ?? 0)} · seq {health?.eventSeq ?? 0}
                     </span>
                   </article>
-                  <article class="card">
-                    <div class="card-label">Event stream</div>
-                    <strong class="card-value">{connectionLabel(connection)}</strong>
-                    <span class="card-meta">
+                  <article className="card">
+                    <div className="card-label">Event stream</div>
+                    <strong className="card-value">{connectionLabel(connection)}</strong>
+                    <span className="card-meta">
                       {events.length} received · cursor {lastSeq.current}
                     </span>
                   </article>
-                  <article class="card">
-                    <div class="card-label">Providers</div>
-                    <strong class="card-value">
+                  <article className="card">
+                    <div className="card-label">Providers</div>
+                    <strong className="card-value">
                       {providers.filter((provider) => provider.status === "online").length} /{" "}
                       {providers.length} online
                     </strong>
-                    <span class="card-meta">
+                    <span className="card-meta">
                       {checkingProviders ? "Checking health…" : "Dev harness"}
                     </span>
                   </article>
-                  <article class="card">
-                    <div class="card-label">State</div>
-                    <strong class="card-value">{diagnostics?.storage.kind ?? "—"}</strong>
-                    <span class="card-meta">Node {diagnostics?.node ?? "—"}</span>
+                  <article className="card">
+                    <div className="card-label">State</div>
+                    <strong className="card-value">{diagnostics?.storage.kind ?? "—"}</strong>
+                    <span className="card-meta">Node {diagnostics?.node ?? "—"}</span>
                   </article>
                 </section>
 
-                <section class="grid-two">
+                <section className="grid-two">
                   {providerPanel}
-                  <article class="panel">
-                    <div class="panel-head">
+                  <article className="panel">
+                    <div className="panel-head">
                       <div>
                         <h2>Event stream</h2>
                         <p>Authenticated SSE with replay and heartbeat.</p>
                       </div>
-                      <span class="mono">after={lastSeq.current}</span>
+                      <span className="mono">after={lastSeq.current}</span>
                     </div>
                     {events.length === 0 ? (
-                      <div class="empty">
+                      <div className="empty">
                         Connected. New hub events will appear here as the provider slices land.
                       </div>
                     ) : (
-                      <div class="event-list">
+                      <div className="event-list">
                         {events.map((event) => (
-                          <div class="event-row" key={`${event.seq}-${event.type}`}>
-                            <span class="event-seq">#{event.seq}</span>
-                            <span class="event-type">{event.type}</span>
-                            <span class="event-time">{formatTime(event.at)}</span>
+                          <div className="event-row" key={`${event.seq}-${event.type}`}>
+                            <span className="event-seq">#{event.seq}</span>
+                            <span className="event-type">{event.type}</span>
+                            <span className="event-time">{formatTime(event.at)}</span>
                           </div>
                         ))}
                       </div>
@@ -572,9 +573,9 @@ export function App() {
               />
             ) : view === "providers" ? (
               <>
-                <section class="hero">
+                <section className="hero">
                   <div>
-                    <p class="eyebrow">Providers</p>
+                    <p className="eyebrow">Providers</p>
                     <h2>Provider health</h2>
                     <p>
                       Configured provider endpoints, health, versions, and normalized
@@ -587,48 +588,48 @@ export function App() {
               </>
             ) : view === "settings" ? (
               <>
-                <section class="grid-two">
-                  <article class="panel">
-                    <div class="panel-head">
+                <section className="grid-two">
+                  <article className="panel">
+                    <div className="panel-head">
                       <div>
                         <h2>Appearance</h2>
                         <p>Theme is stored locally in this browser.</p>
                       </div>
                     </div>
-                    <button class="btn small" type="button" onClick={toggleTheme}>
+                    <button className="btn small" type="button" onClick={toggleTheme}>
                       Use {theme === "dark" ? "light" : "dark"} theme
                     </button>
                   </article>
-                  <article class="panel">
-                    <div class="panel-head">
+                  <article className="panel">
+                    <div className="panel-head">
                       <div>
                         <h2>Providers</h2>
                         <p>Provider connections move under Providers.</p>
                       </div>
                     </div>
-                    <button class="btn small" type="button" onClick={() => selectView("providers")}>
+                    <button className="btn small" type="button" onClick={() => selectView("providers")}>
                       Open providers
                     </button>
                   </article>
-                  <article class="panel">
-                    <div class="panel-head">
+                  <article className="panel">
+                    <div className="panel-head">
                       <div>
                         <h2>Session</h2>
                         <p>The hub token is held only for this tab.</p>
                       </div>
                     </div>
-                    <button class="btn small" type="button" onClick={signOut}>
+                    <button className="btn small" type="button" onClick={signOut}>
                       Disconnect
                     </button>
                   </article>
-                  <article class="panel">
-                    <div class="panel-head">
+                  <article className="panel">
+                    <div className="panel-head">
                       <div>
                         <h2>About</h2>
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span class="mono">design-v1.1 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.1 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -638,20 +639,21 @@ export function App() {
               <Placeholder view={view} onBack={() => setView("foundation")} />
             )}
 
-            <footer class="page-footer">
+            <footer className="page-footer">
               <span>Design reference: design-v1.1</span>
               <span>{current.sub}</span>
             </footer>
           </div>
         </main>
 
-        <nav class="bottom-nav" aria-label="Mobile navigation">
+        <nav className="bottom-nav" aria-label="Mobile navigation">
           {BOTTOM_VIEWS.map((id) => {
             const item = VIEW_META[id];
             return (
               <button
-                class={`bottom-btn ${view === id ? "active" : ""}`}
+                className={`bottom-btn ${view === id ? "active" : ""}`}
                 type="button"
+                key={id}
                 aria-current={view === id ? "page" : undefined}
                 onClick={() => selectView(id)}
                 aria-label={
@@ -660,10 +662,10 @@ export function App() {
                     : item.label
                 }
               >
-                <span class="bottom-mark">
+                <span className="bottom-mark">
                   {item.mark}
                   {id === "inbox" && attentionCount > 0 ? (
-                    <span class="nav-badge">{badge}</span>
+                    <span className="nav-badge">{badge}</span>
                   ) : null}
                 </span>
                 <span>{item.label}</span>
@@ -686,15 +688,15 @@ function Login(props: {
   const [value, setValue] = useState(import.meta.env.DEV ? import.meta.env.VITE_DEV_TOKEN ?? "" : "");
 
   return (
-    <div class="login-page">
-      <button class="icon-btn login-theme" type="button" onClick={props.onToggleTheme} aria-label="Toggle theme">
+    <div className="login-page">
+      <button className="icon-btn login-theme" type="button" onClick={props.onToggleTheme} aria-label="Toggle theme">
         {props.theme === "dark" ? "☀" : "☾"}
       </button>
-      <div class="login-card">
-        <div class="brand-mark">AH</div>
-        <p class="eyebrow">Agent Hub</p>
+      <div className="login-card">
+        <div className="brand-mark">AH</div>
+        <p className="eyebrow">Agent Hub</p>
         <h1>One workbench for your agents.</h1>
-        <p class="login-copy">
+        <p className="login-copy">
           Enter the hub token. Provider credentials stay on the hub and never reach this client.
         </p>
         <form
@@ -703,34 +705,34 @@ function Login(props: {
             if (value.trim()) void props.onSubmit(value.trim());
           }}
         >
-          <label class="field-label" for="hub-token">
+          <label className="field-label" htmlFor="hub-token">
             Hub token
           </label>
           <input
             id="hub-token"
-            class="token-input"
+            className="token-input"
             type="password"
-            autocomplete="off"
-            spellcheck={false}
+            autoComplete="off"
+            spellCheck={false}
             placeholder="Paste your bearer token"
             value={value}
-            onInput={(event) => setValue((event.currentTarget as HTMLInputElement).value)}
+            onChange={(event) => setValue((event.currentTarget as HTMLInputElement).value)}
           />
           {props.error ? (
-            <div class="form-error" role="alert">
+            <div className="form-error" role="alert">
               {props.error}
             </div>
           ) : null}
-          <button class="btn primary login-submit" type="submit" disabled={props.busy || !value.trim()}>
+          <button className="btn primary login-submit" type="submit" disabled={props.busy || !value.trim()}>
             {props.busy ? "Connecting…" : "Connect to hub"}
           </button>
         </form>
         {import.meta.env.DEV && import.meta.env.VITE_DEV_TOKEN ? (
-          <p class="dev-hint">
-            Development token prefilled from <span class="mono">VITE_DEV_TOKEN</span>.
+          <p className="dev-hint">
+            Development token prefilled from <span className="mono">VITE_DEV_TOKEN</span>.
           </p>
         ) : null}
-        <p class="login-footnote">
+        <p className="login-footnote">
           Single-owner build. The token is held in this tab's session storage.
         </p>
       </div>
@@ -857,21 +859,21 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
   };
 
   return (
-    <section class="grid-two settings-assistant">
-      <article class="panel">
-        <div class="panel-head">
+    <section className="grid-two settings-assistant">
+      <article className="panel">
+        <div className="panel-head">
           <div>
             <h2>Reply assistance</h2>
             <p>Short next-reply suggestions for wearable clients. Generated on the hub.</p>
           </div>
-          <span class="mode-badge">{view?.reply.hasApiKey ? "key saved" : "server-side"}</span>
+          <span className="mode-badge">{view?.reply.hasApiKey ? "key saved" : "server-side"}</span>
         </div>
-        <div class="form-grid">
-          <label class="check-field span-2">
+        <div className="form-grid">
+          <label className="check-field span-2">
             <input
               type="checkbox"
               checked={reply.enabled}
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   enabled: (event.currentTarget as HTMLInputElement).checked,
@@ -880,11 +882,11 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
             <span>Enable contextual reply suggestions</span>
           </label>
-          <label class="check-field span-2">
+          <label className="check-field span-2">
             <input
               type="checkbox"
               checked={reply.disableThinking}
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   disableThinking: (event.currentTarget as HTMLInputElement).checked,
@@ -893,12 +895,12 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
             <span>Disable model thinking (recommended for short suggestions)</span>
           </label>
-          <label class="form-field span-2">
+          <label className="form-field span-2">
             <span>OpenAI-compatible base URL</span>
             <input
               value={reply.baseUrl}
               placeholder="https://host/llamacpp/v1"
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   baseUrl: (event.currentTarget as HTMLInputElement).value,
@@ -906,13 +908,13 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
           </label>
-          <label class="form-field">
+          <label className="form-field">
             <span>Model</span>
             <input
               value={reply.model}
               list="reply-model-options"
               placeholder="4B model"
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   model: (event.currentTarget as HTMLInputElement).value,
@@ -920,17 +922,17 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
             <datalist id="reply-model-options">
-              {replyModels.map((model) => <option value={model} />)}
+              {replyModels.map((model) => <option value={model} key={model} />)}
             </datalist>
           </label>
-          <label class="form-field">
+          <label className="form-field">
             <span>Timeout (ms)</span>
             <input
               type="number"
               min={1000}
               max={60000}
               value={reply.timeoutMs}
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
@@ -938,14 +940,14 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
           </label>
-          <label class="form-field span-2">
+          <label className="form-field span-2">
             <span>API key {view?.reply.hasApiKey ? "(saved; leave blank to keep)" : "(optional)"}</span>
             <input
               type="password"
               value={reply.apiKey}
-              autocomplete="off"
+              autoComplete="off"
               placeholder={view?.reply.hasApiKey ? "••••••••" : "No key required"}
-              onInput={(event) =>
+              onChange={(event) =>
                 setReply((current) => ({
                   ...current,
                   apiKey: (event.currentTarget as HTMLInputElement).value,
@@ -954,30 +956,30 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
           </label>
         </div>
-        <div class="form-actions">
-          <button class="btn small" type="button" onClick={() => void loadModels("reply")}>
+        <div className="form-actions">
+          <button className="btn small" type="button" onClick={() => void loadModels("reply")}>
             Load models
           </button>
-          <button class="btn primary small" type="button" disabled={saving === "reply"} onClick={() => void save("reply")}>
+          <button className="btn primary small" type="button" disabled={saving === "reply"} onClick={() => void save("reply")}>
             {saving === "reply" ? "Saving…" : "Save"}
           </button>
         </div>
       </article>
 
-      <article class="panel">
-        <div class="panel-head">
+      <article className="panel">
+        <div className="panel-head">
           <div>
             <h2>Voice transcription</h2>
             <p>Optional speech-to-text path for G2 and future wearable microphone input.</p>
           </div>
-          <span class="mode-badge">{view?.transcription.hasApiKey ? "key saved" : "optional"}</span>
+          <span className="mode-badge">{view?.transcription.hasApiKey ? "key saved" : "optional"}</span>
         </div>
-        <div class="form-grid">
-          <label class="check-field span-2">
+        <div className="form-grid">
+          <label className="check-field span-2">
             <input
               type="checkbox"
               checked={transcription.enabled}
-              onInput={(event) =>
+              onChange={(event) =>
                 setTranscription((current) => ({
                   ...current,
                   enabled: (event.currentTarget as HTMLInputElement).checked,
@@ -986,12 +988,12 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
             <span>Enable voice transcription</span>
           </label>
-          <label class="form-field span-2">
+          <label className="form-field span-2">
             <span>OpenAI-compatible STT base URL</span>
             <input
               value={transcription.baseUrl}
               placeholder="https://host/v1"
-              onInput={(event) =>
+              onChange={(event) =>
                 setTranscription((current) => ({
                   ...current,
                   baseUrl: (event.currentTarget as HTMLInputElement).value,
@@ -999,13 +1001,13 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
           </label>
-          <label class="form-field">
+          <label className="form-field">
             <span>Model</span>
             <input
               value={transcription.model}
               list="transcription-model-options"
               placeholder="whisper-large-v3"
-              onInput={(event) =>
+              onChange={(event) =>
                 setTranscription((current) => ({
                   ...current,
                   model: (event.currentTarget as HTMLInputElement).value,
@@ -1013,17 +1015,17 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
             <datalist id="transcription-model-options">
-              {transcriptionModels.map((model) => <option value={model} />)}
+              {transcriptionModels.map((model) => <option value={model} key={model} />)}
             </datalist>
           </label>
-          <label class="form-field">
+          <label className="form-field">
             <span>Timeout (ms)</span>
             <input
               type="number"
               min={1000}
               max={120000}
               value={transcription.timeoutMs}
-              onInput={(event) =>
+              onChange={(event) =>
                 setTranscription((current) => ({
                   ...current,
                   timeoutMs: Number((event.currentTarget as HTMLInputElement).value),
@@ -1031,14 +1033,14 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
               }
             />
           </label>
-          <label class="form-field span-2">
+          <label className="form-field span-2">
             <span>API key {view?.transcription.hasApiKey ? "(saved; leave blank to keep)" : "(optional)"}</span>
             <input
               type="password"
               value={transcription.apiKey}
-              autocomplete="off"
+              autoComplete="off"
               placeholder={view?.transcription.hasApiKey ? "••••••••" : "No key required"}
-              onInput={(event) =>
+              onChange={(event) =>
                 setTranscription((current) => ({
                   ...current,
                   apiKey: (event.currentTarget as HTMLInputElement).value,
@@ -1047,19 +1049,19 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
           </label>
         </div>
-        <div class="form-actions">
-          <button class="btn small" type="button" onClick={() => void loadModels("transcription")}>
+        <div className="form-actions">
+          <button className="btn small" type="button" onClick={() => void loadModels("transcription")}>
             Load models
           </button>
-          <button class="btn primary small" type="button" disabled={saving === "transcription"} onClick={() => void save("transcription")}>
+          <button className="btn primary small" type="button" disabled={saving === "transcription"} onClick={() => void save("transcription")}>
             {saving === "transcription" ? "Saving…" : "Save"}
           </button>
         </div>
       </article>
 
-      {loading ? <div class="form-note">Loading assistant settings…</div> : null}
-      {notice ? <div class="form-note">{notice}</div> : null}
-      {error ? <div class="form-error span-2" role="alert">{error}</div> : null}
+      {loading ? <div className="form-note">Loading assistant settings…</div> : null}
+      {notice ? <div className="form-note">{notice}</div> : null}
+      {error ? <div className="form-error span-2" role="alert">{error}</div> : null}
     </section>
   );
 }
@@ -1142,34 +1144,35 @@ function InboxView(props: {
 
   return (
     <>
-      <section class="hero">
+      <section className="hero">
         <div>
-          <p class="eyebrow">Attention · Phase 3</p>
+          <p className="eyebrow">Attention · Phase 3</p>
           <h2>What needs you now</h2>
           <p>
             Approvals, questions, unread sessions, and failures. Actions are sent
             through the provider and never auto-approved.
           </p>
         </div>
-        <button class="btn small" type="button" disabled={loading} onClick={() => void load()}>
+        <button className="btn small" type="button" disabled={loading} onClick={() => void load()}>
           {loading ? "Loading…" : "Refresh"}
         </button>
       </section>
 
       {error ? (
-        <div class="alert" role="alert">
+        <div className="alert" role="alert">
           {error}
-          <button class="text-button" type="button" onClick={() => void load()}>
+          <button className="text-button" type="button" onClick={() => void load()}>
             Retry
           </button>
         </div>
       ) : null}
 
-      <div class="inbox-tabs">
+      <div className="inbox-tabs">
         {ATTENTION_FILTERS.map(([value, label]) => (
           <button
-            class={`chip ${filter === value ? "active" : ""}`}
+            className={`chip ${filter === value ? "active" : ""}`}
             type="button"
+            key={value}
             onClick={() => setFilter(value)}
           >
             {label} {count(value)}
@@ -1178,17 +1181,17 @@ function InboxView(props: {
       </div>
 
       {loading && items.length === 0 ? (
-        <div class="empty">Loading attention…</div>
+        <div className="empty">Loading attention…</div>
       ) : visible.length === 0 ? (
-        <div class="empty">Nothing needs you right now.</div>
+        <div className="empty">Nothing needs you right now.</div>
       ) : (
         groups
           .filter(([, groupItems]) => groupItems.length > 0)
           .map(([label, groupItems]) => (
-            <section class="inbox-group" key={label}>
-              <div class="inbox-group-head">
+            <section className="inbox-group" key={label}>
+              <div className="inbox-group-head">
                 <span>{label}</span>
-                <span class="line" />
+                <span className="line" />
                 <span>{groupItems.length}</span>
               </div>
               {groupItems.map((item) => (
@@ -1233,20 +1236,21 @@ function AttentionCard(props: {
   const actionInput = () => (hasFields ? { fields: values } : {});
 
   return (
-    <article class={`attention-card ${item.priority === "blocking" ? "blocking" : ""}`}>
-      <div class="attention-top">
-        <span class={`type-badge ${item.type}`}>{ATTENTION_LABELS[item.type]}</span>
-        <span class="attention-provider">{providerLabel(item.sessionRef.split(":")[0] ?? "")}</span>
-        <span class="attention-age">{relativeTime(item.createdAt)}</span>
+    <article className={`attention-card ${item.priority === "blocking" ? "blocking" : ""}`}>
+      <div className="attention-top">
+        <span className={`type-badge ${item.type}`}>{ATTENTION_LABELS[item.type]}</span>
+        <span className="attention-provider">{providerLabel(item.sessionRef.split(":")[0] ?? "")}</span>
+        <span className="attention-age">{relativeTime(item.createdAt)}</span>
       </div>
-      <div class="attention-title">{item.title}</div>
-      <div class="attention-summary">{item.summary}</div>
+      <div className="attention-title">{item.title}</div>
+      <div className="attention-summary">{item.summary}</div>
 
       {hasFields ? (
-        <div class="attention-fields">
+        <div className="attention-fields">
           {item.fields?.map((field) => (
             <AttentionFieldInput
               field={field}
+              key={field.id}
               value={values[field.id]}
               onValue={(value) => setValues((current) => ({ ...current, [field.id]: value }))}
             />
@@ -1254,12 +1258,12 @@ function AttentionCard(props: {
         </div>
       ) : null}
 
-      <div class="attention-actions">
+      <div className="attention-actions">
         {item.actions
           .filter((action) => action.id !== "answer")
           .map((action) => (
             <button
-              class={`btn small ${action.style === "primary" ? "primary" : action.style === "danger" ? "danger" : ""}`}
+              className={`btn small ${action.style === "primary" ? "primary" : action.style === "danger" ? "danger" : ""}`}
               type="button"
               key={action.id}
               disabled={props.busy}
@@ -1270,7 +1274,7 @@ function AttentionCard(props: {
           ))}
         {answerAction ? (
           <button
-            class="btn primary small"
+            className="btn primary small"
             type="button"
             disabled={props.busy || missingRequired.length > 0}
             onClick={() => props.onAction("answer", actionInput())}
@@ -1279,11 +1283,11 @@ function AttentionCard(props: {
           </button>
         ) : null}
         {answerAction && missingRequired.length > 0 ? (
-          <span class="attention-required">
+          <span className="attention-required">
             Complete {missingRequired.map((field) => field.label).join(", ")}
           </span>
         ) : null}
-        <button class="attention-open" type="button" onClick={props.onOpen}>
+        <button className="attention-open" type="button" onClick={props.onOpen}>
           Open session
         </button>
       </div>
@@ -1299,45 +1303,45 @@ function AttentionFieldInput(props: {
   const { field } = props;
   if (field.type === "boolean") {
     return (
-      <label class="attention-check">
+      <label className="attention-check">
         <input
           type="checkbox"
           checked={Boolean(props.value)}
-          onInput={(event) => props.onValue((event.currentTarget as HTMLInputElement).checked)}
+          onChange={(event) => props.onValue((event.currentTarget as HTMLInputElement).checked)}
         />
         <span>{field.label}</span>
-        {field.description ? <small class="attention-help">{field.description}</small> : null}
+        {field.description ? <small className="attention-help">{field.description}</small> : null}
       </label>
     );
   }
   if (field.type === "select") {
     return (
-      <label class="attention-field">
+      <label className="attention-field">
         <span>{field.label}</span>
         <select
           value={typeof props.value === "string" ? props.value : ""}
-          onInput={(event) => props.onValue((event.currentTarget as HTMLSelectElement).value)}
+          onChange={(event) => props.onValue((event.currentTarget as HTMLSelectElement).value)}
         >
           <option value="">Choose…</option>
           {(field.options ?? []).map((option) => (
-            <option value={option.value}>{option.label}</option>
+            <option value={option.value} key={option.value}>{option.label}</option>
           ))}
         </select>
-        {field.description ? <small class="attention-help">{field.description}</small> : null}
+        {field.description ? <small className="attention-help">{field.description}</small> : null}
       </label>
     );
   }
   if (field.type === "multiselect") {
     const selected = Array.isArray(props.value) ? (props.value as string[]) : [];
     return (
-      <fieldset class="attention-field attention-multi">
+      <fieldset className="attention-field attention-multi">
         <legend>{field.label}</legend>
         {(field.options ?? []).map((option) => (
-          <label class="attention-check" key={option.value}>
+          <label className="attention-check" key={option.value}>
             <input
               type="checkbox"
               checked={selected.includes(option.value)}
-              onInput={(event) => {
+              onChange={(event) => {
                 const checked = (event.currentTarget as HTMLInputElement).checked;
                 props.onValue(
                   checked
@@ -1349,39 +1353,39 @@ function AttentionFieldInput(props: {
             <span>{option.label}</span>
           </label>
         ))}
-        {field.description ? <small class="attention-help">{field.description}</small> : null}
+        {field.description ? <small className="attention-help">{field.description}</small> : null}
       </fieldset>
     );
   }
   if (field.type === "textarea") {
     return (
-      <label class="attention-field attention-field-wide">
+      <label className="attention-field attention-field-wide">
         <span>{field.label}</span>
         <textarea
           rows={3}
           value={typeof props.value === "string" ? props.value : ""}
           placeholder={field.placeholder}
-          onInput={(event) => props.onValue((event.currentTarget as HTMLTextAreaElement).value)}
+          onChange={(event) => props.onValue((event.currentTarget as HTMLTextAreaElement).value)}
         />
-        {field.description ? <small class="attention-help">{field.description}</small> : null}
+        {field.description ? <small className="attention-help">{field.description}</small> : null}
       </label>
     );
   }
   return (
-    <label class={`attention-field ${field.type === "number" ? "" : "attention-field-wide"}`}>
+    <label className={`attention-field ${field.type === "number" ? "" : "attention-field-wide"}`}>
       <span>{field.label}</span>
       <input
         type={field.type === "number" ? "number" : "text"}
         value={typeof props.value === "string" || typeof props.value === "number" ? props.value : ""}
         placeholder={field.placeholder}
-        onInput={(event) => {
+        onChange={(event) => {
           const value = (event.currentTarget as HTMLInputElement).value;
           props.onValue(
             field.type === "number" ? (value === "" ? "" : Number(value)) : value,
           );
         }}
       />
-      {field.description ? <small class="attention-help">{field.description}</small> : null}
+      {field.description ? <small className="attention-help">{field.description}</small> : null}
     </label>
   );
 }
@@ -1464,9 +1468,9 @@ function SearchView(props: {
 
   return (
     <>
-      <section class="hero">
+      <section className="hero">
         <div>
-          <p class="eyebrow">Search · Phase 6</p>
+          <p className="eyebrow">Search · Phase 6</p>
           <h2>Search sessions</h2>
           <p>
             Find sessions across every provider by title, project, directory, or
@@ -1475,20 +1479,20 @@ function SearchView(props: {
         </div>
       </section>
 
-      <section class="panel search-panel">
-        <label class="sr-only" for="session-search">
+      <section className="panel search-panel">
+        <label className="sr-only" htmlFor="session-search">
           Search sessions
         </label>
         <input
           id="session-search"
           ref={inputRef}
-          class="search-input"
+          className="search-input"
           type="search"
           value={query}
           placeholder="Search sessions…"
-          autocomplete="off"
-          spellcheck={false}
-          onInput={(event) =>
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) =>
             setQuery((event.currentTarget as HTMLInputElement).value)
           }
           onKeyDown={(event) => {
@@ -1499,10 +1503,10 @@ function SearchView(props: {
           }}
         />
 
-        <div class="search-filters" role="group" aria-label="Provider filter">
-          <span class="search-filter-label">Provider</span>
+        <div className="search-filters" role="group" aria-label="Provider filter">
+          <span className="search-filter-label">Provider</span>
           <button
-            class={`chip ${provider === "all" ? "active" : ""}`}
+            className={`chip ${provider === "all" ? "active" : ""}`}
             type="button"
             aria-pressed={provider === "all"}
             onClick={() => setProvider("all")}
@@ -1511,7 +1515,7 @@ function SearchView(props: {
           </button>
           {props.providers.map((item) => (
             <button
-              class={`chip ${provider === item.id ? "active" : ""}`}
+              className={`chip ${provider === item.id ? "active" : ""}`}
               type="button"
               key={item.id}
               aria-pressed={provider === item.id}
@@ -1522,10 +1526,10 @@ function SearchView(props: {
           ))}
         </div>
 
-        <div class="search-filters" role="group" aria-label="Status filter">
-          <span class="search-filter-label">Status</span>
+        <div className="search-filters" role="group" aria-label="Status filter">
+          <span className="search-filter-label">Status</span>
           <button
-            class={`chip ${status === "all" ? "active" : ""}`}
+            className={`chip ${status === "all" ? "active" : ""}`}
             type="button"
             aria-pressed={status === "all"}
             onClick={() => setStatus("all")}
@@ -1534,7 +1538,7 @@ function SearchView(props: {
           </button>
           {(["running", "idle", "error", "offline"] as const).map((value) => (
             <button
-              class={`chip ${status === value ? "active" : ""}`}
+              className={`chip ${status === value ? "active" : ""}`}
               type="button"
               key={value}
               aria-pressed={status === value}
@@ -1547,10 +1551,10 @@ function SearchView(props: {
       </section>
 
       {error ? (
-        <div class="alert" role="alert">
+        <div className="alert" role="alert">
           {error}
           <button
-            class="text-button"
+            className="text-button"
             type="button"
             onClick={() => setAttempt((value) => value + 1)}
           >
@@ -1560,38 +1564,38 @@ function SearchView(props: {
       ) : null}
 
       {!trimmed && !hasFilters ? (
-        <div class="empty">
+        <div className="empty">
           Type a query or choose a provider or status filter to search the hub
           session cache.
         </div>
       ) : loading && results.length === 0 ? (
-        <div class="empty">Searching sessions…</div>
+        <div className="empty">Searching sessions…</div>
       ) : !loading && results.length === 0 && !error ? (
-        <div class="empty">
+        <div className="empty">
           No sessions match {trimmed ? `“${trimmed}”` : "these filters"}.
         </div>
       ) : results.length > 0 ? (
-        <section class="panel search-results-panel" aria-busy={loading}>
-          <div class="panel-head">
+        <section className="panel search-results-panel" aria-busy={loading}>
+          <div className="panel-head">
             <div>
               <h2>Results</h2>
               <p role="status">{resultSummary}</p>
             </div>
-            <span class="mode-badge">Session metadata</span>
+            <span className="mode-badge">Session metadata</span>
           </div>
-          <div class={`session-list ${loading ? "search-loading" : ""}`}>
+          <div className={`session-list ${loading ? "search-loading" : ""}`}>
             {results.map((session) => (
               <button
-                class={`session-list-item ${session.unread ? "unread" : ""}`}
+                className={`session-list-item ${session.unread ? "unread" : ""}`}
                 type="button"
                 key={session.ref}
                 onClick={() => props.onOpen(session.ref)}
                 aria-label={searchResultLabel(session)}
               >
-                <span class={`session-status-dot ${session.status}`} />
-                <span class="session-list-main">
+                <span className={`session-status-dot ${session.status}`} />
+                <span className="session-list-main">
                   <strong>{session.title}</strong>
-                  <span class="session-list-meta">
+                  <span className="session-list-meta">
                     {providerLabel(session.providerID)}
                     {session.project || session.directory ? (
                       <> · {session.project ?? session.directory}</>
@@ -1599,15 +1603,15 @@ function SearchView(props: {
                     {session.agent ? <> · {session.agent}</> : null}
                   </span>
                 </span>
-                <span class="session-list-side">
+                <span className="session-list-side">
                   {session.attention ? (
-                    <span class={`type-badge ${session.attention.type}`}>
+                    <span className={`type-badge ${session.attention.type}`}>
                       {ATTENTION_LABELS[session.attention.type]}
                     </span>
                   ) : null}
-                  {session.unread ? <span class="sr-only">Unread</span> : null}
-                  <span class="mono">{relativeTime(session.updatedAt)}</span>
-                  <span class={`status-chip ${session.status}`}>
+                  {session.unread ? <span className="sr-only">Unread</span> : null}
+                  <span className="mono">{relativeTime(session.updatedAt)}</span>
+                  <span className={`status-chip ${session.status}`}>
                     <i />
                     {session.status}
                   </span>
@@ -1685,18 +1689,18 @@ function SessionsView(props: {
 
   return (
     <>
-      <section class="hero">
+      <section className="hero">
         <div>
-          <p class="eyebrow">Phase 2</p>
+          <p className="eyebrow">Phase 2</p>
           <h2>All sessions</h2>
           <p>
             Sessions from every connected provider, with a live transcript and
             follow-up composer. The separate inbox handles unread work and failures.
           </p>
         </div>
-        <div class="hero-actions">
+        <div className="hero-actions">
           <button
-            class="btn small"
+            className="btn small"
             type="button"
             disabled={loading}
             onClick={() => void load()}
@@ -1704,7 +1708,7 @@ function SessionsView(props: {
             {loading ? "Loading…" : "Refresh"}
           </button>
           <button
-            class="btn primary small"
+            className="btn primary small"
             type="button"
             disabled={props.providers.every((provider) => !provider.capabilities.create)}
             onClick={() => setShowNew(true)}
@@ -1727,48 +1731,48 @@ function SessionsView(props: {
       ) : null}
 
       {error ? (
-        <div class="alert" role="alert">
+        <div className="alert" role="alert">
           {error}
-          <button class="text-button" type="button" onClick={() => void load()}>
+          <button className="text-button" type="button" onClick={() => void load()}>
             Retry
           </button>
         </div>
       ) : null}
 
-      <section class="panel">
-        <div class="panel-head">
+      <section className="panel">
+        <div className="panel-head">
           <div>
             <h2>All sessions</h2>
             <p>{sessions.length} sessions · newest first</p>
           </div>
-          <span class="mode-badge">Read + write · Phase 2</span>
+          <span className="mode-badge">Read + write · Phase 2</span>
         </div>
         {loading && sessions.length === 0 ? (
-          <div class="empty">Loading sessions…</div>
+          <div className="empty">Loading sessions…</div>
         ) : sessions.length === 0 ? (
-          <div class="empty">No sessions returned by the provider.</div>
+          <div className="empty">No sessions returned by the provider.</div>
         ) : (
-          <div class="session-list">
+          <div className="session-list">
             {sessions.map((session) => (
               <button
-                class={`session-list-item ${session.unread ? "unread" : ""}`}
+                className={`session-list-item ${session.unread ? "unread" : ""}`}
                 type="button"
                 key={session.ref}
                 onClick={() => props.onOpen(session.ref)}
               >
-                <span class={`session-status-dot ${session.status}`} />
-                <span class="session-list-main">
+                <span className={`session-status-dot ${session.status}`} />
+                <span className="session-list-main">
                   <strong>{session.title}</strong>
-                  <span class="session-list-meta">
+                  <span className="session-list-meta">
                     {providerLabel(session.providerID)}
                     {session.project || session.directory ? (
                       <> · {session.project ?? session.directory}</>
                     ) : null}
                   </span>
                 </span>
-                <span class="session-list-side">
-                  <span class="mono">{relativeTime(session.updatedAt)}</span>
-                  <span class={`status-chip ${session.status}`}>
+                <span className="session-list-side">
+                  <span className="mono">{relativeTime(session.updatedAt)}</span>
+                  <span className={`status-chip ${session.status}`}>
                     <i />
                     {session.status}
                   </span>
@@ -1779,7 +1783,7 @@ function SessionsView(props: {
         )}
         {cursor ? (
           <button
-            class="btn small load-more"
+            className="btn small load-more"
             type="button"
             disabled={loadingMore}
             onClick={() => void load(cursor)}
@@ -1876,19 +1880,19 @@ function NewSessionForm(props: {
   };
 
   return (
-    <section class="panel new-session-panel">
-      <div class="panel-head">
+    <section className="panel new-session-panel">
+      <div className="panel-head">
         <div>
           <h2>New session</h2>
           <p>Create an OpenCode session and optionally send the first prompt.</p>
         </div>
-        <button class="btn ghost small" type="button" onClick={props.onClose}>
+        <button className="btn ghost small" type="button" onClick={props.onClose}>
           Close
         </button>
       </div>
 
       {creatable.length === 0 ? (
-        <div class="empty">No configured provider supports session creation.</div>
+        <div className="empty">No configured provider supports session creation.</div>
       ) : (
         <form
           onSubmit={(event) => {
@@ -1896,66 +1900,66 @@ function NewSessionForm(props: {
             void submit();
           }}
         >
-          <div class="form-grid">
-            <label class="form-field">
+          <div className="form-grid">
+            <label className="form-field">
               <span>Provider</span>
-              <select value={providerID} onInput={(event) => setProviderID((event.currentTarget as HTMLSelectElement).value)}>
+              <select value={providerID} onChange={(event) => setProviderID((event.currentTarget as HTMLSelectElement).value)}>
                 {creatable.map((provider) => (
-                  <option value={provider.id}>{provider.name}</option>
+                  <option value={provider.id} key={provider.id}>{provider.name}</option>
                 ))}
               </select>
             </label>
-            <label class="form-field">
+            <label className="form-field">
               <span>Title</span>
               <input
                 value={title}
                 placeholder="Investigate auth race"
-                onInput={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
+                onChange={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
               />
             </label>
-            <label class="form-field span-2">
+            <label className="form-field span-2">
               <span>Project directory</span>
               <input
                 value={directory}
                 list="new-session-directories"
                 placeholder="/home/me/agent-hub"
-                onInput={(event) => setDirectory((event.currentTarget as HTMLInputElement).value)}
+                onChange={(event) => setDirectory((event.currentTarget as HTMLInputElement).value)}
               />
               <datalist id="new-session-directories">
-                {(options?.directories ?? []).map((item) => <option value={item} />)}
+                {(options?.directories ?? []).map((item) => <option value={item} key={item} />)}
               </datalist>
             </label>
-            <label class="form-field">
+            <label className="form-field">
               <span>Agent</span>
-              <select value={agent} disabled={loading} onInput={(event) => setAgent((event.currentTarget as HTMLSelectElement).value)}>
-                {(options?.agents ?? []).map((item) => <option value={item.id}>{item.label}</option>)}
+              <select value={agent} disabled={loading} onChange={(event) => setAgent((event.currentTarget as HTMLSelectElement).value)}>
+                {(options?.agents ?? []).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label class="form-field">
+            <label className="form-field">
               <span>Model</span>
-              <select value={model} disabled={loading} onInput={(event) => setModel((event.currentTarget as HTMLSelectElement).value)}>
-                {(options?.models ?? []).map((item) => <option value={item.id}>{item.label}</option>)}
+              <select value={model} disabled={loading} onChange={(event) => setModel((event.currentTarget as HTMLSelectElement).value)}>
+                {(options?.models ?? []).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label class="form-field span-2">
+            <label className="form-field span-2">
               <span>First prompt</span>
               <textarea
                 rows={3}
                 value={prompt}
                 placeholder="Start by reading the auth middleware."
-                onInput={(event) => setPrompt((event.currentTarget as HTMLTextAreaElement).value)}
+                onChange={(event) => setPrompt((event.currentTarget as HTMLTextAreaElement).value)}
               />
             </label>
           </div>
 
-          {loading ? <div class="form-note">Loading provider options…</div> : null}
-          {error ? <div class="form-error" role="alert">{error}</div> : null}
+          {loading ? <div className="form-note">Loading provider options…</div> : null}
+          {error ? <div className="form-error" role="alert">{error}</div> : null}
 
-          <div class="form-actions">
-            <button class="btn small" type="button" onClick={props.onClose}>
+          <div className="form-actions">
+            <button className="btn small" type="button" onClick={props.onClose}>
               Cancel
             </button>
-            <button class="btn primary small" type="submit" disabled={loading || submitting || !title.trim() || !providerID}>
+            <button className="btn primary small" type="submit" disabled={loading || submitting || !title.trim() || !providerID}>
               {submitting ? "Creating…" : "Create session"}
             </button>
           </div>
@@ -1980,8 +1984,8 @@ function useSessionDraft(client: HubClient, sessionRef: string) {
   const revisionRef = useRef(0);
   const lastSavedRef = useRef<string | null>(null);
   const activeRef = useRef(sessionRef);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   activeRef.current = sessionRef;
@@ -2162,7 +2166,7 @@ function SessionDetail(props: {
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
   const transcriptRef = useRef<HTMLElement | null>(null);
-  const pendingScroll = useRef<PendingScroll>();
+  const pendingScroll = useRef<PendingScroll | undefined>(undefined);
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
 
@@ -2343,23 +2347,23 @@ function SessionDetail(props: {
 
   return (
     <>
-      <div class="chat-view-head">
-        <button class="btn ghost small" type="button" onClick={props.onBack}>
+      <div className="chat-view-head">
+        <button className="btn ghost small" type="button" onClick={props.onBack}>
           ← Sessions
         </button>
-        <div class="chat-view-title-block">
-          <span class="chat-view-title">{session?.title ?? "Session"}</span>
+        <div className="chat-view-title-block">
+          <span className="chat-view-title">{session?.title ?? "Session"}</span>
           {session ? (
-            <span class="chat-view-sub">
+            <span className="chat-view-sub">
               {providerLabel(session.providerID)} · {session.status}
             </span>
           ) : null}
         </div>
-        <div class="chat-head-actions">
-          <span class="mode-badge">Writable · Phase 2</span>
+        <div className="chat-head-actions">
+          <span className="mode-badge">Writable · Phase 2</span>
           {session?.status === "running" ? (
             <button
-              class="btn small"
+              className="btn small"
               type="button"
               disabled={interrupting}
               onClick={() => void interrupt()}
@@ -2371,21 +2375,21 @@ function SessionDetail(props: {
       </div>
 
       {loading && !session ? (
-        <div class="empty">Loading session…</div>
+        <div className="empty">Loading session…</div>
       ) : error && !session ? (
-        <div class="alert" role="alert">
+        <div className="alert" role="alert">
           {error}
-          <button class="text-button" type="button" onClick={props.onBack}>
+          <button className="text-button" type="button" onClick={props.onBack}>
             Back
           </button>
         </div>
       ) : session ? (
         <>
-          <section class="hero chat-hero">
+          <section className="hero chat-hero">
             <div>
-              <p class="eyebrow">Session</p>
+              <p className="eyebrow">Session</p>
               <h2>{session.title}</h2>
-              <div class="chat-meta">
+              <div className="chat-meta">
                 <span>{providerLabel(session.providerID)}</span>
                 {session.project || session.directory ? (
                   <>
@@ -2402,10 +2406,10 @@ function SessionDetail(props: {
                 {session.model ? (
                   <>
                     <span>·</span>
-                    <span class="mono">{session.model}</span>
+                    <span className="mono">{session.model}</span>
                   </>
                 ) : null}
-                <span class={`status-chip ${session.status}`}>
+                <span className={`status-chip ${session.status}`}>
                   <i />
                   {session.status}
                 </span>
@@ -2414,22 +2418,22 @@ function SessionDetail(props: {
           </section>
 
           {error ? (
-            <div class="alert" role="alert">
+            <div className="alert" role="alert">
               {error}
             </div>
           ) : null}
 
           {sendError ? (
-            <div class="alert" role="alert">
+            <div className="alert" role="alert">
               {sendError}
             </div>
           ) : null}
 
-          <section class="chat-panel" aria-label="Session transcript" ref={transcriptRef}>
+          <section className="chat-panel" aria-label="Session transcript" ref={transcriptRef}>
             {olderCursor ? (
-              <div class="chat-history-control">
+              <div className="chat-history-control">
                 <button
-                  class="btn small"
+                  className="btn small"
                   type="button"
                   disabled={loadingOlder}
                   onClick={() => void loadOlder()}
@@ -2438,13 +2442,13 @@ function SessionDetail(props: {
                 </button>
               </div>
             ) : messages.length > 0 ? (
-              <div class="chat-history-control">
-                <span class="chat-history-note">Beginning of session</span>
+              <div className="chat-history-control">
+                <span className="chat-history-note">Beginning of session</span>
               </div>
             ) : null}
 
             {messages.length === 0 ? (
-              <div class="empty">No messages returned by the provider.</div>
+              <div className="empty">No messages returned by the provider.</div>
             ) : (
               groupTranscript(messages).map((item) =>
                 item.kind === "message" ? (
@@ -2457,7 +2461,7 @@ function SessionDetail(props: {
           </section>
 
           <form
-            class="chat-composer"
+            className="chat-composer"
             onSubmit={(event) => {
               event.preventDefault();
               void send();
@@ -2467,7 +2471,7 @@ function SessionDetail(props: {
               rows={2}
               value={draft}
               placeholder={`Reply to ${session.title}…`}
-              onInput={(event) => updateDraft((event.currentTarget as HTMLTextAreaElement).value)}
+              onChange={(event) => updateDraft((event.currentTarget as HTMLTextAreaElement).value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault();
@@ -2475,12 +2479,12 @@ function SessionDetail(props: {
                 }
               }}
             />
-            <div class="chat-composer-bar">
-              <span class={`composer-hint ${draftStatus === "error" ? "error" : ""}`}>
+            <div className="chat-composer-bar">
+              <span className={`composer-hint ${draftStatus === "error" ? "error" : ""}`}>
                 {draftStatusLabel(draftStatus)}
               </span>
               <button
-                class="btn primary small"
+                className="btn primary small"
                 type="submit"
                 disabled={sending || !draft.trim()}
               >
@@ -2536,20 +2540,20 @@ function isActivityMessage(message: Message): boolean {
 function TranscriptMessage(props: { message: Message }) {
   const message = props.message;
   return (
-    <article class={`chat-message ${message.role}`}>
-      <div class="chat-message-role">
+    <article className={`chat-message ${message.role}`}>
+      <div className="chat-message-role">
         <span>{message.role}</span>
         <time>{formatTime(message.createdAt)}</time>
-        {message.streaming ? <span class="streaming-label">streaming</span> : null}
+        {message.streaming ? <span className="streaming-label">streaming</span> : null}
       </div>
-      <div class="chat-message-parts">
+      <div className="chat-message-parts">
         {message.metadata?.error ? (
-          <div class="form-error" role="alert">
+          <div className="form-error" role="alert">
             Provider error: {formatJson(message.metadata.error)}
           </div>
         ) : null}
         {message.parts.length === 0 && !message.metadata?.error ? (
-          <div class="message-empty">No content</div>
+          <div className="message-empty">No content</div>
         ) : (
           message.parts.map((part, index) => (
             <MessagePartView part={part} key={index} />
@@ -2567,21 +2571,21 @@ function AgentActivity(props: { messages: Message[] }) {
   );
   const events = props.messages.reduce((total, message) => total + message.parts.length, 0);
   return (
-    <article class="chat-activity">
-      <details class="message-aux chat-activity-details">
+    <article className="chat-activity">
+      <details className="message-aux chat-activity-details">
         <summary>
-          <span class="message-aux-label">Agent activity</span>
-          <span class="message-aux-meta">
+          <span className="message-aux-label">Agent activity</span>
+          <span className="message-aux-meta">
             {props.messages.length} steps · {events} events
           </span>
-          {failed ? <span class="tool-status error">error</span> : null}
-          {working ? <span class="streaming-label">working</span> : null}
+          {failed ? <span className="tool-status error">error</span> : null}
+          {working ? <span className="streaming-label">working</span> : null}
         </summary>
-        <div class="chat-activity-body">
+        <div className="chat-activity-body">
           {props.messages.map((message) => (
-            <div class="activity-step" key={message.id}>
-              <div class="activity-step-time">{formatTime(message.createdAt)}</div>
-              <div class="chat-message-parts">
+            <div className="activity-step" key={message.id}>
+              <div className="activity-step-time">{formatTime(message.createdAt)}</div>
+              <div className="chat-message-parts">
                 {message.parts.map((part, index) => (
                   <MessagePartView part={part} key={index} />
                 ))}
@@ -2598,7 +2602,7 @@ function Markdown(props: { text: string }) {
   const html = useMemo(() => renderMarkdown(props.text), [props.text]);
   return (
     <div
-      class="message-markdown"
+      className="message-markdown"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -2611,12 +2615,12 @@ function MessagePartView(props: { part: MessagePart }) {
   }
   if (part.type === "reasoning") {
     return (
-      <details class="message-aux message-reasoning">
+      <details className="message-aux message-reasoning">
         <summary>
-          <span class="message-aux-label">Reasoning</span>
-          <span class="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
+          <span className="message-aux-label">Reasoning</span>
+          <span className="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
         </summary>
-        <div class="message-aux-body">
+        <div className="message-aux-body">
           <Markdown text={part.text} />
         </div>
       </details>
@@ -2624,21 +2628,21 @@ function MessagePartView(props: { part: MessagePart }) {
   }
   if (part.type === "tool") {
     return (
-      <details class="message-aux message-tool">
+      <details className="message-aux message-tool">
         <summary>
-          <span class="message-aux-label">{toolLabel(part.name)}</span>
-          <span class={`tool-status ${part.status}`}>{part.status}</span>
+          <span className="message-aux-label">{toolLabel(part.name)}</span>
+          <span className={`tool-status ${part.status}`}>{part.status}</span>
         </summary>
-        <div class="message-aux-body">
+        <div className="message-aux-body">
           {part.input !== undefined ? (
             <>
-              <span class="tool-section-label">Input</span>
+              <span className="tool-section-label">Input</span>
               <pre>{formatJson(part.input)}</pre>
             </>
           ) : null}
           {part.output !== undefined ? (
             <>
-              <span class="tool-section-label">Output</span>
+              <span className="tool-section-label">Output</span>
               <pre>{formatJson(part.output)}</pre>
             </>
           ) : null}
@@ -2649,9 +2653,9 @@ function MessagePartView(props: { part: MessagePart }) {
   if (part.type === "file") {
     const href = safeExternalURL(part.url);
     return (
-      <div class="message-file">
-        <span class="message-file-name">{part.name}</span>
-        {part.mimeType ? <span class="message-file-meta">{part.mimeType}</span> : null}
+      <div className="message-file">
+        <span className="message-file-name">{part.name}</span>
+        {part.mimeType ? <span className="message-file-meta">{part.mimeType}</span> : null}
         {href ? (
           <a href={href} target="_blank" rel="noreferrer">
             Open
@@ -2661,11 +2665,11 @@ function MessagePartView(props: { part: MessagePart }) {
     );
   }
   return (
-    <details class="message-aux message-unknown">
+    <details className="message-aux message-unknown">
       <summary>
-        <span class="message-aux-label">Unsupported content</span>
+        <span className="message-aux-label">Unsupported content</span>
       </summary>
-      <div class="message-aux-body">
+      <div className="message-aux-body">
         <pre>{formatJson(part.raw)}</pre>
       </div>
     </details>
@@ -2723,13 +2727,13 @@ function relativeTime(at: number): string {
 function Placeholder(props: { view: View; onBack: () => void }) {
   const item = VIEW_META[props.view];
   return (
-    <section class="hero placeholder">
+    <section className="hero placeholder">
       <div>
-        <p class="eyebrow">Phase {item.phase}</p>
+        <p className="eyebrow">Phase {item.phase}</p>
         <h2>{item.label} is next</h2>
         <p>{item.description} The Foundation shell is live; this screen will be wired to the hub in its phase.</p>
       </div>
-      <button class="btn small" type="button" onClick={props.onBack}>
+      <button className="btn small" type="button" onClick={props.onBack}>
         Back to Foundation
       </button>
     </section>
@@ -2738,9 +2742,9 @@ function Placeholder(props: { view: View; onBack: () => void }) {
 
 function Detail(props: { label: string; value: string }) {
   return (
-    <div class="detail">
+    <div className="detail">
       <span>{props.label}</span>
-      <strong class="mono">{props.value}</strong>
+      <strong className="mono">{props.value}</strong>
     </div>
   );
 }
