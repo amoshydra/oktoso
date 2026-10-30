@@ -54,10 +54,14 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   app.use("/api/v1/*", requestLimits());
 
   if (deps.config.cors.length > 0) {
+    const wildcard = deps.config.cors.includes("*");
+    if (wildcard) {
+      deps.logger.warn("CORS allows every origin; use this only for local testing");
+    }
     app.use(
       "*",
       cors({
-        origin: deps.config.cors,
+        origin: wildcard ? "*" : deps.config.cors,
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
         exposeHeaders: ["X-Request-Id"],
