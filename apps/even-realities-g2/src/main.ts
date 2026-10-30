@@ -40,6 +40,8 @@ interface AppState {
   sessionTitle?: string;
   chatMessages: Message[];
   chatLines: string[];
+  chatLineMessages: number[];
+  chatMessageCount: number;
   chatOffset: number;
   chatFollowBottom: boolean;
   replyOptions: ReplyOption[];
@@ -55,6 +57,8 @@ const state: AppState = {
   attention: [],
   chatMessages: [],
   chatLines: [],
+  chatLineMessages: [],
+  chatMessageCount: 0,
   chatOffset: 0,
   chatFollowBottom: false,
   replyOptions: [],
@@ -317,6 +321,8 @@ async function openChat(ref: string, title: string): Promise<void> {
   state.sessionTitle = title;
   state.chatMessages = [];
   state.chatLines = [];
+  state.chatLineMessages = [];
+  state.chatMessageCount = 0;
   state.chatOffset = 0;
   state.chatFollowBottom = false;
   lastChatScrollAt = 0;
@@ -341,6 +347,8 @@ async function loadChat(quiet: boolean): Promise<void> {
     const previousOffset = state.chatOffset;
     const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
     state.chatLines = built.lines;
+    state.chatLineMessages = built.lineMessages;
+    state.chatMessageCount = built.messageCount;
     const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
     if (!quiet) state.chatFollowBottom = true;
     state.chatOffset = quiet
@@ -376,6 +384,8 @@ function applyLiveMessage(message: Message): void {
   const previousLines = state.chatLines;
   const previousOffset = state.chatOffset;
   state.chatLines = built.lines;
+  state.chatLineMessages = built.lineMessages;
+  state.chatMessageCount = built.messageCount;
   const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
   state.chatOffset = state.chatFollowBottom
     ? nextMax
@@ -425,9 +435,17 @@ function hasReadableText(messages: Message[]): boolean {
   );
 }
 
-function buildChat(messages: Message[]): { lines: string[] } {
-  if (messages.length === 0) return { lines: ["No messages yet."] };
+function buildChat(messages: Message[]): {
+  lines: string[];
+  lineMessages: number[];
+  messageCount: number;
+} {
+  if (messages.length === 0) {
+    return { lines: ["No messages yet."], lineMessages: [0], messageCount: 0 };
+  }
   const lines: string[] = [];
+  const lineMessages: number[] = [];
+  let messageCount = 0;
   for (const message of messages) {
     const text = message.parts
       .filter((part) => part.type === "text")
@@ -435,12 +453,20 @@ function buildChat(messages: Message[]): { lines: string[] } {
       .join("\n")
       .trim();
     if (!text) continue;
-    lines.push(message.role.toUpperCase());
-    lines.push(...wrapText(text, 52, Number.MAX_SAFE_INTEGER));
-    lines.push("");
+    const messageIndex = messageCount;
+    messageCount += 1;
+    const push = (line: string) => {
+      lines.push(line);
+      lineMessages.push(messageIndex);
+    };
+    push(message.role.toUpperCase());
+    for (const line of wrapText(text, 52, Number.MAX_SAFE_INTEGER)) push(line);
+    push("");
   }
-  if (lines.length === 0) return { lines: ["No readable text."] };
-  return { lines };
+  if (lines.length === 0) {
+    return { lines: ["No readable text."], lineMessages: [0], messageCount: 0 };
+  }
+  return { lines, lineMessages, messageCount };
 }
 
 function chatView(): { header: string; body: string; footer: string } {
@@ -451,14 +477,26 @@ function chatView(): { header: string; body: string; footer: string } {
   const visible = state.chatLines.slice(offset, offset + CHAT_VISIBLE_LINES);
   const first = total === 0 ? 0 : offset + 1;
   const last = Math.min(total, offset + CHAT_VISIBLE_LINES);
-  const footer =
+  const visibleLast = Math.min(total - 1, offset + CHAT_VISIBLE_LINES - 1);
+  const firstMessage = state.chatLineMessages[offset];
+  const lastMessage = state.chatLineMessages[visibleLast];
+  const messageLabel =
+    firstMessage === undefined || lastMessage === undefined || state.chatMessageCount === 0
+      ? ""
+      : firstMessage === lastMessage
+        ? `M${firstMessage + 1}/${state.chatMessageCount}`
+        : `M${firstMessage + 1}-${lastMessage + 1}/${state.chatMessageCount}`;
+  const hint =
     total <= CHAT_VISIBLE_LINES
       ? "Swipe up/down · Back ×2"
       : offset >= maxOffset
-        ? `${first}-${last}/${total} · Swipe up`
+        ? "Swipe up"
         : offset === 0
-          ? `${first}-${last}/${total} · Swipe down`
-          : `${first}-${last}/${total} · Swipe`;
+          ? "Swipe down"
+          : "Swipe";
+  const footer = [`${first}-${last}/${total}`, messageLabel, hint]
+    .filter(Boolean)
+    .join(" · ");
   return {
     header: clampLine(state.sessionTitle ?? "Session", 40),
     body: visible.join("\n"),
