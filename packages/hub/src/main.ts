@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { JsonStateStore } from "@agent-hub/storage";
 import { createLogger, type LogLevel } from "./lib/logger";
+import { ensureConfig } from "./config/bootstrap";
 import { loadConfig } from "./config/load";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
@@ -21,13 +22,26 @@ function readArgument(name: string): string | undefined {
   return process.argv[index + 1];
 }
 
+const configArgument = readArgument("--config");
 const configPath =
-  readArgument("--config") ?? process.env.HUB_CONFIG ?? "./hub.config.json";
+  configArgument ?? process.env.HUB_CONFIG ?? "./hub.config.json";
+const explicitConfig = Boolean(configArgument || process.env.HUB_CONFIG);
 const logLevel = (process.env.LOG_LEVEL ?? "info") as LogLevel;
 const logger = createLogger({ level: logLevel });
 const startedAt = Date.now();
 
 try {
+  const bootstrapped = await ensureConfig(configPath, {
+    explicit: explicitConfig,
+    env: process.env,
+    logger,
+  });
+  if (bootstrapped.generatedToken) {
+    console.log(`Hub config created: ${configPath}`);
+    console.log(`Hub token: ${bootstrapped.generatedToken}`);
+    console.log("Add providers to the config, then restart the hub.");
+  }
+
   const config = await loadConfig(configPath);
   const stateFile = join(resolve(config.dataDir), "state.json");
   const store = await JsonStateStore.open({ filePath: stateFile });
