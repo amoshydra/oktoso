@@ -80,9 +80,26 @@ pnpm build
 HUB_TOKEN=... node dist/hub.js --config ./hub.config.json
 ```
 
-## Even G2 package
+## Even G2 URL hosting
 
-The committed `apps/even-realities-g2/app.json` contains only local and placeholder origins. Pass your own hub origin when packing; it is written to a temporary, ignored manifest and never committed:
+The hub can serve the glass app under a generic app prefix, alongside the web UI and API:
+
+```text
+http://localhost:8787/          web UI
+http://localhost:8787/api       hub API
+http://localhost:8787/apps/even-g2/
+```
+
+Build the hub, web UI, and hosted G2 app in one pass:
+
+```sh
+pnpm build:single-port
+node dist/hub.js --config ./hub.config.json
+```
+
+Load the glass app from `.../apps/even-g2/` and leave the Hub URL blank. The app uses the same origin for `/api`, so no CORS or separate Vite server is needed.
+
+The optional `.ehpk` flow still exists:
 
 ```sh
 pnpm --filter @agent-hub/even-realities-g2 build

@@ -17,6 +17,8 @@
     "build:hub": "tsup",
     "build:web": "pnpm --filter @agent-hub/web build",
     "build:even-g2": "pnpm --filter @agent-hub/even-realities-g2 build",
+    "build:even-g2:hosted": "pnpm --filter @agent-hub/even-realities-g2 run build:hosted",
+    "build:single-port": "pnpm build:hub && pnpm build:web && pnpm build:even-g2:hosted",
     "pack:even-g2": "pnpm --filter @agent-hub/even-realities-g2 run pack",
     "start": "node dist/hub.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",

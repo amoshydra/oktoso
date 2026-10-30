@@ -43,6 +43,7 @@ export interface AppDependencies {
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
+  appsRoot?: string;
 }
 
 export function createApp(deps: AppDependencies): Hono<AppEnv> {
@@ -89,13 +90,42 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     store: deps.store,
   });
 
+  if (deps.appsRoot) {
+    const appsRoot = resolve(deps.appsRoot);
+    app.get("/apps/:app", (c) =>
+      c.redirect(`/apps/${encodeURIComponent(c.req.param("app"))}/`, 308),
+    );
+    app.use(
+      "/apps/*",
+      serveStatic({
+        root: appsRoot,
+        rewriteRequestPath: (path) => path.replace(/^\/apps/, ""),
+      }),
+    );
+    app.get("/apps/:app/*", async (c, next) => {
+      const appID = c.req.param("app");
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(appID)) return next();
+      const leaf = c.req.path.slice(c.req.path.lastIndexOf("/") + 1);
+      if (leaf.includes(".")) return next();
+      const indexPath = join(appsRoot, appID, "index.html");
+      if (!existsSync(indexPath)) return next();
+      return c.html(await readFile(indexPath, "utf8"));
+    });
+    app.all("/apps/*", (c) => c.notFound());
+  }
+
   if (deps.webRoot) {
     const root = resolve(deps.webRoot);
     const indexPath = join(root, "index.html");
     if (existsSync(indexPath)) {
       app.use("*", serveStatic({ root }));
       app.get("*", async (c, next) => {
-        if (c.req.path.startsWith("/api/")) return next();
+        if (
+          c.req.path.startsWith("/api/") ||
+          c.req.path.startsWith("/apps/")
+        ) {
+          return next();
+        }
         const html = await readFile(indexPath, "utf8");
         return c.html(html);
       });

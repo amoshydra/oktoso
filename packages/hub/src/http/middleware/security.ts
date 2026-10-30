@@ -8,8 +8,12 @@ export function securityHeaders(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
-    c.header("X-Frame-Options", "DENY");
-    c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    // Device apps may be embedded by the Even Hub plugin loader. They are
+    // public static bundles; the API still requires a bearer token.
+    if (!c.req.path.startsWith("/apps/")) {
+      c.header("X-Frame-Options", "DENY");
+      c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    }
     await next();
   };
 }

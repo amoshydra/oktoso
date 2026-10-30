@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createApp } from "./app";
@@ -30,7 +30,7 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
-async function createTestApp(options: { store?: StateStore; cors?: string[] } = {}) {
+async function createTestApp(options: { store?: StateStore; cors?: string[]; appsRoot?: string } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
   const config = await loadConfig(
@@ -60,6 +60,7 @@ async function createTestApp(options: { store?: StateStore; cors?: string[] } = 
     replies,
     logger,
     startedAt: Date.now(),
+    appsRoot: options.appsRoot,
   });
   return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, fake };
 }
@@ -84,6 +85,42 @@ describe("hub app", () => {
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("serves device apps under /apps/<id>/ with per-app fallback", async () => {
+    const root = await tempRoot();
+    const appsRoot = join(root, "apps");
+    await mkdir(join(appsRoot, "even-g2", "assets"), { recursive: true });
+    await writeFile(
+      join(appsRoot, "even-g2", "index.html"),
+      "<!doctype html><title>G2 test app</title>",
+    );
+    await writeFile(
+      join(appsRoot, "even-g2", "assets", "app.js"),
+      "console.log('g2')",
+    );
+    const { app } = await createTestApp({ appsRoot });
+
+    const index = await app.request("/apps/even-g2/");
+    expect(index.status).toBe(200);
+    expect(await index.text()).toContain("G2 test app");
+    expect(index.headers.get("x-frame-options")).toBeNull();
+
+    const redirect = await app.request("/apps/even-g2");
+    expect(redirect.status).toBe(308);
+
+    const asset = await app.request("/apps/even-g2/assets/app.js");
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toContain("console.log");
+
+    const fallback = await app.request("/apps/even-g2/deep/route");
+    expect(fallback.status).toBe(200);
+    expect(await fallback.text()).toContain("G2 test app");
+
+    expect((await app.request("/apps/missing/")).status).toBe(404);
+    expect(
+      (await app.request("/apps/even-g2/assets/missing.js")).status,
+    ).toBe(404);
   });
 
   it("serves public health", async () => {

@@ -52,6 +52,11 @@ try {
     : existsSync(resolve("dist/web"))
       ? resolve("dist/web")
       : undefined;
+  const configuredAppsRoot = config.appsRoot
+    ? resolve(config.appsRoot)
+    : existsSync(resolve("dist/apps"))
+      ? resolve("dist/apps")
+      : undefined;
 
   const app = createApp({
     config,
@@ -66,6 +71,7 @@ try {
     logger,
     startedAt,
     webRoot: configuredWebRoot,
+    appsRoot: configuredAppsRoot,
   });
 
   const server = serve(
