@@ -39,7 +39,7 @@ Recommended defaults:
 | Contract source | Zod schemas in `packages/contracts`; generate OpenAPI | One source for validation, types, and the Rust-facing contract |
 | Persistence | JSON state store first, behind `StateStore`; optional `node:sqlite` adapter later | Portable, no native modules, enough for single-owner state |
 | Web client | React + Vite + TypeScript | Mature ecosystem, broad chat/UI libraries, future WebXR reuse |
-| Web server state | TanStack Query's React adapter | Cache, pagination, mutations, and invalidation are already solved |
+| Web server state | TanStack Query's React adapter (planned) | Cache, pagination, mutations, and invalidation are already solved |
 | Local web state | React state (`useState` / `useReducer`) | Selected session, filters, sheets, and transient UI |
 | SSE client | `fetch()` streaming, not `EventSource` | `EventSource` cannot send the `Authorization` header |
 | Provider style | Provider adapters behind one interface; capabilities decide UI | No provider-specific logic in the web client |
@@ -53,7 +53,7 @@ Why these two:
 - **Hono** is chosen for routing, middleware, streaming/SSE, and tests through `app.request`, while staying small and Web-Standards based. It is not a performance claim over raw `node:http`; it removes plumbing we would otherwise own.
 - **React** is chosen for ecosystem compatibility, especially chat runtimes such as assistant-ui and TanStack Query. The web client accepts the larger bundle because it is a self-hosted operator surface, not a bundle-sensitive embed. React is not a constraint on the API; the hub and client contract survive a framework change.
 
-Both are implementation choices, not part of the client contract. The OpenAPI/SSE boundary is what matters.
+Both are implementation choices, not part of the client contract. The OpenAPI/SSE boundary is what matters. React was adopted before any candidate chat runtime; assistant-ui and TanStack Query are options, not current dependencies.
 
 Runtime policy: Node 24 is the minimum supported floor. CI also runs Node 26, which becomes Active LTS on 2026-10-28. Do not target Node 22; it is in Maintenance LTS and reaches end of life in April 2027. Node 24 remains supported through April 2028, which is the safer Termux baseline while 26 packaging catches up.
 
@@ -626,7 +626,7 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
 ### Data flow
 
 - `HubClient` from `packages/client` owns HTTP, auth, errors, and SSE parsing.
-- TanStack Query owns server state: sessions, messages, attention, providers, options, search.
+- TanStack Query is planned to own server state: sessions, messages, attention, providers, options, search.
 - React state owns selection, filters, modals, and sheet state.
 - `event-sync.ts` maps hub events into query updates:
   - `message.delta` patches the active message;

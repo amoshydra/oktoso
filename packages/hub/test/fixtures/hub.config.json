@@ -1,0 +1,21 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "token": "${HUB_TOKEN}",
+  "dataDir": ".data",
+  "cors": [],
+  "providers": [
+    {
+      "id": "desktop-opencode",
+      "type": "opencode",
+      "name": "desktop-opencode",
+      "baseUrl": "http://127.0.0.1:4101",
+      "auth": {
+        "kind": "basic",
+        "username": "opencode",
+        "password": "${OPENCODE_PASSWORD}"
+      },
+      "enabled": true
+    }
+  ]
+}
