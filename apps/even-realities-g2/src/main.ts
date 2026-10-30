@@ -22,9 +22,15 @@ import {
   clampLine,
   frameSignature,
   pageChoices,
-  plainTextForGlass,
   wrapText,
 } from "@agent-hub/wearable-core";
+import {
+  activityForMessages,
+  buildChat,
+  initialViewport,
+  mergeChatMessages,
+  nextViewport,
+} from "./chat-model";
 
 const TOKEN_KEY = "agent-hub-even-g2-token";
 
@@ -740,32 +746,29 @@ async function loadChat(quiet: boolean): Promise<void> {
     const messages = await loadReadableMessages(ref);
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
     const previousIDs = new Set(state.chatMessages.map((message) => message.id));
-    const hasNewMessages = messages.some((message) => !previousIDs.has(message.id));
+    const newMessageID = messages.findLast(
+      (message) => !previousIDs.has(message.id),
+    )?.id;
     const previousLines = state.chatLines;
     const previousOffset = state.chatOffset;
-    const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
-    const wasAtBottom = previousOffset >= previousMax;
     state.chatMessages = mergeChatMessages(state.chatMessages, messages);
     const built = buildChat(state.chatMessages);
     state.chatLines = built.lines;
     state.chatLineMessages = built.lineMessages;
     state.chatMessageCount = built.messageCount;
     state.chatActivity = activityForMessages(state.chatMessages);
-    const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
-    if (!quiet) state.chatNewBelow = false;
-    if (quiet && hasNewMessages) {
-      if (wasAtBottom) {
-        state.chatOffset = Math.min(built.latestMessageStart, nextMax);
-        state.chatNewBelow = false;
-      } else {
-        state.chatOffset = Math.min(previousOffset, nextMax);
-        state.chatNewBelow = true;
-      }
-    } else {
-      state.chatOffset = quiet
-        ? Math.min(previousOffset, nextMax)
-        : Math.min(built.latestMessageStart, nextMax);
-    }
+    const viewport = quiet
+      ? nextViewport({
+          previousOffset,
+          previousLineCount: previousLines.length,
+          newBelow: state.chatNewBelow,
+          build: built,
+          visibleLines: CHAT_VISIBLE_LINES,
+          ...(newMessageID ? { newMessageID } : {}),
+        })
+      : initialViewport(built, CHAT_VISIBLE_LINES);
+    state.chatOffset = viewport.offset;
+    state.chatNewBelow = viewport.newBelow;
     state.error = undefined;
     const changed =
       previousLines.length !== state.chatLines.length ||
@@ -792,25 +795,22 @@ function applyLiveMessage(message: Message): void {
   const isNew = !state.chatMessages.some((item) => item.id === message.id);
   const previousLines = state.chatLines;
   const previousOffset = state.chatOffset;
-  const previousMax = Math.max(0, previousLines.length - CHAT_VISIBLE_LINES);
-  const wasAtBottom = previousOffset >= previousMax;
   state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
   const built = buildChat(state.chatMessages);
   state.chatLines = built.lines;
   state.chatLineMessages = built.lineMessages;
   state.chatMessageCount = built.messageCount;
   state.chatActivity = activityForMessages(state.chatMessages);
-  const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
-  if (isNew && wasAtBottom) {
-    state.chatOffset = Math.min(
-      built.messageStarts[message.id] ?? nextMax,
-      nextMax,
-    );
-    state.chatNewBelow = false;
-  } else {
-    state.chatOffset = Math.min(previousOffset, nextMax);
-    if (isNew) state.chatNewBelow = true;
-  }
+  const viewport = nextViewport({
+    previousOffset,
+    previousLineCount: previousLines.length,
+    newBelow: state.chatNewBelow,
+    build: built,
+    visibleLines: CHAT_VISIBLE_LINES,
+    ...(isNew ? { newMessageID: message.id } : {}),
+  });
+  state.chatOffset = viewport.offset;
+  state.chatNewBelow = viewport.newBelow;
   const changed =
     previousLines.length !== state.chatLines.length ||
     previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -818,18 +818,6 @@ function applyLiveMessage(message: Message): void {
     void updateChatView();
   }
   updatePhoneState();
-}
-
-function mergeChatMessages(
-  current: Message[],
-  incoming: Message[],
-): Message[] {
-  const byID = new Map(current.map((message) => [message.id, message]));
-  for (const message of incoming) byID.set(message.id, message);
-  return [...byID.values()].sort(
-    (left, right) =>
-      left.createdAt - right.createdAt || left.id.localeCompare(right.id),
-  );
 }
 
 async function loadReadableMessages(ref: string): Promise<Message[]> {
@@ -854,85 +842,6 @@ function hasReadableText(messages: Message[]): boolean {
   return messages.some((message) =>
     message.parts.some((part) => part.type === "text" && part.text.trim()),
   );
-}
-
-function buildChat(messages: Message[]): {
-  lines: string[];
-  lineMessages: number[];
-  messageStarts: Record<string, number>;
-  messageCount: number;
-  latestMessageStart: number;
-} {
-  if (messages.length === 0) {
-    return {
-      lines: ["No messages yet."],
-      lineMessages: [0],
-      messageStarts: {},
-      messageCount: 0,
-      latestMessageStart: 0,
-    };
-  }
-  const lines: string[] = [];
-  const lineMessages: number[] = [];
-  const messageStarts: Record<string, number> = {};
-  let messageCount = 0;
-  let latestMessageStart = 0;
-  for (const message of messages) {
-    const text = plainTextForGlass(
-      message.parts
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n"),
-    ).trim();
-    if (!text) continue;
-    const messageIndex = messageCount;
-    messageCount += 1;
-    const messageStart = lines.length;
-    messageStarts[message.id] = messageStart;
-    latestMessageStart = messageStart;
-    const push = (line: string) => {
-      lines.push(line);
-      lineMessages.push(messageIndex);
-    };
-    push(message.role.toUpperCase());
-    for (const line of wrapText(text, 52, Number.MAX_SAFE_INTEGER)) push(line);
-    push("");
-  }
-  if (lines.length === 0) {
-    return {
-      lines: ["No readable text."],
-      lineMessages: [0],
-      messageStarts: {},
-      messageCount: 0,
-      latestMessageStart: 0,
-    };
-  }
-  return {
-    lines,
-    lineMessages,
-    messageStarts,
-    messageCount,
-    latestMessageStart,
-  };
-}
-
-function activityForMessages(messages: Message[]): string {
-  const last = [...messages].reverse().find((message) => message.role === "assistant");
-  if (!last) return "";
-  if (last.metadata?.error) return "Error";
-  const tools = last.parts.filter((part) => part.type === "tool");
-  if (tools.some((part) => part.type === "tool" && part.status === "error")) {
-    return "Tool error";
-  }
-  if (last.streaming) {
-    return tools.length > 0
-      ? `Working · ${tools.length} step${tools.length === 1 ? "" : "s"}`
-      : "Working";
-  }
-  if (tools.length > 0) {
-    return `${tools.length} tool step${tools.length === 1 ? "" : "s"}`;
-  }
-  return last.parts.some((part) => part.type === "reasoning") ? "Reasoning" : "";
 }
 
 function chatView(): { header: string; body: string; footer: string } {
