@@ -13,6 +13,7 @@ import type {
   Attention,
   Message,
   ReplyOption,
+  Session,
 } from "@agent-hub/contracts";
 import { HubClient, messageFromHubEvent } from "@agent-hub/client";
 import {
@@ -26,7 +27,9 @@ const URL_KEY = "agent-hub-even-g2-url";
 
 type Screen =
   | "pairing"
+  | "home"
   | "inbox"
+  | "sessions"
   | "attention"
   | "chat"
   | "reply"
@@ -35,6 +38,9 @@ type Screen =
 interface AppState {
   screen: Screen;
   attention: Attention[];
+  attentionTotal: number;
+  sessions: Session[];
+  returnScreen: Screen;
   selectedAttention?: Attention;
   sessionRef?: string;
   sessionTitle?: string;
@@ -55,6 +61,9 @@ interface AppState {
 const state: AppState = {
   screen: "pairing",
   attention: [],
+  attentionTotal: 0,
+  sessions: [],
+  returnScreen: "home",
   chatMessages: [],
   chatLines: [],
   chatLineMessages: [],
@@ -149,6 +158,8 @@ async function connect(): Promise<void> {
     log("Hub connected");
     startEventStream();
     await refreshInbox();
+    state.screen = "home";
+    render();
   } catch (error) {
     client = undefined;
     setConnection("Connection failed", true);
@@ -173,6 +184,8 @@ async function restoreConnection(): Promise<void> {
     log("Restored hub session");
     startEventStream();
     await refreshInbox();
+    state.screen = "home";
+    render();
   } catch (error) {
     client = undefined;
     setConnection("Reconnect in phone", true);
@@ -239,6 +252,22 @@ function scheduleEventRefresh(action: () => void | Promise<void>): void {
   }, 500);
 }
 
+async function openSessions(): Promise<void> {
+  if (!client) return;
+  try {
+    const page = await client.sessions({ limit: 5 });
+    state.sessions = page.data;
+    state.error = undefined;
+    state.screen = "sessions";
+    render();
+  } catch (error) {
+    state.error = errorMessage(error);
+    state.screen = "sessions";
+    render();
+    log(`Session list failed: ${state.error}`);
+  }
+}
+
 async function refreshInbox(): Promise<void> {
   if (!client) {
     render();
@@ -246,23 +275,24 @@ async function refreshInbox(): Promise<void> {
   }
   const previousScreen = state.screen;
   const previousSignature = attentionListSignature(state.attention);
+  const previousTotal = state.attentionTotal;
   const previousError = state.error;
   try {
     const page = await client.attention();
+    state.attentionTotal = page.data.length;
     state.attention = page.data.slice(0, 5);
     state.error = undefined;
-    if (state.screen === "pairing" || state.screen === "inbox") {
-      state.screen = "inbox";
-    }
+    if (state.screen === "pairing") state.screen = "home";
     const changed =
       previousScreen !== state.screen ||
       previousSignature !== attentionListSignature(state.attention) ||
+      previousTotal !== state.attentionTotal ||
       Boolean(previousError) !== false;
     updatePhoneState();
     if (changed) render();
   } catch (error) {
     state.error = errorMessage(error);
-    if (state.screen === "pairing") state.screen = "inbox";
+    if (state.screen === "pairing") state.screen = "home";
     const changed =
       previousScreen !== state.screen ||
       previousError !== state.error;
@@ -300,7 +330,7 @@ async function performAttention(index: number): Promise<void> {
   const action = attentionActions(item)[index];
   if (!action) return;
   if (action.id === "open_chat") {
-    await openChat(item.sessionRef, item.title);
+    await openChat(item.sessionRef, item.title, "inbox");
     return;
   }
   if (!client) return;
@@ -315,10 +345,15 @@ async function performAttention(index: number): Promise<void> {
   }
 }
 
-async function openChat(ref: string, title: string): Promise<void> {
+async function openChat(
+  ref: string,
+  title: string,
+  origin: Screen = "inbox",
+): Promise<void> {
   chatLoadSequence += 1;
   state.sessionRef = ref;
   state.sessionTitle = title;
+  state.returnScreen = origin;
   state.chatMessages = [];
   state.chatLines = [];
   state.chatLineMessages = [];
@@ -731,15 +766,30 @@ async function performChoice(index: number): Promise<void> {
 }
 
 function back(): void {
-  if (state.screen === "attention" || state.screen === "chat") {
+  if (state.screen === "chat") {
+    state.screen = state.returnScreen;
+    state.selectedAttention = undefined;
+    state.notice = undefined;
+    render();
+    void refreshInbox();
+    return;
+  }
+  if (state.screen === "reply" || state.screen === "choices") {
+    state.screen = "chat";
+    state.notice = undefined;
+    render();
+    return;
+  }
+  if (state.screen === "attention") {
     state.screen = "inbox";
     state.selectedAttention = undefined;
     state.notice = undefined;
     render();
     return;
   }
-  if (state.screen === "reply" || state.screen === "choices") {
-    state.screen = "chat";
+  if (state.screen === "inbox" || state.screen === "sessions") {
+    state.screen = "home";
+    state.selectedAttention = undefined;
     state.notice = undefined;
     render();
   }
@@ -747,6 +797,24 @@ function back(): void {
 
 function handleListClick(index: number): void {
   switch (state.screen) {
+    case "home":
+      if (index === 0) {
+        state.screen = "inbox";
+        render();
+        void refreshInbox();
+      } else if (index === 1) {
+        void openSessions();
+      } else if (index === 2 && state.sessionRef) {
+        void openChat(state.sessionRef, state.sessionTitle ?? "Session", "home");
+      } else if (state.error) {
+        void refreshInbox();
+      }
+      break;
+    case "sessions": {
+      const session = state.sessions[index];
+      if (session) void openChat(session.ref, session.title, "sessions");
+      break;
+    }
     case "inbox":
       if (state.attention.length === 0 && state.error) {
         void refreshInbox();
@@ -821,6 +889,56 @@ function render(): void {
     const body = "AGENT HUB\n\nPair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto enter the hub token.";
     if (setPreview("AGENT HUB", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
+    }
+    return;
+  }
+  if (state.screen === "home") {
+    const items = [
+      `Inbox · ${state.attentionTotal}`,
+      "Recent sessions",
+      ...(state.sessionTitle
+        ? [`Current · ${clampLine(state.sessionTitle, 44)}`]
+        : []),
+      ...(state.error ? ["Retry connection"] : []),
+    ];
+    if (
+      setPreview(
+        "AGENT HUB",
+        items.join("\n"),
+        "Tap open   Swipe move",
+        items,
+      )
+    ) {
+      void showPage(
+        listPage("AGENT HUB", items, "Tap open   Swipe move"),
+      );
+    }
+    return;
+  }
+  if (state.screen === "sessions") {
+    const items = state.sessions.length
+      ? state.sessions.map((session) =>
+          clampLine(
+            `${session.unread ? "UNREAD" : session.status.toUpperCase()} · ${session.title}`,
+            54,
+          ),
+        )
+      : [state.error ? "Offline · back to retry" : "No recent sessions"];
+    if (
+      setPreview(
+        `RECENT ${state.sessions.length}`,
+        items.join("\n"),
+        "Tap open   Swipe move   Back ×2",
+        items,
+      )
+    ) {
+      void showPage(
+        listPage(
+          `RECENT ${state.sessions.length}`,
+          items,
+          "Tap open   Swipe move   Back ×2",
+        ),
+      );
     }
     return;
   }
@@ -1211,8 +1329,11 @@ async function refreshCurrent(): Promise<void> {
   if (!client) return;
   if (state.screen === "chat" && state.sessionRef) {
     await loadChat(false);
+  } else if (state.screen === "sessions") {
+    await openSessions();
   } else {
     await refreshInbox();
+    if (state.screen === "home") render();
   }
 }
 
@@ -1258,7 +1379,7 @@ async function init(): Promise<void> {
     bridge.onEvenHubEvent(onEvenEvent);
     pollTimer = setInterval(() => {
       if (!client) return;
-      if (state.screen === "inbox") {
+      if (state.screen === "inbox" || state.screen === "home") {
         void refreshInbox();
       } else if (state.screen === "chat" && state.sessionRef) {
         void loadChat(true);
