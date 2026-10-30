@@ -332,6 +332,7 @@ async function openChat(ref: string, title: string): Promise<void> {
   state.notice = undefined;
   updatePhoneState();
   await loadChat(false);
+  if (client) void client.markRead(ref).catch(() => undefined);
 }
 
 async function loadChat(quiet: boolean): Promise<void> {
