@@ -16,6 +16,7 @@ import type {
 import {
   HubClient,
   HubError,
+  messageFromHubEvent,
   type ConnectionStatus,
 } from "@agent-hub/client";
 import { renderMarkdown } from "./markdown";
@@ -246,7 +247,7 @@ export function App() {
           setHealth((current) =>
             current ? { ...current, eventSeq: Math.max(current.eventSeq, event.seq) } : current,
           );
-          setEvents((current) => [event, ...current].slice(0, 12));
+          setEvents((current) => [event, ...current].slice(0, 100));
           if (event.type === "resync") {
             void loadSnapshot(client).catch(() => undefined);
           }
@@ -528,7 +529,7 @@ export function App() {
                       </div>
                     ) : (
                       <div className="event-list">
-                        {events.map((event) => (
+                        {events.slice(0, 12).map((event) => (
                           <div className="event-row" key={`${event.seq}-${event.type}`}>
                             <span className="event-seq">#{event.seq}</span>
                             <span className="event-type">{event.type}</span>
@@ -1074,7 +1075,13 @@ function InboxView(props: {
     return () => clearInterval(timer);
   }, [props.client]);
 
-  const liveSeq = props.events[0]?.seq ?? 0;
+  const liveSeq =
+    props.events.find(
+      (event) =>
+        event.type.startsWith("session.") ||
+        event.type.startsWith("attention.") ||
+        event.type === "resync",
+    )?.seq ?? 0;
   useEffect(() => {
     if (!liveSeq) return;
     const timer = setTimeout(() => void load(true), 600);
@@ -1658,7 +1665,11 @@ function SessionsView(props: {
     void load();
   }, [props.client]);
 
-  const liveSeq = props.events[0]?.seq ?? 0;
+  const liveSeq =
+    props.events.find(
+      (event) =>
+        event.type.startsWith("session.") || event.type === "resync",
+    )?.seq ?? 0;
   useEffect(() => {
     if (!liveSeq) return;
     const timer = setTimeout(() => void load(), 500);
@@ -2146,6 +2157,8 @@ function SessionDetail(props: {
   const transcriptRef = useRef<HTMLElement | null>(null);
   const pendingScroll = useRef<PendingScroll | undefined>(undefined);
   const messagesRef = useRef<Message[]>([]);
+  const processedSeq = useRef(props.events[0]?.seq ?? 0);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   messagesRef.current = messages;
 
   const getScroller = () =>
@@ -2169,18 +2182,7 @@ function SessionDetail(props: {
       const latest = [...page.data].reverse();
       const stick = forceBottom || nearBottom();
       setSession(nextSession);
-      setMessages((current) => {
-        if (current.length === 0) return latest;
-        const latestByID = new Map(latest.map((message) => [message.id, message]));
-        const merged = current.map((message) => latestByID.get(message.id) ?? message);
-        const seen = new Set(merged.map((message) => message.id));
-        for (const message of latest) {
-          if (seen.has(message.id)) continue;
-          seen.add(message.id);
-          merged.push(message);
-        }
-        return merged;
-      });
+      setMessages((current) => mergeMessages(current, latest));
       setOlderCursor((current) => current ?? page.cursor.next);
       if (stick) pendingScroll.current = { mode: "bottom" };
     },
@@ -2279,15 +2281,50 @@ function SessionDetail(props: {
     };
   }, [props.client, props.sessionRef, refreshLatest]);
 
-  const liveSeq =
-    props.events.find((event) => event.sessionRef === props.sessionRef)?.seq ?? 0;
   useEffect(() => {
-    if (!liveSeq) return;
-    const timer = setTimeout(() => {
-      void refreshLatest().catch(() => undefined);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [liveSeq, refreshLatest]);
+    const fresh = props.events.filter((event) => event.seq > processedSeq.current);
+    if (fresh.length === 0) return;
+    processedSeq.current = Math.max(
+      processedSeq.current,
+      ...fresh.map((event) => event.seq),
+    );
+
+    const upserts: Message[] = [];
+    let needsRefresh = false;
+    for (const event of fresh) {
+      if (event.type === "resync") {
+        needsRefresh = true;
+        continue;
+      }
+      if (event.sessionRef !== props.sessionRef) continue;
+      if (event.type === "message.created" || event.type === "message.updated") {
+        const message = messageFromHubEvent(event);
+        if (message) upserts.push(message);
+        continue;
+      }
+      if (event.type === "session.updated" || event.type === "message.delta") {
+        needsRefresh = true;
+      }
+    }
+
+    if (upserts.length > 0) {
+      setMessages((current) => mergeMessages(current, upserts));
+    }
+    if (needsRefresh) {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => {
+        refreshTimer.current = undefined;
+        void refreshLatest().catch(() => undefined);
+      }, 400);
+    }
+  }, [props.events, props.sessionRef, refreshLatest]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const pending = pendingScroll.current;
@@ -2473,6 +2510,16 @@ function SessionDetail(props: {
         </>
       ) : null}
     </>
+  );
+}
+
+function mergeMessages(current: Message[], incoming: Message[]): Message[] {
+  if (incoming.length === 0) return current;
+  const byID = new Map(current.map((message) => [message.id, message]));
+  for (const message of incoming) byID.set(message.id, message);
+  return [...byID.values()].sort(
+    (left, right) =>
+      left.createdAt - right.createdAt || left.id.localeCompare(right.id),
   );
 }
 

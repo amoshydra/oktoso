@@ -6,7 +6,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, and the newest-first transcript, and the Even G2 client has its first inbox/chat/reply slice. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
+Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has its first inbox/chat/reply slice. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
 
 ## Documents
 

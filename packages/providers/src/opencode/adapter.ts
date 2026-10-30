@@ -75,6 +75,27 @@ interface OpenCodeMessagesResponse {
   cursor: { previous?: string | null; next?: string | null };
 }
 
+interface OpenCodeEventInfo {
+  id?: string;
+  sessionID?: string;
+  role?: string;
+  type?: string;
+  text?: string;
+  time?: { created?: number; completed?: number };
+  content?: Array<Record<string, unknown>>;
+  error?: unknown;
+}
+
+interface OpenCodeLiveMessage {
+  id: string;
+  sessionRef: string;
+  role: Message["role"];
+  createdAt: number;
+  completedAt?: number;
+  parts: Map<string, MessagePart>;
+  error?: unknown;
+}
+
 interface OpenCodePermissionRequest {
   id: string;
   sessionID: string;
@@ -136,6 +157,8 @@ export class OpenCodeAdapter implements ProviderAdapter {
   readonly capabilities = openCodeCapabilities;
   private readonly baseUrl: string;
   private readonly authorization: string;
+  private readonly liveMessages = new Map<string, OpenCodeLiveMessage>();
+  private readonly createdMessages = new Set<string>();
 
   constructor(options: OpenCodeAdapterOptions) {
     this.id = options.id;
@@ -432,6 +455,8 @@ export class OpenCodeAdapter implements ProviderAdapter {
     return () => {
       controller.abort();
       signal.removeEventListener("abort", abort);
+      this.liveMessages.clear();
+      this.createdMessages.clear();
     };
   }
 
@@ -455,20 +480,80 @@ export class OpenCodeAdapter implements ProviderAdapter {
         await readSse(
           response.body,
           (message) => {
-            let parsed: { type?: unknown; data?: unknown };
+            let parsed: { type?: unknown; data?: unknown; properties?: unknown };
             try {
-              parsed = JSON.parse(message.data) as { type?: unknown; data?: unknown };
+              parsed = JSON.parse(message.data) as typeof parsed;
             } catch {
               return;
             }
             if (typeof parsed.type !== "string") return;
-            const sessionID = findSessionID(parsed.data);
+
+            const payload =
+              asRecord(parsed.properties) ?? asRecord(parsed.data);
+            if (!payload) return;
+            const sessionID = findSessionID(payload);
             if (!sessionID) return;
+
+            const sessionRef = `${this.id}:${sessionID}`;
+            const at = Date.now();
+
+            if (
+              parsed.type === "message.updated" ||
+              parsed.type === "message.created"
+            ) {
+              const info =
+                asRecord(payload.info) ??
+                asRecord(payload.message) ??
+                payload;
+              const messageID =
+                stringValue(info.id) ?? stringValue(payload.messageID);
+              if (!messageID) return;
+
+              const live = this.upsertLiveMessage(
+                sessionRef,
+                messageID,
+                info,
+                payload,
+              );
+              this.emitLiveMessage(onEvent, live, at);
+              return;
+            }
+
+            if (parsed.type === "message.part.updated") {
+              const part = asRecord(payload.part) ?? payload;
+              const messageID =
+                stringValue(part.messageID) ??
+                stringValue(payload.messageID);
+              if (!messageID) return;
+
+              const live = this.upsertLiveMessage(
+                sessionRef,
+                messageID,
+                asRecord(payload.info),
+                payload,
+              );
+              this.upsertLivePart(live, part);
+              this.emitLiveMessage(onEvent, live, at);
+              return;
+            }
+
+            // Some OpenCode versions only publish deltas without full parts.
+            // Fall back to a session refresh so the client does not miss them.
+            if (parsed.type === "message.part.delta") {
+              onEvent({
+                type: "session.updated",
+                sessionRef,
+                data: { eventType: parsed.type },
+                at,
+              });
+              return;
+            }
+
             onEvent({
               type: "session.updated",
-              sessionRef: `${this.id}:${sessionID}`,
+              sessionRef,
               data: { eventType: parsed.type },
-              at: Date.now(),
+              at,
             });
           },
           signal,
@@ -479,6 +564,92 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
       await delay(2_000, signal);
     }
+  }
+
+  private upsertLiveMessage(
+    sessionRef: string,
+    messageID: string,
+    info: Record<string, unknown> | undefined,
+    payload: Record<string, unknown>,
+  ): OpenCodeLiveMessage {
+    const key = `${sessionRef}:${messageID}`;
+    let live = this.liveMessages.get(key);
+    if (!live) {
+      live = {
+        id: messageID,
+        sessionRef,
+        role: "assistant",
+        createdAt: 0,
+        parts: new Map(),
+      };
+      this.liveMessages.set(key, live);
+      if (this.liveMessages.size > 1_000) {
+        const oldest = this.liveMessages.keys().next().value;
+        if (oldest) this.liveMessages.delete(oldest);
+      }
+    }
+
+    if (info) {
+      live.role = roleFromInfo(info) ?? live.role;
+      const created = numberValue(info.time, "created") ?? numberValue(info, "createdAt");
+      if (created !== undefined) live.createdAt = created;
+      const completed =
+        numberValue(info.time, "completed") ?? numberValue(info, "completedAt");
+      if (completed !== undefined) live.completedAt = completed;
+      if (info.error !== undefined) live.error = info.error;
+      if (typeof info.text === "string" && info.text) {
+        live.parts.set("text", { type: "text", text: info.text });
+      }
+      const content = Array.isArray(info.content)
+        ? info.content
+        : Array.isArray(payload.parts)
+          ? payload.parts
+          : undefined;
+      if (content) {
+        content.forEach((part, index) => {
+          if (asRecord(part)) this.upsertLivePart(live!, part as Record<string, unknown>, index);
+        });
+      }
+    }
+
+    if (!live.createdAt) live.createdAt = Date.now();
+    return live;
+  }
+
+  private upsertLivePart(
+    live: OpenCodeLiveMessage,
+    raw: Record<string, unknown>,
+    index?: number,
+  ): void {
+    const part = toMessagePart(raw);
+    if (part.type === "unknown") return;
+    const id =
+      stringValue(raw.id) ??
+      `${part.type}:${index ?? live.parts.size}`;
+    live.parts.set(id, part);
+  }
+
+  private emitLiveMessage(
+    onEvent: Parameters<NonNullable<ProviderAdapter["subscribe"]>>[0],
+    live: OpenCodeLiveMessage,
+    at: number,
+  ): void {
+    const key = `${live.sessionRef}:${live.id}`;
+    const type = this.createdMessages.has(key)
+      ? "message.updated"
+      : "message.created";
+    this.createdMessages.add(key);
+    if (this.createdMessages.size > 2_000) {
+      const oldest = this.createdMessages.values().next().value;
+      if (oldest) this.createdMessages.delete(oldest);
+    }
+
+    onEvent({
+      type,
+      sessionRef: live.sessionRef,
+      data: { message: toLiveMessage(live) },
+      at,
+    });
   }
 
   private permissionAttention(request: OpenCodePermissionRequest): Attention {
@@ -633,30 +804,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
     if (raw.type !== "assistant") return undefined;
 
-    const parts: MessagePart[] = (raw.content ?? []).map((part) => {
-      const type = part.type;
-      if (type === "text") {
-        return { type: "text", text: String(part.text ?? "") };
-      }
-      if (type === "reasoning") {
-        return { type: "reasoning", text: String(part.text ?? "") };
-      }
-      if (type === "tool") {
-        const state =
-          part.state && typeof part.state === "object"
-            ? (part.state as Record<string, unknown>)
-            : {};
-        return {
-          type: "tool",
-          id: String(part.id ?? ""),
-          name: String(part.name ?? "tool"),
-          status: String(state.status ?? "unknown"),
-          input: state.input,
-          output: state.content ?? state.error,
-        };
-      }
-      return { type: "unknown", raw: part };
-    });
+    const parts: MessagePart[] = (raw.content ?? []).map((part) =>
+      toMessagePart(part),
+    );
 
     return {
       id: raw.id,
@@ -815,4 +965,80 @@ async function delay(ms: number, signal: AbortSignal): Promise<void> {
       { once: true },
     );
   });
+}
+
+function toMessagePart(raw: Record<string, unknown>): MessagePart {
+  const type = raw.type;
+  if (type === "text") {
+    return { type: "text", text: String(raw.text ?? "") };
+  }
+  if (type === "reasoning") {
+    return { type: "reasoning", text: String(raw.text ?? "") };
+  }
+  if (type === "tool") {
+    const state = asRecord(raw.state) ?? {};
+    return {
+      type: "tool",
+      id: String(raw.id ?? raw.callID ?? ""),
+      name: String(raw.name ?? raw.tool ?? "tool"),
+      status: String(state.status ?? raw.status ?? "unknown"),
+      input: state.input,
+      output: state.content ?? state.output ?? state.error,
+    };
+  }
+  if (type === "file") {
+    const name =
+      stringValue(raw.name) ??
+      stringValue(raw.filename) ??
+      stringValue(raw.title) ??
+      "File";
+    return {
+      type: "file",
+      name,
+      ...(typeof raw.mimeType === "string" ? { mimeType: raw.mimeType } : {}),
+      ...(typeof raw.url === "string" ? { url: raw.url } : {}),
+    };
+  }
+  return { type: "unknown", raw };
+}
+
+function toLiveMessage(live: OpenCodeLiveMessage): Message {
+  return {
+    id: live.id,
+    sessionRef: live.sessionRef,
+    role: live.role,
+    parts: [...live.parts.values()],
+    createdAt: live.createdAt,
+    ...(live.completedAt !== undefined ? { completedAt: live.completedAt } : {}),
+    ...(live.role === "assistant" && live.completedAt === undefined
+      ? { streaming: true }
+      : {}),
+    ...(live.error !== undefined ? { metadata: { error: live.error } } : {}),
+  };
+}
+
+function roleFromInfo(info: Record<string, unknown>): Message["role"] | undefined {
+  const role = info.role ?? info.type;
+  if (role === "user" || role === "assistant" || role === "system" || role === "tool") {
+    return role;
+  }
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberValue(
+  record: unknown,
+  key: string,
+): number | undefined {
+  const value = asRecord(record)?.[key];
+  return typeof value === "number" ? value : undefined;
 }

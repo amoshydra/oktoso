@@ -454,7 +454,7 @@ Attention IDs must be stable and URL-safe. Keep the native request ID in the pay
 - Heartbeat with a comment every 15 seconds.
 - Send `retry:` once at connection start.
 - Bound each subscriber queue. A slow client gets `resync` and is disconnected.
-- Coalesce high-volume message deltas for a short frame (for example 50ms) before fan-out.
+- Coalesce high-volume message snapshots for a short frame (for example 50ms) before fan-out.
 - The browser uses `fetch()` with `Authorization` and an `AbortController`, not `EventSource`.
 - Token must never travel in an SSE URL.
 
@@ -629,9 +629,9 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
 - TanStack Query is planned to own server state: sessions, messages, attention, providers, options, search.
 - React state owns selection, filters, modals, and sheet state.
 - `event-sync.ts` maps hub events into query updates:
-  - `message.delta` patches the active message;
-  - `message.created/updated` updates the message page;
-  - `session.updated` updates the session and list;
+  - `message.created/updated` upserts a normalized message snapshot into the active page;
+  - `message.delta` falls back to a page refresh when only deltas are available;
+  - `session.updated` updates the session and list and reconciles the page;
   - `attention.*` updates the inbox;
   - `provider.status` updates provider cards;
   - `resync` invalidates all server state.

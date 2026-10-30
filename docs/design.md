@@ -493,9 +493,11 @@ Accept: text/event-stream
 
 ```text
 id: 1043
-event: message.delta
-data: {"seq":1043,"type":"message.delta","sessionRef":"desktop-opencode:ses_123","data":{"messageID":"msg_2","part":"text","delta":"The race comes from"}}
+event: message.updated
+data: {"seq":1043,"type":"message.updated","sessionRef":"desktop-opencode:ses_123","data":{"message":{"id":"msg_2","sessionRef":"desktop-opencode:ses_123","role":"assistant","parts":[{"type":"text","text":"The race comes from"}],"createdAt":1792970020000,"streaming":true}}}
 ```
+
+Message events carry a normalized message snapshot. Providers that only expose deltas are coalesced into snapshots before fan-out.
 
 The buffer keeps a bounded number of events. Clients that fall behind fetch a session snapshot and resume from the latest `seq`.
 
