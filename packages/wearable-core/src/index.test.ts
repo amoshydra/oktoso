@@ -9,6 +9,22 @@ describe("wearable core", () => {
     expect(clampLine("a long title here", 8)).toBe("a long …");
   });
 
+  it("preserves newlines and paragraph breaks", () => {
+    expect(wrapText("first line\nsecond line", 40, 10)).toEqual([
+      "first line",
+      "second line",
+    ]);
+    expect(wrapText("para one\n\npara two", 40, 10)).toEqual([
+      "para one",
+      "",
+      "para two",
+    ]);
+    expect(wrapText("windows\r\nline", 40, 10)).toEqual([
+      "windows",
+      "line",
+    ]);
+  });
+
   it("extracts numbered and bulleted choices", () => {
     expect(
       parseNumberedChoices("1. Add retry\n- Use fallback\n2) Explain"),

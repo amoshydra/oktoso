@@ -12,33 +12,49 @@ export function wrapText(
   maxCharactersPerLine: number,
   maxLines: number,
 ): string[] {
-  const words = value.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const normalized = value.replace(/\r\n?/g, "\n").replace(/\t/g, "    ");
   const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    if (!line) {
-      line = word;
+
+  for (const rawLine of normalized.split("\n")) {
+    const text = rawLine.replace(/ +/g, " ").trim();
+    if (!text) {
+      if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
       continue;
     }
-    if (line.length + 1 + word.length <= maxCharactersPerLine) {
-      line += ` ${word}`;
-    } else {
-      lines.push(line);
-      line = word;
-      if (lines.length >= maxLines) break;
+
+    let line = "";
+    for (const rawWord of text.split(" ")) {
+      let word = rawWord;
+      while (word.length > maxCharactersPerLine) {
+        if (line) {
+          lines.push(line);
+          line = "";
+        }
+        lines.push(word.slice(0, maxCharactersPerLine));
+        word = word.slice(maxCharactersPerLine);
+      }
+      if (!word) continue;
+      if (!line) {
+        line = word;
+      } else if (line.length + 1 + word.length <= maxCharactersPerLine) {
+        line += ` ${word}`;
+      } else {
+        lines.push(line);
+        line = word;
+      }
     }
+    if (line) lines.push(line);
   }
-  if (lines.length < maxLines && line) lines.push(line);
-  if (lines.length > maxLines) lines.length = maxLines;
-  if (lines.length === maxLines) {
-    const joined = lines.join(" ");
-    if (joined.length < value.replace(/\s+/g, " ").trim().length) {
-      const last = lines[maxLines - 1] ?? "";
-      lines[maxLines - 1] =
-        last.length >= maxCharactersPerLine
-          ? `${last.slice(0, Math.max(0, maxCharactersPerLine - 1))}…`
-          : `${last}…`;
-    }
+
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  const truncated = lines.length > maxLines;
+  if (truncated) lines.length = Math.max(0, maxLines);
+  if (truncated && maxLines > 0) {
+    const last = lines[maxLines - 1] ?? "";
+    lines[maxLines - 1] =
+      last.length >= maxCharactersPerLine
+        ? `${last.slice(0, Math.max(0, maxCharactersPerLine - 1))}…`
+        : `${last}…`;
   }
   return lines;
 }
