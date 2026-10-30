@@ -94,8 +94,10 @@ Build the hub, web UI, and hosted G2 app in one pass:
 
 ```sh
 pnpm build:single-port
-node dist/hub.js --config ./hub.config.json
+pnpm start:local
 ```
+
+`start:local` loads `.env.local`, uses the dev provider config, binds `0.0.0.0:8787`, and starts the built hub. For a real production config, use `HUB_CONFIG=./hub.config.json node dist/hub.js` instead.
 
 Load the glass app from `.../apps/even-g2/` and enter only the token. The app uses the same origin for `/api`, so no CORS or separate Vite server is needed.
 

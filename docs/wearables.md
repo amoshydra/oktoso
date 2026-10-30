@@ -52,8 +52,10 @@ For hardware testing without packaging, load the built app from the hub:
 
 ```sh
 pnpm build:single-port
-node dist/hub.js --config ./hub.config.json
+pnpm start:local
 ```
+
+`start:local` uses `.env.local` and the dev provider config. For production, use `HUB_CONFIG=./hub.config.json node dist/hub.js`.
 
 The URL is:
 
