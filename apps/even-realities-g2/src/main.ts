@@ -73,7 +73,7 @@ let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let storedBaseURL = localStorage.getItem(URL_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 const CHAT_VISIBLE_LINES = 6;
-const CHAT_SCROLL_BURST_MS = 800;
+const CHAT_SCROLL_BURST_MS = 500;
 let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
@@ -553,15 +553,13 @@ function scrollChat(direction: -1 | 1): void {
   const now = Date.now();
   chatScrollBurst =
     now - lastChatScrollAt <= CHAT_SCROLL_BURST_MS
-      ? Math.min(chatScrollBurst + 1, 3)
+      ? Math.min(chatScrollBurst + 1, 4)
       : 0;
   lastChatScrollAt = now;
+  // Require several rapid swipes before accelerating. Deliberate reading
+  // stays line-by-line; the fastest step is four lines, not a full page.
   const step =
-    chatScrollBurst >= 2
-      ? CHAT_VISIBLE_LINES
-      : chatScrollBurst === 1
-        ? 2
-        : 1;
+    chatScrollBurst >= 4 ? 4 : chatScrollBurst >= 2 ? 2 : 1;
   moveChatLine(direction * step);
 }
 
