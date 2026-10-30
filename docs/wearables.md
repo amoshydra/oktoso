@@ -20,6 +20,7 @@ The first slice is deliberately narrow:
 - reply menu with canned and 4B-assisted suggestions
 - numbered-choice extraction for agent replies
 - full chat responses kept in memory and read through a six-line viewport; newlines and paragraph breaks are preserved, the footer shows both line and readable-message position, chat opens at the latest lines and follows new content, slow swipes move one line, several rapid swipes accelerate gradually, and refresh never rebuilds the page or resets the reading position
+- Markdown formatting is stripped for glass display; fenced code keeps its content and paragraph breaks are preserved
 - hub message snapshots update chat immediately, with a four-second polling fallback
 - stable message retention prevents line shifts when the rolling provider page changes
 - overlapping chat fetches are sequenced, and chat rendering is serialized

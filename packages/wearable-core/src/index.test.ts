@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clampLine, pageChoices, parseNumberedChoices, wrapText } from "./index";
+import {
+  clampLine,
+  pageChoices,
+  parseNumberedChoices,
+  plainTextForGlass,
+  wrapText,
+} from "./index";
 
 describe("wearable core", () => {
   it("wraps text and marks truncation", () => {
@@ -23,6 +29,17 @@ describe("wearable core", () => {
       "windows",
       "line",
     ]);
+  });
+
+  it("strips Markdown while preserving code and paragraphs", () => {
+    expect(
+      plainTextForGlass(
+        "## Heading\n**bold** and `code` and [link](https://example.com)\n\n```ts\nconst x = 1;\n```",
+      ),
+    ).toBe("Heading\nbold and code and link\n\nconst x = 1;");
+    expect(plainTextForGlass("- one\n- two")).toBe("• one\n• two");
+    expect(plainTextForGlass("<b>safe</b>")).toBe("safe");
+    expect(plainTextForGlass("<https://example.com>")).toBe("https://example.com");
   });
 
   it("extracts numbered and bulleted choices", () => {

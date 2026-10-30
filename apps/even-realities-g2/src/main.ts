@@ -19,6 +19,7 @@ import { HubClient, messageFromHubEvent } from "@agent-hub/client";
 import {
   clampLine,
   pageChoices,
+  plainTextForGlass,
   wrapText,
 } from "@agent-hub/wearable-core";
 
@@ -483,11 +484,12 @@ function buildChat(messages: Message[]): {
   const lineMessages: number[] = [];
   let messageCount = 0;
   for (const message of messages) {
-    const text = message.parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
-      .trim();
+    const text = plainTextForGlass(
+      message.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    ).trim();
     if (!text) continue;
     const messageIndex = messageCount;
     messageCount += 1;
