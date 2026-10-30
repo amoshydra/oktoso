@@ -24,7 +24,6 @@ import {
 } from "@agent-hub/wearable-core";
 
 const TOKEN_KEY = "agent-hub-even-g2-token";
-const URL_KEY = "agent-hub-even-g2-url";
 
 type Screen =
   | "pairing"
@@ -81,7 +80,6 @@ const state: AppState = {
 let bridge: EvenAppBridge | undefined;
 let client: HubClient | undefined;
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
-let storedBaseURL = localStorage.getItem(URL_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 const CHAT_VISIBLE_LINES = 6;
 const CHAT_SCROLL_BURST_MS = 500;
@@ -136,10 +134,16 @@ function updatePhoneState(): void {
   syncPhoneSession();
 }
 
+const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
+
+function hubBaseURL(): string {
+  if (buildHubURL) return buildHubURL;
+  return window.location.origin === "null" ? "" : window.location.origin;
+}
+
 async function connect(): Promise<void> {
-  const urlInput = byId<HTMLInputElement>("hub-url");
   const tokenInput = byId<HTMLInputElement>("hub-token");
-  const baseUrl = (urlInput.value.trim() || storedBaseURL).replace(/\/+$/, "");
+  const baseUrl = hubBaseURL();
   const token = tokenInput.value.trim() || storedToken;
   if (!token) {
     setConnection("Token required", true);
@@ -151,9 +155,7 @@ async function connect(): Promise<void> {
     await next.authCheck();
     client = next;
     storedToken = token;
-    storedBaseURL = baseUrl;
     localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(URL_KEY, baseUrl);
     tokenInput.value = "";
     tokenInput.placeholder = "Saved token";
     setConnection("Connected");
@@ -176,11 +178,10 @@ async function restoreConnection(): Promise<void> {
     return;
   }
   setConnection("Restoring…");
-  const next = new HubClient({ baseUrl: storedBaseURL, token: storedToken });
+  const next = new HubClient({ baseUrl: hubBaseURL(), token: storedToken });
   try {
     await next.authCheck();
     client = next;
-    byId<HTMLInputElement>("hub-url").value = storedBaseURL;
     byId<HTMLInputElement>("hub-token").placeholder = "Saved token";
     setConnection("Connected");
     log("Restored hub session");
@@ -1310,8 +1311,7 @@ function errorMessage(error: unknown): string {
 }
 
 function setupPhone(): void {
-  const url = byId<HTMLInputElement>("hub-url");
-  url.value = storedBaseURL;
+  byId<HTMLSpanElement>("hub-origin").textContent = hubBaseURL() || "same origin";
   const token = byId<HTMLInputElement>("hub-token");
   if (storedToken) token.placeholder = "Saved token";
   byId<HTMLButtonElement>("connect").addEventListener("click", () => {

@@ -5,7 +5,7 @@ long forms, search, and session management.
 
 ## Screen map
 
-The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at `/api`.
+The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at `/api`. Setup asks only for the token.
 
 ```text
 Home
