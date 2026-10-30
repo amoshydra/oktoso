@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zMessage } from "./messages";
 
 export const zHubEventType = z.enum([
   "session.created",
@@ -27,3 +28,9 @@ export const zHubEvent = z.object({
 
 export type HubEventType = z.infer<typeof zHubEventType>;
 export type HubEvent = z.infer<typeof zHubEvent>;
+
+export const zMessageEventData = z.object({
+  message: zMessage,
+});
+
+export type MessageEventData = z.infer<typeof zMessageEventData>;

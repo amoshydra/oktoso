@@ -14,7 +14,7 @@ import type {
   Message,
   ReplyOption,
 } from "@agent-hub/contracts";
-import { HubClient } from "@agent-hub/client";
+import { HubClient, messageFromHubEvent } from "@agent-hub/client";
 import {
   clampLine,
   pageChoices,
@@ -197,6 +197,15 @@ function startEventStream(): void {
           scheduleEventRefresh(() => refreshInbox());
         }
         if (
+          (event.type === "message.created" || event.type === "message.updated") &&
+          state.screen === "chat" &&
+          event.sessionRef === state.sessionRef
+        ) {
+          const message = messageFromHubEvent(event);
+          if (message) applyLiveMessage(message);
+          else scheduleEventRefresh(() => loadChat(true));
+        }
+        if (
           event.type === "session.updated" &&
           state.screen === "chat" &&
           event.sessionRef === state.sessionRef
@@ -353,6 +362,26 @@ async function loadChat(quiet: boolean): Promise<void> {
     render();
     log(`Chat load failed: ${state.error}`);
   }
+}
+
+function applyLiveMessage(message: Message): void {
+  if (state.screen !== "chat" || message.sessionRef !== state.sessionRef) return;
+  state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
+  const built = buildChat(state.chatMessages);
+  const previousLines = state.chatLines;
+  const previousOffset = state.chatOffset;
+  state.chatLines = built.lines;
+  const nextMax = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
+  state.chatOffset = state.chatFollowBottom
+    ? nextMax
+    : Math.min(previousOffset, nextMax);
+  const changed =
+    previousLines.length !== state.chatLines.length ||
+    previousLines.some((line, index) => line !== state.chatLines[index]);
+  if (changed || previousOffset !== state.chatOffset) {
+    void updateChatView();
+  }
+  updatePhoneState();
 }
 
 function mergeChatMessages(

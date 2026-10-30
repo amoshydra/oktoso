@@ -318,7 +318,7 @@ function broadcastEvent(type: string, data: unknown): void {
   const payload = `data: ${JSON.stringify({
     id: `evt_${Date.now().toString(36)}`,
     type,
-    data,
+    properties: data,
   })}\n\n`;
   for (const response of fakeEventClients) response.write(payload);
 }
@@ -516,13 +516,15 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       files: [],
       agents: [],
     });
+    const replyID = `msg_fake_reply_${now.toString(36)}`;
+    const replyText = `Fake reply: ${text}`;
     messages.push({
-      id: `msg_fake_reply_${now.toString(36)}`,
+      id: replyID,
       type: "assistant",
       time: { created: now + 1, completed: now + 2 },
       agent: "build",
       model: { id: "claude-sonnet", providerID: "commandcode" },
-      content: [{ type: "text", text: `Fake reply: ${text}` }],
+      content: [{ type: "text", text: replyText }],
     });
     const session = OPENCODE_SESSIONS.find((item) => item.id === sessionID);
     if (session) {
@@ -530,7 +532,65 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       session.time.idle = now + 2;
       session.outcome = "succeeded";
     }
-    broadcastEvent("session.updated", { sessionID });
+    const replyPartID = `part_${replyID}_text`;
+    broadcastEvent("message.updated", {
+      sessionID,
+      info: {
+        id: userID,
+        sessionID,
+        type: "user",
+        time: { created: now },
+        text,
+      },
+    });
+    broadcastEvent("message.updated", {
+      sessionID,
+      info: {
+        id: replyID,
+        sessionID,
+        type: "assistant",
+        time: { created: now + 1 },
+        content: [],
+      },
+    });
+    setTimeout(() => {
+      broadcastEvent("message.part.updated", {
+        sessionID,
+        part: {
+          id: replyPartID,
+          messageID: replyID,
+          sessionID,
+          type: "text",
+          text: replyText.slice(0, Math.ceil(replyText.length / 2)),
+        },
+      });
+    }, 25);
+    setTimeout(() => {
+      broadcastEvent("message.part.updated", {
+        sessionID,
+        part: {
+          id: replyPartID,
+          messageID: replyID,
+          sessionID,
+          type: "text",
+          text: replyText,
+        },
+      });
+    }, 50);
+    setTimeout(() => {
+      broadcastEvent("message.updated", {
+        sessionID,
+        info: {
+          id: replyID,
+          sessionID,
+          type: "assistant",
+          time: { created: now + 1, completed: now + 2 },
+        },
+      });
+    }, 75);
+    setTimeout(() => {
+      broadcastEvent("session.updated", { sessionID });
+    }, 100);
     sendJson(response, 200, { data: { id: userID } });
     return;
   }
