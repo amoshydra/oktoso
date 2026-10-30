@@ -11,6 +11,7 @@ import {
 } from "@evenrealities/even_hub_sdk";
 import type {
   Attention,
+  AttentionField,
   Message,
   ReplyOption,
   Session,
@@ -95,11 +96,20 @@ let eventController: AbortController | undefined;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
+let phoneFormItem: Attention | undefined;
+let phoneFormValues: Record<string, unknown> = {};
 
 const phoneSession = byId<HTMLSpanElement>("phone-session");
 const phoneText = byId<HTMLTextAreaElement>("phone-text");
 const phoneSend = byId<HTMLButtonElement>("phone-send");
 const phoneStatus = byId<HTMLDivElement>("phone-status");
+const phoneFormPanel = byId<HTMLElement>("phone-form-panel");
+const phoneFormTitle = byId<HTMLElement>("phone-form-title");
+const phoneFormSummary = byId<HTMLElement>("phone-form-summary");
+const phoneFormFields = byId<HTMLDivElement>("phone-form-fields");
+const phoneFormSubmit = byId<HTMLButtonElement>("phone-form-submit");
+const phoneFormCancel = byId<HTMLButtonElement>("phone-form-cancel");
+const phoneFormStatus = byId<HTMLDivElement>("phone-form-status");
 const connection = byId<HTMLSpanElement>("connection");
 const connectionStatus = byId<HTMLDivElement>("connection-status");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
@@ -120,6 +130,200 @@ function setConnection(label: string, error = false): void {
 function setPhoneStatus(message: string, error = false): void {
   phoneStatus.textContent = message;
   phoneStatus.className = error ? "status error" : "status";
+}
+
+function setPhoneFormStatus(message: string, error = false): void {
+  phoneFormStatus.textContent = message;
+  phoneFormStatus.className = error ? "status error" : "status";
+}
+
+function hidePhoneForm(): void {
+  phoneFormItem = undefined;
+  phoneFormValues = {};
+  phoneFormFields.replaceChildren();
+  phoneFormPanel.hidden = true;
+  setPhoneFormStatus("");
+}
+
+function showPhoneForm(item: Attention): void {
+  const fields = item.fields ?? [];
+  if (fields.length === 0) {
+    hidePhoneForm();
+    return;
+  }
+  phoneFormItem = item;
+  phoneFormValues = {};
+  phoneFormTitle.textContent = item.title;
+  phoneFormSummary.textContent = item.summary;
+  phoneFormFields.replaceChildren();
+  setPhoneFormStatus("");
+  for (const [index, field] of fields.entries()) {
+    phoneFormValues[field.id] = fieldDefault(field);
+    phoneFormFields.append(renderPhoneField(field, index));
+  }
+  phoneFormSubmit.disabled = !item.actions.some((action) => action.id === "answer");
+  phoneFormPanel.hidden = false;
+  phoneFormPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function renderPhoneField(field: AttentionField, index: number): HTMLElement {
+  if (field.type === "multiselect") {
+    const fieldset = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = `${field.label}${field.required ? " *" : ""}`;
+    fieldset.append(legend);
+    const selected = Array.isArray(phoneFormValues[field.id])
+      ? (phoneFormValues[field.id] as string[])
+      : [];
+    for (const option of field.options ?? []) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = selected.includes(option.value);
+      checkbox.addEventListener("change", () => {
+        const current = Array.isArray(phoneFormValues[field.id])
+          ? (phoneFormValues[field.id] as string[])
+          : [];
+        phoneFormValues[field.id] = checkbox.checked
+          ? [...current, option.value]
+          : current.filter((value) => value !== option.value);
+      });
+      label.append(checkbox, document.createTextNode(option.label));
+      fieldset.append(label);
+    }
+    if (field.description) {
+      const help = document.createElement("small");
+      help.className = "hint";
+      help.textContent = field.description;
+      fieldset.append(help);
+    }
+    return fieldset;
+  }
+
+  const label = document.createElement("label");
+  label.textContent = `${field.label}${field.required ? " *" : ""}`;
+  const id = `phone-form-field-${index}`;
+  if (field.type === "boolean") {
+    const input = document.createElement("input");
+    input.id = id;
+    input.type = "checkbox";
+    input.checked = Boolean(phoneFormValues[field.id]);
+    input.addEventListener("change", () => {
+      phoneFormValues[field.id] = input.checked;
+    });
+    label.append(input);
+  } else if (field.type === "select") {
+    const select = document.createElement("select");
+    select.id = id;
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Choose…";
+    select.append(empty);
+    for (const option of field.options ?? []) {
+      const item = document.createElement("option");
+      item.value = option.value;
+      item.textContent = option.label;
+      select.append(item);
+    }
+    select.value =
+      typeof phoneFormValues[field.id] === "string"
+        ? (phoneFormValues[field.id] as string)
+        : "";
+    select.addEventListener("change", () => {
+      phoneFormValues[field.id] = select.value;
+    });
+    label.append(select);
+  } else if (field.type === "textarea") {
+    const textarea = document.createElement("textarea");
+    textarea.id = id;
+    textarea.rows = 3;
+    textarea.placeholder = field.placeholder ?? "";
+    textarea.value =
+      typeof phoneFormValues[field.id] === "string"
+        ? (phoneFormValues[field.id] as string)
+        : "";
+    textarea.addEventListener("input", () => {
+      phoneFormValues[field.id] = textarea.value;
+    });
+    label.append(textarea);
+  } else {
+    const input = document.createElement("input");
+    input.id = id;
+    input.type = field.type === "number" ? "number" : "text";
+    input.placeholder = field.placeholder ?? "";
+    input.value =
+      typeof phoneFormValues[field.id] === "string" ||
+      typeof phoneFormValues[field.id] === "number"
+        ? String(phoneFormValues[field.id])
+        : "";
+    input.addEventListener("input", () => {
+      phoneFormValues[field.id] = input.value;
+    });
+    label.append(input);
+  }
+  if (field.description) {
+    const help = document.createElement("small");
+    help.className = "hint";
+    help.textContent = field.description;
+    label.append(help);
+  }
+  return label;
+}
+
+function fieldDefault(field: AttentionField): unknown {
+  if (field.defaultValue !== undefined) return field.defaultValue;
+  if (field.type === "boolean") return false;
+  if (field.type === "multiselect") return [];
+  return "";
+}
+
+function missingPhoneFields(item: Attention): AttentionField[] {
+  return (item.fields ?? []).filter((field) => {
+    if (!field.required) return false;
+    const value = phoneFormValues[field.id];
+    return (
+      value === undefined ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  });
+}
+
+async function submitPhoneForm(): Promise<void> {
+  const item = phoneFormItem;
+  if (!item || !client) return;
+  const missing = missingPhoneFields(item);
+  if (missing.length > 0) {
+    setPhoneFormStatus(
+      `Required: ${missing.map((field) => field.label).join(", ")}`,
+      true,
+    );
+    return;
+  }
+
+  const fields: Record<string, unknown> = {};
+  for (const field of item.fields ?? []) {
+    const value = phoneFormValues[field.id];
+    fields[field.id] =
+      field.type === "number" && typeof value === "string" && value !== ""
+        ? Number(value)
+        : value;
+  }
+
+  phoneFormSubmit.disabled = true;
+  setPhoneFormStatus("Submitting…");
+  try {
+    await client.actOnAttention(item.id, "answer", { fields });
+    state.selectedAttention = undefined;
+    hidePhoneForm();
+    state.screen = "inbox";
+    await refreshInbox();
+    render();
+  } catch (error) {
+    setPhoneFormStatus(errorMessage(error), true);
+  } finally {
+    phoneFormSubmit.disabled = false;
+  }
 }
 
 function syncPhoneSession(): void {
@@ -284,6 +488,12 @@ async function refreshInbox(): Promise<void> {
     const page = await client.attention();
     state.attentionTotal = page.data.length;
     state.attention = page.data.slice(0, 5);
+    if (
+      phoneFormItem &&
+      !page.data.some((item) => item.id === phoneFormItem?.id)
+    ) {
+      hidePhoneForm();
+    }
     state.error = undefined;
     if (state.screen === "pairing") state.screen = "home";
     const changed =
@@ -316,13 +526,19 @@ async function openAttention(index: number): Promise<void> {
   state.selectedAttention = item;
   state.error = undefined;
   state.screen = "attention";
+  if (item.fields?.length) showPhoneForm(item);
+  else hidePhoneForm();
   render();
 }
 
 function attentionActions(item: Attention): Array<{ id: string; label: string }> {
+  const hasFields = (item.fields?.length ?? 0) > 0;
   const actions = item.actions
-    .filter((action) => action.id !== "answer" || !(item.fields?.length ?? 0))
+    .filter((action) => action.id !== "answer" || !hasFields)
     .map((action) => ({ id: action.id, label: action.label }));
+  if (hasFields && item.actions.some((action) => action.id === "answer")) {
+    actions.unshift({ id: "phone_form", label: "Answer on phone" });
+  }
   actions.push({ id: "open_chat", label: "Open chat" });
   return actions;
 }
@@ -334,6 +550,10 @@ async function performAttention(index: number): Promise<void> {
   if (!action) return;
   if (action.id === "open_chat") {
     await openChat(item.sessionRef, item.title, "inbox");
+    return;
+  }
+  if (action.id === "phone_form") {
+    showPhoneForm(item);
     return;
   }
   if (!client) return;
@@ -369,6 +589,7 @@ async function openChat(
   state.screen = "chat";
   state.error = undefined;
   state.notice = undefined;
+  hidePhoneForm();
   updatePhoneState();
   void client
     ?.session(ref)
@@ -784,6 +1005,7 @@ async function performChoice(index: number): Promise<void> {
 }
 
 function back(): void {
+  hidePhoneForm();
   if (state.screen === "chat") {
     state.screen = state.returnScreen;
     state.selectedAttention = undefined;
@@ -1324,6 +1546,8 @@ function setupPhone(): void {
   byId<HTMLButtonElement>("phone-refresh").addEventListener("click", () => {
     void refreshCurrent();
   });
+  phoneFormSubmit.addEventListener("click", () => void submitPhoneForm());
+  phoneFormCancel.addEventListener("click", () => hidePhoneForm());
   byId<HTMLButtonElement>("sim-up").addEventListener("click", () => simulate("up"));
   byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));
   byId<HTMLButtonElement>("sim-click").addEventListener("click", () => simulate("click"));

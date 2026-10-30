@@ -109,10 +109,19 @@ handlers as hardware. Hardware validation remains authoritative for:
 - long-session reading position;
 - no-op frames while idle.
 
+## Attention forms
+
+Form fields render on the phone surface, including boolean, select, multiselect,
+text, textarea, and number fields. Opening a form attention item shows the form
+automatically. The glass offers `Answer on phone` and never submits a form
+automatically.
+
+Required fields are validated before submission. The provider action is sent with
+the existing `actOnAttention(..., "answer", { fields })` path; successful submission
+removes the attention item and refreshes the inbox.
+
 ## Planned order
 
-1. Project/title context in the chat header.
-3. Simple attention forms on glass; complex forms hand off to phone.
-4. Compact agent activity state.
-5. Voice capture and STT if the SDK exposes microphone input.
-6. Frame snapshot tests and a scripted hardware checklist.
+1. Compact agent activity state.
+2. Voice capture and STT if the SDK exposes microphone input.
+3. Frame snapshot tests and a scripted hardware checklist.

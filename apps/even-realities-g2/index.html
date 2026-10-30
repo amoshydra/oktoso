@@ -16,7 +16,10 @@
       .panel h2 { margin: 0 0 4px; font-size: 15px; }
       .panel .hint { font-size: 12px; }
       label { display: block; margin-top: 12px; font-size: 12px; color: var(--muted); }
-      input, textarea { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d131b; color: var(--ink); font: inherit; font-size: 16px; }
+      input, textarea, select { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d131b; color: var(--ink); font: inherit; font-size: 16px; }
+      input[type="checkbox"] { width: auto; margin: 0 6px 0 0; }
+      fieldset { margin-top: 12px; padding: 8px 12px 12px; border: 1px solid var(--line); border-radius: 8px; }
+      fieldset label { margin-top: 6px; color: var(--ink); }
       textarea { min-height: 72px; resize: vertical; }
       button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
       button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 650; }
@@ -50,6 +53,17 @@
         <span id="connection" class="pill">Not connected</span>
       </div>
       <div id="connection-status" class="status"></div>
+    </section>
+
+    <section id="phone-form-panel" class="panel" hidden>
+      <h2 id="phone-form-title">Answer</h2>
+      <p id="phone-form-summary" class="hint"></p>
+      <div id="phone-form-fields"></div>
+      <div class="row" style="margin-top:12px">
+        <button id="phone-form-submit" class="primary" type="button">Submit answer</button>
+        <button id="phone-form-cancel" type="button">Cancel</button>
+      </div>
+      <div id="phone-form-status" class="status"></div>
     </section>
 
     <section class="panel composer">

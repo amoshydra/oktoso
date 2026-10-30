@@ -17,6 +17,7 @@ The first slice is deliberately narrow:
 - home with inbox count, recent sessions, and the current session
 - inbox with up to five attention items
 - permission / unread / failure detail and actions
+- attention forms render on the phone surface with an explicit `Answer on phone` action on the glass
 - chat view of the latest transcript context with a full-response line viewport
 - reply menu with canned and 4B-assisted suggestions
 - numbered-choice extraction for agent replies
