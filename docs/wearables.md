@@ -13,6 +13,7 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 The first slice is deliberately narrow:
 
 - phone pairing for hub URL and bearer token
+- home with inbox count, recent sessions, and the current session
 - inbox with up to five attention items
 - permission / unread / failure detail and actions
 - chat view of the latest transcript context with a full-response line viewport
@@ -23,11 +24,12 @@ The first slice is deliberately narrow:
 - stable message retention prevents line shifts when the rolling provider page changes
 - overlapping chat fetches are sequenced, and chat rendering is serialized
 - phone keyboard fallback
+- opening a session stores a hub read marker so web and glass agree on unread state
 - offline/retry polling
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 - a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 
-Voice capture, inline forms, session browsing, and long-running stream updates are follow-ups.
+Voice capture, inline forms, and full session management are follow-ups. The screen and interaction contract is in [`glass-ux.md`](glass-ux.md).
 
 ## Run locally
 

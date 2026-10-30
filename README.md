@@ -19,6 +19,7 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
 - [`docs/wearables.md`](docs/wearables.md) - Even G2 setup, packaging, and device limits
+- [`docs/glass-ux.md`](docs/glass-ux.md) - glass screen map, interaction grammar, and validation plan
 - [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data
 
