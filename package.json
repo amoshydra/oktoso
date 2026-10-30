@@ -21,6 +21,7 @@
     "build:single-port": "pnpm build:hub && pnpm build:web && pnpm build:even-g2:hosted",
     "pack:even-g2": "pnpm --filter @agent-hub/even-realities-g2 run pack",
     "start": "node dist/hub.js",
+    "start:local": "tsx scripts/start-local.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
