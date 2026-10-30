@@ -45,6 +45,7 @@ interface AppState {
   selectedAttention?: Attention;
   sessionRef?: string;
   sessionTitle?: string;
+  sessionProject?: string;
   chatMessages: Message[];
   chatLines: string[];
   chatLineMessages: number[];
@@ -354,6 +355,7 @@ async function openChat(
   chatLoadSequence += 1;
   state.sessionRef = ref;
   state.sessionTitle = title;
+  state.sessionProject = undefined;
   state.returnScreen = origin;
   state.chatMessages = [];
   state.chatLines = [];
@@ -367,6 +369,14 @@ async function openChat(
   state.error = undefined;
   state.notice = undefined;
   updatePhoneState();
+  void client
+    ?.session(ref)
+    .then((session) => {
+      if (state.sessionRef !== ref) return;
+      state.sessionProject = session.project;
+      if (state.screen === "chat") render();
+    })
+    .catch(() => undefined);
   await loadChat(false);
   if (client) void client.markRead(ref).catch(() => undefined);
 }
@@ -536,7 +546,12 @@ function chatView(): { header: string; body: string; footer: string } {
     .filter(Boolean)
     .join(" · ");
   return {
-    header: clampLine(state.sessionTitle ?? "Session", 40),
+    header: clampLine(
+      state.sessionProject
+        ? `${state.sessionProject} · ${state.sessionTitle ?? "Session"}`
+        : (state.sessionTitle ?? "Session"),
+      40,
+    ),
     body: visible.join("\n"),
     footer,
   };
@@ -899,7 +914,14 @@ function render(): void {
       `Inbox · ${state.attentionTotal}`,
       "Recent sessions",
       ...(state.sessionTitle
-        ? [`Current · ${clampLine(state.sessionTitle, 44)}`]
+        ? [
+            `Current · ${clampLine(
+              state.sessionProject
+                ? `${state.sessionProject} · ${state.sessionTitle}`
+                : state.sessionTitle,
+              44,
+            )}`,
+          ]
         : []),
       ...(state.error ? ["Retry connection"] : []),
     ];
