@@ -50,7 +50,7 @@ does not expose.
   collapsed.
 - The footer reports visible line and readable-message position:
   `L456-461/461 · M30/30`.
-- The header reports the session title. Project context is a planned addition.
+- The header reports `project · session title` so the glass shows which home the session belongs to.
 
 ## Read state
 
