@@ -59,6 +59,36 @@ export function wrapText(
   return lines;
 }
 
+export function plainTextForGlass(value: string): string {
+  const lines: string[] = [];
+  let fenced = false;
+  for (const rawLine of value.replace(/\r\n?/g, "\n").split("\n")) {
+    if (/^\s*```/.test(rawLine)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) {
+      lines.push(rawLine);
+      continue;
+    }
+
+    let line = rawLine
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/<((?:https?|mailto):[^>]+)>/g, "$1")
+      .replace(/^#{1,6}\s+/, "")
+      .replace(/^>\s?/, "")
+      .replace(/^[-*]\s+/, "• ")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/__([^_]+)__/g, "$1")
+      .replace(/<\/?[a-zA-Z][^>]*>/g, "");
+    if (/^\s*([-*_])\1{2,}\s*$/.test(line)) line = "";
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
 export function clampLine(value: string, maxCharacters: number): string {
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length <= maxCharacters

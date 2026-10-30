@@ -109,8 +109,7 @@ handlers as hardware. Hardware validation remains authoritative for:
 
 ## Planned order
 
-1. Markdown-to-glass text cleanup.
-2. Project/title context in the chat header.
+1. Project/title context in the chat header.
 3. Simple attention forms on glass; complex forms hand off to phone.
 4. Compact agent activity state.
 5. Voice capture and STT if the SDK exposes microphone input.
