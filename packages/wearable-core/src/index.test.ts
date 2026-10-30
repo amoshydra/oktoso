@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  chatScrollStep,
   clampLine,
+  frameSignature,
   pageChoices,
   parseNumberedChoices,
   plainTextForGlass,
@@ -40,6 +42,22 @@ describe("wearable core", () => {
     expect(plainTextForGlass("- one\n- two")).toBe("• one\n• two");
     expect(plainTextForGlass("<b>safe</b>")).toBe("safe");
     expect(plainTextForGlass("<https://example.com>")).toBe("https://example.com");
+  });
+
+  it("deduplicates unchanged glass frames", () => {
+    expect(frameSignature("h", "b", "f")).toBe(frameSignature("h", "b", "f"));
+    expect(frameSignature("h", "b", "f", ["a"])).not.toBe(
+      frameSignature("h", "b", "f", ["b"]),
+    );
+    expect(frameSignature("h", "b", "f")).not.toBe(
+      frameSignature("h", "b", "f", ["a"]),
+    );
+  });
+
+  it("only accelerates after several rapid swipes", () => {
+    expect([0, 1, 2, 3, 4, 10].map(chatScrollStep)).toEqual([
+      1, 1, 2, 2, 4, 4,
+    ]);
   });
 
   it("extracts numbered and bulleted choices", () => {

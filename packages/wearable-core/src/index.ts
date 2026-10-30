@@ -89,6 +89,27 @@ export function plainTextForGlass(value: string): string {
   return lines.join("\n");
 }
 
+export function frameSignature(
+  header: string,
+  body: string,
+  footer: string,
+  listItems?: string[],
+): string {
+  return [
+    listItems ? "list" : "text",
+    header,
+    body,
+    footer,
+    listItems?.join("\u001f") ?? "",
+  ].join("\u001e");
+}
+
+export function chatScrollStep(burst: number): number {
+  if (burst >= 4) return 4;
+  if (burst >= 2) return 2;
+  return 1;
+}
+
 export function clampLine(value: string, maxCharacters: number): string {
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length <= maxCharacters
