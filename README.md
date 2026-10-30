@@ -18,6 +18,8 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.1` reference and change policy
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
+- [`docs/wearables.md`](docs/wearables.md) - Even G2 setup, packaging, and device limits
+- [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data
 
 ## Principles
@@ -57,6 +59,8 @@ OPENWEBUI_API_KEY=...
 
 When those variables are present, the matching providers use the real instances instead of the fake ones. Omitting a provider's base URL leaves that provider on its local fake endpoint. The dev command does not start the frozen prototype.
 
+`.env.local` and `.data/` are ignored. Keep `.env.local` at mode `0600`. The committed `dev-token-agent-hub` is a local-only token; generate a long random `HUB_TOKEN` for any reachable deployment.
+
 ## Prototype
 
 ```sh
@@ -75,6 +79,15 @@ pnpm build
 HUB_TOKEN=... node dist/hub.js --config ./hub.config.json
 ```
 
+## Even G2 package
+
+The committed `apps/even-realities-g2/app.json` contains only local and placeholder origins. Pass your own hub origin when packing; it is written to a temporary, ignored manifest and never committed:
+
+```sh
+pnpm --filter @agent-hub/even-realities-g2 build
+HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
+```
+
 ## Stack
 
 - Node.js 24+
@@ -84,6 +97,14 @@ HUB_TOKEN=... node dist/hub.js --config ./hub.config.json
 - Pure JavaScript dependencies, no native modules
 - JSON state store first; optional `node:sqlite` adapter later
 - A bundled `dist/hub.js` for portable deployment
+
+## Security
+
+Provider credentials, hub tokens, and runtime state stay out of Git. See [`SECURITY.md`](SECURITY.md) for reporting and deployment guidance.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
 
 ## Next
 

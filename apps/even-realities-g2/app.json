@@ -12,8 +12,7 @@
       "desc": "Connects to the self-hosted Agent Hub.",
       "whitelist": [
         "http://127.0.0.1:8787",
-        "https://hub.example.com",
-        "http://localhost:8787"
+        "https://hub.example.com"
       ]
     }
   ],
