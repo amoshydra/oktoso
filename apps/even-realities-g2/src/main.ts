@@ -9,9 +9,12 @@ import {
   waitForEvenAppBridge,
 } from "@evenrealities/even_hub_sdk";
 import type {
+  AnswerChoice,
   Attention,
   AttentionField,
   Message,
+  PendingQuestion,
+  QuestionPrompt,
   ReplyOption,
   Session,
 } from "@agent-hub/contracts";
@@ -44,6 +47,11 @@ type Screen =
   | "glass-form"
   | "glass-options"
   | "chat"
+  | "answer"
+  | "answer-more"
+  | "answer-type"
+  | "answer-sent"
+  | "answer-confirm"
   | "reply"
   | "choices";
 
@@ -70,8 +78,15 @@ interface AppState {
   formBusy: boolean;
   replyOptions: ReplyOption[];
   replyPage: number;
+  replyReturnScreen: Screen;
   choiceOptions: ReplyOption[];
   choicePage: number;
+  question?: QuestionPrompt;
+  answerText?: string;
+  pendingAnswerText?: string;
+  answerBusy: boolean;
+  answerError?: string;
+  answerMode: boolean;
   notice?: string;
   error?: string;
 }
@@ -95,8 +110,15 @@ const state: AppState = {
   formBusy: false,
   replyOptions: [],
   replyPage: 0,
+  replyReturnScreen: "chat",
   choiceOptions: [],
   choicePage: 0,
+  question: undefined,
+  answerText: undefined,
+  pendingAnswerText: undefined,
+  answerBusy: false,
+  answerError: undefined,
+  answerMode: false,
 };
 
 let bridge: EvenAppBridge | undefined;
@@ -131,6 +153,12 @@ const phoneFormFields = byId<HTMLDivElement>("phone-form-fields");
 const phoneFormSubmit = byId<HTMLButtonElement>("phone-form-submit");
 const phoneFormCancel = byId<HTMLButtonElement>("phone-form-cancel");
 const phoneFormStatus = byId<HTMLDivElement>("phone-form-status");
+const phoneQuestionPanel = byId<HTMLElement>("phone-question-panel");
+const phoneQuestionSession = byId<HTMLElement>("phone-question-session");
+const phoneQuestionText = byId<HTMLElement>("phone-question-text");
+const phoneQuestionChoices = byId<HTMLDivElement>("phone-question-choices");
+const phoneQuestionType = byId<HTMLButtonElement>("phone-question-type");
+const phoneQuestionStatus = byId<HTMLDivElement>("phone-question-status");
 const connection = byId<HTMLSpanElement>("connection");
 const connectionStatus = byId<HTMLDivElement>("connection-status");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
@@ -352,11 +380,75 @@ function syncPhoneSession(): void {
   phoneSession.textContent = hasSession
     ? clampLine(state.sessionTitle ?? state.sessionRef ?? "", 48)
     : "No session open";
-  phoneSend.disabled = !hasSession || !phoneText.value.trim();
+  phoneSend.textContent = state.answerMode ? "Send answer" : "Send to session";
+  phoneSend.disabled =
+    !hasSession || !phoneText.value.trim() || state.answerBusy;
 }
 
 function updatePhoneState(): void {
   syncPhoneSession();
+}
+
+type AnswerAction =
+  | "type"
+  | "more"
+  | "read"
+  | "attention"
+  | "phone"
+  | "send"
+  | "cancel";
+
+type AnswerRow =
+  | { kind: "choice"; label: string; choice: AnswerChoice }
+  | { kind: "action"; label: string; action: AnswerAction };
+
+function activeQuestion(): PendingQuestion | undefined {
+  return state.question?.questions[0];
+}
+
+function answerRows(): AnswerRow[] {
+  const question = activeQuestion();
+  if (!question) return [];
+  if (state.question?.attentionID) {
+    return [
+      { kind: "action", action: "attention", label: "Answer in Inbox" },
+      { kind: "action", action: "read", label: "Read chat" },
+    ];
+  }
+
+  const rows: AnswerRow[] = question.choices
+    .slice(0, 6)
+    .map((choice) => ({
+      kind: "choice" as const,
+      label: clampLine(choice.label, 54),
+      choice,
+    }));
+
+  if (state.question && state.question.questions.length > 1) {
+    rows.push({ kind: "action", action: "phone", label: "Answer on phone" });
+  } else if (question.allowsFreeText) {
+    rows.push({ kind: "action", action: "type", label: "Type answer" });
+  }
+  rows.push({ kind: "action", action: "more", label: "More" });
+  rows.push({ kind: "action", action: "read", label: "Read chat" });
+  return rows;
+}
+
+function answerSummary(): string {
+  const question = activeQuestion();
+  if (!question) return "";
+  const lines = wrapText(`Q  ${question.text}`, 54, 2);
+  if (lines.length < 2 && question.context) {
+    lines.push(clampLine(question.context, 54));
+  }
+  return lines.join("\n");
+}
+
+function answerHeader(prefix = "ANSWER"): string {
+  return clampLine(
+    `${prefix} · ${state.sessionTitle ?? "Session"}`,
+    40,
+  );
 }
 
 const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
@@ -774,6 +866,12 @@ async function openChat(
   state.chatOffset = 0;
   state.chatNewBelow = false;
   state.chatActivity = "";
+  state.question = undefined;
+  state.answerText = undefined;
+  state.pendingAnswerText = undefined;
+  state.answerError = undefined;
+  state.answerBusy = false;
+  state.answerMode = false;
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   state.screen = "chat";
@@ -781,6 +879,7 @@ async function openChat(
   state.notice = undefined;
   hidePhoneForm();
   updatePhoneState();
+  updatePhoneQuestion();
   void client
     ?.session(ref)
     .then((session) => {
@@ -789,8 +888,218 @@ async function openChat(
       if (state.screen === "chat") render();
     })
     .catch(() => undefined);
+  void loadQuestion(ref);
   await loadChat(false);
   if (client) void client.markRead(ref).catch(() => undefined);
+}
+
+async function loadQuestion(ref: string): Promise<void> {
+  if (!client) return;
+  try {
+    const question = await client.question(ref);
+    if (state.sessionRef !== ref) return;
+    state.question = question ?? undefined;
+    state.answerMode = false;
+    updatePhoneQuestion();
+    if (state.screen === "chat") render();
+  } catch (error) {
+    log(`Question load failed: ${errorMessage(error)}`);
+  }
+}
+
+function openAnswer(): void {
+  if (!state.question) {
+    void openReply();
+    return;
+  }
+  state.screen = "answer";
+  state.answerError = undefined;
+  state.pendingAnswerText = undefined;
+  state.answerMode = false;
+  updatePhoneQuestion();
+  render();
+}
+
+async function sendAnswer(
+  text: string,
+  source: "glass" | "phone" = "glass",
+): Promise<void> {
+  if (!client || !state.sessionRef || state.answerBusy) return;
+  const ref = state.sessionRef;
+  state.answerBusy = true;
+  state.answerText = text;
+  state.answerError = undefined;
+  updatePhoneQuestion();
+  if (source === "phone") setPhoneStatus("Sending answer…");
+
+  try {
+    await client.sendMessage(ref, { text });
+    if (state.sessionRef !== ref) return;
+    state.answerBusy = false;
+    state.question = undefined;
+    state.answerMode = false;
+    state.pendingAnswerText = undefined;
+    state.screen = "answer-sent";
+    updatePhoneQuestion();
+    if (source === "phone") {
+      phoneText.value = "";
+      setPhoneStatus("Answer sent.");
+    }
+    render();
+  } catch (error) {
+    state.answerBusy = false;
+    state.answerError = errorMessage(error);
+    state.screen = "answer";
+    if (source === "phone") setPhoneStatus(state.answerError, true);
+    render();
+    log(`Answer send failed: ${state.answerError}`);
+  }
+}
+
+function focusPhoneAnswer(): void {
+  phoneText.focus();
+  phoneText.scrollIntoView({ block: "center", behavior: "smooth" });
+  setPhoneStatus("Type your answer, then send.");
+}
+
+function openTypeAnswer(): void {
+  state.answerMode = true;
+  state.screen = "answer-type";
+  updatePhoneQuestion();
+  focusPhoneAnswer();
+  render();
+}
+
+async function openAttentionByID(id: string | undefined): Promise<void> {
+  if (!id) {
+    state.screen = "inbox";
+    render();
+    return;
+  }
+  let item = state.attention.find((candidate) => candidate.id === id);
+  if (!item) {
+    await refreshInbox();
+    item = state.attention.find((candidate) => candidate.id === id);
+  }
+  if (item) {
+    state.selectedAttention = item;
+    state.screen = "attention";
+    render();
+  } else {
+    state.screen = "inbox";
+    render();
+  }
+}
+
+async function performAnswerRow(index: number): Promise<void> {
+  if (state.screen === "answer-confirm") {
+    if (index === 0) {
+      const text = state.pendingAnswerText;
+      if (text) await sendAnswer(text);
+    } else {
+      state.pendingAnswerText = undefined;
+      state.screen = "answer";
+      render();
+    }
+    return;
+  }
+
+  if (state.screen === "answer-more") {
+    if (index === 0) {
+      await openReply();
+    } else if (index === 1) {
+      state.screen = "chat";
+      state.answerMode = false;
+      updatePhoneQuestion();
+      render();
+    } else if (index === 2 && client && state.sessionRef) {
+      try {
+        await client.interrupt(state.sessionRef);
+      } catch (error) {
+        log(`Interrupt failed: ${errorMessage(error)}`);
+      }
+      state.screen = "chat";
+      render();
+    }
+    return;
+  }
+
+  const row = answerRows()[index];
+  if (!row) return;
+  if (row.kind === "choice") {
+    if (row.choice.requiresConfirmation) {
+      state.pendingAnswerText = row.choice.text;
+      state.screen = "answer-confirm";
+      render();
+    } else {
+      await sendAnswer(row.choice.text);
+    }
+    return;
+  }
+
+  if (row.action === "type" || row.action === "phone") {
+    openTypeAnswer();
+  } else if (row.action === "more") {
+    state.screen = "answer-more";
+    render();
+  } else if (row.action === "read") {
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+  } else if (row.action === "attention") {
+    await openAttentionByID(state.question?.attentionID);
+  }
+}
+
+function updatePhoneQuestion(): void {
+  const question = activeQuestion();
+  const visible =
+    Boolean(question && state.sessionRef) &&
+    [
+      "chat",
+      "answer",
+      "answer-more",
+      "answer-type",
+      "answer-sent",
+      "answer-confirm",
+    ].includes(state.screen);
+  phoneQuestionPanel.hidden = !visible;
+  if (!question || !visible) {
+    phoneQuestionChoices.replaceChildren();
+    phoneQuestionStatus.textContent = "";
+    return;
+  }
+
+  phoneQuestionSession.textContent = clampLine(
+    state.sessionTitle ?? state.sessionRef ?? "",
+    48,
+  );
+  const formal = Boolean(state.question?.attentionID);
+  phoneQuestionText.textContent = formal
+    ? "This question has a formal answer form in Inbox."
+    : question.context
+      ? `${question.text}\n${question.context}`
+      : question.text;
+  phoneQuestionChoices.replaceChildren();
+  for (const choice of formal ? [] : question.choices.slice(0, 6)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = choice.text;
+    button.disabled = state.answerBusy;
+    button.addEventListener("click", () => {
+      void sendAnswer(choice.text, "phone");
+    });
+    phoneQuestionChoices.append(button);
+  }
+  phoneQuestionType.hidden = formal || !question.allowsFreeText;
+  phoneQuestionType.disabled = state.answerBusy;
+  phoneQuestionStatus.textContent = state.answerBusy
+    ? "Sending…"
+    : state.answerError ?? "";
+  phoneQuestionStatus.className = state.answerError
+    ? "status error"
+    : "status";
 }
 
 async function loadChat(quiet: boolean): Promise<void> {
@@ -926,6 +1235,7 @@ function chatView(): { header: string; body: string; footer: string } {
           : "Swipe";
   const footer = clampLine(
     [
+      state.question ? "? Answer" : "",
       `${first}-${last}/${total}`,
       messageLabel,
       state.chatActivity,
@@ -1007,6 +1317,8 @@ function scrollChat(direction: -1 | 1): void {
 
 async function openReply(): Promise<void> {
   if (!client || !state.sessionRef) return;
+  state.replyReturnScreen =
+    state.screen === "answer-more" ? "answer-more" : "chat";
   state.replyPage = 0;
   try {
     const options = await client.replyOptions(state.sessionRef, "reply");
@@ -1108,6 +1420,8 @@ async function executeReply(option: ReplyOption): Promise<void> {
     }
     if (option.text) {
       await client.sendMessage(state.sessionRef, { text: option.text });
+      state.question = undefined;
+      updatePhoneQuestion();
       state.screen = "chat";
       state.notice = "Reply sent.";
       await loadChat(false);
@@ -1161,6 +1475,8 @@ async function performChoice(index: number): Promise<void> {
   if (!option || !client || !state.sessionRef) return;
   try {
     await client.sendMessage(state.sessionRef, { text: option.text });
+    state.question = undefined;
+    updatePhoneQuestion();
     state.screen = "chat";
     state.notice = "Choice sent.";
     await loadChat(false);
@@ -1173,16 +1489,58 @@ async function performChoice(index: number): Promise<void> {
 
 function back(): void {
   hidePhoneForm();
+  if (state.screen === "answer") {
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    return;
+  }
+  if (state.screen === "answer-more") {
+    state.screen = "answer";
+    render();
+    return;
+  }
+  if (state.screen === "answer-type") {
+    state.screen = "answer";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    return;
+  }
+  if (state.screen === "answer-sent") {
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    void loadChat(false);
+    return;
+  }
+  if (state.screen === "answer-confirm") {
+    state.pendingAnswerText = undefined;
+    state.screen = "answer";
+    render();
+    return;
+  }
   if (state.screen === "chat") {
     state.screen = state.returnScreen;
     state.selectedAttention = undefined;
     state.notice = undefined;
+    state.answerMode = false;
+    updatePhoneQuestion();
     render();
     void refreshInbox();
     return;
   }
-  if (state.screen === "reply" || state.screen === "choices") {
-    state.screen = "chat";
+  if (state.screen === "reply") {
+    state.screen = state.replyReturnScreen;
+    state.replyReturnScreen = "chat";
+    state.notice = undefined;
+    render();
+    return;
+  }
+  if (state.screen === "choices") {
+    state.screen = "reply";
     state.notice = undefined;
     render();
     return;
@@ -1267,6 +1625,11 @@ function handleListClick(index: number): void {
     case "attention":
       void performAttention(index);
       break;
+    case "answer":
+    case "answer-more":
+    case "answer-confirm":
+      void performAnswerRow(index);
+      break;
     case "reply":
       void performReply(index);
       break;
@@ -1280,7 +1643,20 @@ function handleListClick(index: number): void {
 
 function handleTextClick(): void {
   if (state.screen === "chat") {
-    void openReply();
+    if (state.question) openAnswer();
+    else void openReply();
+    return;
+  }
+  if (state.screen === "answer-type") {
+    focusPhoneAnswer();
+    return;
+  }
+  if (state.screen === "answer-sent") {
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    void loadChat(false);
     return;
   }
   if (state.screen === "pairing") {
@@ -1316,6 +1692,8 @@ async function processEvents(): Promise<void> {
 
 function render(): void {
   if (!bridge) return;
+  updatePhoneQuestion();
+  updatePhoneState();
   if (!client) {
     const body = "Pair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto pair or enter a token.";
     if (setPreview("AGENT HUB", body, "Phone setup")) {
@@ -1474,6 +1852,70 @@ function render(): void {
     }
     return;
   }
+  if (
+    state.screen === "answer" ||
+    state.screen === "answer-more" ||
+    state.screen === "answer-confirm"
+  ) {
+    const question = activeQuestion();
+    if (!question) {
+      state.screen = "chat";
+      render();
+      return;
+    }
+
+    if (state.screen === "answer-confirm") {
+      const header = answerHeader("CONFIRM");
+      const text = state.pendingAnswerText ?? "";
+      const body = wrapText(`Send this answer?\n“${text}”`, 54, 2).join("\n");
+      const items = ["Send", "Cancel"];
+      if (setPreview(header, body, "This cannot be undone.", items)) {
+        void showPage(listPage(header, items, "This cannot be undone.", body));
+      }
+      return;
+    }
+
+    if (state.screen === "answer-more") {
+      const header = answerHeader("MORE");
+      const body = clampLine(`Q  ${question.text}`, 54);
+      const items = ["More replies", "Read chat", "Stop"];
+      if (setPreview(header, body, "Tap choose · Back ×2", items)) {
+        void showPage(listPage(header, items, "Tap choose · Back ×2", body));
+      }
+      return;
+    }
+
+    const header = answerHeader();
+    const body = answerSummary();
+    const rows = answerRows();
+    const items = rows.map((row) => row.label);
+    const footer = state.answerError
+      ? clampLine(`Couldn't send: ${state.answerError}`, 60)
+      : "Swipe choose · Tap send · Back ×2";
+    if (setPreview(header, body, footer, items)) {
+      void showPage(listPage(header, items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "answer-type" || state.screen === "answer-sent") {
+    if (state.screen === "answer-type") {
+      const header = answerHeader("TYPE");
+      const body = "Type on the phone.\nThe answer sends from there.";
+      const footer = "Tap to focus phone · Back ×2";
+      if (setPreview(header, body, footer)) {
+        void showPage(textPage(body, footer, header));
+      }
+      return;
+    }
+
+    const header = answerHeader();
+    const body = `Sent\n“${clampLine(state.answerText ?? "", 60)}”`;
+    const footer = "Tap to return · Back ×2";
+    if (setPreview(header, body, footer)) {
+      void showPage(textPage(body, footer, header));
+    }
+    return;
+  }
   if (state.screen === "chat") {
     const view = chatView();
     if (setPreview(view.header, view.body, view.footer)) {
@@ -1566,7 +2008,11 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
   if (state.screen === "chat") {
     if (action === "up") moveChatLine(-1);
     else if (action === "down") moveChatLine(1);
-    else void openReply();
+    else handleTextClick();
+    return;
+  }
+  if (state.screen === "answer-type" || state.screen === "answer-sent") {
+    if (action === "click") handleTextClick();
     return;
   }
   if (state.screen === "pairing") {
@@ -1772,6 +2218,7 @@ function setupPhone(): void {
   });
   phoneFormSubmit.addEventListener("click", () => void submitPhoneForm());
   phoneFormCancel.addEventListener("click", () => hidePhoneForm());
+  phoneQuestionType.addEventListener("click", () => openTypeAnswer());
   byId<HTMLButtonElement>("sim-up").addEventListener("click", () => simulate("up"));
   byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));
   byId<HTMLButtonElement>("sim-click").addEventListener("click", () => simulate("click"));
@@ -1783,6 +2230,13 @@ async function sendPhone(): Promise<void> {
   const text = phoneText.value.trim();
   if (!text || !client || !state.sessionRef) return;
   phoneSend.disabled = true;
+
+  if (state.answerMode && state.question) {
+    await sendAnswer(text, "phone");
+    syncPhoneSession();
+    return;
+  }
+
   setPhoneStatus("Sending…");
   try {
     await client.sendMessage(state.sessionRef, { text });
@@ -1790,6 +2244,7 @@ async function sendPhone(): Promise<void> {
     setPhoneStatus("Sent.");
     state.screen = "chat";
     await loadChat(false);
+    await loadQuestion(state.sessionRef);
   } catch (error) {
     setPhoneStatus(errorMessage(error), true);
   } finally {
@@ -1801,6 +2256,7 @@ async function refreshCurrent(): Promise<void> {
   if (!client) return;
   if (state.screen === "chat" && state.sessionRef) {
     await loadChat(false);
+    await loadQuestion(state.sessionRef);
   } else if (state.screen === "sessions") {
     await openSessions();
   } else {

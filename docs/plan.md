@@ -211,7 +211,7 @@ Acceptance:
 
 ## Milestone 7: Glasses client
 
-Status: in progress. The Even G2 client scaffold, phone pairing, inbox, attention detail, chat, reply options, numbered-choice flow, and phone keyboard fallback are implemented. Voice capture/STT, inline forms, and hardware acceptance remain.
+Status: in progress. The Even G2 client scaffold, phone pairing, inbox, attention detail, chat, reply options, numbered-choice flow, question reply, and phone keyboard fallback are implemented. Voice capture/STT, stale-question protection, multiple question batches, and hardware acceptance remain.
 
 Goal: a glanceable inbox and reply surface on Even G2.
 
