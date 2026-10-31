@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "oktoso": "./dist/hub.js"
+    "oktoso": "dist/hub.js"
   },
   "files": [
     "dist",
