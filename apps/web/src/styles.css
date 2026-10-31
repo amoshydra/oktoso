@@ -84,6 +84,50 @@
   margin-top: var(--space-3);
 }
 
+.login-scan {
+  width: 100%;
+  margin-top: var(--space-3);
+}
+
+.qr-scan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 72%);
+}
+
+.qr-scan-panel {
+  width: min(420px, 100%);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.qr-scan-panel h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  line-height: 1.3;
+}
+
+.qr-scan-panel p {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.qr-scan-video {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
 .form-error,
 .alert {
   border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));

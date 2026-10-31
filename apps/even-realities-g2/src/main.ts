@@ -33,6 +33,7 @@ import {
 } from "./chat-model";
 
 const TOKEN_KEY = "agent-hub-even-g2-token";
+const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Screen =
   | "pairing"
@@ -365,60 +366,114 @@ function hubBaseURL(): string {
   return window.location.origin === "null" ? "" : window.location.origin;
 }
 
-async function connect(): Promise<void> {
-  const tokenInput = byId<HTMLInputElement>("hub-token");
-  const baseUrl = hubBaseURL();
-  const token = tokenInput.value.trim() || storedToken;
-  if (!token) {
-    setConnection("Token required", true);
-    return;
-  }
-  setConnection("Connecting…");
-  const next = new HubClient({ baseUrl, token });
+async function refreshStoredSession(
+  hub: HubClient,
+  check: { auth?: { kind: string; expiresAt?: number } },
+  viaToken: boolean,
+): Promise<void> {
+  if (!viaToken) return;
+  if (check.auth?.kind !== "session") return;
+  if (check.auth.expiresAt === undefined) return;
+  if (check.auth.expiresAt - Date.now() > SESSION_REFRESH_WINDOW_MS) return;
+
   try {
-    await next.authCheck();
-    client = next;
-    storedToken = token;
-    localStorage.setItem(TOKEN_KEY, token);
-    tokenInput.value = "";
-    tokenInput.placeholder = "Saved token";
-    setConnection("Connected");
-    log("Hub connected");
-    startEventStream();
-    await refreshInbox();
-    state.screen = "home";
-    render();
-  } catch (error) {
-    client = undefined;
-    setConnection("Connection failed", true);
-    log(`Connect failed: ${errorMessage(error)}`);
-    render();
+    const refreshed = await hub.refresh();
+    hub.setToken(refreshed.token);
+    storedToken = refreshed.token;
+    localStorage.setItem(TOKEN_KEY, refreshed.token);
+  } catch {
+    // Keep the old token until it expires.
   }
 }
 
+async function connect(): Promise<void> {
+  const tokenInput = byId<HTMLInputElement>("hub-token");
+  const baseUrl = hubBaseURL();
+  const inputToken = tokenInput.value.trim();
+  const token = inputToken || storedToken;
+  setConnection("Connecting…");
+
+  const candidates: Array<{ hub: HubClient; viaToken: boolean }> = [
+    ...(token
+      ? [{ hub: new HubClient({ baseUrl, token }), viaToken: true }]
+      : []),
+    { hub: new HubClient({ baseUrl }), viaToken: false },
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const check = await candidate.hub.authCheck();
+      await refreshStoredSession(candidate.hub, check, candidate.viaToken);
+      client = candidate.hub;
+      if (candidate.viaToken && inputToken) {
+        storedToken = inputToken;
+        localStorage.setItem(TOKEN_KEY, inputToken);
+      } else if (!candidate.viaToken) {
+        storedToken = "";
+        localStorage.removeItem(TOKEN_KEY);
+      }
+      tokenInput.value = "";
+      tokenInput.placeholder = storedToken ? "Saved token" : "Paired with cookie";
+      setConnection("Connected");
+      log("Hub connected");
+      startEventStream();
+      await refreshInbox();
+      state.screen = "home";
+      render();
+      return;
+    } catch {
+      // Try the next credential.
+    }
+  }
+
+  client = undefined;
+  setConnection(token ? "Connection failed" : "Pair or enter token", true);
+  log("Connect failed: no accepted hub credential");
+  render();
+}
+
 async function restoreConnection(): Promise<void> {
-  if (!storedToken) {
-    render();
-    return;
-  }
+  const baseUrl = hubBaseURL();
   setConnection("Restoring…");
-  const next = new HubClient({ baseUrl: hubBaseURL(), token: storedToken });
-  try {
-    await next.authCheck();
-    client = next;
-    byId<HTMLInputElement>("hub-token").placeholder = "Saved token";
-    setConnection("Connected");
-    log("Restored hub session");
-    startEventStream();
-    await refreshInbox();
-    state.screen = "home";
-    render();
-  } catch (error) {
-    client = undefined;
-    setConnection("Reconnect in phone", true);
-    log(`Restore failed: ${errorMessage(error)}`);
-    render();
+
+  const candidates: Array<{ hub: HubClient; viaToken: boolean }> = [
+    ...(storedToken
+      ? [{ hub: new HubClient({ baseUrl, token: storedToken }), viaToken: true }]
+      : []),
+    // A browser paired through /api/v1/auth/connect has an HttpOnly cookie.
+    { hub: new HubClient({ baseUrl }), viaToken: false },
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const check = await candidate.hub.authCheck();
+      await refreshStoredSession(candidate.hub, check, candidate.viaToken);
+      client = candidate.hub;
+      if (!candidate.viaToken) {
+        storedToken = "";
+        localStorage.removeItem(TOKEN_KEY);
+      }
+      byId<HTMLInputElement>("hub-token").placeholder = storedToken
+        ? "Saved token"
+        : "Paired with cookie";
+      setConnection("Connected");
+      log("Restored hub session");
+      startEventStream();
+      await refreshInbox();
+      state.screen = "home";
+      render();
+      return;
+    } catch {
+      // Try the next credential.
+    }
   }
+
+  client = undefined;
+  setConnection(
+    storedToken ? "Reconnect in phone" : "Not connected",
+    Boolean(storedToken),
+  );
+  render();
 }
 
 function startEventStream(): void {
@@ -1273,7 +1328,7 @@ async function processEvents(): Promise<void> {
 function render(): void {
   if (!bridge) return;
   if (!client) {
-    const body = "AGENT HUB\n\nPair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto enter the hub token.";
+    const body = "AGENT HUB\n\nPair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto pair or enter a token.";
     if (setPreview("AGENT HUB", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
     }
