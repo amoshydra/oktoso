@@ -362,7 +362,7 @@ The session view is the core reading and reply surface.
 - Appearance: theme, density, message width.
 - Notifications: attention badge, desktop notifications, sound.
 - Shortcuts: command palette, new session, search, send.
-- Devices and tokens: hub token rotation, connected devices later.
+- Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
 - About: hub version, provider versions, build info.
 
 ## 12. States
@@ -377,6 +377,8 @@ Every screen needs these states:
 - **Streaming:** append text, keep scroll position unless the user is at the bottom.
 - **Disconnected hub:** persistent banner with reconnect and last sync time.
 - **No attention:** calm empty inbox with a link to sessions.
+- **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error.
+- **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Agent Hub** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal.
 
 ## 13. Visual language
 

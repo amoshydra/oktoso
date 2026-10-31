@@ -194,6 +194,13 @@ The transcript reading model changed after live providers exposed 1,000+ message
 
 The type scale, spacing, radii, palette, semantic color rules, navigation, and all other screens remain `design-v1`. The pre-existing prototype remains the visual reference for those surfaces.
 
+## Auth affordance (2026-10-31)
+
+- The signed-out screen gained a secondary **Scan pairing QR** action when the browser is a secure context and exposes the Barcode Detection API, plus a camera overlay with one cancel action and an inline error.
+- The action reuses existing surfaces, borders, radii, and control styles. It adds no new type, spacing, or color tokens.
+- The server-rendered `/pair/<code>` confirmation page sits outside the app shell and uses the same neutral palette.
+- The action is hidden on unsupported or insecure browsers. The phone camera app remains the fallback.
+
 ## Files changed
 
 - `docs/prototypes/styles.css`: tokens, surfaces, borders, controls, attention cards, chat, details, providers, settings, mobile nav.

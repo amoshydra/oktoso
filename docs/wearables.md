@@ -13,7 +13,7 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 
 The first slice is deliberately narrow:
 
-- phone pairing for the bearer token; the hub is the app origin
+- phone pairing for a session cookie or bearer token; the hub is the app origin
 - home with inbox count, recent sessions, and the current session
 - inbox with up to five attention items
 - permission / unread / failure detail and actions
@@ -41,7 +41,7 @@ pnpm dev            # hub + web at 5175
 pnpm dev:even-g2    # Even G2 web app at 5176
 ```
 
-The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The phone must be able to reach the laptop's LAN address. The setup screen asks only for the token because the hub is the origin that served the app.
+The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The phone must be able to reach the laptop's LAN address. If the browser is already paired, the setup screen is skipped. Otherwise the setup screen accepts the owner token or a session token; the hub is the origin that served the app.
 
 ```sh
 pnpm simulate:even-g2
@@ -64,7 +64,7 @@ The URL is:
 http://<hub-host>:8787/apps/even-g2/
 ```
 
-Enter only the token. The app and API share an origin.
+Scan the terminal **Scan to pair** QR with the phone camera, or open the pairing link, then confirm **Pair this device**. Load `http://<hub-host>:8787/apps/even-g2/` after pairing. If the webview has its own cookie jar or the app is loaded from another origin, enter a token instead. The app and API share an origin, so a paired browser uses the HttpOnly session cookie.
 
 The hub serves `/apps/<app-id>/` generically, so future glass or watch apps can use `/apps/watch/`, `/apps/vision/`, and so on. Each app is built with its own Vite base and stored under `dist/apps/<app-id>/`.
 
