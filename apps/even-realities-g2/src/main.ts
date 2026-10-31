@@ -3,7 +3,6 @@ import {
   EvenAppBridge,
   ListContainerProperty,
   ListItemContainerProperty,
-  OsEventTypeList,
   RebuildPageContainer,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -31,6 +30,7 @@ import {
   mergeChatMessages,
   nextViewport,
 } from "./chat-model";
+import { glassInput } from "./input";
 
 const TOKEN_KEY = "agent-hub-even-g2-token";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1298,25 +1298,14 @@ async function processEvents(): Promise<void> {
   eventBusy = true;
   const event = eventQueue.shift();
   try {
-    const type =
-      event?.sysEvent?.eventType ??
-      event?.textEvent?.eventType ??
-      event?.listEvent?.eventType;
-    if (type === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+    const input = glassInput(event);
+    if (input?.type === "back") {
       back();
-    } else if (
-      type === OsEventTypeList.SCROLL_TOP_EVENT ||
-      type === OsEventTypeList.SCROLL_BOTTOM_EVENT
-    ) {
-      if (state.screen === "chat") {
-        scrollChat(type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
-      }
-    } else if (event?.listEvent) {
-      const eventType = event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT;
-      if (eventType === OsEventTypeList.CLICK_EVENT) {
-        handleListClick(event.listEvent.currentSelectItemIndex ?? 0);
-      }
-    } else if (event?.textEvent?.eventType === OsEventTypeList.CLICK_EVENT) {
+    } else if (input?.type === "scroll") {
+      if (state.screen === "chat") scrollChat(input.direction);
+    } else if (input?.type === "list-click") {
+      handleListClick(input.index);
+    } else if (input?.type === "text-click") {
       handleTextClick();
     }
   } finally {
@@ -1328,7 +1317,7 @@ async function processEvents(): Promise<void> {
 function render(): void {
   if (!bridge) return;
   if (!client) {
-    const body = "AGENT HUB\n\nPair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto pair or enter a token.";
+    const body = "Pair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto pair or enter a token.";
     if (setPreview("AGENT HUB", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
     }
@@ -1659,9 +1648,10 @@ function listPage(
   footer: string,
   body?: string,
 ): RebuildPageContainer {
-  const headerHeight = body ? 24 : 32;
+  const headerHeight = 32;
   const bodyHeight = body ? 44 : 0;
-  const listY = 24 + bodyHeight;
+  const bodyY = headerHeight;
+  const listY = headerHeight + bodyHeight;
   const listHeight = 244 - listY;
   const texts = [
     new TextContainerProperty({
@@ -1683,7 +1673,7 @@ function listPage(
     texts.push(
       new TextContainerProperty({
         xPosition: 0,
-        yPosition: 24,
+        yPosition: bodyY,
         width: 576,
         height: 44,
         borderWidth: 0,
