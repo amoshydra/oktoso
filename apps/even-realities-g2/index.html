@@ -35,6 +35,10 @@
       .glasses-preview { min-height: 150px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid #24452c; border-radius: 8px; background: #07130a; color: #71f28a; font-size: 11px; }
       .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
       .preview-controls button { min-height: 36px; font-size: 12px; }
+      #phone-question-text { white-space: pre-line; }
+      .question-choices { display: grid; gap: 8px; margin-top: 10px; }
+      .question-choices button { text-align: left; min-height: 44px; }
+      .question-choices button:only-child { width: 100%; }
     </style>
   </head>
   <body>
@@ -53,6 +57,17 @@
         <span id="connection" class="pill">Not connected</span>
       </div>
       <div id="connection-status" class="status"></div>
+    </section>
+
+    <section id="phone-question-panel" class="panel" hidden>
+      <div class="composer-head">
+        <h2>Question</h2>
+        <strong id="phone-question-session">No session open</strong>
+      </div>
+      <p id="phone-question-text" class="hint"></p>
+      <div id="phone-question-choices" class="question-choices"></div>
+      <button id="phone-question-type" type="button" style="margin-top:10px">Type a different answer…</button>
+      <p id="phone-question-status" class="status"></p>
     </section>
 
     <section id="phone-form-panel" class="panel" hidden>
