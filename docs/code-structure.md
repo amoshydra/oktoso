@@ -199,6 +199,8 @@ agent-hub/
           message-service.ts
           send-job.ts
           attention-service.ts
+          question-service.ts
+          question-parser.ts
           read-service.ts
           options-service.ts
           search-service.ts
@@ -219,6 +221,7 @@ agent-hub/
             health.ts
             providers.ts
             sessions.ts
+            questions.ts
             attention.ts
             events.ts
             search.ts

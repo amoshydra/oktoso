@@ -17,6 +17,9 @@ Inbox
 └─ Attention        permission / form / error / unread detail
 
 Chat
+├─ Answer           pending question: choices + Type answer / More / Read chat
+├─ More             More replies / Read chat / Stop
+├─ Type             phone keyboard handoff
 ├─ Reply            canned, 4B, and numbered choices
 └─ Phone keyboard   longer text fallback
 ```
@@ -24,7 +27,10 @@ Chat
 Back always follows where you came from:
 
 - chat → inbox, recent, or home
-- reply / choices → chat
+- answer → chat
+- answer more / type / confirm → answer
+- sent → chat
+- reply / choices → chat or More, depending on where reply was opened
 - attention → inbox
 - inbox / recent → home
 
@@ -55,6 +61,29 @@ does not expose.
   agent activity when present:
   `L456-461/461 · M30/30 · Working · 3 steps`.
 - The header reports `project · session title` so the glass shows which home the session belongs to.
+
+## Question reply
+
+When the latest completed assistant message ends in a question, the chat footer
+adds `? Answer`. Tapping the chat opens `ANSWER` instead of the generic reply
+menu.
+
+- One event-capturing list owns input. The footer is a hint, never a button.
+  The G2 page builder accepts only one capture container, and a text tap has no
+  container identity; do not reintroduce footer buttons or split capture zones.
+- The list contains the agent's choices, then `Type answer`, `More`, and
+  `Read chat`. Four rows are visible; the list scrolls to the rest.
+- A choice sends in one tap. Destructive choices open `CONFIRM` with `Send` /
+  `Cancel`.
+- `Type answer` opens `TYPE` and focuses the phone keyboard. The phone question
+  card shows the full question and choice buttons above the existing composer.
+- `More` opens `More replies`, `Read chat`, and `Stop` (when interruptible).
+- `SENT` shows the exact text sent; tap it or wait to return to chat.
+- The hub derives the question from the transcript at
+  `GET /api/v1/sessions/:ref/question`. No provider-side question API is needed.
+- Multiple questions are deferred; the parser returns no prompt until the phone
+  batch flow exists. Provider-native question forms still use the attention
+  inbox.
 
 ## Read state
 
@@ -129,6 +158,7 @@ rendering still require the scripted hardware checklist.
 
 ## Planned order
 
-1. Voice capture and STT if the SDK exposes microphone input.
-2. Frame snapshot tests against recorded hardware frames.
-3. Scripted hardware checklist for input cadence, reconnect, and latency.
+1. Question reply: free-form, stale-question protection, and multiple questions.
+2. Voice capture and STT if the SDK exposes microphone input.
+3. Frame snapshot tests against recorded hardware frames.
+4. Scripted hardware checklist for input cadence, reconnect, and latency.
