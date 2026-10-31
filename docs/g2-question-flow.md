@@ -1,7 +1,9 @@
 # G2 Question Flow
 
-Status: **design + Slice 1 implementation**. Revised after the isolated G2
-answer-flow spike. Does not modify `glass-ux.md`, `wearables.md`, or `ui-ia.md`; those need a
+Status: **design + core Slice 1-2 implementation**. Revised after the isolated
+G2 answer-flow spike. Question detection, the ANSWER list, phone handoff, stale
+revision checks, and idempotent retry are implemented. The distinct offline/auth
+error copy and multiple-question batch remain. Does not modify `glass-ux.md`, `wearables.md`, or `ui-ia.md`; those need a
 short amendment when this is approved.
 
 Scope: non-voice answering of AI-agent questions from Even G2 glasses and the
