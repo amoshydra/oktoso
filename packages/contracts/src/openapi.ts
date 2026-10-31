@@ -37,6 +37,7 @@ import {
   zProviderCapabilities,
   zProviderHealth,
   zProviderOptions,
+  zQuestionPrompt,
   zReplyOptions,
   zSearchResult,
   zSendInput,
@@ -97,6 +98,10 @@ const AssistantModelsSchema = registry.register(
   }),
 );
 const ReplyOptionsSchema = registry.register("ReplyOptions", zReplyOptions);
+const QuestionPromptSchema = registry.register(
+  "QuestionPrompt",
+  zQuestionPrompt,
+);
 const MessagePartSchema = registry.register("MessagePart", zMessagePart);
 const MessageSchema = registry.register("Message", zMessage);
 const MessagePageSchema = registry.register("MessagePage", zMessagePage);
@@ -474,6 +479,24 @@ registry.registerPath({
   },
   responses: {
     200: { description: "Reply options", content: json(ReplyOptionsSchema) },
+    404: errorResponse("Session not found"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/question",
+  tags: ["questions"],
+  summary: "Get the pending question in a session",
+  description:
+    "Returns the latest completed assistant question, detected from the transcript, or null when there is no pending question.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Pending question or null",
+      content: json(z.object({ data: QuestionPromptSchema.nullable() })),
+    },
     404: errorResponse("Session not found"),
     502: errorResponse("Provider failure"),
   },

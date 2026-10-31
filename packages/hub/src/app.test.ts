@@ -14,6 +14,7 @@ import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
+import { QuestionService } from "./services/question-service";
 import {
   JsonStateStore,
   MemoryStateStore,
@@ -55,6 +56,7 @@ async function createTestApp(options: {
   const drafts = new DraftService(store);
   const settings = new AssistantSettingsService(store);
   const replies = new ReplyService(settings, sessions, logger);
+  const questions = new QuestionService(sessions);
   const app = createApp({
     config,
     store,
@@ -65,12 +67,13 @@ async function createTestApp(options: {
     drafts,
     settings,
     replies,
+    questions,
     logger,
     startedAt: Date.now(),
     appsRoot: options.appsRoot,
     auth: options.auth,
   });
-  return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, fake };
+  return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, questions, fake };
 }
 
 afterEach(async () => {
@@ -518,6 +521,35 @@ describe("hub app", () => {
       events: { lastSeq: 0 },
       storage: { kind: "memory" },
     });
+  });
+
+  it("returns a pending question from the latest assistant message", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const response = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/question",
+      { headers },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: {
+        sessionRef: "desktop-opencode:ses_auth",
+        questions: [
+          {
+            kind: "boolean",
+            choices: [{ text: "Yes" }, { text: "No" }],
+          },
+        ],
+      },
+    });
+
+    const none = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_index/question",
+      { headers },
+    );
+    expect(none.status).toBe(200);
+    expect(await none.json()).toEqual({ data: null });
   });
 
   it("searches session metadata across the hub cache", async () => {

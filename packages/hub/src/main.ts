@@ -47,6 +47,7 @@ import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
+import { QuestionService } from "./services/question-service";
 import { createApp } from "./app";
 import { watchPairingCommands } from "./lib/pairing-prompt";
 import { VERSION } from "./version";
@@ -485,6 +486,7 @@ async function main(): Promise<void> {
     const drafts = new DraftService(store);
     const assistantSettings = new AssistantSettingsService(store);
     const replies = new ReplyService(assistantSettings, sessions, logger);
+    const questions = new QuestionService(sessions);
     const providerEvents = new ProviderEventService(
       registry,
       eventBus,
@@ -521,6 +523,7 @@ async function main(): Promise<void> {
       drafts,
       settings: assistantSettings,
       replies,
+      questions,
       logger,
       startedAt,
       webRoot: configuredWebRoot,
