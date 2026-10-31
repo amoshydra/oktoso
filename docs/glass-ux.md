@@ -127,11 +127,15 @@ count. Older unread sessions are intentionally not pushed onto the glasses.
 
 ## Reliability
 
-- SSE is the primary update path; polling remains a fallback.
+- SSE is the primary update path. The four-second polling loop runs only while
+  SSE is disconnected.
 - Reconnect and resync must preserve the reader's line unless new content is being
   followed intentionally.
 - Auth, offline, provider failure, and timeout need distinct short messages.
 - Back must always work, including on error screens.
+- Recent sessions and chat open immediately show a loading panel; provider calls
+  may take longer than the first frame. The list refresh is cached for 30 seconds
+  on the hub, but a cold refresh waits for every provider.
 
 ## Testing
 

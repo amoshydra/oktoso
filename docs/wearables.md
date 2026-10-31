@@ -27,12 +27,12 @@ The first slice is deliberately narrow:
 - numbered-choice extraction for agent replies
 - full chat responses kept in memory and read through a six-line viewport; newlines and paragraph breaks are preserved, the footer shows line/message position and compact agent activity, chat opens at the start of the latest message, new messages preserve the reading position (or jump to their start only when already at the bottom), `New below` marks unseen content, slow swipes move one line, several rapid swipes accelerate gradually, and refresh never rebuilds the page or resets the reading position
 - Markdown formatting is stripped for glass display; fenced code keeps its content and paragraph breaks are preserved
-- hub message snapshots update chat immediately, with a four-second polling fallback
+- hub message snapshots update chat immediately via SSE, with a four-second polling fallback only while SSE is disconnected
 - stable message retention prevents line shifts when the rolling provider page changes
 - overlapping chat fetches are sequenced, and chat rendering is serialized
 - phone keyboard fallback
 - opening a session stores a hub read marker so web and glass agree on unread state
-- offline/retry polling
+- offline/retry polling; recent-session and chat-open loading panels
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 - a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 
