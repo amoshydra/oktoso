@@ -80,6 +80,7 @@ interface AppState {
   chatOffset: number;
   chatNewBelow: boolean;
   chatActivity: string;
+  chatLoading: boolean;
   formValues: Record<string, unknown>;
   formOptionsField?: AttentionField;
   formError?: string;
@@ -116,6 +117,7 @@ const state: AppState = {
   chatOffset: 0,
   chatNewBelow: false,
   chatActivity: "",
+  chatLoading: false,
   formValues: {},
   formOptionsField: undefined,
   formError: undefined,
@@ -152,6 +154,7 @@ let chatLoadSequence = 0;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
+let eventStreamOpen = false;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
@@ -569,6 +572,7 @@ async function restoreConnection(): Promise<void> {
 
 function startEventStream(): void {
   eventController?.abort();
+  eventStreamOpen = false;
   if (!client) return;
   const controller = new AbortController();
   eventController = controller;
@@ -576,7 +580,10 @@ function startEventStream(): void {
     .startEvents({
       after: 0,
       signal: controller.signal,
-      onStatus: (status) => log(`Hub events: ${status}`),
+      onStatus: (status) => {
+        eventStreamOpen = status === "open";
+        log(`Hub events: ${status}`);
+      },
       onEvent: (event) => {
         if (controller.signal.aborted) return;
         if (event.type === "resync") {
@@ -612,6 +619,7 @@ function startEventStream(): void {
     })
     .catch((error) => {
       if (!controller.signal.aborted) {
+        eventStreamOpen = false;
         log(`Hub events stopped: ${errorMessage(error)}`);
       }
     });
@@ -625,8 +633,16 @@ function scheduleEventRefresh(action: () => void | Promise<void>): void {
   }, 500);
 }
 
+function showLoading(body: string): void {
+  if (!bridge) return;
+  if (setPreview("AGENT HUB", body, "Please wait")) {
+    void showPage(textPage(body, "Please wait"));
+  }
+}
+
 async function openSessions(): Promise<void> {
   if (!client) return;
+  showLoading("Loading recent\nsessions…");
   try {
     const page = await client.sessions({ limit: 5 });
     state.sessions = page.data;
@@ -853,6 +869,7 @@ async function openChat(
   title: string,
   origin: Screen = "inbox",
 ): Promise<void> {
+  if (!client) return;
   chatLoadSequence += 1;
   state.sessionRef = ref;
   state.sessionTitle = title;
@@ -865,6 +882,7 @@ async function openChat(
   state.chatOffset = 0;
   state.chatNewBelow = false;
   state.chatActivity = "";
+  state.chatLoading = true;
   state.question = undefined;
   state.answerText = undefined;
   state.pendingAnswerText = undefined;
@@ -883,6 +901,7 @@ async function openChat(
   hidePhoneForm();
   updatePhoneState();
   updatePhoneQuestion();
+  render();
   void client
     ?.session(ref)
     .then((session) => {
@@ -1195,6 +1214,7 @@ async function loadChat(quiet: boolean): Promise<void> {
     state.chatOffset = viewport.offset;
     state.chatNewBelow = viewport.newBelow;
     state.error = undefined;
+    state.chatLoading = false;
     const changed =
       previousLines.length !== state.chatLines.length ||
       previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -1210,6 +1230,7 @@ async function loadChat(quiet: boolean): Promise<void> {
   } catch (error) {
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
     state.error = errorMessage(error);
+    state.chatLoading = false;
     render();
     log(`Chat load failed: ${state.error}`);
   }
@@ -2005,6 +2026,14 @@ function render(): void {
     return;
   }
   if (state.screen === "chat") {
+    if (state.chatLoading) {
+      const header = clampLine(state.sessionTitle ?? "Session", 40);
+      const body = "Opening session…";
+      if (setPreview(header, body, "Please wait")) {
+        void showPage(textPage(body, "Please wait", header));
+      }
+      return;
+    }
     const view = chatView();
     if (setPreview(view.header, view.body, view.footer)) {
       void showPage(textPage(view.body, view.footer, view.header));
@@ -2394,7 +2423,7 @@ async function init(): Promise<void> {
     );
     bridge.onEvenHubEvent(onEvenEvent);
     pollTimer = setInterval(() => {
-      if (!client) return;
+      if (!client || eventStreamOpen) return;
       if (state.screen === "inbox" || state.screen === "home") {
         void refreshInbox();
       } else if (state.screen === "chat" && state.sessionRef) {
