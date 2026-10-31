@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createApp } from "./app";
+import { AuthService } from "./auth/service";
+import { SESSION_TTL_SECONDS } from "./auth/session";
 import { loadConfig } from "./config/load";
 import { createLogger } from "./lib/logger";
 import { EventBus } from "./services/event-bus";
@@ -30,7 +32,12 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
-async function createTestApp(options: { store?: StateStore; cors?: string[]; appsRoot?: string } = {}) {
+async function createTestApp(options: {
+  store?: StateStore;
+  cors?: string[];
+  appsRoot?: string;
+  auth?: AuthService;
+} = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
   const config = await loadConfig(
@@ -61,6 +68,7 @@ async function createTestApp(options: { store?: StateStore; cors?: string[]; app
     logger,
     startedAt: Date.now(),
     appsRoot: options.appsRoot,
+    auth: options.auth,
   });
   return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, fake };
 }
@@ -130,14 +138,335 @@ describe("hub app", () => {
     expect(await response.json()).toMatchObject({ ok: true, version: "0.1.0" });
   });
 
-  it("requires the bearer token for API routes", async () => {
+  it("requires a hub credential for API routes", async () => {
     const { app } = await createTestApp();
     expect((await app.request("/api/v1/auth/check")).status).toBe(401);
     const response = await app.request("/api/v1/auth/check", {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true });
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      auth: { kind: "owner" },
+    });
+  });
+
+  it("issues and redeems a single-use pairing code for a JSON client", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(pair.status).toBe(200);
+    const { code, expiresIn } = (await pair.json()) as {
+      code: string;
+      expiresIn: number;
+    };
+    expect(code).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(expiresIn).toBe(300);
+
+    const connect = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code }),
+    });
+    expect(connect.status).toBe(200);
+    const { token: session, expiresAt } = (await connect.json()) as {
+      token: string;
+      expiresAt: number;
+    };
+    expect(session).toMatch(/^\d+\.[A-Za-z0-9_-]+$/);
+    expect(expiresAt).toBeGreaterThan(Date.now());
+
+    const check = await app.request("/api/v1/auth/check", {
+      headers: { Authorization: `Bearer ${session}` },
+    });
+    expect(check.status).toBe(200);
+    expect(await check.json()).toMatchObject({ auth: { kind: "session" } });
+
+    const replay = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    expect(replay.status).toBe(401);
+  });
+
+  it("does not consume a pairing code when the link is viewed", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const pairing = auth.issuePairing();
+
+    const page = await app.request(`/pair/${pairing.code}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Pair this device");
+    expect(page.headers.get("set-cookie")).toBeNull();
+
+    const exchange = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.code }),
+    });
+    expect(exchange.status).toBe(200);
+  });
+
+  it("sets an HttpOnly session cookie when the pairing form is submitted", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { code } = (await pair.json()) as { code: string };
+
+    const form = await app.request(`/pair/${code}`, {
+      method: "POST",
+      headers: { Origin: "http://localhost" },
+    });
+    expect(form.status).toBe(303);
+    expect(form.headers.get("location")).toBe("/");
+
+    const setCookie = form.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("agent_hub_session=");
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+    expect(setCookie).toContain(`Max-Age=${SESSION_TTL_SECONDS}`);
+    expect(setCookie).not.toContain("Secure");
+
+    const cookie = setCookie.split(";")[0]!;
+    const check = await app.request("/api/v1/auth/check", {
+      headers: { Cookie: cookie },
+    });
+    expect(check.status).toBe(200);
+    expect(await check.json()).toMatchObject({ auth: { kind: "session" } });
+  });
+
+  it("shows an already-paired page without consuming a valid link", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+    const pairing = auth.issuePairing();
+
+    const page = await app.request(`/pair/${pairing.code}`, {
+      headers: { Cookie: cookie },
+    });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Already paired");
+
+    const exchange = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.code }),
+    });
+    expect(exchange.status).toBe(200);
+  });
+
+  it("marks the session cookie Secure behind an HTTPS proxy", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { code } = (await pair.json()) as { code: string };
+
+    const form = await app.request(`/pair/${code}`, {
+      method: "POST",
+      headers: {
+        Origin: "http://localhost",
+        "X-Forwarded-Proto": "https",
+      },
+    });
+    expect(form.status).toBe(303);
+    expect(form.headers.get("set-cookie")).toContain("Secure");
+  });
+
+  it("rejects a non-JSON pairing exchange without consuming the code", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const pairing = auth.issuePairing();
+
+    const form = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `code=${pairing.code}`,
+    });
+    expect(form.status).toBe(400);
+
+    const exchange = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.code }),
+    });
+    expect(exchange.status).toBe(200);
+  });
+
+  it("does not let a paired session create another pairing code", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const response = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${auth.mintSession().token}` },
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects cross-origin cookie mutations", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+
+    const crossOrigin = await app.request(
+      "/api/v1/providers/desktop-opencode/check",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          Origin: "https://evil.example",
+          Host: "localhost",
+        },
+      },
+    );
+    expect(crossOrigin.status).toBe(403);
+
+    const sameOrigin = await app.request(
+      "/api/v1/providers/desktop-opencode/check",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          Origin: "http://localhost",
+          Host: "localhost",
+        },
+      },
+    );
+    expect(sameOrigin.status).toBe(200);
+  });
+
+  it("rejects expired pairing and session tokens", async () => {
+    let now = Date.now();
+    const auth = new AuthService(token, { now: () => now });
+    const { app } = await createTestApp({ auth });
+
+    const pairing = auth.issuePairing();
+    now = pairing.expiresAt;
+    const expiredPage = await app.request(`/pair/${pairing.code}`);
+    expect(expiredPage.status).toBe(401);
+
+    const expiredExchange = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.code }),
+    });
+    expect(expiredExchange.status).toBe(401);
+
+    const session = auth.mintSession();
+    now = session.expiresAt;
+    const expiredSession = await app.request("/api/v1/auth/check", {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+    expect(expiredSession.status).toBe(401);
+  });
+
+  it("explains an expired pairing link to a browser", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/pair/not-a-code");
+    expect(response.status).toBe(401);
+    const html = await response.text();
+    expect(html).toContain("Pairing link expired");
+    expect(html).toContain("<code>p</code>");
+    expect(html).toContain("<code>pair</code>");
+  });
+
+  it("serves the pairing page as HTML even when Accept is */*", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const pairing = auth.issuePairing();
+
+    const page = await app.request(`/pair/${pairing.code}`, {
+      headers: { Accept: "*/*", "Sec-Fetch-Mode": "navigate" },
+    });
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("sends an already-paired browser to the app when a link is reused", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+
+    const response = await app.request("/pair/not-a-code", {
+      headers: { Cookie: cookie },
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/");
+  });
+
+  it("refreshes a session token on demand", async () => {
+    let now = Date.now();
+    const auth = new AuthService(token, { now: () => now });
+    const { app } = await createTestApp({ auth });
+    const session = auth.mintSession();
+    now += 1_000;
+
+    const response = await app.request("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+    expect(response.status).toBe(200);
+    const refreshed = (await response.json()) as {
+      token: string;
+      expiresAt: number;
+    };
+    expect(refreshed.token).toMatch(/^\d+\.[A-Za-z0-9_-]+$/);
+    expect(refreshed.expiresAt).toBeGreaterThan(session.expiresAt);
+
+    const owner = await app.request("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(owner.status).toBe(400);
+  });
+
+  it("refreshes a near-expiry session cookie automatically", async () => {
+    let now = Date.now();
+    const auth = new AuthService(token, { now: () => now });
+    const { app } = await createTestApp({ auth });
+    const session = auth.mintSession();
+    now = session.expiresAt - 6 * 24 * 60 * 60 * 1000;
+
+    const response = await app.request("/api/v1/auth/check", {
+      headers: { Cookie: `agent_hub_session=${session.token}` },
+    });
+    expect(response.status).toBe(200);
+
+    const setCookie = response.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("agent_hub_session=");
+    const refreshedToken = setCookie.split(";")[0]!.split("=")[1]!;
+    expect(refreshedToken).not.toBe(session.token);
+
+    const body = (await response.json()) as {
+      auth: { expiresAt: number };
+    };
+    expect(body.auth.expiresAt).toBeGreaterThan(session.expiresAt);
+  });
+
+  it("clears the session cookie on signout", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/api/v1/auth/signout", {
+      method: "POST",
+      headers: { Cookie: "agent_hub_session=stale" },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
   it("lists providers and diagnostics with auth", async () => {

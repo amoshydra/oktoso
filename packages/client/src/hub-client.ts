@@ -13,6 +13,9 @@ import type {
   Health,
   MessagePage,
   MessagesQuery,
+  PairingCode,
+  PairingSession,
+  SessionRefresh,
   Provider,
   ProviderOptions,
   ReplyMode,
@@ -31,23 +34,26 @@ import {
 
 export interface HubClientOptions {
   baseUrl?: string;
-  token: string;
+  token?: string;
+  credentials?: RequestCredentials;
   fetchImpl?: typeof fetch;
 }
 
 export class HubClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
-  private token: string;
+  private readonly credentials: RequestCredentials;
+  private token: string | undefined;
 
   constructor(options: HubClientOptions) {
     this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.token = options.token;
+    this.token = options.token?.trim() || undefined;
+    this.credentials = options.credentials ?? "same-origin";
     this.fetchImpl = options.fetchImpl ?? fetch.bind(globalThis);
   }
 
-  setToken(token: string): void {
-    this.token = token;
+  setToken(token: string | undefined): void {
+    this.token = token?.trim() || undefined;
   }
 
   async health(): Promise<Health> {
@@ -56,6 +62,31 @@ export class HubClient {
 
   async authCheck(): Promise<AuthCheck> {
     return this.request<AuthCheck>("/api/v1/auth/check");
+  }
+
+  async pair(): Promise<PairingCode> {
+    return this.request<PairingCode>("/api/v1/auth/pair", { method: "POST" });
+  }
+
+  async connect(code: string): Promise<PairingSession> {
+    return this.request<PairingSession>("/api/v1/auth/connect", {
+      method: "POST",
+      body: { code },
+    });
+  }
+
+  async refresh(): Promise<SessionRefresh> {
+    return this.request<SessionRefresh>("/api/v1/auth/refresh", {
+      method: "POST",
+    });
+  }
+
+  async signOut(): Promise<void> {
+    await this.request<void>("/api/v1/auth/signout", {
+      method: "POST",
+      auth: false,
+      keepalive: true,
+    });
   }
 
   async providers(): Promise<Provider[]> {
@@ -213,6 +244,7 @@ export class HubClient {
     return runEventStream({
       baseUrl: this.baseUrl,
       token: this.token,
+      credentials: this.credentials,
       after: options.after,
       signal: options.signal,
       onEvent: options.onEvent,
@@ -223,16 +255,25 @@ export class HubClient {
 
   private async request<T>(
     path: string,
-    options: { auth?: boolean; method?: string; body?: unknown } = {},
+    options: {
+      auth?: boolean;
+      method?: string;
+      body?: unknown;
+      keepalive?: boolean;
+    } = {},
   ): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (options.auth !== false) headers.Authorization = `Bearer ${this.token}`;
+    if (options.auth !== false && this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         headers,
+        credentials: this.credentials,
+        keepalive: options.keepalive,
         method: options.method ?? "GET",
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       });

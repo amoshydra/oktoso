@@ -6,7 +6,8 @@ export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed"
 
 export interface EventStreamOptions {
   baseUrl?: string;
-  token: string;
+  token?: string;
+  credentials?: RequestCredentials;
   after?: number;
   signal: AbortSignal;
   onEvent: (event: HubEvent) => void;
@@ -58,11 +59,12 @@ export async function runEventStream(options: EventStreamOptions): Promise<void>
   while (!options.signal.aborted) {
     try {
       options.onStatus?.(attempt === 0 ? "connecting" : "reconnecting");
+      const headers: Record<string, string> = { Accept: "text/event-stream" };
+      if (options.token) headers.Authorization = `Bearer ${options.token}`;
+
       const response = await fetchImpl(`${baseUrl}/api/v1/events?after=${cursor}`, {
-        headers: {
-          Authorization: `Bearer ${options.token}`,
-          Accept: "text/event-stream",
-        },
+        headers,
+        credentials: options.credentials ?? "same-origin",
         signal: options.signal,
       });
 
