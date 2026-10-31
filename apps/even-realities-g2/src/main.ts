@@ -1649,7 +1649,7 @@ function listPage(
   body?: string,
 ): RebuildPageContainer {
   const headerHeight = 32;
-  const bodyHeight = body ? 44 : 0;
+  const bodyHeight = body ? 56 : 0;
   const bodyY = headerHeight;
   const listY = headerHeight + bodyHeight;
   const listHeight = 244 - listY;
@@ -1675,7 +1675,7 @@ function listPage(
         xPosition: 0,
         yPosition: bodyY,
         width: 576,
-        height: 44,
+        height: bodyHeight,
         borderWidth: 0,
         borderColor: 5,
         borderRadius: 0,
