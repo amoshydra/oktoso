@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe("ensureConfig", () => {
   it("creates an empty config with a generated token", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-bootstrap-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-bootstrap-"));
     roots.push(root);
     const configPath = join(root, "hub.config.json");
 
@@ -46,7 +46,7 @@ describe("ensureConfig", () => {
   });
 
   it("uses HUB_TOKEN when one is provided", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-bootstrap-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-bootstrap-"));
     roots.push(root);
     const configPath = join(root, "hub.config.json");
     const token = "a".repeat(32);
@@ -62,7 +62,7 @@ describe("ensureConfig", () => {
   });
 
   it("does not create an explicitly requested config", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-bootstrap-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-bootstrap-"));
     roots.push(root);
 
     await expect(

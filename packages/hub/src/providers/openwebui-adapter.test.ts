@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
-import { OpenWebUIAdapter } from "@agent-hub/providers";
+import { createFakeProviderServer, type FakeProviderServer } from "@amoshydra/oktoso-testing";
+import { OpenWebUIAdapter } from "@amoshydra/oktoso-providers";
 
 const servers: FakeProviderServer[] = [];
 

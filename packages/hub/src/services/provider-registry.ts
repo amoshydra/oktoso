@@ -2,13 +2,13 @@ import type {
   Provider,
   ProviderHealth,
   ProviderStatus,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import {
   emptyCapabilities,
   OpenCodeAdapter,
   OpenWebUIAdapter,
   type ProviderAdapter,
-} from "@agent-hub/providers";
+} from "@amoshydra/oktoso-providers";
 import type { ProviderConfig } from "../config/schema";
 import { buildProviderEndpoint } from "../config/load";
 import type { Logger } from "../lib/logger";

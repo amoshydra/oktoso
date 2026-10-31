@@ -12,7 +12,7 @@ placeholders.
 
 ## Credentials
 
-Agent Hub is hub-owned: provider credentials stay on the hub and are never sent
+Oktoso is hub-owned: provider credentials stay on the hub and are never sent
 to web or wearable clients.
 
 - Put provider credentials in the ignored `.env.local` or in a local
@@ -33,7 +33,7 @@ to web or wearable clients.
   valid while it is used. Rotating `HUB_TOKEN` invalidates every paired session.
   Per-device revocation is not implemented yet; stored device tokens are the
   follow-up.
-- The committed `dev-token-agent-hub` value is only for local development. Never
+- The committed `dev-token-oktoso` value is only for local development. Never
   reuse it for a reachable deployment.
 - Assistant API keys are write-only from the browser and are not returned by the
   settings API or included in wearable packages.

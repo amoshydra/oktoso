@@ -1,6 +1,6 @@
-# Agent Hub UI prototype
+# Oktoso UI prototype
 
-Static prototype for the Agent Hub web client. It uses mock providers and sessions. No backend is required.
+Static prototype for the Oktoso web client. It uses mock providers and sessions. No backend is required.
 
 ## Run
 

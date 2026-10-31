@@ -1,5 +1,5 @@
-import type { Message } from "@agent-hub/contracts";
-import { plainTextForGlass, wrapText } from "@agent-hub/wearable-core";
+import type { Message } from "@amoshydra/oktoso-contracts";
+import { plainTextForGlass, wrapText } from "@amoshydra/oktoso-wearable-core";
 
 export interface ChatBuild {
   lines: string[];

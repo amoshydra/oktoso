@@ -3,7 +3,7 @@ import type {
   AnswerChoice,
   PendingQuestion,
   QuestionPrompt,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import {
   buildAnswerMetadata,
   buildAnswerRows,

@@ -15,18 +15,18 @@ export function resolveLogDir(
   if (env.HUB_LOG_DIR) return env.HUB_LOG_DIR;
 
   if (platform === "darwin") {
-    return join(homedir(), "Library", "Logs", "Agent Hub");
+    return join(homedir(), "Library", "Logs", "Oktoso");
   }
   if (platform === "win32") {
     return join(
       env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-      "AgentHub",
+      "Oktoso",
       "Logs",
     );
   }
   return join(
     env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
-    "agent-hub",
+    "oktoso",
     "logs",
   );
 }

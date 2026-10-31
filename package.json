@@ -1,12 +1,12 @@
 {
-  "name": "agent-hub",
+  "name": "@amoshydra/oktoso",
   "version": "0.1.0",
-  "private": true,
-  "description": "Hub-first session hub for AI agents across OpenCode, Open WebUI, Hermes, and wearable clients.",
+  "private": false,
+  "description": "Oktoso \u2014 hub and control plane for AI agents across providers and wearable clients.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "agent-hub": "./dist/hub.js"
+    "oktoso": "./dist/hub.js"
   },
   "files": [
     "dist",
@@ -20,14 +20,14 @@
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "dev:even-g2": "tsx scripts/dev-even-g2.ts",
-    "simulate:even-g2": "pnpm --filter @agent-hub/even-realities-g2 simulate",
+    "simulate:even-g2": "pnpm --filter @amoshydra/oktoso-even-g2 simulate",
     "build": "pnpm build:hub && pnpm build:web && pnpm build:even-g2",
     "build:hub": "tsup",
-    "build:web": "pnpm --filter @agent-hub/web build",
-    "build:even-g2": "pnpm --filter @agent-hub/even-realities-g2 build",
-    "build:even-g2:hosted": "pnpm --filter @agent-hub/even-realities-g2 run build:hosted",
+    "build:web": "pnpm --filter @amoshydra/oktoso-web build",
+    "build:even-g2": "pnpm --filter @amoshydra/oktoso-even-g2 build",
+    "build:even-g2:hosted": "pnpm --filter @amoshydra/oktoso-even-g2 run build:hosted",
     "build:single-port": "pnpm build:hub && pnpm build:web && pnpm build:even-g2:hosted",
-    "pack:even-g2": "pnpm --filter @agent-hub/even-realities-g2 run pack",
+    "pack:even-g2": "pnpm --filter @amoshydra/oktoso-even-g2 run pack",
     "start": "node dist/hub.js",
     "start:local": "tsx scripts/start-local.ts",
     "pair": "tsx packages/hub/src/main.ts --pair",
@@ -37,7 +37,8 @@
     "test:watch": "vitest",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "openapi:check": "tsx scripts/generate-openapi.ts --check",
-    "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes"
+    "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes",
+    "prepublishOnly": "pnpm build:single-port"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
@@ -53,5 +54,16 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "mcp",
+    "opencode",
+    "openwebui",
+    "even-g2"
+  ]
 }

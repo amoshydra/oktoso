@@ -13,7 +13,7 @@ import type {
   SessionListQuery,
   SessionPage,
   SessionStatus,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import type { ProviderAdapter } from "../types";
 import { ProviderError } from "../errors";
 

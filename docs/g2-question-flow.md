@@ -216,7 +216,7 @@ was.
 1. **Chat, question pending.** The chat shows the latest message, scrolled to the
    question line with two context lines above it. The footer is
    `? Answer · L456-461/461 · M30/30`. Tap anywhere in the body.
-2. **`ANSWER`.** Header `ANSWER · agent-hub`. Summary `Q  <question>` plus one
+2. **`ANSWER`.** Header `ANSWER · oktoso`. Summary `Q  <question>` plus one
    context line. The only capture is the list: choices in the agent's order,
    then `Type answer` (when free text is allowed), `More`, and `Read chat`. Four
    rows are visible; the rest are below the fold. Footer hint:
@@ -450,7 +450,7 @@ not a rendered glyph. `[ … ]` in the phone wireframe is a button.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32  header
+│ ANSWER · oktoso                                           │ 32  header
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Should I squash the three fix commits into one?           │ 56  summary
 │    Branch: fix/auth-race                                     │
@@ -473,7 +473,7 @@ not tappable.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Continue with the failing test?                           │ 56
 │    Last run: 1 failed, 2 passed                              │
@@ -495,7 +495,7 @@ Do not invent a third answer.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Which branch should I target for the release?             │ 56
 │    No options suggested.                                     │
@@ -516,7 +516,7 @@ opens the phone handoff. The list is the only capture.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  The migration will drop legacy_users. Which backup do     │ 56
 │    you want first?                                           │
@@ -540,7 +540,7 @@ no paging; one list scrolls. The header never shows `1/2`.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Which region should receive the release?                  │ 56
 │    Strict choice; no free text.                              │
@@ -583,7 +583,7 @@ remains the manual escape hatch when detection misses.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Sending…                                                     │ 56
 │ “Yes, squash them”                                           │
@@ -599,7 +599,7 @@ The `sending` body is the single capture but ignores input; the footer is a hint
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Sent                                                         │ 56
 │ “Yes, squash them”                                           │
@@ -615,7 +615,7 @@ Tapping the `sent` body returns to chat; it also auto-returns after 1.2 s.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ANSWER · agent-hub                                           │ 32
+│ ANSWER · oktoso                                           │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Couldn’t send. Agent is offline.                             │ 56
 │ “Yes, squash them”                                           │
@@ -655,7 +655,7 @@ not selectable. Back goes to chat.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ MORE · agent-hub                                             │ 32
+│ MORE · oktoso                                             │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Should I squash the three fix commits into one?           │ 56
 ├──────────────────────────────────────────────────────────────┤
@@ -677,7 +677,7 @@ the list has two rows (`More replies`, `Read chat`).
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ CONFIRM · agent-hub                                          │ 32
+│ CONFIRM · oktoso                                          │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Send this answer? This cannot be undone.                      │ 56
 │ “Delete the branch”                                          │
@@ -695,7 +695,7 @@ the list has two rows (`More replies`, `Read chat`).
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ TYPE · agent-hub                                             │ 32
+│ TYPE · oktoso                                             │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Which branch should I target for the release?             │ 56
 │    Use the phone keyboard.                                   │
@@ -716,9 +716,9 @@ returns to `ANSWER` and keeps the composer text.
 
 ```text
 ┌────────────────────────────────────────────┐
-│ Agent Hub for Even G2                      │
+│ Oktoso for Even G2                      │
 │ ┌────────────────────────────────────────┐ │
-│ │ QUESTION                    agent-hub  │ │
+│ │ QUESTION                    oktoso  │ │
 │ │ Should I squash the three fix commits  │ │
 │ │ into one?                              │ │
 │ │ Branch: fix/auth-race                  │ │
@@ -1377,7 +1377,7 @@ attaching `replyTo` to unrelated messages.
   Even Hub webview on the phone. No cross-device sync is required for v1.
 - A second paired browser is a separate client. It shares messages, read state,
   and drafts through the hub, but the glasses cannot focus its keyboard. The
-  `Type answer` action there shows `Open Agent Hub on your phone`.
+  `Type answer` action there shows `Open Oktoso on your phone`.
 - When the phone sends, the glasses go to `SENT` if they are anywhere in the
   answer flow. If the glasses are on `CHAT`, the footer question marker clears.
 - When the glasses send, the phone card shows `Sent` and keeps the text until

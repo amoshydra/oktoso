@@ -4,9 +4,9 @@ import type {
   AttentionPage,
   AttentionType,
   Session,
-} from "@agent-hub/contracts";
-import type { StateStore } from "@agent-hub/storage";
-import type { ProviderAdapter } from "@agent-hub/providers";
+} from "@amoshydra/oktoso-contracts";
+import type { StateStore } from "@amoshydra/oktoso-storage";
+import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { AppError, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { EventBus } from "./event-bus";

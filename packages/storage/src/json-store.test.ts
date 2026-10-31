@@ -7,7 +7,7 @@ import { JsonStateStore } from "./json-store";
 const roots: string[] = [];
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "agent-hub-store-"));
+  const root = await mkdtemp(join(tmpdir(), "oktoso-store-"));
   roots.push(root);
   return root;
 }

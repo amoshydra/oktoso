@@ -1,4 +1,4 @@
-import type { HubEvent, Message } from "@agent-hub/contracts";
+import type { HubEvent, Message } from "@amoshydra/oktoso-contracts";
 
 /** Returns the normalized message carried by a message event, if present. */
 export function messageFromHubEvent(event: HubEvent): Message | undefined {

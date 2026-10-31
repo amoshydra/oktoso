@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Session } from "@agent-hub/contracts";
-import type { ProviderAdapter } from "@agent-hub/providers";
-import { MemoryStateStore } from "@agent-hub/storage";
+import type { Session } from "@amoshydra/oktoso-contracts";
+import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
+import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
 import type { ProviderRegistry } from "./provider-registry";
 import { SessionService } from "./session-service";
