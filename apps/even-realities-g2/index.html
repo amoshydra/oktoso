@@ -44,10 +44,10 @@
 
     <section class="panel">
       <h2>Hub connection</h2>
-      <p class="hint">This app connects to the hub it was loaded from.</p>
+      <p class="hint">This app connects to the hub it was loaded from. If this browser is paired, Connect uses the session cookie.</p>
       <p class="hint"><code id="hub-origin">same origin</code></p>
-      <label for="hub-token">Hub bearer token</label>
-      <input id="hub-token" type="password" placeholder="Paste the hub token" autocomplete="off" spellcheck="false" />
+      <label for="hub-token">Hub token (optional when paired)</label>
+      <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
       <div class="row" style="margin-top:12px">
         <button id="connect" class="primary" type="button">Connect</button>
         <span id="connection" class="pill">Not connected</span>

@@ -20,9 +20,11 @@ import {
   type ConnectionStatus,
 } from "@agent-hub/client";
 import { renderMarkdown } from "./markdown";
+import { canScanPairingQr, scanPairingQr } from "./qr-scanner";
 
 const TOKEN_KEY = "agent-hub-token";
 const THEME_KEY = "agent-hub-theme";
+const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type AuthState = "checking" | "signed-out" | "signed-in";
 type View = "foundation" | "inbox" | "sessions" | "search" | "providers" | "settings";
@@ -91,7 +93,7 @@ export function App() {
   );
   const [view, setView] = useState<View>("foundation");
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
-  const [auth, setAuth] = useState<AuthState>(token ? "checking" : "signed-out");
+  const [auth, setAuth] = useState<AuthState>("checking");
   const [client, setClient] = useState<HubClient | null>(null);
   const [health, setHealth] = useState<Health>();
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
@@ -103,6 +105,8 @@ export function App() {
   const [error, setError] = useState<string>();
   const [loginError, setLoginError] = useState<string>();
   const [loginBusy, setLoginBusy] = useState(false);
+  const signingOut = useRef(false);
+  const didRefresh = useRef(false);
   const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -135,7 +139,10 @@ export function App() {
   };
 
   const signOut = useCallback(() => {
+    signingOut.current = true;
+    didRefresh.current = false;
     sessionStorage.removeItem(TOKEN_KEY);
+    void new HubClient({}).signOut().catch(() => undefined);
     setToken("");
     setClient(null);
     setAuth("signed-out");
@@ -195,20 +202,43 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!token) {
-      setAuth("signed-out");
-      return;
-    }
+    // Do not let the cookie bootstrap race an in-flight signout and sign the
+    // user back in before the server clears the cookie.
+    if (signingOut.current) return;
 
     let cancelled = false;
-    const hub = new HubClient({ token });
+    // A paired browser has an HttpOnly session cookie and no local token.
+    // A token, when present, is the explicit owner/dev fallback.
+    const hub = new HubClient(token ? { token } : {});
     setClient(hub);
     setAuth("checking");
 
     hub
       .authCheck()
-      .then(async () => {
+      .then(async (check) => {
         if (cancelled) return;
+
+        // A pasted session token is not refreshed by the cookie middleware.
+        // Rotate it here when it is close to expiry; owner tokens do not expire.
+        if (
+          !didRefresh.current &&
+          token &&
+          check.auth?.kind === "session" &&
+          check.auth.expiresAt !== undefined &&
+          check.auth.expiresAt - Date.now() <= SESSION_REFRESH_WINDOW_MS
+        ) {
+          try {
+            const refreshed = await hub.refresh();
+            didRefresh.current = true;
+            hub.setToken(refreshed.token);
+            sessionStorage.setItem(TOKEN_KEY, refreshed.token);
+            setToken(refreshed.token);
+            return;
+          } catch {
+            // Keep using the old token until it expires.
+          }
+        }
+
         setAuth("signed-in");
         const snapshot = await loadSnapshot(hub);
         if (!cancelled) {
@@ -278,6 +308,8 @@ export function App() {
   const handleConnect = async (nextToken: string) => {
     setLoginBusy(true);
     setLoginError(undefined);
+    signingOut.current = false;
+    didRefresh.current = false;
     const hub = new HubClient({ token: nextToken });
     try {
       await hub.authCheck();
@@ -616,7 +648,7 @@ export function App() {
                     <div className="panel-head">
                       <div>
                         <h2>Session</h2>
-                        <p>The hub token is held only for this tab.</p>
+                        <p>A paired browser uses an HttpOnly cookie. The owner token stays in this tab.</p>
                       </div>
                     </div>
                     <button className="btn small" type="button" onClick={signOut}>
@@ -687,6 +719,37 @@ function Login(props: {
   onToggleTheme: () => void;
 }) {
   const [value, setValue] = useState(import.meta.env.DEV ? import.meta.env.VITE_DEV_TOKEN ?? "" : "");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string>();
+  const scanVideo = useRef<HTMLVideoElement | null>(null);
+  const canScan = useMemo(() => canScanPairingQr(), []);
+
+  useEffect(() => {
+    if (!scanning) return;
+    const video = scanVideo.current;
+    if (!video) return;
+
+    const controller = new AbortController();
+    setScanError(undefined);
+    void scanPairingQr(video, controller.signal)
+      .then((url) => {
+        if (url) {
+          window.location.assign(url);
+          return;
+        }
+        if (!controller.signal.aborted) {
+          setScanError("No pairing QR found. Point the camera at the terminal QR code.");
+        }
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setScanError(
+          reason instanceof Error ? reason.message : "Unable to open the camera",
+        );
+      });
+
+    return () => controller.abort();
+  }, [scanning]);
 
   return (
     <div className="login-page">
@@ -698,7 +761,7 @@ function Login(props: {
         <p className="eyebrow">Agent Hub</p>
         <h1>One workbench for your agents.</h1>
         <p className="login-copy">
-          Enter the hub token. Provider credentials stay on the hub and never reach this client.
+          Enter the hub token, or open a pairing link from the hub. On first run, the hub prints a link when it starts. Provider credentials stay on the hub and never reach this client.
         </p>
         <form
           onSubmit={(event) => {
@@ -715,7 +778,7 @@ function Login(props: {
             type="password"
             autoComplete="off"
             spellCheck={false}
-            placeholder="Paste your bearer token"
+            placeholder="Paste the owner or session token"
             value={value}
             onChange={(event) => setValue((event.currentTarget as HTMLInputElement).value)}
           />
@@ -728,15 +791,57 @@ function Login(props: {
             {props.busy ? "Connecting…" : "Connect to hub"}
           </button>
         </form>
+        {canScan ? (
+          <button
+            className="btn login-scan"
+            type="button"
+            onClick={() => setScanning(true)}
+          >
+            Scan pairing QR
+          </button>
+        ) : null}
         {import.meta.env.DEV && import.meta.env.VITE_DEV_TOKEN ? (
           <p className="dev-hint">
             Development token prefilled from <span className="mono">VITE_DEV_TOKEN</span>.
           </p>
         ) : null}
         <p className="login-footnote">
-          Single-owner build. The token is held in this tab's session storage.
+          Single-owner build. A paired browser uses an HttpOnly cookie; a pasted token stays in this tab. If you run the hub, type <span className="mono">p</span> in its terminal or run its <span className="mono">pair</span> command.
         </p>
       </div>
+
+      {scanning ? (
+        <div
+          className="qr-scan-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Scan pairing QR code"
+        >
+          <div className="qr-scan-panel">
+            <h2>Scan pairing QR</h2>
+            <p>Point the camera at the QR code shown in the hub terminal.</p>
+            <video
+              ref={scanVideo}
+              className="qr-scan-video"
+              autoPlay
+              muted
+              playsInline
+            />
+            {scanError ? (
+              <div className="form-error" role="alert">
+                {scanError}
+              </div>
+            ) : null}
+            <button
+              className="btn login-scan"
+              type="button"
+              onClick={() => setScanning(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
