@@ -15,6 +15,7 @@ import {
   zAttentionPriority,
   zAttentionType,
   zAuthCheck,
+  zAuthKind,
   zCreateSessionInput,
   zCursor,
   zDiagnostics,
@@ -28,6 +29,10 @@ import {
   zMessagePage,
   zMessagePart,
   zModelOption,
+  zPairingCode,
+  zPairingExchange,
+  zPairingSession,
+  zSessionRefresh,
   zProvider,
   zProviderCapabilities,
   zProviderHealth,
@@ -46,7 +51,18 @@ const registry = new OpenAPIRegistry();
 const ErrorSchema = registry.register("Error", zError);
 const CursorSchema = registry.register("Cursor", zCursor);
 const HealthSchema = registry.register("Health", zHealth);
+const AuthKindSchema = registry.register("AuthKind", zAuthKind);
 const AuthCheckSchema = registry.register("AuthCheck", zAuthCheck);
+const PairingCodeSchema = registry.register("PairingCode", zPairingCode);
+const PairingSessionSchema = registry.register("PairingSession", zPairingSession);
+const PairingExchangeSchema = registry.register(
+  "PairingExchange",
+  zPairingExchange,
+);
+const SessionRefreshSchema = registry.register(
+  "SessionRefresh",
+  zSessionRefresh,
+);
 const DiagnosticsSchema = registry.register("Diagnostics", zDiagnostics);
 const ProviderCapabilitiesSchema = registry.register(
   "ProviderCapabilities",
@@ -156,10 +172,74 @@ registry.registerPath({
   method: "get",
   path: "/api/v1/auth/check",
   tags: ["auth"],
-  summary: "Check the hub bearer token",
+  summary: "Check the hub credential",
+  description:
+    "Accepts the owner bearer token, a paired session bearer token, or a paired session cookie.",
   responses: {
-    200: { description: "Token accepted", content: json(AuthCheckSchema) },
-    401: errorResponse("Missing or invalid hub token"),
+    200: { description: "Credential accepted", content: json(AuthCheckSchema) },
+    401: errorResponse("Missing or invalid hub credential"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/auth/pair",
+  tags: ["auth"],
+  summary: "Create a pairing code",
+  description:
+    "Create a short-lived, single-use code for a /pair/{code} pairing link. Requires the owner credential.",
+  responses: {
+    200: { description: "Pairing code", content: json(PairingCodeSchema) },
+    401: errorResponse("Missing or invalid hub credential"),
+    403: errorResponse("A session credential cannot create pairing codes"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/auth/connect",
+  tags: ["auth"],
+  summary: "Redeem a pairing code",
+  description:
+    "Redeem a pairing code for a session token. This is the machine exchange; browser pairing uses the GET/POST /pair/{code} page so link previews cannot consume the code. Codes work once and expire after five minutes.",
+  security: [],
+  request: {
+    body: {
+      required: true,
+      content: json(PairingExchangeSchema),
+    },
+  },
+  responses: {
+    200: { description: "Session token", content: json(PairingSessionSchema) },
+    400: errorResponse("A JSON body with a pairing code is required"),
+    401: errorResponse("Pairing link expired or already used"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/auth/refresh",
+  tags: ["auth"],
+  summary: "Refresh a session token",
+  description:
+    "Issue a fresh 30-day session token for a valid paired session. The owner token never expires and is rejected here. Old stateless tokens remain valid until their original expiry.",
+  responses: {
+    200: { description: "Refreshed session", content: json(SessionRefreshSchema) },
+    400: errorResponse("The owner token does not expire"),
+    401: errorResponse("Missing or invalid hub credential"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/auth/signout",
+  tags: ["auth"],
+  summary: "Clear the session cookie",
+  description:
+    "Clears the paired browser cookie. Stateless session tokens remain valid until they expire or the owner token rotates.",
+  security: [],
+  responses: {
+    204: { description: "Cookie cleared" },
   },
 });
 

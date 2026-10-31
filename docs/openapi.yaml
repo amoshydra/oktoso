@@ -69,6 +69,9 @@ components:
           type: boolean
         version:
           type: string
+        pid:
+          type: integer
+          exclusiveMinimum: 0
         uptimeMs:
           type: integer
           minimum: 0
@@ -80,9 +83,15 @@ components:
       required:
         - ok
         - version
+        - pid
         - uptimeMs
         - startedAt
         - eventSeq
+    AuthKind:
+      type: string
+      enum:
+        - owner
+        - session
     AuthCheck:
       type: object
       properties:
@@ -90,9 +99,72 @@ components:
           type: boolean
         version:
           type: string
+        auth:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - owner
+                - session
+            expiresAt:
+              type: integer
+              description: Unix epoch milliseconds for a paired session
+          required:
+            - kind
       required:
         - ok
         - version
+    PairingCode:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+        expiresIn:
+          type: integer
+          minimum: 0
+          description: Seconds until the pairing code expires
+        expiresAt:
+          type: integer
+          description: Unix epoch milliseconds when the pairing code expires
+      required:
+        - code
+        - expiresIn
+        - expiresAt
+    PairingSession:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+        expiresAt:
+          type: integer
+          description: Unix epoch milliseconds when the session token expires
+      required:
+        - token
+        - expiresAt
+    PairingExchange:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Single-use pairing code
+      required:
+        - code
+    SessionRefresh:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+        expiresAt:
+          type: integer
+          description: Unix epoch milliseconds when the refreshed session expires
+      required:
+        - token
+        - expiresAt
     Diagnostics:
       type: object
       properties:
@@ -1437,20 +1509,113 @@ paths:
     get:
       tags:
         - auth
-      summary: Check the hub bearer token
+      summary: Check the hub credential
+      description: Accepts the owner bearer token, a paired session bearer token, or a paired session cookie.
       responses:
         "200":
-          description: Token accepted
+          description: Credential accepted
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthCheck"
         "401":
-          description: Missing or invalid hub token
+          description: Missing or invalid hub credential
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/auth/pair:
+    post:
+      tags:
+        - auth
+      summary: Create a pairing code
+      description: Create a short-lived, single-use code for a /pair/{code} pairing link. Requires the owner credential.
+      responses:
+        "200":
+          description: Pairing code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingCode"
+        "401":
+          description: Missing or invalid hub credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: A session credential cannot create pairing codes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/auth/connect:
+    post:
+      tags:
+        - auth
+      summary: Redeem a pairing code
+      description: Redeem a pairing code for a session token. This is the machine exchange; browser pairing uses the GET/POST /pair/{code} page so link previews cannot consume the code. Codes work once and expire after five minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairingExchange"
+      responses:
+        "200":
+          description: Session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingSession"
+        "400":
+          description: A JSON body with a pairing code is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Pairing link expired or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - auth
+      summary: Refresh a session token
+      description: Issue a fresh 30-day session token for a valid paired session. The owner token never expires and is rejected here. Old stateless tokens remain valid until their original expiry.
+      responses:
+        "200":
+          description: Refreshed session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRefresh"
+        "400":
+          description: The owner token does not expire
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid hub credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/auth/signout:
+    post:
+      tags:
+        - auth
+      summary: Clear the session cookie
+      description: Clears the paired browser cookie. Stateless session tokens remain valid until they expire or the owner token rotates.
+      security: []
+      responses:
+        "204":
+          description: Cookie cleared
   /api/v1/providers:
     get:
       tags:

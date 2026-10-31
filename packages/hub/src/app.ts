@@ -16,12 +16,16 @@ import type { ReplyService } from "./services/reply-service";
 import type { StateStore } from "@agent-hub/storage";
 import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
+import { VERSION } from "./version";
 import type { AppEnv } from "./http/types";
 import { AppError } from "./domain/errors";
+import { AuthService } from "./auth/service";
 import { bearerAuth } from "./http/middleware/auth";
 import { requestContext } from "./http/middleware/request";
 import { requestLimits, securityHeaders } from "./http/middleware/security";
 import { registerHealthRoutes } from "./http/routes/health";
+import { registerAuthRoutes } from "./http/routes/auth";
+import { registerPairRoutes } from "./http/routes/pair";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerDraftRoutes } from "./http/routes/drafts";
@@ -44,10 +48,12 @@ export interface AppDependencies {
   startedAt?: number;
   webRoot?: string;
   appsRoot?: string;
+  auth?: AuthService;
 }
 
 export function createApp(deps: AppDependencies): Hono<AppEnv> {
   const startedAt = deps.startedAt ?? Date.now();
+  const auth = deps.auth ?? new AuthService(deps.config.token);
   const app = new Hono<AppEnv>();
 
   app.use("*", requestContext(deps.logger));
@@ -63,6 +69,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
       "*",
       cors({
         origin: wildcard ? "*" : deps.config.cors,
+        credentials: !wildcard,
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
         exposeHeaders: ["X-Request-Id"],
@@ -71,12 +78,14 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     );
   }
 
-  app.use("/api/v1/*", bearerAuth(deps.config.token));
+  app.use("/api/v1/*", bearerAuth(auth));
 
   registerHealthRoutes(app, {
     startedAt,
     eventSeq: () => deps.eventBus.lastSeq,
   });
+  registerAuthRoutes(app, { auth, version: VERSION });
+  registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry);
   registerSessionRoutes(app, deps.sessions, deps.replies);
   registerDraftRoutes(app, deps.drafts);

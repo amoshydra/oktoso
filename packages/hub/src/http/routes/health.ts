@@ -11,14 +11,11 @@ export function registerHealthRoutes(
     const health: Health = {
       ok: true,
       version: VERSION,
+      pid: process.pid,
       uptimeMs: Math.max(0, Date.now() - deps.startedAt),
       startedAt: deps.startedAt,
       eventSeq: deps.eventSeq(),
     };
     return c.json(health);
   });
-
-  app.get("/api/v1/auth/check", (c) =>
-    c.json({ ok: true, version: VERSION }),
-  );
 }

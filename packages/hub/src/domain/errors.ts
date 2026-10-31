@@ -19,7 +19,7 @@ export class AppError extends Error {
   }
 }
 
-export function unauthorized(message = "Missing or invalid bearer token"): AppError {
+export function unauthorized(message = "Missing or invalid hub credential"): AppError {
   return new AppError("unauthorized", message, 401);
 }
 
