@@ -178,7 +178,7 @@ duplicate actions when two agents are connected.
 ### Phase 5 — Surfaces and ecosystem
 
 - Web control plane: MCP connections, policies, audit, automation status.
-- G2: voice answers, suggested answers, question discovery in the inbox.
+- G2: voice answers, suggested answers, and hardware acceptance (question discovery, pairing, and multi-question batches are implemented).
 - Provider adapter SDK and MCP tool packs.
 - Templates for common control loops.
 - Hardware validation and packaging.

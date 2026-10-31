@@ -20,6 +20,7 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
 - [`docs/wearables.md`](docs/wearables.md) - Even G2 setup, packaging, and device limits
 - [`docs/glass-ux.md`](docs/glass-ux.md) - glass screen map, interaction grammar, and validation plan
+- [`docs/g2-hardware-validation.md`](docs/g2-hardware-validation.md) - scripted G2 hardware acceptance run
 - [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
 - [`docs/publishing.md`](docs/publishing.md) - npm trusted publishing and release workflow
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data

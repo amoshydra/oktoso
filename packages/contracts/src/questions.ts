@@ -45,10 +45,28 @@ export const zQuestionResponse = z.object({
   data: zQuestionPrompt.nullable(),
 });
 
+export const zPendingQuestionSummary = z.object({
+  sessionRef: z.string(),
+  messageId: z.string(),
+  revision: z.string(),
+  askedAt: z.number().int(),
+  questionCount: z.number().int().min(1),
+  text: z.string(),
+  context: z.string().optional(),
+  attentionID: z.string().optional(),
+});
+
+export const zQuestionSummaryPage = z.object({
+  data: z.array(zPendingQuestionSummary),
+  failed: z.array(z.string()).optional(),
+});
+
 export type AnswerChoice = z.infer<typeof zAnswerChoice>;
 export type PendingQuestion = z.infer<typeof zPendingQuestion>;
 export type QuestionPrompt = z.infer<typeof zQuestionPrompt>;
 export type QuestionResponse = z.infer<typeof zQuestionResponse>;
+export type PendingQuestionSummary = z.infer<typeof zPendingQuestionSummary>;
+export type QuestionSummaryPage = z.infer<typeof zQuestionSummaryPage>;
 export type QuestionKind = z.infer<typeof zQuestionKind>;
 export type QuestionRisk = z.infer<typeof zQuestionRisk>;
 export type QuestionConfidence = z.infer<typeof zQuestionConfidence>;

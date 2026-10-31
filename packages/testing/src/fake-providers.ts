@@ -198,6 +198,21 @@ let fakeForm: Record<string, unknown> | undefined = {
   ],
 };
 
+const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
+const INITIAL_PERMISSION = structuredClone(fakePermission);
+const INITIAL_FORM = structuredClone(fakeForm);
+
+export function resetFakeProviderState(): void {
+  for (const key of Object.keys(OPENCODE_MESSAGES)) {
+    delete OPENCODE_MESSAGES[key];
+  }
+  for (const [key, messages] of Object.entries(INITIAL_OPENCODE_MESSAGES)) {
+    OPENCODE_MESSAGES[key] = structuredClone(messages);
+  }
+  fakePermission = structuredClone(INITIAL_PERMISSION);
+  fakeForm = structuredClone(INITIAL_FORM);
+}
+
 interface FakeOwuiMessage {
   id: string;
   role: string;

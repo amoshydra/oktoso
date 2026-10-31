@@ -211,7 +211,7 @@ Acceptance:
 
 ## Milestone 7: Glasses client
 
-Status: in progress. The Even G2 client scaffold, phone pairing, inbox, attention detail, chat, reply options, numbered-choice flow, question reply, and phone keyboard fallback are implemented. Voice capture/STT, multiple question batches, and hardware acceptance remain.
+Status: in progress. The Even G2 client scaffold, phone pairing (QR, link, code, token), inbox, attention detail, chat, reply options, numbered-choice flow, question reply, multiple-question batches, question discovery, and phone keyboard fallback are implemented. Voice capture/STT and real-hardware acceptance remain; the checklist and preflight script are ready.
 
 Goal: a glanceable inbox and reply surface on Even G2.
 
@@ -230,13 +230,16 @@ Deliverables:
   - long press: contextual menu
 - Contextual menu for approve, deny, reply, snooze, mark read.
 - Partial text rendering. No full page rebuild on every update.
-- Simulator tests and hardware checks.
+- Simulator tests and the scripted hardware checklist in
+  [`g2-hardware-validation.md`](g2-hardware-validation.md).
 
 Acceptance:
 
 - The glasses show a permission request and can approve or deny it.
-- A chat can be opened, read, and answered by voice.
+- A chat can be opened, read, and answered by a choice, typed reply, or phone.
+- A multi-question message is answered as one batch from the phone.
 - The inbox updates when a new attention item arrives.
+- Pending questions are visible from Home, Recent, and Inbox before the chat is opened.
 - A lost connection shows an offline state and recovers.
 
 ## Milestone 8: VR client

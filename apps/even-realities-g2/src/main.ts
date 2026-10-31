@@ -14,12 +14,19 @@ import type {
   AttentionField,
   Message,
   PendingQuestion,
+  PendingQuestionSummary,
   QuestionPrompt,
   ReplyOption,
   SendAnswer,
   Session,
 } from "@amoshydra/oktoso-contracts";
-import { HubClient, messageFromHubEvent } from "@amoshydra/oktoso-client";
+import {
+  HubClient,
+  canScanPairingQr,
+  messageFromHubEvent,
+  pairingCodeFromInput,
+  scanPairingQr,
+} from "@amoshydra/oktoso-client";
 import {
   chatScrollStep,
   clampLine,
@@ -38,7 +45,10 @@ import {
   buildAnswerMetadata,
   buildAnswerRows,
   buildAnswerSummary,
+  buildBatchAnswerMetadata,
+  composeBatchAnswer,
   type AnswerRow,
+  type BatchAnswerDraft,
 } from "./answer-model";
 import { glassInput } from "./input";
 
@@ -91,6 +101,8 @@ interface AppState {
   choiceOptions: ReplyOption[];
   choicePage: number;
   question?: QuestionPrompt;
+  questionSummaries: Record<string, PendingQuestionSummary>;
+  batchAnswers: Record<string, BatchAnswerState>;
   answerText?: string;
   pendingAnswerText?: string;
   answerBusy: boolean;
@@ -102,6 +114,11 @@ interface AppState {
   pendingAnswerChoice?: AnswerChoice;
   notice?: string;
   error?: string;
+}
+
+interface BatchAnswerState {
+  choice?: AnswerChoice;
+  text: string;
 }
 
 const state: AppState = {
@@ -128,6 +145,8 @@ const state: AppState = {
   choiceOptions: [],
   choicePage: 0,
   question: undefined,
+  questionSummaries: {},
+  batchAnswers: {},
   answerText: undefined,
   pendingAnswerText: undefined,
   answerBusy: false,
@@ -143,6 +162,11 @@ let bridge: EvenAppBridge | undefined;
 let client: HubClient | undefined;
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
+let scanController: AbortController | undefined;
+let inputCount = 0;
+let frameCount = 0;
+let lastInputMs = 0;
+let lastFrameMs = 0;
 const CHAT_VISIBLE_LINES = 6;
 const CHAT_SCROLL_BURST_MS = 500;
 let eventQueue: any[] = [];
@@ -156,10 +180,12 @@ let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
 let eventStreamOpen = false;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let eventRefreshActions: Array<() => void | Promise<void>> = [];
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
 let phoneFormItem: Attention | undefined;
 let phoneFormValues: Record<string, unknown> = {};
+let phoneQuestionKey = "";
 
 const phoneSession = byId<HTMLSpanElement>("phone-session");
 const phoneText = byId<HTMLTextAreaElement>("phone-text");
@@ -176,10 +202,17 @@ const phoneQuestionPanel = byId<HTMLElement>("phone-question-panel");
 const phoneQuestionSession = byId<HTMLElement>("phone-question-session");
 const phoneQuestionText = byId<HTMLElement>("phone-question-text");
 const phoneQuestionChoices = byId<HTMLDivElement>("phone-question-choices");
+const phoneBatchSend = byId<HTMLButtonElement>("phone-batch-send");
 const phoneQuestionType = byId<HTMLButtonElement>("phone-question-type");
 const phoneQuestionStatus = byId<HTMLDivElement>("phone-question-status");
 const connection = byId<HTMLSpanElement>("connection");
 const connectionStatus = byId<HTMLDivElement>("connection-status");
+const pairingCodeInput = byId<HTMLInputElement>("pairing-code");
+const pairButton = byId<HTMLButtonElement>("pair");
+const pairScan = byId<HTMLButtonElement>("pair-scan");
+const pairVideo = byId<HTMLVideoElement>("pair-video");
+const pairScanNote = byId<HTMLParagraphElement>("pair-scan-note");
+const pairingStatus = byId<HTMLDivElement>("pairing-status");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
 const debug = byId<HTMLPreElement>("debug");
 const glassesPreview = byId<HTMLPreElement>("glasses-preview");
@@ -193,6 +226,16 @@ function setConnection(label: string, error = false): void {
   connection.textContent = label;
   connectionStatus.textContent = error ? label : "";
   connectionStatus.className = error ? "status error" : "status";
+}
+
+function setPairingStatus(message: string, error = false): void {
+  pairingStatus.textContent = message;
+  pairingStatus.className = error ? "status error" : "status";
+}
+
+function updateBridgeStats(): void {
+  if (!bridge) return;
+  bridgeStatus.textContent = `Bridge · ${inputCount} input · ${frameCount} frames · input ${lastInputMs} ms · frame ${lastFrameMs} ms`;
 }
 
 function setPhoneStatus(message: string, error = false): void {
@@ -412,6 +455,100 @@ function activeQuestion(): PendingQuestion | undefined {
   return state.question?.questions[0];
 }
 
+function questionSummaryFor(ref?: string): PendingQuestionSummary | undefined {
+  return ref ? state.questionSummaries[ref] : undefined;
+}
+
+function resetBatchAnswers(): void {
+  const next: Record<string, BatchAnswerState> = {};
+  for (const question of state.question?.questions ?? []) {
+    next[question.id] = { text: "" };
+  }
+  state.batchAnswers = next;
+}
+
+function summaryFromPrompt(prompt: QuestionPrompt): PendingQuestionSummary {
+  const first = prompt.questions[0]!;
+  return {
+    sessionRef: prompt.sessionRef,
+    messageId: prompt.messageId,
+    revision: prompt.revision,
+    askedAt: prompt.askedAt,
+    questionCount: prompt.questions.length,
+    text: first.text,
+    ...(first.context ? { context: first.context } : {}),
+    ...(prompt.attentionID ? { attentionID: prompt.attentionID } : {}),
+  };
+}
+
+function rememberQuestionSummary(
+  ref: string,
+  prompt: QuestionPrompt | null,
+): boolean {
+  const previous = state.questionSummaries[ref];
+  if (!prompt) {
+    if (!previous) return false;
+    delete state.questionSummaries[ref];
+    return true;
+  }
+  const next = summaryFromPrompt(prompt);
+  if (previous && JSON.stringify(previous) === JSON.stringify(next)) {
+    return false;
+  }
+  state.questionSummaries[ref] = next;
+  return true;
+}
+
+function discoveryRefs(): string[] {
+  const refs = new Set<string>();
+  if (state.sessionRef) refs.add(state.sessionRef);
+  for (const item of state.attention) refs.add(item.sessionRef);
+  for (const session of state.sessions) refs.add(session.ref);
+  return [...refs].slice(0, 10);
+}
+
+async function refreshQuestionSummaries(refs?: string[]): Promise<void> {
+  if (!client) return;
+  const unique = [...new Set((refs ?? discoveryRefs()).filter(Boolean))].slice(
+    0,
+    10,
+  );
+  if (unique.length === 0) return;
+  try {
+    const result = await client.questionSummaries(unique);
+    const found = new Map(
+      result.data.map((summary) => [summary.sessionRef, summary]),
+    );
+    const failed = new Set(result.failed ?? []);
+    let changed = false;
+    for (const ref of unique) {
+      if (failed.has(ref)) continue;
+      const next = found.get(ref);
+      const previous = state.questionSummaries[ref];
+      if (next) {
+        if (JSON.stringify(previous) !== JSON.stringify(next)) {
+          state.questionSummaries[ref] = next;
+          changed = true;
+        }
+      } else if (previous) {
+        delete state.questionSummaries[ref];
+        changed = true;
+      }
+    }
+    if (
+      changed &&
+      (state.screen === "home" ||
+        state.screen === "sessions" ||
+        state.screen === "inbox" ||
+        state.screen === "attention")
+    ) {
+      render();
+    }
+  } catch (error) {
+    log(`Question discovery failed: ${errorMessage(error)}`);
+  }
+}
+
 function answerRows(): AnswerRow[] {
   const question = activeQuestion();
   return question && state.question
@@ -419,12 +556,24 @@ function answerRows(): AnswerRow[] {
     : [];
 }
 
+function isBatchQuestion(): boolean {
+  return (state.question?.questions.length ?? 0) > 1;
+}
+
 function answerSummary(): string {
   const question = activeQuestion();
-  return question ? buildAnswerSummary(question) : "";
+  return question
+    ? buildAnswerSummary(question, state.question)
+    : "";
 }
 
 function answerHeader(prefix = "ANSWER"): string {
+  if (isBatchQuestion()) {
+    return clampLine(
+      `${prefix} · ${state.question?.questions.length ?? 0} questions`,
+      40,
+    );
+  }
   return clampLine(
     `${prefix} · ${state.sessionTitle ?? "Session"}`,
     40,
@@ -480,50 +629,156 @@ async function refreshStoredSession(
   }
 }
 
+function storeSessionToken(token: string): void {
+  storedToken = token;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+async function activateClient(hub: HubClient): Promise<void> {
+  client = hub;
+  const tokenInput = byId<HTMLInputElement>("hub-token");
+  tokenInput.value = "";
+  tokenInput.placeholder = storedToken ? "Saved token" : "Paired with cookie";
+  setConnection("Connected");
+  log("Hub connected");
+  startEventStream();
+  await refreshInbox();
+  state.screen = "home";
+  render();
+}
+
+async function connectWithToken(token: string): Promise<boolean> {
+  const baseUrl = hubBaseURL();
+  try {
+    const hub = new HubClient({ baseUrl, token });
+    const check = await hub.authCheck();
+    storeSessionToken(token);
+    await refreshStoredSession(hub, check, true);
+    await activateClient(hub);
+    return true;
+  } catch (error) {
+    log(`Token connect failed: ${errorMessage(error)}`);
+    return false;
+  }
+}
+
 async function connect(): Promise<void> {
   const tokenInput = byId<HTMLInputElement>("hub-token");
-  const baseUrl = hubBaseURL();
   const inputToken = tokenInput.value.trim();
   const token = inputToken || storedToken;
   setConnection("Connecting…");
 
-  const candidates: Array<{ hub: HubClient; viaToken: boolean }> = [
-    ...(token
-      ? [{ hub: new HubClient({ baseUrl, token }), viaToken: true }]
-      : []),
-    { hub: new HubClient({ baseUrl }), viaToken: false },
-  ];
+  if (token && (await connectWithToken(token))) return;
 
-  for (const candidate of candidates) {
-    try {
-      const check = await candidate.hub.authCheck();
-      await refreshStoredSession(candidate.hub, check, candidate.viaToken);
-      client = candidate.hub;
-      if (candidate.viaToken && inputToken) {
-        storedToken = inputToken;
-        localStorage.setItem(TOKEN_KEY, inputToken);
-      } else if (!candidate.viaToken) {
-        storedToken = "";
-        localStorage.removeItem(TOKEN_KEY);
-      }
-      tokenInput.value = "";
-      tokenInput.placeholder = storedToken ? "Saved token" : "Paired with cookie";
-      setConnection("Connected");
-      log("Hub connected");
-      startEventStream();
-      await refreshInbox();
-      state.screen = "home";
-      render();
-      return;
-    } catch {
-      // Try the next credential.
-    }
+  try {
+    const hub = new HubClient({ baseUrl: hubBaseURL() });
+    await hub.authCheck();
+    storedToken = "";
+    localStorage.removeItem(TOKEN_KEY);
+    await activateClient(hub);
+    return;
+  } catch {
+    // Try the next credential.
   }
 
   client = undefined;
   setConnection(token ? "Connection failed" : "Pair or enter token", true);
   log("Connect failed: no accepted hub credential");
   render();
+}
+
+async function pairWithCode(raw: string): Promise<void> {
+  // The code is redeemed against the hub configured for this app, so the
+  // scanned URL only needs to look like a pairing link. This also works when
+  // the app is served by Vite or packaged under a different webview origin.
+  const code = pairingCodeFromInput(raw);
+  if (!code) {
+    setPairingStatus(
+      "Paste the pairing link or code from the hub terminal.",
+      true,
+    );
+    return;
+  }
+
+  pairButton.disabled = true;
+  setPairingStatus("Pairing…");
+  try {
+    const hub = new HubClient({ baseUrl: hubBaseURL() });
+    const session = await hub.connect(code);
+    pairingCodeInput.value = "";
+    if (await connectWithToken(session.token)) {
+      setPairingStatus("Paired. This phone can close setup.");
+    } else {
+      setPairingStatus(
+        "Paired, but the hub rejected the new session. Run Pair again.",
+        true,
+      );
+    }
+  } catch (error) {
+    const message = errorMessage(error);
+    const expired = /expired|already used|401|unauthorized/i.test(message);
+    setPairingStatus(
+      expired
+        ? "That pairing link expired or was already used. Create a new one with `p` in the hub terminal."
+        : message,
+      true,
+    );
+    log(`Pairing failed: ${message}`);
+  } finally {
+    pairButton.disabled = false;
+  }
+}
+
+async function togglePairScan(): Promise<void> {
+  if (scanController) {
+    scanController.abort();
+    scanController = undefined;
+    pairVideo.hidden = true;
+    pairScan.textContent = "Scan QR";
+    return;
+  }
+  if (!canScanPairingQr()) {
+    setPairingStatus(
+      "Camera QR scanning needs HTTPS in this webview. Paste the pairing code instead.",
+      true,
+    );
+    return;
+  }
+
+  const controller = new AbortController();
+  scanController = controller;
+  pairVideo.hidden = false;
+  pairScan.textContent = "Stop scanning";
+  setPairingStatus("Point the camera at the hub terminal QR.");
+  try {
+    const url = await scanPairingQr(pairVideo, controller.signal);
+    if (controller.signal.aborted) return;
+    if (!url) {
+      setPairingStatus(
+        "No pairing QR found. Try again or paste the code.",
+        true,
+      );
+      return;
+    }
+    pairingCodeInput.value = url;
+    setPairingStatus("QR found. Pairing…");
+    pairVideo.hidden = true;
+    pairScan.textContent = "Scan QR";
+    scanController = undefined;
+    await pairWithCode(url);
+    return;
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      setPairingStatus(errorMessage(error), true);
+      log(`QR scan failed: ${errorMessage(error)}`);
+    }
+  } finally {
+    if (scanController === controller) {
+      scanController = undefined;
+      pairVideo.hidden = true;
+      pairScan.textContent = "Scan QR";
+    }
+  }
 }
 
 async function restoreConnection(): Promise<void> {
@@ -588,13 +843,23 @@ function startEventStream(): void {
         if (controller.signal.aborted) return;
         if (event.type === "resync") {
           void refreshInbox();
+          void refreshQuestionSummaries();
           if (state.screen === "chat" && state.sessionRef) {
             void loadChat(true);
           }
           return;
         }
-        if (event.type === "session.updated" && state.screen === "inbox") {
+        if (
+          event.type === "session.updated" &&
+          (state.screen === "inbox" || state.screen === "home")
+        ) {
           scheduleEventRefresh(() => refreshInbox());
+          const sessionRef = event.sessionRef;
+          if (sessionRef) {
+            scheduleEventRefresh(() =>
+              refreshQuestionSummaries([sessionRef]),
+            );
+          }
         }
         if (
           (event.type === "message.created" || event.type === "message.updated") &&
@@ -604,6 +869,26 @@ function startEventStream(): void {
           const message = messageFromHubEvent(event);
           if (message) applyLiveMessage(message);
           else scheduleEventRefresh(() => loadChat(true));
+          const sessionRef = event.sessionRef;
+          if (sessionRef) {
+            scheduleEventRefresh(() =>
+              refreshQuestionSummaries([sessionRef]),
+            );
+          }
+        }
+        if (
+          (event.type === "message.created" ||
+            event.type === "message.updated") &&
+          (state.screen === "home" ||
+            state.screen === "inbox" ||
+            state.screen === "sessions")
+        ) {
+          const sessionRef = event.sessionRef;
+          if (sessionRef) {
+            scheduleEventRefresh(() =>
+              refreshQuestionSummaries([sessionRef]),
+            );
+          }
         }
         if (
           event.type === "session.updated" &&
@@ -626,10 +911,15 @@ function startEventStream(): void {
 }
 
 function scheduleEventRefresh(action: () => void | Promise<void>): void {
+  eventRefreshActions.push(action);
   if (eventRefreshTimer) clearTimeout(eventRefreshTimer);
   eventRefreshTimer = setTimeout(() => {
     eventRefreshTimer = undefined;
-    void action();
+    const actions = eventRefreshActions;
+    eventRefreshActions = [];
+    void (async () => {
+      for (const queued of actions) await queued();
+    })();
   }, 500);
 }
 
@@ -649,6 +939,7 @@ async function openSessions(): Promise<void> {
     state.error = undefined;
     state.screen = "sessions";
     render();
+    void refreshQuestionSummaries(page.data.map((session) => session.ref));
   } catch (error) {
     state.error = errorMessage(error);
     state.screen = "sessions";
@@ -685,6 +976,7 @@ async function refreshInbox(): Promise<void> {
       Boolean(previousError) !== false;
     updatePhoneState();
     if (changed) render();
+    void refreshQuestionSummaries(discoveryRefs());
   } catch (error) {
     state.error = errorMessage(error);
     if (state.screen === "pairing") state.screen = "home";
@@ -735,7 +1027,10 @@ function attentionActions(item: Attention): Array<{ id: string; label: string }>
   if (hasFields && hasAnswer) {
     fieldActions.push({ id: "phone_form", label: "Answer on phone" });
   }
-  actions.push({ id: "open_chat", label: "Open chat" });
+  actions.push({
+    id: "open_chat",
+    label: questionSummaryFor(item.sessionRef) ? "Answer in chat" : "Open chat",
+  });
   return [...fieldActions, ...actions];
 }
 
@@ -884,6 +1179,7 @@ async function openChat(
   state.chatActivity = "";
   state.chatLoading = true;
   state.question = undefined;
+  resetBatchAnswers();
   state.answerText = undefined;
   state.pendingAnswerText = undefined;
   state.answerError = undefined;
@@ -921,7 +1217,12 @@ async function loadQuestion(ref: string): Promise<void> {
     const question = await client.question(ref);
     if (state.sessionRef !== ref) return;
     state.question = question ?? undefined;
+    resetBatchAnswers();
     state.answerMode = false;
+    state.answerError = undefined;
+    if (rememberQuestionSummary(ref, question ?? null) && state.screen !== "chat") {
+      render();
+    }
     updatePhoneQuestion();
     if (state.screen === "chat") render();
   } catch (error) {
@@ -976,6 +1277,7 @@ async function sendAnswer(
     state.answerKeyText = undefined;
     state.pendingAnswerText = undefined;
     state.pendingAnswerChoice = undefined;
+    rememberQuestionSummary(ref, null);
     state.screen = "answer-sent";
     updatePhoneQuestion();
     if (source === "phone") {
@@ -1062,6 +1364,7 @@ async function performAnswerRow(index: number): Promise<void> {
     const ref = state.sessionRef;
     state.answerStale = undefined;
     state.question = undefined;
+    if (ref) rememberQuestionSummary(ref, null);
     state.screen = "chat";
     state.answerMode = false;
     updatePhoneQuestion();
@@ -1117,7 +1420,9 @@ async function performAnswerRow(index: number): Promise<void> {
     return;
   }
 
-  if (row.action === "type" || row.action === "phone") {
+  if (row.action === "phone") {
+    focusPhoneBatch();
+  } else if (row.action === "type") {
     openTypeAnswer();
   } else if (row.action === "more") {
     state.screen = "answer-more";
@@ -1146,40 +1451,253 @@ function updatePhoneQuestion(): void {
     ].includes(state.screen);
   phoneQuestionPanel.hidden = !visible;
   if (!question || !visible) {
+    phoneQuestionKey = "";
     phoneQuestionChoices.replaceChildren();
+    phoneBatchSend.hidden = true;
     phoneQuestionStatus.textContent = "";
     return;
   }
 
+  const formal = Boolean(state.question?.attentionID);
+  const batch = isBatchQuestion();
   phoneQuestionSession.textContent = clampLine(
     state.sessionTitle ?? state.sessionRef ?? "",
     48,
   );
-  const formal = Boolean(state.question?.attentionID);
   phoneQuestionText.textContent = formal
     ? "This question has a formal answer form in Inbox."
-    : question.context
-      ? `${question.text}\n${question.context}`
-      : question.text;
-  phoneQuestionChoices.replaceChildren();
-  for (const choice of formal ? [] : question.choices.slice(0, 6)) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = choice.text;
-    button.disabled = state.answerBusy;
-    button.addEventListener("click", () => {
-      void sendAnswer(choice.text, "phone", choice);
-    });
-    phoneQuestionChoices.append(button);
-  }
-  phoneQuestionType.hidden = formal || !question.allowsFreeText;
+    : batch
+      ? `${state.question?.questions.length ?? 0} questions. Answer each below.`
+      : question.context
+        ? `${question.text}\n${question.context}`
+        : question.text;
+
+  phoneBatchSend.hidden = !batch || formal;
+  phoneQuestionType.hidden = formal || batch || !question.allowsFreeText;
   phoneQuestionType.disabled = state.answerBusy;
+
+  if (batch && !formal) {
+    renderBatchAnswers();
+    updatePhoneBatchSendState();
+  } else {
+    phoneQuestionKey = "";
+    phoneQuestionChoices.replaceChildren();
+    for (const choice of formal ? [] : question.choices.slice(0, 6)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = choice.text;
+      button.disabled = state.answerBusy;
+      button.addEventListener("click", () => {
+        void sendAnswer(choice.text, "phone", choice);
+      });
+      phoneQuestionChoices.append(button);
+    }
+  }
+
   phoneQuestionStatus.textContent = state.answerBusy
     ? "Sending…"
     : state.answerError ?? "";
   phoneQuestionStatus.className = state.answerError
     ? "status error"
     : "status";
+}
+
+function renderBatchAnswers(): void {
+  const prompt = state.question;
+  if (!prompt) return;
+  const key = `${prompt.revision}:${prompt.questions.length}`;
+  if (phoneQuestionKey === key) {
+    updateBatchButtonStates();
+    return;
+  }
+  phoneQuestionKey = key;
+  phoneQuestionChoices.replaceChildren();
+
+  for (const [index, question] of prompt.questions.entries()) {
+    const block = document.createElement("div");
+    block.className = "batch-question";
+    const title = document.createElement("h3");
+    title.textContent = `${index + 1}. ${question.text}`;
+    block.append(title);
+    if (question.context) {
+      const context = document.createElement("p");
+      context.className = "hint";
+      context.textContent = question.context;
+      block.append(context);
+    }
+
+    if (question.choices.length > 0) {
+      const choices = document.createElement("div");
+      choices.className = "question-choices";
+      for (const choice of question.choices) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = choice.text;
+        button.disabled = state.answerBusy;
+        button.dataset.questionId = question.id;
+        button.dataset.choiceId = choice.id;
+        button.setAttribute("aria-pressed", "false");
+        button.addEventListener("click", () => {
+          state.batchAnswers[question.id] = {
+            choice,
+            text: state.batchAnswers[question.id]?.text ?? "",
+          };
+          phoneQuestionStatus.textContent = "";
+          phoneQuestionStatus.className = "status";
+          updateBatchButtonStates();
+          updatePhoneBatchSendState();
+        });
+        choices.append(button);
+      }
+      block.append(choices);
+    }
+
+    if (question.allowsFreeText) {
+      const textarea = document.createElement("textarea");
+      textarea.rows = 2;
+      textarea.placeholder =
+        question.choices.length > 0
+          ? "Or type a different answer…"
+          : "Type an answer…";
+      textarea.value = state.batchAnswers[question.id]?.text ?? "";
+      textarea.addEventListener("input", () => {
+        const current = state.batchAnswers[question.id] ?? { text: "" };
+        state.batchAnswers[question.id] = {
+          text: textarea.value,
+        };
+        if (current.choice) {
+          // A typed answer replaces a selected choice for this question.
+          delete state.batchAnswers[question.id]!.choice;
+        }
+        phoneQuestionStatus.textContent = "";
+        phoneQuestionStatus.className = "status";
+        updateBatchButtonStates();
+        updatePhoneBatchSendState();
+      });
+      block.append(textarea);
+    }
+
+    phoneQuestionChoices.append(block);
+  }
+  updateBatchButtonStates();
+}
+
+function updateBatchButtonStates(): void {
+  for (const button of phoneQuestionChoices.querySelectorAll<HTMLButtonElement>(
+    "button[data-question-id]",
+  )) {
+    const questionID = button.dataset.questionId;
+    const choiceID = button.dataset.choiceId;
+    const selected =
+      Boolean(questionID && choiceID) &&
+      state.batchAnswers[questionID!]?.choice?.id === choiceID;
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.disabled = state.answerBusy;
+  }
+}
+
+function batchDrafts(announce = false): BatchAnswerDraft[] | undefined {
+  const prompt = state.question;
+  if (!prompt) return undefined;
+  const drafts: BatchAnswerDraft[] = [];
+  for (const [index, question] of prompt.questions.entries()) {
+    const entry = state.batchAnswers[question.id];
+    const text = (entry?.choice?.text ?? entry?.text ?? "").trim();
+    if (!text) {
+      if (announce) setPhoneStatus(`Answer question ${index + 1} first.`, true);
+      return undefined;
+    }
+    drafts.push({
+      questionId: question.id,
+      text,
+      ...(entry?.choice ? { choice: entry.choice } : {}),
+    });
+  }
+  return drafts;
+}
+
+function updatePhoneBatchSendState(): void {
+  if (phoneBatchSend.hidden) return;
+  const drafts = batchDrafts();
+  phoneBatchSend.disabled =
+    state.answerBusy ||
+    !drafts ||
+    drafts.length !== (state.question?.questions.length ?? 0);
+}
+
+function focusPhoneBatch(): void {
+  phoneQuestionPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+  const target = phoneQuestionChoices.querySelector<HTMLElement>(
+    "textarea, button",
+  );
+  target?.focus();
+  setPhoneStatus("Answer each question, then send from the question card.");
+}
+
+async function sendBatchAnswers(): Promise<void> {
+  const prompt = state.question;
+  const ref = state.sessionRef;
+  if (!client || !prompt || !ref || state.answerBusy) return;
+  if (prompt.questions.length < 2) return;
+  const drafts = batchDrafts(true);
+  if (!drafts) return;
+
+  const text = composeBatchAnswer(drafts);
+  const answers = buildBatchAnswerMetadata(prompt, drafts);
+  const idempotencyKey = answerKeyFor(text);
+  state.answerBusy = true;
+  state.answerText = text;
+  state.answerError = undefined;
+  phoneQuestionStatus.textContent = "Sending…";
+  phoneQuestionStatus.className = "status";
+  updateBatchButtonStates();
+  updatePhoneBatchSendState();
+
+  try {
+    await client.sendMessage(ref, { text, answers }, { idempotencyKey });
+    if (state.sessionRef !== ref) return;
+    state.answerBusy = false;
+    state.question = undefined;
+    resetBatchAnswers();
+    state.answerStale = undefined;
+    state.answerKey = undefined;
+    state.answerKeyText = undefined;
+    rememberQuestionSummary(ref, null);
+    state.screen = "answer-sent";
+    setPhoneStatus("Answers sent.");
+    updatePhoneQuestion();
+    render();
+  } catch (error) {
+    state.answerBusy = false;
+    const status = (error as { status?: number }).status;
+    const reason = (
+      error as { details?: { reason?: string } }
+    ).details?.reason;
+    if (
+      status === 409 &&
+      (reason === "question_changed" ||
+        reason === "question_resolved" ||
+        reason === "question_incomplete")
+    ) {
+      state.answerStale =
+        reason === "question_resolved" ? "resolved" : "changed";
+      state.answerKey = undefined;
+      state.answerKeyText = undefined;
+      state.screen = "answer-stale";
+      setPhoneStatus("Question changed. Review before answering.", true);
+      updatePhoneQuestion();
+      render();
+      log(`Batch answer rejected: ${reason}`);
+      return;
+    }
+
+    state.answerError = errorMessage(error);
+    state.screen = "answer";
+    setPhoneStatus(state.answerError, true);
+    updatePhoneQuestion();
+    render();
+    log(`Batch answer send failed: ${state.answerError}`);
+  }
 }
 
 async function loadChat(quiet: boolean): Promise<void> {
@@ -1503,6 +2021,7 @@ async function executeReply(option: ReplyOption): Promise<void> {
     if (option.text) {
       await client.sendMessage(state.sessionRef, { text: option.text });
       state.question = undefined;
+      rememberQuestionSummary(state.sessionRef, null);
       updatePhoneQuestion();
       state.screen = "chat";
       state.notice = "Reply sent.";
@@ -1558,6 +2077,7 @@ async function performChoice(index: number): Promise<void> {
   try {
     await client.sendMessage(state.sessionRef, { text: option.text });
     state.question = undefined;
+    rememberQuestionSummary(state.sessionRef, null);
     updatePhoneQuestion();
     state.screen = "chat";
     state.notice = "Choice sent.";
@@ -1609,6 +2129,7 @@ function back(): void {
     const ref = state.sessionRef;
     state.answerStale = undefined;
     state.question = undefined;
+    if (ref) rememberQuestionSummary(ref, null);
     state.screen = "chat";
     state.answerMode = false;
     updatePhoneQuestion();
@@ -1756,7 +2277,7 @@ function handleTextClick(): void {
     return;
   }
   if (state.screen === "pairing") {
-    phoneText.focus();
+    pairingCodeInput.focus();
   }
 }
 
@@ -1768,6 +2289,7 @@ function onEvenEvent(event: any): void {
 async function processEvents(): Promise<void> {
   if (eventBusy || eventQueue.length === 0) return;
   eventBusy = true;
+  const started = performance.now();
   const event = eventQueue.shift();
   try {
     const input = glassInput(event);
@@ -1781,6 +2303,9 @@ async function processEvents(): Promise<void> {
       handleTextClick();
     }
   } finally {
+    inputCount += 1;
+    lastInputMs = Math.round(performance.now() - started);
+    updateBridgeStats();
     eventBusy = false;
     void processEvents();
   }
@@ -1791,7 +2316,8 @@ function render(): void {
   updatePhoneQuestion();
   updatePhoneState();
   if (!client) {
-    const body = "Pair in phone\n\nOpen Oktoso for\nEven G2 on your phone\nto pair or enter a token.";
+    const body =
+      "Pair in phone\n\nScan the hub QR\nor paste its code.\nThen connect.";
     if (setPreview("OKTOSO", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
     }
@@ -1803,7 +2329,7 @@ function render(): void {
       "Recent sessions",
       ...(state.sessionTitle
         ? [
-            `Current · ${clampLine(
+            `Current · ${questionSummaryFor(state.sessionRef) ? "? " : ""}${clampLine(
               state.sessionProject
                 ? `${state.sessionProject} · ${state.sessionTitle}`
                 : state.sessionTitle,
@@ -1831,7 +2357,9 @@ function render(): void {
     const items = state.sessions.length
       ? state.sessions.map((session) =>
           clampLine(
-            `${session.unread ? "UNREAD" : session.status.toUpperCase()} · ${session.title}`,
+            questionSummaryFor(session.ref)
+              ? `QUESTION · ${session.title}`
+              : `${session.unread ? "UNREAD" : session.status.toUpperCase()} · ${session.title}`,
             54,
           ),
         )
@@ -1928,7 +2456,9 @@ function render(): void {
       return;
     }
     const actions = attentionActions(item);
-    const summary = wrapText(item.summary, 54, 2).join("\n");
+    const discovered = questionSummaryFor(item.sessionRef);
+    const summaryText = discovered?.text ?? item.summary;
+    const summary = wrapText(summaryText, 54, 2).join("\n");
     if (
       setPreview(
         `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
@@ -1985,9 +2515,12 @@ function render(): void {
     const body = answerSummary();
     const rows = answerRows();
     const items = rows.map((row) => row.label);
+    const hasChoices = rows.some((row) => row.kind === "choice");
     const footer = state.answerError
       ? clampLine(`Couldn't send: ${state.answerError}`, 60)
-      : "Swipe choose · Tap send · Back ×2";
+      : hasChoices
+        ? "Swipe choose · Tap send · Back ×2"
+        : "Tap choose · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));
     }
@@ -2018,7 +2551,12 @@ function render(): void {
     }
 
     const header = answerHeader();
-    const body = `Sent\n“${clampLine(state.answerText ?? "", 60)}”`;
+    const text = state.answerText ?? "";
+    const answerCount = text.split("\n").filter(Boolean).length;
+    const body =
+      answerCount > 1
+        ? `Sent\n${answerCount} answers`
+        : `Sent\n“${clampLine(text, 60)}”`;
     const footer = "Tap to return · Back ×2";
     if (setPreview(header, body, footer)) {
       void showPage(textPage(body, footer, header));
@@ -2133,7 +2671,7 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
     return;
   }
   if (state.screen === "pairing") {
-    phoneText.focus();
+    pairingCodeInput.focus();
     return;
   }
   if (!previewListItems || previewListItems.length === 0) return;
@@ -2150,8 +2688,12 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
+  const started = performance.now();
   try {
     await bridge.rebuildPageContainer(page);
+    frameCount += 1;
+    lastFrameMs = Math.round(performance.now() - started);
+    updateBridgeStats();
   } catch (error) {
     log(`Display update failed: ${errorMessage(error)}`);
   }
@@ -2293,6 +2835,9 @@ function listPage(
 }
 
 function attentionLabel(item: Attention): string {
+  if (item.type === "unread" && questionSummaryFor(item.sessionRef)) {
+    return "QUESTION";
+  }
   switch (item.type) {
     case "permission":
       return "PERMISSION";
@@ -2323,6 +2868,20 @@ function setupPhone(): void {
   byId<HTMLSpanElement>("hub-origin").textContent = hubBaseURL() || "same origin";
   const token = byId<HTMLInputElement>("hub-token");
   if (storedToken) token.placeholder = "Saved token";
+  const canScan = canScanPairingQr();
+  pairScan.hidden = !canScan;
+  pairScanNote.hidden = canScan;
+  pairButton.addEventListener("click", () => {
+    void pairWithCode(pairingCodeInput.value);
+  });
+  pairingCodeInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void pairWithCode(pairingCodeInput.value);
+  });
+  pairScan.addEventListener("click", () => {
+    void togglePairScan();
+  });
   byId<HTMLButtonElement>("connect").addEventListener("click", () => {
     void connect();
   });
@@ -2335,6 +2894,7 @@ function setupPhone(): void {
   });
   phoneFormSubmit.addEventListener("click", () => void submitPhoneForm());
   phoneFormCancel.addEventListener("click", () => hidePhoneForm());
+  phoneBatchSend.addEventListener("click", () => void sendBatchAnswers());
   phoneQuestionType.addEventListener("click", () => openTypeAnswer());
   byId<HTMLButtonElement>("sim-up").addEventListener("click", () => simulate("up"));
   byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));

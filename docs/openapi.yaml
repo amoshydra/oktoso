@@ -12,6 +12,7 @@ tags:
   - name: providers
   - name: sessions
   - name: drafts
+  - name: questions
   - name: attention
   - name: replies
   - name: settings
@@ -946,6 +947,71 @@ components:
         - askedAt
         - questions
         - generatedAt
+    PendingQuestionSummary:
+      type: object
+      properties:
+        sessionRef:
+          type: string
+        messageId:
+          type: string
+        revision:
+          type: string
+        askedAt:
+          type: integer
+        questionCount:
+          type: integer
+          minimum: 1
+        text:
+          type: string
+        context:
+          type: string
+        attentionID:
+          type: string
+      required:
+        - sessionRef
+        - messageId
+        - revision
+        - askedAt
+        - questionCount
+        - text
+    QuestionSummaryPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              sessionRef:
+                type: string
+              messageId:
+                type: string
+              revision:
+                type: string
+              askedAt:
+                type: integer
+              questionCount:
+                type: integer
+                minimum: 1
+              text:
+                type: string
+              context:
+                type: string
+              attentionID:
+                type: string
+            required:
+              - sessionRef
+              - messageId
+              - revision
+              - askedAt
+              - questionCount
+              - text
+        failed:
+          type: array
+          items:
+            type: string
+      required:
+        - data
     MessagePart:
       oneOf:
         - type: object
@@ -1264,6 +1330,38 @@ components:
             - questionId
             - messageId
             - revision
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+                minLength: 1
+              messageId:
+                type: string
+                minLength: 1
+              revision:
+                type: string
+                minLength: 1
+              choiceId:
+                type: string
+                minLength: 1
+              source:
+                type: string
+                enum:
+                  - choice
+                  - boolean
+                  - text
+                  - voice
+                  - suggestion
+                default: choice
+            required:
+              - questionId
+              - messageId
+              - revision
+          minItems: 1
+          maxItems: 20
       required:
         - text
     SendResult:
@@ -2252,6 +2350,36 @@ paths:
                 $ref: "#/components/schemas/Error"
         "502":
           description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/questions:
+    get:
+      tags:
+        - questions
+      summary: List pending question summaries for sessions
+      description: Cheap discovery for the glass home and inbox. Returns at most ten summaries; provider failures and sessions without a pending question are omitted. Results are cached briefly.
+      parameters:
+        - schema:
+            type: array
+            items:
+              type: string
+              minLength: 1
+            minItems: 1
+            maxItems: 10
+          required: true
+          name: ref
+          in: query
+      responses:
+        "200":
+          description: Pending question summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionSummaryPage"
+        "400":
+          description: Invalid or too many session refs
           content:
             application/json:
               schema:

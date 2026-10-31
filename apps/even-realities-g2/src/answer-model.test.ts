@@ -8,6 +8,8 @@ import {
   buildAnswerMetadata,
   buildAnswerRows,
   buildAnswerSummary,
+  buildBatchAnswerMetadata,
+  composeBatchAnswer,
 } from "./answer-model";
 
 function choice(
@@ -90,7 +92,48 @@ describe("G2 answer model", () => {
       buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo).map(
         (row) => row.label,
       ),
-    ).toEqual(["Yes", "No", "Answer on phone", "More", "Read chat"]);
+    ).toEqual(["Answer on phone", "More", "Read chat"]);
+    expect(buildAnswerSummary(promptWithTwo.questions[0]!, promptWithTwo)).toContain(
+      "+1 more on phone",
+    );
+  });
+
+  it("builds batch metadata and a numbered message", () => {
+    const promptWithTwo = prompt({
+      questions: [
+        question(),
+        question({
+          id: "msg_1:q1",
+          text: "Which database?",
+          kind: "freeform",
+          choices: [],
+        }),
+      ],
+    });
+    const drafts = [
+      {
+        questionId: "msg_1:q0",
+        text: "Yes",
+        choice: choice("c0", "Yes", "boolean"),
+      },
+      { questionId: "msg_1:q1", text: "Postgres" },
+    ];
+    expect(composeBatchAnswer(drafts)).toBe("1. Yes\n2. Postgres");
+    expect(buildBatchAnswerMetadata(promptWithTwo, drafts)).toEqual([
+      {
+        questionId: "msg_1:q0",
+        messageId: "msg_1",
+        revision: "msg_1:abc123",
+        choiceId: "c0",
+        source: "boolean",
+      },
+      {
+        questionId: "msg_1:q1",
+        messageId: "msg_1",
+        revision: "msg_1:abc123",
+        source: "text",
+      },
+    ]);
   });
 
   it("keeps the question and context within two lines", () => {

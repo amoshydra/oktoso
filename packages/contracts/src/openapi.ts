@@ -38,6 +38,8 @@ import {
   zProviderHealth,
   zProviderOptions,
   zQuestionPrompt,
+  zPendingQuestionSummary,
+  zQuestionSummaryPage,
   zReplyOptions,
   zSearchResult,
   zSendInput,
@@ -101,6 +103,14 @@ const ReplyOptionsSchema = registry.register("ReplyOptions", zReplyOptions);
 const QuestionPromptSchema = registry.register(
   "QuestionPrompt",
   zQuestionPrompt,
+);
+const PendingQuestionSummarySchema = registry.register(
+  "PendingQuestionSummary",
+  zPendingQuestionSummary,
+);
+const QuestionSummaryPageSchema = registry.register(
+  "QuestionSummaryPage",
+  zQuestionSummaryPage,
 );
 const MessagePartSchema = registry.register("MessagePart", zMessagePart);
 const MessageSchema = registry.register("Message", zMessage);
@@ -487,6 +497,27 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/v1/questions",
+  tags: ["questions"],
+  summary: "List pending question summaries for sessions",
+  description:
+    "Cheap discovery for the glass home and inbox. Returns at most ten summaries; provider failures and sessions without a pending question are omitted. Results are cached briefly.",
+  request: {
+    query: z.object({
+      ref: z.array(z.string().min(1)).min(1).max(10),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Pending question summaries",
+      content: json(QuestionSummaryPageSchema),
+    },
+    400: errorResponse("Invalid or too many session refs"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/v1/sessions/{ref}/question",
   tags: ["questions"],
   summary: "Get the pending question in a session",
@@ -598,6 +629,7 @@ export function buildOpenApiDocument() {
       { name: "providers" },
       { name: "sessions" },
       { name: "drafts" },
+      { name: "questions" },
       { name: "attention" },
       { name: "replies" },
       { name: "settings" },
