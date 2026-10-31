@@ -41,7 +41,11 @@ pnpm dev            # hub + web at 5175
 pnpm dev:even-g2    # Even G2 web app at 5176
 ```
 
-The G2 app uses the Vite `/api` proxy to `127.0.0.1:8787` in development. The phone must be able to reach the laptop's LAN address. If the browser is already paired, the setup screen is skipped. Otherwise the setup screen accepts the owner token or a session token; the hub is the origin that served the app.
+`dev:even-g2` reads the local `hub.config.json` (or `HUB_CONFIG`) for the hub host, port, and owner token, points the Vite `/api` proxy at that hub, and authenticates proxy requests with the owner token so the simulator skips setup. The token is not embedded in client code or written to `localStorage`. Override the target with `HUB_DEV_API`, or the token with `HUB_DEV_TOKEN`.
+
+The dev proxy grants API access to anyone who can reach the Vite server, so use it only on a trusted network. For phone testing, pair the phone browser and use the cookie path instead.
+
+The phone must be able to reach the laptop's LAN address. If the browser is already paired, the setup screen is skipped. Otherwise the setup screen accepts the owner token or a session token; the hub is the origin that served the app.
 
 ```sh
 pnpm simulate:even-g2

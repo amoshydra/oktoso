@@ -19,7 +19,7 @@
   },
   "scripts": {
     "dev": "tsx scripts/dev.ts",
-    "dev:even-g2": "pnpm --filter @agent-hub/even-realities-g2 dev",
+    "dev:even-g2": "tsx scripts/dev-even-g2.ts",
     "simulate:even-g2": "pnpm --filter @agent-hub/even-realities-g2 simulate",
     "build": "pnpm build:hub && pnpm build:web && pnpm build:even-g2",
     "build:hub": "tsup",
