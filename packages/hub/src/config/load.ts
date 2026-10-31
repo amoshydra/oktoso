@@ -1,5 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { zHubConfig, type HubConfig } from "./schema";
+import {
+  zHubConfig,
+  zHubPairingConfig,
+  zHubTarget,
+  type HubConfig,
+  type HubPairingConfig,
+  type HubTarget,
+} from "./schema";
 
 type Env = Record<string, string | undefined>;
 
@@ -40,6 +47,53 @@ export async function loadConfig(
   }
 
   return zHubConfig.parse(interpolated);
+}
+
+/**
+ * Load only the fields the pairing CLI needs. Provider environment variables
+ * are deliberately not resolved, so pairing works without the hub's full
+ * secret environment.
+ */
+export async function loadHubTarget(
+  filePath: string,
+  env: Env = process.env,
+): Promise<HubTarget> {
+  const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  const picked = {
+    host: raw.host,
+    port: raw.port,
+  };
+  const interpolated = interpolate(picked, env) as Record<string, unknown>;
+
+  if (env.HUB_HOST) interpolated.host = env.HUB_HOST;
+  if (env.HUB_PORT) interpolated.port = env.HUB_PORT;
+
+  return zHubTarget.parse(interpolated);
+}
+
+export async function loadPairingConfig(
+  filePath: string,
+  env: Env = process.env,
+): Promise<HubPairingConfig> {
+  const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  const picked = {
+    host: raw.host,
+    port: raw.port,
+    token: raw.token,
+  };
+  const interpolated = interpolate(picked, env) as Record<string, unknown>;
+
+  if (env.HUB_HOST) interpolated.host = env.HUB_HOST;
+  if (env.HUB_PORT) interpolated.port = env.HUB_PORT;
+  if (env.HUB_TOKEN) interpolated.token = env.HUB_TOKEN;
+
+  return zHubPairingConfig.parse(interpolated);
 }
 
 export function buildProviderEndpoint(

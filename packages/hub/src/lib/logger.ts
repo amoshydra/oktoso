@@ -2,6 +2,15 @@ import { redact } from "./redact";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
+export interface LogRecord {
+  time: string;
+  level: Exclude<LogLevel, "silent">;
+  msg: string;
+  [key: string]: unknown;
+}
+
+export type LogSink = (record: LogRecord) => void;
+
 const LEVEL_ORDER: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
@@ -18,11 +27,25 @@ export interface Logger {
   child(fields: Record<string, unknown>): Logger;
 }
 
-export function createLogger(
-  options: { level?: LogLevel; bindings?: Record<string, unknown> } = {},
-): Logger {
+export interface LoggerOptions {
+  level?: LogLevel;
+  bindings?: Record<string, unknown>;
+  sink?: LogSink;
+}
+
+function defaultSink(record: LogRecord): void {
+  const line = `${JSON.stringify(record)}\n`;
+  if (record.level === "warn" || record.level === "error") {
+    process.stderr.write(line);
+  } else {
+    process.stdout.write(line);
+  }
+}
+
+export function createLogger(options: LoggerOptions = {}): Logger {
   const level = options.level ?? "info";
   const bindings = options.bindings ?? {};
+  const sink = options.sink ?? defaultSink;
 
   const write = (
     messageLevel: Exclude<LogLevel, "silent">,
@@ -36,9 +59,7 @@ export function createLogger(
       msg: message,
       ...(redact({ ...bindings, ...fields }) as Record<string, unknown>),
     };
-    const line = `${JSON.stringify(record)}\n`;
-    if (messageLevel === "warn" || messageLevel === "error") process.stderr.write(line);
-    else process.stdout.write(line);
+    sink(record as LogRecord);
   };
 
   return {
@@ -46,6 +67,6 @@ export function createLogger(
     info: (message, fields) => write("info", message, fields),
     warn: (message, fields) => write("warn", message, fields),
     error: (message, fields) => write("error", message, fields),
-    child: (fields) => createLogger({ level, bindings: { ...bindings, ...fields } }),
+    child: (fields) => createLogger({ level, bindings: { ...bindings, ...fields }, sink }),
   };
 }
