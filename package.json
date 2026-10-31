@@ -5,6 +5,14 @@
   "description": "Hub-first session hub for AI agents across OpenCode, Open WebUI, Hermes, and wearable clients.",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "agent-hub": "./dist/hub.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=24"
@@ -22,6 +30,8 @@
     "pack:even-g2": "pnpm --filter @agent-hub/even-realities-g2 run pack",
     "start": "node dist/hub.js",
     "start:local": "tsx scripts/start-local.ts",
+    "pair": "tsx packages/hub/src/main.ts --pair",
+    "pair:dev": "tsx scripts/pair-dev.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

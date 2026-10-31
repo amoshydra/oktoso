@@ -38,6 +38,18 @@ export const zHubConfig = z.object({
   providers: z.array(zProviderConfig).default([]),
 });
 
+/** The subset needed to probe or pair with a running hub. */
+export const zHubTarget = z.object({
+  host: z.string().default("127.0.0.1"),
+  port: z.coerce.number().int().min(1).max(65535).default(8787),
+});
+
+export const zHubPairingConfig = zHubTarget.extend({
+  token: z.string().min(16),
+});
+
 export type ProviderAuth = z.infer<typeof zProviderAuth>;
 export type ProviderConfig = z.infer<typeof zProviderConfig>;
 export type HubConfig = z.infer<typeof zHubConfig>;
+export type HubTarget = z.infer<typeof zHubTarget>;
+export type HubPairingConfig = z.infer<typeof zHubPairingConfig>;

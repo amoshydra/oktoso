@@ -27,6 +27,10 @@ const env = {
   OPENWEBUI_API_KEY: process.env.OPENWEBUI_API_KEY ?? "dev-openwebui-key",
   HERMES_API_KEY: process.env.HERMES_API_KEY ?? "dev-hermes-key",
   LOG_LEVEL: process.env.LOG_LEVEL ?? "debug",
+  // Vite also owns the dev terminal's stdin. Use the plain output and
+  // `pnpm pair:dev` instead of a TUI in development.
+  HUB_PAIRING_PROMPT: "0",
+  HUB_TUI: "0",
 };
 
 console.log(
