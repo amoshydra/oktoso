@@ -65,5 +65,13 @@
     "opencode",
     "openwebui",
     "even-g2"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amoshydra/oktoso.git"
+  },
+  "homepage": "https://github.com/amoshydra/oktoso",
+  "bugs": {
+    "url": "https://github.com/amoshydra/oktoso/issues"
+  }
 }
