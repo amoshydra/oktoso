@@ -374,6 +374,7 @@ POST   /api/v1/providers/:id/check
 GET    /api/v1/sessions?provider=&status=&q=&cursor=&limit=
 GET    /api/v1/sessions/:ref
 GET    /api/v1/sessions/:ref/messages?cursor=&limit=&order=
+GET    /api/v1/sessions/:ref/question
 POST   /api/v1/sessions/:ref/messages
 POST   /api/v1/sessions
 POST   /api/v1/sessions/:ref/interrupt
@@ -435,6 +436,48 @@ GET /api/v1/sessions/desktop-opencode%3Ases_123/messages?limit=50&order=asc
   "cursor": { "next": "opaque" }
 }
 ```
+
+### Question
+
+```http
+GET /api/v1/sessions/desktop-opencode%3Ases_123/question
+```
+
+```json
+{
+  "data": {
+    "sessionRef": "desktop-opencode:ses_123",
+    "messageId": "msg_42",
+    "revision": "msg_42:8f3c1a",
+    "askedAt": 1793000000000,
+    "generatedAt": 1793000001000,
+    "questions": [
+      {
+        "id": "msg_42:q0",
+        "text": "Should I squash the three fix commits into one?",
+        "context": "Branch: fix/auth-race",
+        "kind": "boolean",
+        "choices": [
+          { "id": "msg_42:q0:c0", "label": "Yes", "text": "Yes", "kind": "boolean", "source": "heuristic" },
+          { "id": "msg_42:q0:c1", "label": "No", "text": "No", "kind": "boolean", "source": "heuristic" }
+        ],
+        "allowsFreeText": true,
+        "allowsVoice": false,
+        "multiSelect": false,
+        "risk": "normal",
+        "confidence": "high",
+        "source": "heuristic"
+      }
+    ]
+  }
+}
+```
+
+`data` is `null` when there is no pending question. The question is derived from
+the latest completed assistant message; no provider-side question API is needed.
+A provider-native question attention item is returned as `attentionID` so the
+glasses route to the attention form instead of sending a text answer. Multiple
+questions return `null` until the phone batch flow exists.
 
 ### Send
 

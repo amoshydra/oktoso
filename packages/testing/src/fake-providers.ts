@@ -112,7 +112,7 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
       content: [
         {
           type: "text",
-          text: "The failing test is in auth.test.ts. I am narrowing it to the double-refresh case.",
+          text: "The failing test is in auth.test.ts. I am narrowing it to the double-refresh case. Should I continue with the double-refresh case?",
         },
       ],
     },
@@ -159,7 +159,7 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
       agent: "build",
       model: { id: "claude-sonnet", providerID: "commandcode" },
       content: [
-        { type: "text", text: "SSE parser fails on a comment frame." },
+        { type: "text", text: "SSE parser fails on a comment frame. What should I name the replacement branch?" },
       ],
       error: { type: "Error", message: "SSE parser fails on a comment frame." },
     },

@@ -18,6 +18,7 @@ import type {
   SessionRefresh,
   Provider,
   ProviderOptions,
+  QuestionPrompt,
   ReplyMode,
   ReplyOptions,
   SendInput,
@@ -129,6 +130,13 @@ export class HubClient {
     return this.request<MessagePage>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/messages${suffix}`,
     );
+  }
+
+  async question(ref: string): Promise<QuestionPrompt | null> {
+    const response = await this.request<{ data: QuestionPrompt | null }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/question`,
+    );
+    return response.data;
   }
 
   async markRead(ref: string): Promise<void> {

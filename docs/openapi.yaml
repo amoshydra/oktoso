@@ -835,6 +835,117 @@ components:
         - data
         - generatedAt
         - mode
+    QuestionPrompt:
+      type: object
+      properties:
+        sessionRef:
+          type: string
+        messageId:
+          type: string
+        revision:
+          type: string
+        askedAt:
+          type: integer
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+              context:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - choice
+                  - boolean
+                  - freeform
+              choices:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                      maxLength: 80
+                    text:
+                      type: string
+                    kind:
+                      type: string
+                      enum:
+                        - choice
+                        - boolean
+                        - suggestion
+                      default: choice
+                    source:
+                      type: string
+                      enum:
+                        - explicit
+                        - heuristic
+                        - model
+                      default: explicit
+                    requiresConfirmation:
+                      type: boolean
+                    destructive:
+                      type: boolean
+                    sensitive:
+                      type: boolean
+                  required:
+                    - id
+                    - label
+                    - text
+              allowsFreeText:
+                type: boolean
+              allowsVoice:
+                type: boolean
+              multiSelect:
+                type: boolean
+              risk:
+                type: string
+                enum:
+                  - normal
+                  - destructive
+                  - sensitive
+              confidence:
+                type: string
+                enum:
+                  - high
+                  - medium
+                  - low
+              source:
+                type: string
+                enum:
+                  - explicit
+                  - heuristic
+                  - model
+            required:
+              - id
+              - text
+              - kind
+              - choices
+              - allowsFreeText
+              - allowsVoice
+              - multiSelect
+              - risk
+              - confidence
+              - source
+          minItems: 1
+        attentionID:
+          type: string
+        generatedAt:
+          type: integer
+      required:
+        - sessionRef
+        - messageId
+        - revision
+        - askedAt
+        - questions
+        - generatedAt
     MessagePart:
       oneOf:
         - type: object
@@ -2099,6 +2210,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReplyOptions"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/question:
+    get:
+      tags:
+        - questions
+      summary: Get the pending question in a session
+      description: Returns the latest completed assistant question, detected from the transcript, or null when there is no pending question.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Pending question or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/QuestionPrompt"
+                      - type:
+                          - object
+                          - "null"
+                required:
+                  - data
         "404":
           description: Session not found
           content:
