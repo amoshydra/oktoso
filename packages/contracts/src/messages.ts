@@ -39,8 +39,25 @@ export const zMessagePage = z.object({
   cursor: zCursor,
 });
 
+export const zSendAnswerSource = z.enum([
+  "choice",
+  "boolean",
+  "text",
+  "voice",
+  "suggestion",
+]);
+
+export const zSendAnswer = z.object({
+  questionId: z.string().min(1),
+  messageId: z.string().min(1),
+  revision: z.string().min(1),
+  choiceId: z.string().min(1).optional(),
+  source: zSendAnswerSource.default("choice"),
+});
+
 export const zSendInput = z.object({
   text: z.string().min(1),
+  answer: zSendAnswer.optional(),
 });
 
 export const zSendResult = z.object({
@@ -58,6 +75,8 @@ export type MessageRole = z.infer<typeof zMessageRole>;
 export type MessagePart = z.infer<typeof zMessagePart>;
 export type Message = z.infer<typeof zMessage>;
 export type MessagePage = z.infer<typeof zMessagePage>;
+export type SendAnswerSource = z.infer<typeof zSendAnswerSource>;
+export type SendAnswer = z.infer<typeof zSendAnswer>;
 export type SendInput = z.infer<typeof zSendInput>;
 export type SendResult = z.infer<typeof zSendResult>;
 export type MessagesQuery = z.infer<typeof zMessagesQuery>;

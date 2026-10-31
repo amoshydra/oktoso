@@ -1236,6 +1236,34 @@ components:
         text:
           type: string
           minLength: 1
+        answer:
+          type: object
+          properties:
+            questionId:
+              type: string
+              minLength: 1
+            messageId:
+              type: string
+              minLength: 1
+            revision:
+              type: string
+              minLength: 1
+            choiceId:
+              type: string
+              minLength: 1
+            source:
+              type: string
+              enum:
+                - choice
+                - boolean
+                - text
+                - voice
+                - suggestion
+              default: choice
+          required:
+            - questionId
+            - messageId
+            - revision
       required:
         - text
     SendResult:
@@ -1984,6 +2012,12 @@ paths:
                 $ref: "#/components/schemas/SendResult"
         "404":
           description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Question changed or already answered
           content:
             application/json:
               schema:

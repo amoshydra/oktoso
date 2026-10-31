@@ -486,10 +486,29 @@ POST /api/v1/sessions/desktop-opencode%3Ases_123/messages
 Idempotency-Key: 01J...
 Content-Type: application/json
 
-{ "text": "Continue with the failing test." }
+{
+  "text": "Yes",
+  "answer": {
+    "questionId": "msg_42:q0",
+    "messageId": "msg_42",
+    "revision": "msg_42:8f3c1a",
+    "choiceId": "msg_42:q0:c0",
+    "source": "boolean"
+  }
+}
 ```
 
 The hub queues the prompt, returns `202 Accepted`, and emits message events. Provider send failures surface as `error` events and a session status update.
+
+`answer` is optional hub-only metadata. When present, the hub compares the
+question ID, message ID, and revision with the current pending question. A
+changed question returns `409 conflict` with
+`details.reason = "question_changed"`; an already answered question returns
+`question_resolved`. The metadata is stripped before the provider send.
+
+An `Idempotency-Key` header is optional. The hub caches the `202` result for five
+minutes and returns the same result for a retry with the same key. Retries must
+reuse the key; a new answer draft gets a new key.
 
 ### Create
 
