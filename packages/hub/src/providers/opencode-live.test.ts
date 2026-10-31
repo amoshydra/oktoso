@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { Message } from "@agent-hub/contracts";
-import { OpenCodeAdapter, type ProviderEvent } from "@agent-hub/providers";
+import type { Message } from "@amoshydra/oktoso-contracts";
+import { OpenCodeAdapter, type ProviderEvent } from "@amoshydra/oktoso-providers";
 import {
   createFakeProviderServer,
   type FakeProviderServer,
-} from "@agent-hub/testing";
+} from "@amoshydra/oktoso-testing";
 
 const servers: FakeProviderServer[] = [];
 

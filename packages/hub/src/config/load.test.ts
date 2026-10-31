@@ -6,7 +6,7 @@ import { loadConfig, loadHubTarget, loadPairingConfig } from "./load";
 
 describe("loadConfig", () => {
   it("interpolates environment variables and applies overrides", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-config-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-config-"));
     const filePath = join(root, "hub.config.json");
     try {
       await writeFile(
@@ -44,7 +44,7 @@ describe("loadConfig", () => {
   });
 
   it("fails when a referenced secret is missing", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-config-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-config-"));
     const filePath = join(root, "hub.config.json");
     try {
       await writeFile(filePath, JSON.stringify({ token: "${MISSING_TOKEN}" }), "utf8");
@@ -57,7 +57,7 @@ describe("loadConfig", () => {
   });
 
   it("loads pairing fields without resolving provider secrets", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-config-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-config-"));
     const filePath = join(root, "hub.config.json");
     try {
       await writeFile(
@@ -94,7 +94,7 @@ describe("loadConfig", () => {
   });
 
   it("loads a probe target without a token or provider secrets", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agent-hub-config-"));
+    const root = await mkdtemp(join(tmpdir(), "oktoso-config-"));
     const filePath = join(root, "hub.config.json");
     try {
       await writeFile(

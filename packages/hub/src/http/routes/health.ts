@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import type { Health } from "@agent-hub/contracts";
+import type { Health } from "@amoshydra/oktoso-contracts";
 import type { AppEnv } from "../types";
 import { VERSION } from "../../version";
 

@@ -35,13 +35,13 @@ importers:
 
   apps/even-realities-g2:
     dependencies:
-      '@agent-hub/client':
+      '@amoshydra/oktoso-client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@agent-hub/wearable-core':
+      '@amoshydra/oktoso-wearable-core':
         specifier: workspace:*
         version: link:../../packages/wearable-core
       '@evenrealities/even_hub_sdk':
@@ -63,13 +63,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@agent-hub/client':
+      '@amoshydra/oktoso-client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@agent-hub/ui':
+      '@amoshydra/oktoso-ui':
         specifier: workspace:*
         version: link:../../packages/ui
       dompurify:
@@ -100,7 +100,7 @@ importers:
 
   packages/client:
     dependencies:
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../contracts
 
@@ -112,13 +112,13 @@ importers:
 
   packages/hub:
     dependencies:
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agent-hub/providers':
+      '@amoshydra/oktoso-providers':
         specifier: workspace:*
         version: link:../providers
-      '@agent-hub/storage':
+      '@amoshydra/oktoso-storage':
         specifier: workspace:*
         version: link:../storage
       '@hono/node-server':
@@ -134,19 +134,19 @@ importers:
         specifier: ^0.1.3
         version: 0.1.3
     devDependencies:
-      '@agent-hub/testing':
+      '@amoshydra/oktoso-testing':
         specifier: workspace:*
         version: link:../testing
 
   packages/providers:
     dependencies:
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../contracts
 
   packages/storage:
     dependencies:
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../contracts
       zod:
@@ -155,13 +155,13 @@ importers:
 
   packages/testing:
     dependencies:
-      '@agent-hub/contracts':
+      '@amoshydra/oktoso-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agent-hub/providers':
+      '@amoshydra/oktoso-providers':
         specifier: workspace:*
         version: link:../providers
-      '@agent-hub/storage':
+      '@amoshydra/oktoso-storage':
         specifier: workspace:*
         version: link:../storage
 

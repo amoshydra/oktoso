@@ -14,13 +14,13 @@
     "verbatimModuleSyntax": true,
     "baseUrl": ".",
     "paths": {
-      "@agent-hub/contracts": ["packages/contracts/src/index.ts"],
-      "@agent-hub/providers": ["packages/providers/src/index.ts"],
-      "@agent-hub/storage": ["packages/storage/src/index.ts"],
-      "@agent-hub/hub": ["packages/hub/src/index.ts"],
-      "@agent-hub/client": ["packages/client/src/index.ts"],
-      "@agent-hub/ui": ["packages/ui/src/index.ts"],
-      "@agent-hub/testing": ["packages/testing/src/index.ts"]
+      "@amoshydra/oktoso-contracts": ["packages/contracts/src/index.ts"],
+      "@amoshydra/oktoso-providers": ["packages/providers/src/index.ts"],
+      "@amoshydra/oktoso-storage": ["packages/storage/src/index.ts"],
+      "@amoshydra/oktoso-hub": ["packages/hub/src/index.ts"],
+      "@amoshydra/oktoso-client": ["packages/client/src/index.ts"],
+      "@amoshydra/oktoso-ui": ["packages/ui/src/index.ts"],
+      "@amoshydra/oktoso-testing": ["packages/testing/src/index.ts"]
     }
   },
   "include": [

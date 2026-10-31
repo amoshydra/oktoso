@@ -586,7 +586,7 @@ export function buildOpenApiDocument() {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",
     info: {
-      title: "Agent Hub API",
+      title: "Oktoso API",
       version: "0.2.0",
       description:
         "Hub API for sessions, drafts, messages, attention, provider options, diagnostics, and a resumable event stream.",

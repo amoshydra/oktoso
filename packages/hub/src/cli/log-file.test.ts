@@ -8,7 +8,7 @@ import type { LogRecord } from "../lib/logger";
 const roots: string[] = [];
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "agent-hub-log-"));
+  const root = await mkdtemp(join(tmpdir(), "oktoso-log-"));
   roots.push(root);
   return root;
 }
@@ -29,10 +29,10 @@ afterEach(async () => {
 
 describe("resolveLogDir", () => {
   it("uses the platform log convention", () => {
-    expect(resolveLogDir({}, "linux")).toContain(".local/state/agent-hub/logs");
-    expect(resolveLogDir({}, "darwin")).toContain("Library/Logs/Agent Hub");
+    expect(resolveLogDir({}, "linux")).toContain(".local/state/oktoso/logs");
+    expect(resolveLogDir({}, "darwin")).toContain("Library/Logs/Oktoso");
     expect(resolveLogDir({ LOCALAPPDATA: "C:\\Logs" }, "win32")).toBe(
-      join("C:\\Logs", "AgentHub", "Logs"),
+      join("C:\\Logs", "Oktoso", "Logs"),
     );
   });
 

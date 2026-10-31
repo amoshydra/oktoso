@@ -9,7 +9,7 @@ try {
 
 const env = {
   ...process.env,
-  HUB_TOKEN: process.env.HUB_TOKEN ?? "dev-token-agent-hub",
+  HUB_TOKEN: process.env.HUB_TOKEN ?? "dev-token-oktoso",
 };
 
 const child = spawn(

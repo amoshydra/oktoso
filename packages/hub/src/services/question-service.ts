@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { QuestionPrompt } from "@agent-hub/contracts";
+import type { QuestionPrompt } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "./session-service";
 import { parseQuestion } from "./question-parser";
 

@@ -1,5 +1,5 @@
-import type { HubEvent } from "@agent-hub/contracts";
-import type { StateStore } from "@agent-hub/storage";
+import type { HubEvent } from "@amoshydra/oktoso-contracts";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { Logger } from "../lib/logger";
 
 export interface EventBusOptions {

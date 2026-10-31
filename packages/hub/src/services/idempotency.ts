@@ -1,4 +1,4 @@
-import type { StateStore } from "@agent-hub/storage";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 
 export interface IdempotencyServiceOptions {
   ttlMs?: number;

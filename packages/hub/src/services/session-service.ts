@@ -8,11 +8,11 @@ import type {
   Session,
   SessionListQuery,
   SessionPage,
-} from "@agent-hub/contracts";
-import type { ProviderAdapter } from "@agent-hub/providers";
+} from "@amoshydra/oktoso-contracts";
+import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
-import type { StateStore } from "@agent-hub/storage";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { ProviderRegistry } from "./provider-registry";
 
 export interface SessionServiceOptions {

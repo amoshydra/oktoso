@@ -1,4 +1,4 @@
-# Agent Hub UI and Information Architecture
+# Oktoso UI and Information Architecture
 
 > Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27. Changes to this document follow the design lock policy.
 
@@ -34,7 +34,7 @@ The interface should feel like a workbench, not a marketing dashboard. Dense eno
 ## 2. Information architecture
 
 ```text
-Agent Hub
+Oktoso
 ├─ Inbox
 │  ├─ Needs approval
 │  ├─ Needs an answer
@@ -123,7 +123,7 @@ The global navigation has five destinations: Inbox, Sessions, Search, Providers,
 │ Inbox│ Search…              │ Fix auth race in gateway         │ Provider         │
 │ 3    │ [All] [OpenCode] …   │ OpenCode · build · running       │ desktop-opencode │
 │      │                      │                                  │ Project          │
-│ Sess │ Today                │ You                              │ agent-hub        │
+│ Sess │ Today                │ You                              │ oktoso        │
 │      │ ● Fix auth race      │ Fix the auth race                │ Directory        │
 │ Srch │   OpenCode · 2m      │                                  │ /home/me/...     │
 │      │ ○ Q4 planning        │ Agent                            │ Model            │
@@ -210,7 +210,7 @@ The sessions view is the full browsing surface.
 │                      │                                            │
 │ PINNED               │ ┌────────────────────────────────────────┐ │
 │ ★ Fix auth race      │ │ ● Fix auth race in gateway             │ │
-│                      │ │ OpenCode · agent-hub · build · 2m      │ │
+│                      │ │ OpenCode · oktoso · build · 2m      │ │
 │ TODAY                │ │ Needs approval · Run shell             │ │
 │ ● Fix auth race      │ └────────────────────────────────────────┘ │
 │ ○ Q4 planning        │ ┌────────────────────────────────────────┐ │
@@ -305,7 +305,7 @@ The session view is the core reading and reply surface.
 │ New session                                      ×    │
 │                                                      │
 │ Provider   [desktop-opencode ▾]                       │
-│ Project    [/home/me/agent-hub ▾]                     │
+│ Project    [/home/me/oktoso ▾]                     │
 │ Agent      [build ▾]                                  │
 │ Model      [claude-sonnet ▾]                          │
 │                                                      │
@@ -378,7 +378,7 @@ Every screen needs these states:
 - **Disconnected hub:** persistent banner with reconnect and last sync time.
 - **No attention:** calm empty inbox with a link to sessions.
 - **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error.
-- **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Agent Hub** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal.
+- **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Oktoso** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal.
 
 ## 13. Visual language
 
@@ -462,7 +462,7 @@ The type scale has six roles, not a continuum of half-steps:
 
 ```text
 ┌──────────────────────────────────┐
-│ Agent Hub                 ⌕  +   │
+│ Oktoso                 ⌕  +   │
 │ [All] [OpenCode] [Open WebUI] …  │
 ├──────────────────────────────────┤
 │ ● Fix auth race in gateway       │

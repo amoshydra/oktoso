@@ -1,5 +1,5 @@
 {
-  "name": "@agent-hub/providers",
+  "name": "@amoshydra/oktoso-providers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@agent-hub/contracts": "workspace:*"
+    "@amoshydra/oktoso-contracts": "workspace:*"
   }
 }

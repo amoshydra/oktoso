@@ -19,8 +19,8 @@ import {
   JsonStateStore,
   MemoryStateStore,
   type StateStore,
-} from "@agent-hub/storage";
-import { createFakeProviderServer, type FakeProviderServer } from "@agent-hub/testing";
+} from "@amoshydra/oktoso-storage";
+import { createFakeProviderServer, type FakeProviderServer } from "@amoshydra/oktoso-testing";
 
 const token = "test-token-long-enough";
 const logger = createLogger({ level: "silent" });
@@ -28,7 +28,7 @@ const servers: FakeProviderServer[] = [];
 const roots: string[] = [];
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "agent-hub-app-"));
+  const root = await mkdtemp(join(tmpdir(), "oktoso-app-"));
   roots.push(root);
   return root;
 }
@@ -236,7 +236,7 @@ describe("hub app", () => {
     expect(form.headers.get("location")).toBe("/");
 
     const setCookie = form.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("agent_hub_session=");
+    expect(setCookie).toContain("oktoso_session=");
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toContain("SameSite=Lax");
     expect(setCookie).toContain(`Max-Age=${SESSION_TTL_SECONDS}`);
@@ -253,7 +253,7 @@ describe("hub app", () => {
   it("shows an already-paired page without consuming a valid link", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
-    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+    const cookie = `oktoso_session=${auth.mintSession().token}`;
     const pairing = auth.issuePairing();
 
     const page = await app.request(`/pair/${pairing.code}`, {
@@ -325,7 +325,7 @@ describe("hub app", () => {
   it("rejects cross-origin cookie mutations", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
-    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+    const cookie = `oktoso_session=${auth.mintSession().token}`;
 
     const crossOrigin = await app.request(
       "/api/v1/providers/desktop-opencode/check",
@@ -404,7 +404,7 @@ describe("hub app", () => {
   it("sends an already-paired browser to the app when a link is reused", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
-    const cookie = `agent_hub_session=${auth.mintSession().token}`;
+    const cookie = `oktoso_session=${auth.mintSession().token}`;
 
     const response = await app.request("/pair/not-a-code", {
       headers: { Cookie: cookie },
@@ -447,12 +447,12 @@ describe("hub app", () => {
     now = session.expiresAt - 6 * 24 * 60 * 60 * 1000;
 
     const response = await app.request("/api/v1/auth/check", {
-      headers: { Cookie: `agent_hub_session=${session.token}` },
+      headers: { Cookie: `oktoso_session=${session.token}` },
     });
     expect(response.status).toBe(200);
 
     const setCookie = response.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("agent_hub_session=");
+    expect(setCookie).toContain("oktoso_session=");
     const refreshedToken = setCookie.split(";")[0]!.split("=")[1]!;
     expect(refreshedToken).not.toBe(session.token);
 
@@ -466,7 +466,7 @@ describe("hub app", () => {
     const { app } = await createTestApp();
     const response = await app.request("/api/v1/auth/signout", {
       method: "POST",
-      headers: { Cookie: "agent_hub_session=stale" },
+      headers: { Cookie: "oktoso_session=stale" },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
@@ -657,7 +657,7 @@ describe("hub app", () => {
     });
 
     const filtered = await app.request(
-      "/api/v1/sessions?q=agent-hub&status=error&provider=desktop-opencode",
+      "/api/v1/sessions?q=oktoso&status=error&provider=desktop-opencode",
       { headers },
     );
     expect(filtered.status).toBe(200);
@@ -865,7 +865,7 @@ describe("hub app", () => {
       body: JSON.stringify({
         providerID: "desktop-opencode",
         title: "Adapter smoke test",
-        directory: "/home/me/agent-hub",
+        directory: "/home/me/oktoso",
         agent: "build",
         model: "commandcode/claude-sonnet",
       }),
@@ -975,7 +975,7 @@ describe("hub app", () => {
     const created = await sessions.create({
       providerID: "desktop-opencode",
       title: "Ephemeral provider session",
-      directory: "/home/me/agent-hub",
+      directory: "/home/me/oktoso",
     });
     expect(
       (await sessions.list({ limit: 200 })).data.some(

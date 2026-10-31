@@ -1,4 +1,4 @@
-# Agent Hub Delivery Plan
+# Oktoso Delivery Plan
 
 The plan starts with the hub API and the web client. Glasses and VR come after the API and the web client prove the model.
 

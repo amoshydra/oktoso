@@ -4,7 +4,7 @@ import type {
   ReplyMode,
   ReplyOption,
   ReplyOptions,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import type { Logger } from "../lib/logger";
 import type { AssistantSettingsService } from "./assistant-settings";
 import type { SessionService } from "./session-service";

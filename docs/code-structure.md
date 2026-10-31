@@ -1,4 +1,4 @@
-# Agent Hub — Implementation Plan and Code Structure
+# Oktoso — Implementation Plan and Code Structure
 
 Status: proposed implementation shape. Milestones and acceptance criteria live in [`plan.md`](plan.md); architecture lives in [`design.md`](design.md); UI rules live in [`ui-ia.md`](ui-ia.md) and [`visual-audit.md`](visual-audit.md).
 
@@ -62,7 +62,7 @@ The contract is generated from the Zod schemas and checked into `docs/openapi.ya
 ## 3. Repository tree
 
 ```text
-agent-hub/
+oktoso/
   apps/
     web/
       src/
@@ -307,14 +307,14 @@ Package names:
 
 | Path | Package |
 |---|---|
-| `packages/contracts` | `@agent-hub/contracts` |
-| `packages/providers` | `@agent-hub/providers` |
-| `packages/storage` | `@agent-hub/storage` |
-| `packages/hub` | `@agent-hub/hub` |
-| `packages/client` | `@agent-hub/client` |
-| `packages/ui` | `@agent-hub/ui` |
-| `packages/testing` | `@agent-hub/testing` |
-| `apps/web` | `@agent-hub/web` |
+| `packages/contracts` | `@amoshydra/oktoso-contracts` |
+| `packages/providers` | `@amoshydra/oktoso-providers` |
+| `packages/storage` | `@amoshydra/oktoso-storage` |
+| `packages/hub` | `@amoshydra/oktoso-hub` |
+| `packages/client` | `@amoshydra/oktoso-client` |
+| `packages/ui` | `@amoshydra/oktoso-ui` |
+| `packages/testing` | `@amoshydra/oktoso-testing` |
+| `apps/web` | `@amoshydra/oktoso-web` |
 
 This refines the Milestone 1 sketch: the old `packages/shared` is split into `packages/contracts` for the wire/domain contract and the service layer inside `packages/hub`. It is not kept as a catch-all.
 
@@ -492,7 +492,7 @@ or, for a paired browser:
 
 ```http
 GET /api/v1/events?after=1042
-Cookie: agent_hub_session_8787=<session-token>
+Cookie: oktoso_session_8787=<session-token>
 Accept: text/event-stream
 ```
 
@@ -549,11 +549,11 @@ Response:
 {
   "agents": [{ "id": "build", "label": "build" }],
   "models": [{ "id": "claude-sonnet", "label": "Claude Sonnet" }],
-  "directories": ["/home/me/agent-hub"],
+  "directories": ["/home/me/oktoso"],
   "defaults": {
     "agent": "build",
     "model": "claude-sonnet",
-    "directory": "/home/me/agent-hub"
+    "directory": "/home/me/oktoso"
   }
 }
 ```
@@ -593,10 +593,10 @@ Cache options for a few minutes. Fall back to configured defaults when a provide
 - The first start that creates a config opens a TUI setup panel; plain and non-TTY modes print one pairing link after the server is listening. Later starts print only the pairing command. A foreground terminal watches for `p`/`pair` lines and issues a fresh link without restarting. The expired-link page sends an already-paired browser to `/`.
 - When stdout is a TTY and a LAN URL exists, the terminal prints a **Scan to pair** QR code. The web login can scan it with the Barcode Detection API on secure-context browsers; the phone camera app is the fallback.
 - The owner token is the only credential that can mint pairing codes. A paired session cannot create another pairing code.
-- Session tokens are stateless: `<expiry>.<HMAC-SHA256(HMAC-SHA256(ownerToken, "agent-hub-session-v1"), expiry)>`. They last 30 days; rotating the owner token revokes all of them.
+- Session tokens are stateless: `<expiry>.<HMAC-SHA256(HMAC-SHA256(ownerToken, "oktoso-session-v1"), expiry)>`. They last 30 days; rotating the owner token revokes all of them.
 - A cookie session within seven days of expiry rotates to a fresh 30-day token on an authenticated request. Bearer clients call `POST /api/v1/auth/refresh`. Old stateless tokens remain valid until their original expiry. There is no absolute refresh cap or per-device revoke; rotating the owner token invalidates all.
 - The browser session cookie is `HttpOnly`, `SameSite=Lax`, `Path=/`, port-scoped, and `Secure` when the request is HTTPS or `X-Forwarded-Proto: https`.
-- In TUI mode, structured logs go to the platform log directory (`$XDG_STATE_HOME/agent-hub/logs` on Linux/Termux, `~/Library/Logs/Agent Hub` on macOS, `%LOCALAPPDATA%\AgentHub\Logs` on Windows). Keep `hub.log` and `hub.log.prev`; rotate at 25 MiB. Plain mode uses stderr; JSON mode uses stdout; non-TTY services do not create a file unless `--log-file` is explicit.
+- In TUI mode, structured logs go to the platform log directory (`$XDG_STATE_HOME/oktoso/logs` on Linux/Termux, `~/Library/Logs/Oktoso` on macOS, `%LOCALAPPDATA%\Oktoso\Logs` on Windows). Keep `hub.log` and `hub.log.prev`; rotate at 25 MiB. Plain mode uses stderr; JSON mode uses stdout; non-TTY services do not create a file unless `--log-file` is explicit.
 - Cookie-authenticated mutations require a same-origin `Origin` header, falling back to `Sec-Fetch-Site`. Credentialed CORS uses an explicit origin list, never `*`.
 - Body size limits, URL limits, request timeouts, and provider timeouts are mandatory.
 - CORS defaults to same-origin; development origin is explicit.

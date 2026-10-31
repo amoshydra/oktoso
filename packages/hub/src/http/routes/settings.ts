@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { zAssistantInput } from "@agent-hub/contracts";
+import { zAssistantInput } from "@amoshydra/oktoso-contracts";
 import type { AssistantSettingsService } from "../../services/assistant-settings";
 import type { AppEnv } from "../types";
 import { badRequest } from "../../domain/errors";

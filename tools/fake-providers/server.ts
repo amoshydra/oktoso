@@ -1,4 +1,4 @@
-import { createFakeProviderServers } from "@agent-hub/testing";
+import { createFakeProviderServers } from "@amoshydra/oktoso-testing";
 
 const providers = await createFakeProviderServers();
 for (const provider of providers) {

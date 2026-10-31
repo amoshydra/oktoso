@@ -2,8 +2,8 @@ import type {
   AssistantConfig,
   AssistantInput,
   AssistantView,
-} from "@agent-hub/contracts";
-import type { StateStore } from "@agent-hub/storage";
+} from "@amoshydra/oktoso-contracts";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 
 export class AssistantSettingsService {
   constructor(private readonly store: StateStore) {}

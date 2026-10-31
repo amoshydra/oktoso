@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_ASSISTANT_CONFIG, zAssistantConfig } from "@agent-hub/contracts";
+import { DEFAULT_ASSISTANT_CONFIG, zAssistantConfig } from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
   readAt: z.number().int().nonnegative(),

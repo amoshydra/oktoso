@@ -74,7 +74,7 @@ function pageShell(title: string, body: string): string {
 <body>
   <main>
     <div class="brand">AH</div>
-    <p class="eyebrow">Agent Hub</p>
+    <p class="eyebrow">Oktoso</p>
     ${body}
   </main>
 </body>
@@ -90,7 +90,7 @@ function pairingPage(input: {
     ? `<h1>Already paired</h1>
     <p>This browser is already paired with <code>${input.origin}</code>.</p>
     <p class="meta">This link expires at ${formatExpiry(input.expiresAt)}.</p>
-    <p><a href="/">Open Agent Hub</a></p>
+    <p><a href="/">Open Oktoso</a></p>
     <form method="post">
       <button class="secondary" type="submit">Pair again to refresh this session</button>
     </form>
@@ -103,7 +103,7 @@ function pairingPage(input: {
     </form>
     <p class="hint">Only pair a browser you control. The owner token is not shared.</p>`;
 
-  return pageShell("Pair this device with Agent Hub", body);
+  return pageShell("Pair this device with Oktoso", body);
 }
 
 function expiredPage(): string {
@@ -112,7 +112,7 @@ function expiredPage(): string {
     `<h1>Pairing link expired</h1>
     <p>This link expired, was already used, or the hub restarted. Pairing links work once and expire after five minutes.</p>
     <p>In the terminal running the hub, type <code>p</code> and press Enter. If the hub runs in the background, run its <code>pair</code> command from another terminal.</p>
-    <p>If this browser is already paired, <a href="/">open Agent Hub</a>.</p>`,
+    <p>If this browser is already paired, <a href="/">open Oktoso</a>.</p>`,
   );
 }
 

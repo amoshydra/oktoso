@@ -5,7 +5,7 @@ import type {
   PendingQuestion,
   QuestionPrompt,
   QuestionRisk,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 
 const DESTRUCTIVE =
   /\b(delete|remove|drop|reset|overwrite|wipe|truncate|force[- ]push|revoke|rotate|destroy|kill|rm\s+-rf)\b/i;

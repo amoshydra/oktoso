@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { loadEnvFile } from "node:process";
-import { createFakeProviderServers } from "@agent-hub/testing";
+import { createFakeProviderServers } from "@amoshydra/oktoso-testing";
 
 try {
   loadEnvFile(".env.local");
@@ -8,7 +8,7 @@ try {
   // .env.local is optional; the fake OpenCode provider is the default.
 }
 
-const token = "dev-token-agent-hub";
+const token = "dev-token-oktoso";
 const providers = await createFakeProviderServers();
 const children: ChildProcess[] = [];
 let shuttingDown = false;
@@ -47,7 +47,7 @@ const hub = spawn(
 );
 const web = spawn(
   "pnpm",
-  ["--filter", "@agent-hub/web", "dev"],
+  ["--filter", "@amoshydra/oktoso-web", "dev"],
   {
     stdio: "inherit",
     env: { ...env, VITE_DEV_TOKEN: token },

@@ -33,7 +33,7 @@ function signingKey(ownerToken: string): Buffer {
   // Keep the owner token out of the HMAC message and give the key a fixed
   // context. This mirrors the OpenCode session-token derivation.
   return createHmac("sha256", ownerToken)
-    .update("agent-hub-session-v1")
+    .update("oktoso-session-v1")
     .digest();
 }
 

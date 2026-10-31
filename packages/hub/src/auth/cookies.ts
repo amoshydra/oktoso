@@ -1,4 +1,4 @@
-const COOKIE_BASE = "agent_hub_session";
+const COOKIE_BASE = "oktoso_session";
 
 /**
  * Keep sessions for hubs on different ports separate, matching the OpenCode
