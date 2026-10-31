@@ -15,6 +15,7 @@ import { DraftService } from "./services/draft-service";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
 import { QuestionService } from "./services/question-service";
+import { VERSION } from "./version";
 import {
   JsonStateStore,
   MemoryStateStore,
@@ -138,7 +139,7 @@ describe("hub app", () => {
     const { app } = await createTestApp();
     const response = await app.request("/api/v1/health");
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, version: "0.1.0" });
+    expect(await response.json()).toMatchObject({ ok: true, version: VERSION });
   });
 
   it("requires a hub credential for API routes", async () => {
