@@ -956,7 +956,7 @@ function renderSettings() {
             <h3>Networking</h3>
             <p>The hub binds a host and port. WireGuard, Tailscale, DNS, and TLS sit outside the hub. Configure provider URLs directly.</p>
             <div class="settings-row"><span>Hub bind</span><span class="mono">127.0.0.1:8787</span></div>
-            <div class="settings-row"><span>Client auth</span><span>Bearer token</span></div>
+            <div class="settings-row"><span>Client auth</span><span>Pairing cookie or bearer token</span></div>
           </section>
           <section class="settings-card">
             <h3>About</h3>

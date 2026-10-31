@@ -12,7 +12,7 @@ The architecture covers the provider model and API, but implementation needs the
 |---|---|
 | Generated contract layer | Runtime validation, TypeScript types, and OpenAPI must not drift |
 | Config and secret resolution | Provider URLs and credentials must be validated without leaking |
-| Hub auth and client login | Every API call and SSE stream needs one bearer token |
+| Hub auth and client login | Every API call and SSE stream needs an owner/session credential, sent as Bearer or the paired HttpOnly cookie |
 | Storage abstraction | Read markers, attention state, drafts, idempotency, sequence number |
 | Resumable event bus | Reconnect without losing or duplicating state |
 | Provider sync runtime | Health, polling, streaming, backoff, and cache ownership |
@@ -99,6 +99,7 @@ agent-hub/
         lib/
           auth.ts
           format.ts
+          qr-scanner.ts
         styles/
         pwa/
       index.html
@@ -177,6 +178,20 @@ agent-hub/
           session.ts
           attention.ts
           event.ts
+        auth/
+          session.ts
+          pairing.ts
+          service.ts
+          cookies.ts
+        cli/
+          args.ts
+          hub-status.ts
+          log-file.ts
+          pairing-panel.ts
+          terminal.ts
+          tui.ts
+          types.ts
+          urls.ts
         services/
           provider-registry.ts
           sync-service.ts
@@ -196,8 +211,11 @@ agent-hub/
             errors.ts
             request-id.ts
             security.ts
+          auth-cookie.ts
+          origin.ts
           routes/
             auth.ts
+            pair.ts
             health.ts
             providers.ts
             sessions.ts
@@ -209,6 +227,7 @@ agent-hub/
         lib/
           logger.ts
           redact.ts
+          pairing-prompt.ts
           clock.ts
           sse.ts
         test/
@@ -455,14 +474,22 @@ Attention IDs must be stable and URL-safe. Keep the native request ID in the pay
 - Send `retry:` once at connection start.
 - Bound each subscriber queue. A slow client gets `resync` and is disconnected.
 - Coalesce high-volume message snapshots for a short frame (for example 50ms) before fan-out.
-- The browser uses `fetch()` with `Authorization` and an `AbortController`, not `EventSource`.
-- Token must never travel in an SSE URL.
+- The browser uses `fetch()` with `Authorization` or the paired session cookie, and an `AbortController`, not `EventSource`.
+- A session token must never travel in an SSE URL. The one-time pairing code is the only credential that may appear in a URL.
 
 Transport:
 
 ```http
 GET /api/v1/events?after=1042
-Authorization: Bearer <hub-token>
+Authorization: Bearer <owner-or-session-token>
+Accept: text/event-stream
+```
+
+or, for a paired browser:
+
+```http
+GET /api/v1/events?after=1042
+Cookie: agent_hub_session_8787=<session-token>
 Accept: text/event-stream
 ```
 
@@ -542,21 +569,37 @@ Cache options for a few minutes. Fall back to configured defaults when a provide
 | Hub restart mid-send | Mark the local job interrupted; sync provider state; never pretend the hub finished |
 | JSON state corrupt | Fail startup with a clear path to the backup; never silently reset read/attention state |
 | Options unavailable | Use configured defaults and hide unsupported fields |
-| Token invalid | Return `401`; web clears the token and returns to login |
+| Credential invalid | Return `401`; web clears the session and returns to login |
+| Pairing link preview | `GET /pair/<code>` renders the page without consuming; previews are safe |
+| Pairing code invalid or reused | The page shows the expired state; `POST /pair/<code>` or the JSON exchange returns `401` |
+| Pairing code expired | Codes expire after five minutes; an expired POST is consumed and rejected |
+| Session near expiry | A cookie session within seven days of expiry rotates to a fresh 30-day cookie; bearer clients call the refresh endpoint |
+| Owner token rotated | Every paired session returns `401`; clients must pair again |
+| Cookie mutation from another origin | Return `403`; require same-origin `Origin` or `Sec-Fetch-Site` |
 | Slow SSE client | Send `resync`, close the subscriber, let the client reconnect |
 
 ### 5.12 Observability and security
 
 - Use structured JSON logs with request ID, provider ID, route, status, and duration.
-- Redact authorization, tokens, passwords, message bodies, and form payloads.
+- Redact authorization, tokens, cookies, pairing codes, passwords, message bodies, and form payloads from logs.
 - Public `GET /api/v1/health` returns liveness only.
 - Authenticated `GET /api/v1/diagnostics` returns provider health, last sync, retry time, event backlog, subscriber count, storage kind, uptime, and version.
-- Bearer comparison uses constant-time comparison.
+- Bearer and session comparisons use constant-time comparison.
+- Pairing codes are 128-bit URL-safe random values, single-use, valid for five minutes, kept in memory with a 1000-entry cap, and redacted from logs.
+- `GET /pair/<code>` renders a confirmation page without consuming the code, so chat link previews are safe. `POST /pair/<code>` consumes it, sets the cookie, and returns `303 /`. The machine exchange is `POST /api/v1/auth/connect` with a JSON body; form posts and GET requests cannot redeem a code.
+- The first start that creates a config opens a TUI setup panel; plain and non-TTY modes print one pairing link after the server is listening. Later starts print only the pairing command. A foreground terminal watches for `p`/`pair` lines and issues a fresh link without restarting. The expired-link page sends an already-paired browser to `/`.
+- When stdout is a TTY and a LAN URL exists, the terminal prints a **Scan to pair** QR code. The web login can scan it with the Barcode Detection API on secure-context browsers; the phone camera app is the fallback.
+- The owner token is the only credential that can mint pairing codes. A paired session cannot create another pairing code.
+- Session tokens are stateless: `<expiry>.<HMAC-SHA256(HMAC-SHA256(ownerToken, "agent-hub-session-v1"), expiry)>`. They last 30 days; rotating the owner token revokes all of them.
+- A cookie session within seven days of expiry rotates to a fresh 30-day token on an authenticated request. Bearer clients call `POST /api/v1/auth/refresh`. Old stateless tokens remain valid until their original expiry. There is no absolute refresh cap or per-device revoke; rotating the owner token invalidates all.
+- The browser session cookie is `HttpOnly`, `SameSite=Lax`, `Path=/`, port-scoped, and `Secure` when the request is HTTPS or `X-Forwarded-Proto: https`.
+- In TUI mode, structured logs go to the platform log directory (`$XDG_STATE_HOME/agent-hub/logs` on Linux/Termux, `~/Library/Logs/Agent Hub` on macOS, `%LOCALAPPDATA%\AgentHub\Logs` on Windows). Keep `hub.log` and `hub.log.prev`; rotate at 25 MiB. Plain mode uses stderr; JSON mode uses stdout; non-TTY services do not create a file unless `--log-file` is explicit.
+- Cookie-authenticated mutations require a same-origin `Origin` header, falling back to `Sec-Fetch-Site`. Credentialed CORS uses an explicit origin list, never `*`.
 - Body size limits, URL limits, request timeouts, and provider timeouts are mandatory.
 - CORS defaults to same-origin; development origin is explicit.
 - Serve CSP, frame-ancestors, nosniff, and referrer-policy headers.
 - Hub never accepts provider credentials from a client.
-- No token in URLs, logs, HTML, or localStorage by default.
+- No session token in URLs, logs, HTML, or localStorage by default. The one-time pairing code may appear in `/pair/<code>`; the confirmation page does not consume it, and the machine exchange uses a POST body.
 
 ### 5.13 Data flow
 
@@ -593,7 +636,13 @@ Keep the existing `/api/v1` contract and add:
 
 | Method | Route | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/auth/check` | Validate the hub token before loading the app |
+| `POST` | `/api/v1/auth/pair` | Create a five-minute, single-use pairing code; owner credential only |
+| `POST` | `/api/v1/auth/connect` | Redeem a JSON `{ code }` for a session token; machine exchange only |
+| `POST` | `/api/v1/auth/refresh` | Issue a fresh 30-day session token for a paired session |
+| `POST` | `/api/v1/auth/signout` | Clear the paired browser cookie |
+| `GET` | `/api/v1/auth/check` | Validate the owner or session credential before loading the app |
+| `GET` | `/pair/{code}` | Human confirmation page; does not consume the code |
+| `POST` | `/pair/{code}` | Human pairing action; consumes the code and sets the session cookie |
 | `GET` | `/api/v1/providers/{id}/options` | Agents, models, directories, defaults |
 | `POST` | `/api/v1/sessions/{ref}/read` | Mark a session read and sync the marker |
 | `GET` | `/api/v1/diagnostics` | Authenticated operational state |
@@ -601,6 +650,7 @@ Keep the existing `/api/v1` contract and add:
 Contract changes:
 
 - Add `ProviderOptions`, `AgentOption`, `ModelOption`, and `DirectoryOption`.
+- Add `AuthKind`, `PairingCode`, `PairingSession`, `PairingExchange`, and `SessionRefresh` schemas.
 - Add `options` and `markRead` to provider capabilities.
 - Add an optional `fields` array and `openInProviderUrl` to attention items.
 - Add `resync` and `session.read` to the event union.
@@ -650,6 +700,8 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
   - one primary action per surface.
 - Reuse the responsive rules from `AGENTS.md`.
 - Add a logged-out state and a token validation failure state.
+- Bootstrap auth from the paired HttpOnly cookie before showing login; keep the pasted owner/session token as the fallback.
+- Pairing links are opened directly, so the app does not need a token field in the pairing path.
 - Render normalized message parts: text, reasoning, tool calls, code, and the streaming cursor.
 - Gate actions from provider capabilities. Do not show a permission or interrupt control a provider cannot honor.
 - Add loading, empty, offline, stale, and provider-error states.
@@ -662,6 +714,7 @@ Session refs are opaque. URL-encode them; never parse the provider ID from the U
 1. Fake OpenCode, Open WebUI, and Hermes HTTP servers.
 2. The hub pointed at those fake providers.
 3. The Vite web app proxying `/api` to the hub.
+4. A pairing link available with `pnpm pair:dev` while the hub is running. The dev hub disables the TUI and interactive `p` prompt because Vite owns the terminal.
 
 The fake providers need scripted scenarios:
 

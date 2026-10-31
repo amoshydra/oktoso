@@ -5,7 +5,7 @@ long forms, search, and session management.
 
 ## Screen map
 
-The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at `/api`. Setup asks only for the token.
+The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at `/api`. A paired browser skips setup; otherwise pair the phone browser with the hub terminal QR or enter the owner or session token.
 
 ```text
 Home

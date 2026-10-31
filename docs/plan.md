@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation and the OpenCode read/write slice are in place: contracts, config, auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding.
+Status: in progress. Phase 0 foundation and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding.
 
 Goal: prove the hub with one provider and one client.
 
@@ -52,7 +52,13 @@ Deliverables:
   - `/api/v1/sessions/:ref/messages` POST
   - `/api/v1/sessions` POST
   - `/api/v1/events`
-- Bearer auth, auth check endpoint, error shape, request logging with redaction.
+  - `/api/v1/auth/pair`
+  - `/api/v1/auth/connect`
+  - `/api/v1/auth/refresh`
+  - `/api/v1/auth/signout`
+  - `/pair/:code`
+- Owner and session auth (Bearer or HttpOnly cookie), five-minute single-use pairing codes, preview-safe `/pair/:code` confirmation, 30-day stateless sessions with rolling refresh, terminal/browser QR pairing, auth check endpoint, error shape, request logging with redaction.
+- Terminal UI: full-screen dashboard, setup/pairing modal with QR, platform log files with two-file rotation, `--plain` and `--log-json` service modes.
 - Web client shell:
   - session list
   - filters by provider and status
@@ -68,6 +74,13 @@ Acceptance:
 - Sending a prompt reaches OpenCode and the reply streams into the client.
 - Creating a session works with a directory, agent, and model.
 - The event stream survives a reconnect and resyncs.
+- A five-minute pairing page pairs a browser without exposing the owner token; only the confirmation POST consumes the code, so a link preview cannot use it. The cookie authenticates the API.
+- Machine clients redeem a code with `POST /api/v1/auth/connect` and a JSON body.
+- The first start that creates a config opens a TUI setup panel (plain/non-TTY prints a first-run link); `p` in the foreground terminal issues a new link without restarting; an expired link explains how to create a new one and sends an already-paired browser to the app.
+- A terminal QR code and the browser Barcode Detection API cover phone pairing where available.
+- Active cookie sessions refresh automatically before the 30-day expiry; bearer clients can call the refresh endpoint.
+- A TTY starts the dashboard; a non-TTY process logs to stdout/stderr; TUI logs go to the platform log file with a bounded two-file rotation.
+- A second start against a live hub prints a status card instead of an `EADDRINUSE` stack; `status`, `pair`, `--host`, and `--port` cover the follow-up actions.
 - No blocking shell calls in a request path.
 
 ## Milestone 2: Attention inbox
@@ -183,7 +196,7 @@ Deliverables:
 
 - Read markers and unread counts shared across clients.
 - Drafts stored per session and device.
-- Device list and token management.
+- Device list and token management. Per-device revocation requires stored device tokens; the first pairing release is stateless, so rotating `HUB_TOKEN` revokes all sessions.
 - Session search by title and project.
 - Message search API and UI.
 - Attention snooze and bulk mark read.
@@ -254,7 +267,7 @@ Deliverables:
 - Contract tests for every provider adapter.
 - Integration tests with recorded provider responses.
 - Load test with multiple clients and event bursts.
-- Security review: token handling, redaction, CORS, rate limits.
+- Security review: token handling, pairing code handling, cookie CSRF, redaction, CORS, rate limits.
 - Packaging: single-file bundle, Docker image, Termux archive.
 - Rust port decision record.
 - If porting: Rust hub behind the same OpenAPI contract, with contract tests run against both.
@@ -309,7 +322,7 @@ Acceptance:
 ## Decisions to confirm
 
 1. Hub host: Termux, Raspberry Pi, desktop, NAS, or VPS.
-2. Single-user token for the first release.
+2. Single-owner owner token plus paired sessions for the first release.
 3. Open WebUI as a chat provider, not as the hub.
 4. Hermes existing sessions through the TUI gateway.
 5. Web client first, then glasses, then VR.
