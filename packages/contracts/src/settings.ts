@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 export const DEFAULT_REPLY_BASE_URL = "http://127.0.0.1:8080/v1";
-export const DEFAULT_REPLY_MODEL =
-  "gemma-3-4b-it";
+export const DEFAULT_REPLY_MODEL = "gemma-3-4b-it";
 export const DEFAULT_REPLY_TIMEOUT_MS = 8_000;
 export const DEFAULT_TRANSCRIPTION_TIMEOUT_MS = 20_000;
 
