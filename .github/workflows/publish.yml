@@ -1,0 +1,85 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match package version $version" >&2
+            exit 1
+          fi
+
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm openapi:check
+      - run: pnpm build:single-port
+      - run: npm pack --dry-run
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify npm supports trusted publishing
+        run: |
+          version="$(npm --version)"
+          node - "$version" <<'NODE'
+          const [major, minor, patch] = process.argv[2].split(".").map(Number);
+          if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+            console.error(`npm ${process.argv[2]} is too old for trusted publishing; npm >= 11.5.1 is required`);
+            process.exit(1);
+          }
+          console.log(`npm ${process.argv[2]} supports trusted publishing`);
+          NODE
+
+      - name: Build package
+        run: pnpm build:single-port
+
+      # No NODE_AUTH_TOKEN is configured. npm obtains the short-lived OIDC
+      # credential from GitHub when the package has a trusted publisher entry.
+      - name: Publish with provenance
+        run: npm publish --access public --provenance --ignore-scripts
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
