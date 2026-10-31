@@ -34,3 +34,10 @@ export function badRequest(message: string, details?: Record<string, unknown>): 
 export function notImplemented(message: string): AppError {
   return new AppError("not_implemented", message, 501);
 }
+
+export function conflict(
+  message: string,
+  details?: Record<string, unknown>,
+): AppError {
+  return new AppError("conflict", message, 409, { details });
+}

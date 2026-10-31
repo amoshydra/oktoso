@@ -364,6 +364,7 @@ registry.registerPath({
   responses: {
     202: { description: "Prompt accepted", content: json(SendResultSchema) },
     404: errorResponse("Session not found"),
+    409: errorResponse("Question changed or already answered"),
     502: errorResponse("Provider failure"),
   },
 });

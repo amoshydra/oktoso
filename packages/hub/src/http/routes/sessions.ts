@@ -6,15 +6,20 @@ import {
   zSendInput,
   zSessionListQuery,
 } from "@agent-hub/contracts";
+import type { SendResult } from "@agent-hub/contracts";
 import type { SessionService } from "../../services/session-service";
 import type { ReplyService } from "../../services/reply-service";
+import type { QuestionService } from "../../services/question-service";
+import type { IdempotencyService } from "../../services/idempotency";
 import type { AppEnv } from "../types";
-import { badRequest, notFound } from "../../domain/errors";
+import { badRequest, conflict, notFound } from "../../domain/errors";
 
 export function registerSessionRoutes(
   app: Hono<AppEnv>,
   sessions: SessionService,
   replies: ReplyService,
+  questions: QuestionService,
+  idempotency: IdempotencyService,
 ): void {
   app.get("/api/v1/sessions", async (c) => {
     const parsed = zSessionListQuery.safeParse(c.req.query());
@@ -67,7 +72,43 @@ export function registerSessionRoutes(
         issues: parsed.error.issues,
       });
     }
-    const result = await sessions.sendMessage(c.req.param("ref"), parsed.data);
+    const ref = c.req.param("ref");
+    const idempotencyKey = c.req.header("Idempotency-Key")?.trim();
+    const cacheKey = idempotencyKey ? `${ref}:${idempotencyKey}` : undefined;
+
+    if (cacheKey) {
+      const cached = await idempotency.get(cacheKey);
+      if (cached !== undefined) {
+        return c.json(cached as SendResult, 202);
+      }
+    }
+
+    const answer = parsed.data.answer;
+    if (answer) {
+      const prompt = await questions.get(ref);
+      if (!prompt) {
+        throw conflict("This question is no longer pending", {
+          reason: "question_resolved",
+        });
+      }
+      const current = prompt.questions.find(
+        (question) => question.id === answer.questionId,
+      );
+      if (
+        !current ||
+        prompt.messageId !== answer.messageId ||
+        prompt.revision !== answer.revision
+      ) {
+        throw conflict("Question changed", {
+          reason: "question_changed",
+          current: prompt,
+        });
+      }
+    }
+
+    // `answer` is hub-only metadata; providers receive the plain message.
+    const result = await sessions.sendMessage(ref, { text: parsed.data.text });
+    if (cacheKey) await idempotency.set(cacheKey, result);
     return c.json(result, 202);
   });
 

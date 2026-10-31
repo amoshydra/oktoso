@@ -14,6 +14,7 @@ import type { DraftService } from "./services/draft-service";
 import type { AssistantSettingsService } from "./services/assistant-settings";
 import type { ReplyService } from "./services/reply-service";
 import type { QuestionService } from "./services/question-service";
+import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@agent-hub/storage";
 import { ProviderError } from "@agent-hub/providers";
 import type { Logger } from "./lib/logger";
@@ -90,7 +91,13 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerAuthRoutes(app, { auth, version: VERSION });
   registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry);
-  registerSessionRoutes(app, deps.sessions, deps.replies);
+  registerSessionRoutes(
+    app,
+    deps.sessions,
+    deps.replies,
+    deps.questions,
+    new IdempotencyService(deps.store),
+  );
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);
   registerSettingsRoutes(app, deps.settings);
