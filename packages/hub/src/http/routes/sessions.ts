@@ -84,7 +84,53 @@ export function registerSessionRoutes(
     }
 
     const answer = parsed.data.answer;
-    if (answer) {
+    const answers = parsed.data.answers;
+    if (answer && answers) {
+      throw badRequest("Use either answer or answers, not both");
+    }
+    if (answers) {
+      const prompt = await questions.get(ref);
+      if (!prompt) {
+        throw conflict("This question is no longer pending", {
+          reason: "question_resolved",
+        });
+      }
+      if (
+        answers.some(
+          (item) =>
+            item.messageId !== prompt.messageId ||
+            item.revision !== prompt.revision,
+        )
+      ) {
+        throw conflict("Question changed", {
+          reason: "question_changed",
+          current: prompt,
+        });
+      }
+      const known = new Set(prompt.questions.map((question) => question.id));
+      const seen = new Set<string>();
+      for (const item of answers) {
+        if (!known.has(item.questionId)) {
+          throw conflict("Question changed", {
+            reason: "question_changed",
+            current: prompt,
+          });
+        }
+        if (seen.has(item.questionId)) {
+          throw badRequest("Duplicate question in answer batch");
+        }
+        seen.add(item.questionId);
+      }
+      const missing = prompt.questions.filter(
+        (question) => !seen.has(question.id),
+      );
+      if (missing.length > 0) {
+        throw conflict("Answer every question in this batch", {
+          reason: "question_incomplete",
+          current: prompt,
+        });
+      }
+    } else if (answer) {
       const prompt = await questions.get(ref);
       if (!prompt) {
         throw conflict("This question is no longer pending", {
@@ -108,6 +154,7 @@ export function registerSessionRoutes(
 
     // `answer` is hub-only metadata; providers receive the plain message.
     const result = await sessions.sendMessage(ref, { text: parsed.data.text });
+    questions.invalidate(ref);
     if (cacheKey) await idempotency.set(cacheKey, result);
     return c.json(result, 202);
   });

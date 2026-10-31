@@ -19,6 +19,7 @@ import type {
   Provider,
   ProviderOptions,
   QuestionPrompt,
+  QuestionSummaryPage,
   ReplyMode,
   ReplyOptions,
   SendInput,
@@ -137,6 +138,14 @@ export class HubClient {
       `/api/v1/sessions/${encodeURIComponent(ref)}/question`,
     );
     return response.data;
+  }
+
+  async questionSummaries(refs: string[]): Promise<QuestionSummaryPage> {
+    const params = new URLSearchParams();
+    for (const ref of refs) params.append("ref", ref);
+    return this.request<QuestionSummaryPage>(
+      `/api/v1/questions?${params.toString()}`,
+    );
   }
 
   async markRead(ref: string): Promise<void> {

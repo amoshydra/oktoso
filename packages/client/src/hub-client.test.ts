@@ -77,4 +77,24 @@ describe("HubClient.sendMessage", () => {
       details: { reason: "question_changed" },
     });
   });
+
+  it("requests question summaries with repeated refs", async () => {
+    let url = "";
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      url = String(input);
+      return new Response(JSON.stringify({ data: [], failed: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const hub = new HubClient({
+      baseUrl: "http://hub",
+      token: "owner-token",
+      fetchImpl,
+    });
+    await hub.questionSummaries(["desktop-opencode:ses_a", "openwebui:chat_b"]);
+    expect(url).toBe(
+      "http://hub/api/v1/questions?ref=desktop-opencode%3Ases_a&ref=openwebui%3Achat_b",
+    );
+  });
 });

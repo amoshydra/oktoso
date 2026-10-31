@@ -21,7 +21,7 @@
       fieldset { margin-top: 12px; padding: 8px 12px 12px; border: 1px solid var(--line); border-radius: 8px; }
       fieldset label { margin-top: 6px; color: var(--ink); }
       textarea { min-height: 72px; resize: vertical; }
-      button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
+      button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
       button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 650; }
       button:disabled { opacity: .5; }
       .row { display: flex; gap: 8px; align-items: center; }
@@ -39,6 +39,12 @@
       .question-choices { display: grid; gap: 8px; margin-top: 10px; }
       .question-choices button { text-align: left; min-height: 44px; }
       .question-choices button:only-child { width: 100%; }
+      .question-choices button[aria-pressed="true"] { border-color: var(--accent); background: #25314a; }
+      .scan-video { width: 100%; margin-top: 12px; border-radius: 8px; background: #000; aspect-ratio: 4 / 3; object-fit: cover; }
+      .batch-question { padding-top: 14px; border-top: 1px solid var(--line); margin-top: 14px; }
+      .batch-question:first-child { padding-top: 0; border-top: 0; margin-top: 0; }
+      .batch-question h3 { margin: 0; font-size: 14px; font-weight: 600; }
+      .batch-question textarea { min-height: 56px; }
     </style>
   </head>
   <body>
@@ -47,13 +53,24 @@
     <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge.</p>
 
     <section class="panel">
-      <h2>Hub connection</h2>
-      <p class="hint">This app connects to the hub it was loaded from. If this browser is paired, Connect uses the session cookie.</p>
+      <h2>Pair this phone</h2>
+      <p class="hint">In the hub terminal, type <code>p</code> and press Enter. Then scan the QR code or paste the pairing link or code here.</p>
       <p class="hint"><code id="hub-origin">same origin</code></p>
-      <label for="hub-token">Hub token (optional when paired)</label>
+      <label for="pairing-code">Pairing link or code</label>
+      <input id="pairing-code" type="text" placeholder="Paste the pairing link or code" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <div class="row" style="margin-top:12px">
+        <button id="pair" class="primary" type="button">Pair this phone</button>
+        <button id="pair-scan" type="button" hidden>Scan QR</button>
+      </div>
+      <video id="pair-video" class="scan-video" muted playsinline hidden></video>
+      <p id="pair-scan-note" class="hint" hidden style="margin-top:8px">QR scanning needs a camera-capable secure browser. Paste the pairing link or code instead.</p>
+      <div id="pairing-status" class="status" role="status"></div>
+
+      <p class="hint" style="margin-top:16px">Already have a hub token? Use it instead.</p>
+      <label for="hub-token">Hub token</label>
       <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
       <div class="row" style="margin-top:12px">
-        <button id="connect" class="primary" type="button">Connect</button>
+        <button id="connect" type="button">Connect with token</button>
         <span id="connection" class="pill">Not connected</span>
       </div>
       <div id="connection-status" class="status"></div>
@@ -66,6 +83,7 @@
       </div>
       <p id="phone-question-text" class="hint"></p>
       <div id="phone-question-choices" class="question-choices"></div>
+      <button id="phone-batch-send" class="primary" type="button" hidden style="margin-top:10px">Send answers</button>
       <button id="phone-question-type" type="button" style="margin-top:10px">Type a different answer…</button>
       <p id="phone-question-status" class="status"></p>
     </section>

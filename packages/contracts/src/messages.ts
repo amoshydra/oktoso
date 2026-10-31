@@ -58,6 +58,7 @@ export const zSendAnswer = z.object({
 export const zSendInput = z.object({
   text: z.string().min(1),
   answer: zSendAnswer.optional(),
+  answers: z.array(zSendAnswer).min(1).max(20).optional(),
 });
 
 export const zSendResult = z.object({

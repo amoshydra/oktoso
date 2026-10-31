@@ -21,4 +21,5 @@ jobs:
       - run: pnpm test
       - run: pnpm openapi:check
       - run: pnpm build:single-port
+      - run: pnpm hardware:check
       - run: npm pack --dry-run

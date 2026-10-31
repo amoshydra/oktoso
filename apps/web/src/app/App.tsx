@@ -16,11 +16,12 @@ import type {
 import {
   HubClient,
   HubError,
+  canScanPairingQr,
   messageFromHubEvent,
+  scanPairingQr,
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
 import { renderMarkdown } from "./markdown";
-import { canScanPairingQr, scanPairingQr } from "./qr-scanner";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -731,7 +732,7 @@ function Login(props: {
 
     const controller = new AbortController();
     setScanError(undefined);
-    void scanPairingQr(video, controller.signal)
+    void scanPairingQr(video, controller.signal, { origin: window.location.origin })
       .then((url) => {
         if (url) {
           window.location.assign(url);

@@ -121,8 +121,29 @@ describe("question parser", () => {
     );
   });
 
-  it("does not answer one of several questions", () => {
-    expect(parse("Which branch? And should I force push?")).toBeNull();
+  it("returns every question in a multi-question message", () => {
+    const prompt = parse("Which branch? And should I force push?");
+    expect(prompt?.questions.map((question) => question.text)).toEqual([
+      "Which branch?",
+      "And should I force push?",
+    ]);
+    expect(prompt?.questions[0]?.kind).toBe("freeform");
+    expect(prompt?.questions[1]?.kind).toBe("boolean");
+  });
+
+  it("extracts choices for each question in a numbered batch", () => {
+    const prompt = parse(
+      "1. Which database?\n   - Postgres\n   - SQLite\n2. Should I add caching?",
+    );
+    expect(prompt?.questions.map((question) => question.text)).toEqual([
+      "Which database?",
+      "Should I add caching?",
+    ]);
+    expect(prompt?.questions[0]?.choices.map((choice) => choice.text)).toEqual([
+      "Postgres",
+      "SQLite",
+    ]);
+    expect(prompt?.questions[1]?.kind).toBe("boolean");
   });
 
   it("ignores a streaming message", () => {

@@ -6,7 +6,19 @@
       "package-name": "@amoshydra/oktoso",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "apps/even-realities-g2/app.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "apps/even-realities-g2/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }

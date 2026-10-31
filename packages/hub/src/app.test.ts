@@ -21,7 +21,11 @@ import {
   MemoryStateStore,
   type StateStore,
 } from "@amoshydra/oktoso-storage";
-import { createFakeProviderServer, type FakeProviderServer } from "@amoshydra/oktoso-testing";
+import {
+  createFakeProviderServer,
+  resetFakeProviderState,
+  type FakeProviderServer,
+} from "@amoshydra/oktoso-testing";
 
 const token = "test-token-long-enough";
 const logger = createLogger({ level: "silent" });
@@ -78,6 +82,7 @@ async function createTestApp(options: {
 }
 
 afterEach(async () => {
+  resetFakeProviderState();
   await Promise.all(servers.splice(0).map((server) => server.close()));
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
@@ -553,6 +558,35 @@ describe("hub app", () => {
     expect(await none.json()).toEqual({ data: null });
   });
 
+  it("returns pending question summaries for cheap discovery", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const response = await app.request(
+      "/api/v1/questions?ref=desktop-opencode%3Ases_auth&ref=desktop-opencode%3Ases_index",
+      { headers },
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: Array<{
+        sessionRef: string;
+        questionCount: number;
+        text: string;
+      }>;
+      failed: string[];
+    };
+    expect(body.failed).toEqual([]);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      sessionRef: "desktop-opencode:ses_auth",
+      questionCount: 1,
+      text: "Should I continue with the double-refresh case?",
+    });
+
+    const missing = await app.request("/api/v1/questions", { headers });
+    expect(missing.status).toBe(400);
+  });
+
   it("rejects stale answers and deduplicates retries", async () => {
     const { app } = await createTestApp();
     const headers = {
@@ -1014,4 +1048,43 @@ describe("hub app", () => {
     expect(new TextDecoder().decode(next.value)).toContain("provider.status");
     await reader!.cancel();
   });
+  it("accepts a batch answer covering every pending question", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const questionResponse = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/question",
+      { headers },
+    );
+    const questionBody = (await questionResponse.json()) as {
+      data: {
+        messageId: string;
+        revision: string;
+        questions: Array<{ id: string }>;
+      };
+    };
+    const prompt = questionBody.data;
+    const response = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          text: "1. Yes",
+          answers: prompt.questions.map((question) => ({
+            questionId: question.id,
+            messageId: prompt.messageId,
+            revision: prompt.revision,
+            source: "text",
+          })),
+        }),
+      },
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ accepted: true });
+  });
+
 });

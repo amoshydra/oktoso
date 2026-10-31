@@ -13,7 +13,7 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 
 The first slice is deliberately narrow:
 
-- phone pairing for a session cookie or bearer token; the hub is the app origin
+- phone pairing with a terminal QR, pairing link, raw pairing code, or bearer token; the hub is the app origin
 - home with inbox count, recent sessions, and the current session
 - inbox with up to five attention items
 - permission / unread / failure detail and actions
@@ -21,6 +21,8 @@ The first slice is deliberately narrow:
 - chat view of the latest transcript context with a full-response line viewport
 - reply menu with canned and 4B-assisted suggestions
 - question reply: when the latest assistant message asks a question, the chat footer shows `? Answer`; the ANSWER list contains choices plus `Type answer`, `More`, and `Read chat`. The list is the only capture container; the footer is a hint. Destructive choices confirm. The phone card shows the question and choice buttons above the keyboard.
+- multiple-question batches: `ANSWER · 2 questions` routes to `Answer on phone`; the phone card shows every question with its own choices and text field, then sends one numbered message and all answer metadata.
+- question discovery: `GET /api/v1/questions` returns compact summaries for up to ten sessions. Home marks the current question, recent rows read `QUESTION`, and unread inbox rows become `QUESTION` with the question text in the detail.
 - question detection at `GET /api/v1/sessions/:ref/question`; derived from the latest completed assistant message, with no provider-side question API
 - stale-question protection: answer sends carry the question ID, message ID, and revision; a changed or resolved question returns `409` and the glasses show `ANSWER · changed` with `Review` / `Read chat`
 - idempotent answer retry: one key per answer draft; the hub caches the accepted result for five minutes
@@ -36,7 +38,7 @@ The first slice is deliberately narrow:
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 - a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 
-Voice capture, stale-question protection, multiple-question batches, and full session management are follow-ups. The screen and interaction contract is in [`glass-ux.md`](glass-ux.md); the full design is in [`g2-question-flow.md`](g2-question-flow.md).
+Voice capture, suggested answers, and full session management are follow-ups. The screen and interaction contract is in [`glass-ux.md`](glass-ux.md); the full design is in [`g2-question-flow.md`](g2-question-flow.md); the hardware acceptance run is in [`g2-hardware-validation.md`](g2-hardware-validation.md).
 
 ## Run locally
 
@@ -49,7 +51,7 @@ pnpm dev:even-g2    # Even G2 web app at 5176
 
 The dev proxy grants API access to anyone who can reach the Vite server, so use it only on a trusted network. For phone testing, pair the phone browser and use the cookie path instead.
 
-The phone must be able to reach the laptop's LAN address. If the browser is already paired, the setup screen is skipped. Otherwise the setup screen accepts the owner token or a session token; the hub is the origin that served the app.
+The phone must be able to reach the laptop's LAN address. If the browser is already paired, the setup screen is skipped. Otherwise the setup screen accepts a pairing QR, a pairing link, a raw pairing code, or a token; the hub is the origin that served the app.
 
 ```sh
 pnpm simulate:even-g2
@@ -72,7 +74,7 @@ The URL is:
 http://<hub-host>:8787/apps/even-g2/
 ```
 
-Scan the terminal **Scan to pair** QR with the phone camera, or open the pairing link, then confirm **Pair this device**. Load `http://<hub-host>:8787/apps/even-g2/` after pairing. If the webview has its own cookie jar or the app is loaded from another origin, enter a token instead. The app and API share an origin, so a paired browser uses the HttpOnly session cookie.
+Load `http://<hub-host>:8787/apps/even-g2/`. Create a pairing code with `p` in the hub terminal, then scan the QR or paste the link/code into **Pair this phone**. The app exchanges the code for a session token and stores it on the phone, so the Even Hub webview does not need the browser cookie. A browser paired through `/pair/<code>` also connects with the HttpOnly session cookie. Enter a token only as the fallback.
 
 The hub serves `/apps/<app-id>/` generically, so future glass or watch apps can use `/apps/watch/`, `/apps/vision/`, and so on. Each app is built with its own Vite base and stored under `dist/apps/<app-id>/`.
 
@@ -83,7 +85,7 @@ VITE_HUB_URL=https://hub.example.com pnpm --filter @amoshydra/oktoso-even-g2 bui
 HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
 
-`HUB_ORIGIN` must include the scheme and any non-default port. The pack script writes the generated whitelist to an ignored `.app.pack.json`, packs `dist`, and removes the temporary manifest.
+`HUB_ORIGIN` must include the scheme and any non-default port. The pack script writes the generated whitelist to an ignored `.app.pack.json`, packs `dist`, and removes the temporary manifest. Before a hardware run, use `pnpm build:single-port && pnpm hardware:check`; the checklist is in [`g2-hardware-validation.md`](g2-hardware-validation.md).
 
 Packaged Even Hub builds may run under a different webview origin than the dev server. For trusted local hardware testing, start the hub with `HUB_CORS=*`; do not use wildcard CORS on a reachable deployment.
 

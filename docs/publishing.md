@@ -68,6 +68,10 @@ On every push to `main`:
 Do not create version tags by hand. Release-please owns `vX.Y.Z` tags and
 `CHANGELOG.md`.
 
+The `extra-files` entry in `release-please-config.json` also bumps the Even G2
+manifest and package versions, so the app listing cannot drift from the hub
+release.
+
 `0.1.0` is already published on npm. The manifest starts at `0.1.0`, so the
 first release-please PR determines the next version from the commits since that
 baseline. That release will be the first one published by OIDC.

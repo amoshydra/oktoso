@@ -30,6 +30,14 @@ export function buildAnswerRows(
     ];
   }
 
+  if (prompt.questions.length > 1) {
+    return [
+      { kind: "action", action: "phone", label: "Answer on phone" },
+      { kind: "action", action: "more", label: "More" },
+      { kind: "action", action: "read", label: "Read chat" },
+    ];
+  }
+
   const rows: AnswerRow[] = question.choices
     .slice(0, 6)
     .map((choice) => ({
@@ -38,9 +46,7 @@ export function buildAnswerRows(
       choice,
     }));
 
-  if (prompt.questions.length > 1) {
-    rows.push({ kind: "action", action: "phone", label: "Answer on phone" });
-  } else if (question.allowsFreeText) {
+  if (question.allowsFreeText) {
     rows.push({ kind: "action", action: "type", label: "Type answer" });
   }
   rows.push({ kind: "action", action: "more", label: "More" });
@@ -48,12 +54,56 @@ export function buildAnswerRows(
   return rows;
 }
 
-export function buildAnswerSummary(question: PendingQuestion): string {
-  const lines = wrapText(`Q  ${question.text}`, 54, 2);
-  if (lines.length < 2 && question.context) {
+export function buildAnswerSummary(
+  question: PendingQuestion,
+  prompt?: QuestionPrompt,
+): string {
+  const multiple = (prompt?.questions.length ?? 0) > 1;
+  const prefix = multiple ? "Q1  " : "Q  ";
+  const lines = wrapText(`${prefix}${question.text}`, 54, 2);
+  if (!multiple && lines.length < 2 && question.context) {
     lines.push(clampLine(question.context, 54));
   }
+  if (
+    multiple &&
+    lines.length < 2 &&
+    prompt &&
+    prompt.questions.length > 1
+  ) {
+    lines.push(
+      clampLine(`+${prompt.questions.length - 1} more on phone`, 54),
+    );
+  }
   return lines.join("\n");
+}
+
+export interface BatchAnswerDraft {
+  questionId: string;
+  text: string;
+  choice?: AnswerChoice;
+}
+
+export function composeBatchAnswer(drafts: BatchAnswerDraft[]): string {
+  return drafts
+    .map((draft, index) => `${index + 1}. ${draft.text.trim()}`)
+    .join("\n");
+}
+
+export function buildBatchAnswerMetadata(
+  prompt: QuestionPrompt,
+  drafts: BatchAnswerDraft[],
+): SendAnswer[] {
+  return drafts.map((draft) => ({
+    questionId: draft.questionId,
+    messageId: prompt.messageId,
+    revision: prompt.revision,
+    ...(draft.choice ? { choiceId: draft.choice.id } : {}),
+    source: draft.choice
+      ? draft.choice.kind === "boolean"
+        ? "boolean"
+        : "choice"
+      : "text",
+  }));
 }
 
 export function buildAnswerMetadata(

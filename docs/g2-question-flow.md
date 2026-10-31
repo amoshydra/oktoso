@@ -947,9 +947,10 @@ detected in the latest message:
 - Do not let the user answer only the last question on the glass by default; the
   agent may proceed without the others. `More` may offer `Answer last only` as
   an explicit escape hatch, with the copy `Only the last question will be sent.`
-- If the questions are clearly independent and the user insists on the glass,
-  each subsequent question appears after the first send. This is a future
-  refinement, not v1.
+- The hub rejects a partial batch with `question_incomplete`. Answering only
+  the last question on the glass is not supported in v1.
+- The phone composes the numbered message and includes every question ID in the
+  batch metadata.
 
 ### 6.6 Truncation and formatting
 
@@ -1086,9 +1087,9 @@ export interface AnswerDraft {
 }
 
 // Multiple questions are answered together, never one at a time on the glass.
+// The wire format is `answers: AnswerDraft[]`; each draft repeats the shared
+// message ID and revision so the hub can validate the whole batch.
 export interface AnswerBatch {
-  messageId: string;
-  revision: string;
   answers: AnswerDraft[];
 }
 
@@ -1229,9 +1230,11 @@ The service:
 - fetches the last 6 messages (`order=desc`);
 - requires the latest to be assistant, completed, and text-bearing;
 - caches by `ref:messageId:textHash` for 30 s;
+- caches discovery summaries for 15 s and reports provider failures separately;
 - exposes a pure `parseQuestion(messages)` for unit tests;
 - returns `null` for no question, streaming, provider-native question, or a
-  user message after the assistant.
+  user message after the assistant;
+- returns every question in the latest message, not just the first.
 
 Consider a short-lived shared message snapshot cache in `SessionService` so the
 glass's parallel `messages` and `question` fetches do not hit the provider twice.
@@ -1261,32 +1264,43 @@ For multiple questions, the phone sends one batch:
 ```json
 {
   "text": "1. release/2.4\n2. No, do not force push",
-  "answerBatch": {
-    "messageId": "msg_42",
-    "revision": "msg_42:8f3c1a",
-    "answers": [
-      { "questionId": "msg_42:1", "text": "release/2.4", "source": "text" },
-      { "questionId": "msg_42:2", "choiceId": "no", "text": "No", "source": "boolean" }
-    ]
-  }
+  "answers": [
+    {
+      "questionId": "msg_42:1",
+      "messageId": "msg_42",
+      "revision": "msg_42:8f3c1a",
+      "text": "release/2.4",
+      "source": "text"
+    },
+    {
+      "questionId": "msg_42:2",
+      "messageId": "msg_42",
+      "revision": "msg_42:8f3c1a",
+      "choiceId": "no",
+      "text": "No",
+      "source": "boolean"
+    }
+  ]
 }
 ```
 
-`answer` and `answerBatch` are mutually exclusive. The composed `text` is what
-the provider receives; the metadata is for validation and audit.
+`answer` and `answers` are mutually exclusive. The composed `text` is what the
+provider receives; the metadata is for validation and audit.
 
 Hub behavior:
 
-1. If `answer`/`answerBatch` is absent, send as a normal message (existing path).
+1. If `answer`/`answers` is absent, send as a normal message (existing path).
 2. If present, load the current prompt. Compare `messageId` + `revision`.
 3. Mismatch → `409` with `code: "conflict"`,
    `details.reason: "question_changed"`, and the current prompt.
 4. Already answered → `409` with `reason: "question_resolved"`.
-5. Valid → send `text` through the provider; return the existing `202`.
-   Strip `answer`/`answerBatch` before the provider adapter; they are hub-only.
-6. Cache `(sessionRef, Idempotency-Key)` → result for 5 minutes. A retry with the
+5. A batch that omits a pending question → `409` with
+   `reason: "question_incomplete"`.
+6. Valid → send `text` through the provider; return the existing `202`.
+   Strip `answer`/`answers` before the provider adapter; they are hub-only.
+7. Cache `(sessionRef, Idempotency-Key)` → result for 5 minutes. A retry with the
    same key returns the same result without a second provider send.
-7. Optionally annotate the hub's message cache with the answer metadata for
+8. Optionally annotate the hub's message cache with the answer metadata for
    audit; provider message metadata is not required.
 
 The glass generates one idempotency key per `AnswerDraft`. `Retry` reuses it;
@@ -1429,10 +1443,11 @@ Instead:
 - The home `Current` row gets a `?` prefix when the loaded session has a pending
   question: `Current · ? Fix auth race`.
 - Opening the session marks it read; the question marker persists until answered.
-- The existing `UNREAD` attention row remains the triage entry. If the hub can
-  cheaply know the latest message is a question, relabel that row `QUESTION` and
-  use the question text as its summary. Do this only when the data is already in
-  hand; do not add ten provider calls to refresh the inbox.
+- The existing `UNREAD` attention row remains the triage entry. The hub exposes
+  compact summaries at `GET /api/v1/questions?ref=…` for up to ten sessions. The
+  G2 home, recent, and inbox surfaces use it to relabel the row `QUESTION` and
+  show the question text. Summaries are cached briefly and provider failures are
+  reported separately so an outage does not clear a marker.
 
 ### 9.2 Labels
 
@@ -1448,12 +1463,17 @@ Read the two `QUESTION` rows carefully: the provider-native one opens the
 attention form, the chat-derived one opens chat at the question. The detail
 screen and the `Answer` action distinguish them.
 
-### 9.3 Future
+### 9.3 Implemented discovery
 
-If users miss questions, add a `questions` filter to the session list, not a new
-blocking attention type. A `Session.hasQuestion` boolean computed by the hub from
-the latest message preview would let the inbox and session list show `?` without
-extra calls. That is a v1.1 addition, validated with real sessions.
+`GET /api/v1/questions?ref=…&ref=…` returns `PendingQuestionSummary` rows
+(`sessionRef`, `messageId`, `revision`, `askedAt`, `questionCount`, `text`,
+optional `context`, optional `attentionID`). It is a batch read, capped at ten
+refs, and the hub caches each session summary for 15 seconds. The response also
+returns `failed: string[]` so the client never treats a provider error as a
+resolved question.
+
+A `questions` filter on the session list remains a future addition. Do not create
+a new blocking attention type for chat-derived questions.
 
 ---
 

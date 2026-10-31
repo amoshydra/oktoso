@@ -38,7 +38,8 @@
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "openapi:check": "tsx scripts/generate-openapi.ts --check",
     "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes",
-    "prepublishOnly": "pnpm build:single-port"
+    "prepublishOnly": "pnpm build:single-port",
+    "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
