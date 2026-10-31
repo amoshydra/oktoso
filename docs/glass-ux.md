@@ -79,6 +79,11 @@ menu.
   card shows the full question and choice buttons above the existing composer.
 - `More` opens `More replies`, `Read chat`, and `Stop` (when interruptible).
 - `SENT` shows the exact text sent; tap it or wait to return to chat.
+- Every answer carries the question ID, message ID, and revision. The hub returns
+  `409` if the question changed or was already answered. The glasses show
+  `ANSWER · changed` with `Review` / `Read chat`; the old choice list is never
+  sent silently. `Review` reloads the question.
+- Retries reuse the same idempotency key. A changed answer draft gets a new key.
 - The hub derives the question from the transcript at
   `GET /api/v1/sessions/:ref/question`. No provider-side question API is needed.
 - Multiple questions are deferred; the parser returns no prompt until the phone
@@ -158,7 +163,7 @@ rendering still require the scripted hardware checklist.
 
 ## Planned order
 
-1. Question reply: free-form, stale-question protection, and multiple questions.
+1. Question reply: multiple-question batches and broader parser coverage.
 2. Voice capture and STT if the SDK exposes microphone input.
 3. Frame snapshot tests against recorded hardware frames.
 4. Scripted hardware checklist for input cadence, reconnect, and latency.
