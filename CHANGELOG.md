@@ -5,11 +5,11 @@
 
 ### Bug Fixes
 
-* derive the CLI version from package.json ([03d504e](https://github.com/amoshydra/oktoso/commit/03d504e9d232700c5e787d5f4bbc3a649556ed7d))
+* derive the CLI version from package.json ([b52db0a](https://github.com/amoshydra/oktoso/commit/b52db0ac4493ecf8169579c364571eb5f133aa8f))
 
 ## [0.1.1](https://github.com/amoshydra/oktoso/compare/v0.1.0...v0.1.1) (2026-10-31)
 
 
 ### Bug Fixes
 
-* **ci:** align release workflow with npm trusted publisher ([ced73ca](https://github.com/amoshydra/oktoso/commit/ced73caf1bf9ce6856154a0b3756082e6f511ac5))
+* **ci:** align release workflow with npm trusted publisher ([e465905](https://github.com/amoshydra/oktoso/commit/e4659059179ba124eee3dfb0d9c0b516318b1265))
