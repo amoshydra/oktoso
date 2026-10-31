@@ -79,8 +79,9 @@ Check the repository, workflow filename, and environment fields.
 ### Version already exists
 
 npm does not allow republishing an existing version. Bump `package.json`, commit,
-and create a new tag. The currently published version is `0.1.0`; the first
-workflow release must be a later version.
+and create a new tag. The currently published version is `0.1.0`. The repository is prepared at
+`0.1.1` for the first trusted-publishing release; tag it only after the npm
+trusted-publisher entry is saved.
 
 ### npm CLI too old
 
