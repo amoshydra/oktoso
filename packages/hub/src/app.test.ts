@@ -552,6 +552,95 @@ describe("hub app", () => {
     expect(await none.json()).toEqual({ data: null });
   });
 
+  it("rejects stale answers and deduplicates retries", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const questionResponse = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/question",
+      { headers },
+    );
+    const questionBody = (await questionResponse.json()) as {
+      data: {
+        messageId: string;
+        revision: string;
+        questions: Array<{ id: string }>;
+      };
+    };
+    const prompt = questionBody.data;
+    const answer = {
+      questionId: prompt.questions[0]!.id,
+      messageId: prompt.messageId,
+      revision: prompt.revision,
+      source: "boolean" as const,
+    };
+
+    const stale = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          text: "Yes",
+          answer: { ...answer, revision: "stale-revision" },
+        }),
+      },
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({
+      error: {
+        code: "conflict",
+        details: { reason: "question_changed" },
+      },
+    });
+
+    const beforeResponse = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages?order=asc",
+      { headers },
+    );
+    const before = (await beforeResponse.json()) as { data: unknown[] };
+
+    const send = () =>
+      app.request("/api/v1/sessions/desktop-opencode%3Ases_auth/messages", {
+        method: "POST",
+        headers: { ...headers, "Idempotency-Key": "answer-1" },
+        body: JSON.stringify({ text: "Yes", answer }),
+      });
+
+    const first = await send();
+    expect(first.status).toBe(202);
+    const firstBody = await first.json();
+    const second = await send();
+    expect(second.status).toBe(202);
+    expect(await second.json()).toEqual(firstBody);
+
+    const afterResponse = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages?order=asc",
+      { headers },
+    );
+    const after = (await afterResponse.json()) as { data: unknown[] };
+    expect(after.data.length).toBe(before.data.length + 2);
+
+    const resolved = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages",
+      {
+        method: "POST",
+        headers: { ...headers, "Idempotency-Key": "answer-2" },
+        body: JSON.stringify({ text: "Yes", answer }),
+      },
+    );
+    expect(resolved.status).toBe(409);
+    expect(await resolved.json()).toMatchObject({
+      error: {
+        code: "conflict",
+        details: { reason: "question_resolved" },
+      },
+    });
+  });
+
   it("searches session metadata across the hub cache", async () => {
     const { app } = await createTestApp();
     const headers = { Authorization: `Bearer ${token}` };

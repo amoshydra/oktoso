@@ -167,10 +167,20 @@ export class HubClient {
     );
   }
 
-  async sendMessage(ref: string, input: SendInput): Promise<SendResult> {
+  async sendMessage(
+    ref: string,
+    input: SendInput,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<SendResult> {
     return this.request<SendResult>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/messages`,
-      { method: "POST", body: input },
+      {
+        method: "POST",
+        body: input,
+        ...(options.idempotencyKey
+          ? { headers: { "Idempotency-Key": options.idempotencyKey } }
+          : {}),
+      },
     );
   }
 
@@ -268,9 +278,13 @@ export class HubClient {
       method?: string;
       body?: unknown;
       keepalive?: boolean;
+      headers?: Record<string, string>;
     } = {},
   ): Promise<T> {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      ...(options.headers ?? {}),
+    };
     if (options.auth !== false && this.token) {
       headers.Authorization = `Bearer ${this.token}`;
     }
