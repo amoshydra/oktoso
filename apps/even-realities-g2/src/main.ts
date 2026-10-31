@@ -16,6 +16,7 @@ import type {
   PendingQuestion,
   QuestionPrompt,
   ReplyOption,
+  SendAnswer,
   Session,
 } from "@agent-hub/contracts";
 import { HubClient, messageFromHubEvent } from "@agent-hub/client";
@@ -33,6 +34,12 @@ import {
   mergeChatMessages,
   nextViewport,
 } from "./chat-model";
+import {
+  buildAnswerMetadata,
+  buildAnswerRows,
+  buildAnswerSummary,
+  type AnswerRow,
+} from "./answer-model";
 import { glassInput } from "./input";
 
 const TOKEN_KEY = "agent-hub-even-g2-token";
@@ -52,6 +59,7 @@ type Screen =
   | "answer-type"
   | "answer-sent"
   | "answer-confirm"
+  | "answer-stale"
   | "reply"
   | "choices";
 
@@ -87,6 +95,10 @@ interface AppState {
   answerBusy: boolean;
   answerError?: string;
   answerMode: boolean;
+  answerStale?: "changed" | "resolved";
+  answerKey?: string;
+  answerKeyText?: string;
+  pendingAnswerChoice?: AnswerChoice;
   notice?: string;
   error?: string;
 }
@@ -119,6 +131,10 @@ const state: AppState = {
   answerBusy: false,
   answerError: undefined,
   answerMode: false,
+  answerStale: undefined,
+  answerKey: undefined,
+  answerKeyText: undefined,
+  pendingAnswerChoice: undefined,
 };
 
 let bridge: EvenAppBridge | undefined;
@@ -389,59 +405,20 @@ function updatePhoneState(): void {
   syncPhoneSession();
 }
 
-type AnswerAction =
-  | "type"
-  | "more"
-  | "read"
-  | "attention"
-  | "phone"
-  | "send"
-  | "cancel";
-
-type AnswerRow =
-  | { kind: "choice"; label: string; choice: AnswerChoice }
-  | { kind: "action"; label: string; action: AnswerAction };
-
 function activeQuestion(): PendingQuestion | undefined {
   return state.question?.questions[0];
 }
 
 function answerRows(): AnswerRow[] {
   const question = activeQuestion();
-  if (!question) return [];
-  if (state.question?.attentionID) {
-    return [
-      { kind: "action", action: "attention", label: "Answer in Inbox" },
-      { kind: "action", action: "read", label: "Read chat" },
-    ];
-  }
-
-  const rows: AnswerRow[] = question.choices
-    .slice(0, 6)
-    .map((choice) => ({
-      kind: "choice" as const,
-      label: clampLine(choice.label, 54),
-      choice,
-    }));
-
-  if (state.question && state.question.questions.length > 1) {
-    rows.push({ kind: "action", action: "phone", label: "Answer on phone" });
-  } else if (question.allowsFreeText) {
-    rows.push({ kind: "action", action: "type", label: "Type answer" });
-  }
-  rows.push({ kind: "action", action: "more", label: "More" });
-  rows.push({ kind: "action", action: "read", label: "Read chat" });
-  return rows;
+  return question && state.question
+    ? buildAnswerRows(question, state.question)
+    : [];
 }
 
 function answerSummary(): string {
   const question = activeQuestion();
-  if (!question) return "";
-  const lines = wrapText(`Q  ${question.text}`, 54, 2);
-  if (lines.length < 2 && question.context) {
-    lines.push(clampLine(question.context, 54));
-  }
-  return lines.join("\n");
+  return question ? buildAnswerSummary(question) : "";
 }
 
 function answerHeader(prefix = "ANSWER"): string {
@@ -449,6 +426,28 @@ function answerHeader(prefix = "ANSWER"): string {
     `${prefix} · ${state.sessionTitle ?? "Session"}`,
     40,
   );
+}
+
+function answerMetadata(choice?: AnswerChoice): SendAnswer | undefined {
+  return state.question
+    ? buildAnswerMetadata(state.question, choice)
+    : undefined;
+}
+
+function newAnswerKey(): string {
+  const generated = globalThis.crypto?.randomUUID?.();
+  return (
+    generated ??
+    `answer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
+function answerKeyFor(text: string): string {
+  if (!state.answerKey || state.answerKeyText !== text) {
+    state.answerKey = newAnswerKey();
+    state.answerKeyText = text;
+  }
+  return state.answerKey;
 }
 
 const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
@@ -872,6 +871,10 @@ async function openChat(
   state.answerError = undefined;
   state.answerBusy = false;
   state.answerMode = false;
+  state.answerStale = undefined;
+  state.answerKey = undefined;
+  state.answerKeyText = undefined;
+  state.pendingAnswerChoice = undefined;
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   state.screen = "chat";
@@ -914,7 +917,11 @@ function openAnswer(): void {
   }
   state.screen = "answer";
   state.answerError = undefined;
+  state.answerStale = undefined;
+  state.answerKey = undefined;
+  state.answerKeyText = undefined;
   state.pendingAnswerText = undefined;
+  state.pendingAnswerChoice = undefined;
   state.answerMode = false;
   updatePhoneQuestion();
   render();
@@ -923,9 +930,12 @@ function openAnswer(): void {
 async function sendAnswer(
   text: string,
   source: "glass" | "phone" = "glass",
+  choice?: AnswerChoice,
 ): Promise<void> {
   if (!client || !state.sessionRef || state.answerBusy) return;
   const ref = state.sessionRef;
+  const answer = answerMetadata(choice);
+  const idempotencyKey = answer ? answerKeyFor(text) : undefined;
   state.answerBusy = true;
   state.answerText = text;
   state.answerError = undefined;
@@ -933,12 +943,20 @@ async function sendAnswer(
   if (source === "phone") setPhoneStatus("Sending answer…");
 
   try {
-    await client.sendMessage(ref, { text });
+    await client.sendMessage(
+      ref,
+      { text, ...(answer ? { answer } : {}) },
+      idempotencyKey ? { idempotencyKey } : {},
+    );
     if (state.sessionRef !== ref) return;
     state.answerBusy = false;
     state.question = undefined;
     state.answerMode = false;
+    state.answerStale = undefined;
+    state.answerKey = undefined;
+    state.answerKeyText = undefined;
     state.pendingAnswerText = undefined;
+    state.pendingAnswerChoice = undefined;
     state.screen = "answer-sent";
     updatePhoneQuestion();
     if (source === "phone") {
@@ -948,6 +966,28 @@ async function sendAnswer(
     render();
   } catch (error) {
     state.answerBusy = false;
+    const status = (error as { status?: number }).status;
+    const reason = (
+      error as { details?: { reason?: string } }
+    ).details?.reason;
+    if (
+      status === 409 &&
+      (reason === "question_changed" || reason === "question_resolved")
+    ) {
+      state.answerStale =
+        reason === "question_resolved" ? "resolved" : "changed";
+      state.answerKey = undefined;
+      state.answerKeyText = undefined;
+      state.screen = "answer-stale";
+      if (source === "phone") {
+        setPhoneStatus("Question changed. Review before answering.", true);
+      }
+      updatePhoneQuestion();
+      render();
+      log(`Answer rejected: ${reason}`);
+      return;
+    }
+
     state.answerError = errorMessage(error);
     state.screen = "answer";
     if (source === "phone") setPhoneStatus(state.answerError, true);
@@ -992,12 +1032,32 @@ async function openAttentionByID(id: string | undefined): Promise<void> {
 }
 
 async function performAnswerRow(index: number): Promise<void> {
+  if (state.screen === "answer-stale") {
+    if (state.answerStale === "changed" && index === 0 && state.sessionRef) {
+      await loadQuestion(state.sessionRef);
+      state.answerStale = undefined;
+      state.screen = state.question ? "answer" : "chat";
+      render();
+      return;
+    }
+    const ref = state.sessionRef;
+    state.answerStale = undefined;
+    state.question = undefined;
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    if (ref) void loadQuestion(ref);
+    return;
+  }
+
   if (state.screen === "answer-confirm") {
     if (index === 0) {
       const text = state.pendingAnswerText;
-      if (text) await sendAnswer(text);
+      if (text) await sendAnswer(text, "glass", state.pendingAnswerChoice);
     } else {
       state.pendingAnswerText = undefined;
+      state.pendingAnswerChoice = undefined;
       state.screen = "answer";
       render();
     }
@@ -1029,10 +1089,11 @@ async function performAnswerRow(index: number): Promise<void> {
   if (row.kind === "choice") {
     if (row.choice.requiresConfirmation) {
       state.pendingAnswerText = row.choice.text;
+      state.pendingAnswerChoice = row.choice;
       state.screen = "answer-confirm";
       render();
     } else {
-      await sendAnswer(row.choice.text);
+      await sendAnswer(row.choice.text, "glass", row.choice);
     }
     return;
   }
@@ -1088,7 +1149,7 @@ function updatePhoneQuestion(): void {
     button.textContent = choice.text;
     button.disabled = state.answerBusy;
     button.addEventListener("click", () => {
-      void sendAnswer(choice.text, "phone");
+      void sendAnswer(choice.text, "phone", choice);
     });
     phoneQuestionChoices.append(button);
   }
@@ -1518,8 +1579,21 @@ function back(): void {
   }
   if (state.screen === "answer-confirm") {
     state.pendingAnswerText = undefined;
+    state.pendingAnswerChoice = undefined;
     state.screen = "answer";
     render();
+    return;
+  }
+  if (state.screen === "answer-stale") {
+    const ref = state.sessionRef;
+    state.answerStale = undefined;
+    state.question = undefined;
+    state.screen = "chat";
+    state.answerMode = false;
+    updatePhoneQuestion();
+    render();
+    void loadChat(false);
+    if (ref) void loadQuestion(ref);
     return;
   }
   if (state.screen === "chat") {
@@ -1628,6 +1702,7 @@ function handleListClick(index: number): void {
     case "answer":
     case "answer-more":
     case "answer-confirm":
+    case "answer-stale":
       void performAnswerRow(index);
       break;
     case "reply":
@@ -1894,6 +1969,19 @@ function render(): void {
       : "Swipe choose · Tap send · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "answer-stale") {
+    const header = "ANSWER · changed";
+    const body =
+      state.answerStale === "resolved"
+        ? "Answered already.\nRead the latest chat."
+        : "Question changed.\nReview before answering.";
+    const items =
+      state.answerStale === "resolved" ? ["Read chat"] : ["Review", "Read chat"];
+    if (setPreview(header, body, "Tap choose · Back ×2", items)) {
+      void showPage(listPage(header, items, "Tap choose · Back ×2", body));
     }
     return;
   }

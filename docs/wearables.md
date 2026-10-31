@@ -22,6 +22,8 @@ The first slice is deliberately narrow:
 - reply menu with canned and 4B-assisted suggestions
 - question reply: when the latest assistant message asks a question, the chat footer shows `? Answer`; the ANSWER list contains choices plus `Type answer`, `More`, and `Read chat`. The list is the only capture container; the footer is a hint. Destructive choices confirm. The phone card shows the question and choice buttons above the keyboard.
 - question detection at `GET /api/v1/sessions/:ref/question`; derived from the latest completed assistant message, with no provider-side question API
+- stale-question protection: answer sends carry the question ID, message ID, and revision; a changed or resolved question returns `409` and the glasses show `ANSWER · changed` with `Review` / `Read chat`
+- idempotent answer retry: one key per answer draft; the hub caches the accepted result for five minutes
 - numbered-choice extraction for agent replies
 - full chat responses kept in memory and read through a six-line viewport; newlines and paragraph breaks are preserved, the footer shows line/message position and compact agent activity, chat opens at the start of the latest message, new messages preserve the reading position (or jump to their start only when already at the bottom), `New below` marks unseen content, slow swipes move one line, several rapid swipes accelerate gradually, and refresh never rebuilds the page or resets the reading position
 - Markdown formatting is stripped for glass display; fenced code keeps its content and paragraph breaks are preserved
