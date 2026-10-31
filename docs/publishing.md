@@ -72,9 +72,29 @@ The `extra-files` entry in `release-please-config.json` also bumps the Even G2
 manifest and package versions, so the app listing cannot drift from the hub
 release.
 
-`0.1.0` is already published on npm. The manifest starts at `0.1.0`, so the
-first release-please PR determines the next version from the commits since that
-baseline. That release will be the first one published by OIDC.
+### Pre-1.0 version policy
+
+Until `1.0.0`, the repository intentionally keeps feature releases on the patch
+line:
+
+```json
+"bump-minor-pre-major": true,
+"bump-patch-for-minor-pre-major": true
+```
+
+The resulting policy is:
+
+| Commit | Version bump before 1.0.0 |
+|---|---|
+| `fix:` | patch |
+| `feat:` | patch |
+| `feat!:` / `BREAKING CHANGE:` | minor |
+
+After `1.0.0`, remove both options and use normal SemVer: fix → patch, feat →
+minor, breaking change → major.
+
+`.release-please-manifest.json` tracks the latest published version. Release
+PRs always compare against that baseline.
 
 ## Verify a release
 
