@@ -4,7 +4,7 @@ Oktoso uses **release-please** to manage versions, changelogs, release PRs, and
 GitHub releases. The release workflow publishes to npm with trusted publishing
 (OIDC) and provenance.
 
-- Workflow: [`../.github/workflows/release.yml`](../.github/workflows/release.yml)
+- Workflow: [`../.github/workflows/publish.yml`](../.github/workflows/publish.yml)
 - Config: [`../release-please-config.json`](../release-please-config.json)
 - Manifest: [`../.release-please-manifest.json`](../.release-please-manifest.json)
 
@@ -19,7 +19,7 @@ On npm:
 3. Set:
    - Organization or user: `amoshydra`
    - Repository: `oktoso`
-   - Workflow filename: `release.yml`
+   - Workflow filename: `publish.yml`
    - Environment: leave blank
 4. Save.
 
@@ -27,13 +27,13 @@ The same setup from the npm CLI:
 
 ```sh
 npm trust github @amoshydra/oktoso \
-  --file release.yml \
+  --file publish.yml \
   --repo amoshydra/oktoso \
   --allow-publish \
   -y
 ```
 
-The workflow filename must be `release.yml`, not the old `publish.yml`. If an
+The workflow filename must be `publish.yml`. If an
 npm environment is configured, add `environment: npm` (or the configured name)
 to the `publish` job.
 
@@ -87,7 +87,7 @@ The attestations output confirms the OIDC/provenance publish path.
 
 - Confirm the package name in `package.json` is exactly `@amoshydra/oktoso`.
 - Confirm the trusted publisher entry uses repo `amoshydra/oktoso` and workflow
-  `release.yml`.
+  `publish.yml`.
 - Confirm the npm account owns or belongs to the `@amoshydra` scope.
 - Confirm the package is public.
 
