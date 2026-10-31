@@ -1,8 +1,8 @@
 {
   "name": "@amoshydra/oktoso",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
-  "description": "Oktoso \u2014 hub and control plane for AI agents across providers and wearable clients.",
+  "description": "Oktoso — hub and control plane for AI agents across providers and wearable clients.",
   "license": "MIT",
   "type": "module",
   "bin": {
