@@ -1,11 +1,14 @@
 # Publishing
 
-The package is published as `@amoshydra/oktoso` from GitHub Actions using npm
-trusted publishing (OIDC). The workflow is
-[`../.github/workflows/publish.yml`](../.github/workflows/publish.yml).
+Oktoso uses **release-please** to manage versions, changelogs, release PRs, and
+GitHub releases. The release workflow publishes to npm with trusted publishing
+(OIDC) and provenance.
 
-There is no `NPM_TOKEN` secret. npm exchanges a short-lived GitHub OIDC token
-for a publish credential, and npm records provenance for the release.
+- Workflow: [`../.github/workflows/release.yml`](../.github/workflows/release.yml)
+- Config: [`../release-please-config.json`](../release-please-config.json)
+- Manifest: [`../.release-please-manifest.json`](../.release-please-manifest.json)
+
+There is no `NPM_TOKEN` secret.
 
 ## One-time npm setup
 
@@ -16,12 +19,23 @@ On npm:
 3. Set:
    - Organization or user: `amoshydra`
    - Repository: `oktoso`
-   - Workflow filename: `publish.yml`
+   - Workflow filename: `release.yml`
    - Environment: leave blank
 4. Save.
 
-The workflow filename must match exactly. If an npm environment is configured,
-add `environment: npm` (or the configured name) to the `publish` job.
+The same setup from the npm CLI:
+
+```sh
+npm trust github @amoshydra/oktoso \
+  --file release.yml \
+  --repo amoshydra/oktoso \
+  --allow-publish \
+  -y
+```
+
+The workflow filename must be `release.yml`, not the old `publish.yml`. If an
+npm environment is configured, add `environment: npm` (or the configured name)
+to the `publish` job.
 
 The repository must be public for provenance. If it is private, remove
 `--provenance` and `NPM_CONFIG_PROVENANCE` from the workflow, or make the
@@ -29,29 +43,34 @@ repository public before publishing.
 
 ## Release flow
 
-Update the version, commit it, tag the same version, and push the commit and tag:
+Use conventional commits:
 
-```sh
-npm version patch --no-git-tag-version
-git add package.json
-git commit -m "chore: release v0.1.1"
-git tag v0.1.1
-git push origin main --tags
+```text
+fix: ...
+feat: ...
+feat!: ...
+chore: ...
+docs: ...
+refactor: ...
 ```
 
-The tag must be `v` followed by the exact `package.json` version. The workflow
-fails before publishing if they differ.
+On every push to `main`:
 
-The workflow then:
+1. Release-please opens or updates a **release PR**.
+2. The release PR contains the next version and `CHANGELOG.md` entries.
+3. Review the PR, then merge it.
+4. The same workflow runs again, creates the release and tag, and the publish
+   job runs because `release_created == 'true'`.
+5. The publish job checks out the new tag, verifies the tag matches
+   `package.json`, runs the checks, builds the single-port package, and runs
+   `npm publish --provenance --ignore-scripts`.
 
-1. Installs with a frozen lockfile.
-2. Runs typecheck, tests, the OpenAPI check, the single-port build, and
-   `npm pack --dry-run`.
-3. Checks that npm is at least 11.5.1.
-4. Builds again and publishes with `npm publish --provenance --ignore-scripts`.
+Do not create version tags by hand. Release-please owns `vX.Y.Z` tags and
+`CHANGELOG.md`.
 
-`--ignore-scripts` is intentional: the workflow has already built the package.
-Local `npm publish` still runs `prepublishOnly` and builds automatically.
+`0.1.0` is already published on npm. The manifest starts at `0.1.0`, so the
+first release-please PR determines the next version from the commits since that
+baseline. That release will be the first one published by OIDC.
 
 ## Verify a release
 
@@ -60,13 +79,15 @@ npm view @amoshydra/oktoso version dist.attestations
 npx --yes @amoshydra/oktoso@<version> --version
 ```
 
+The attestations output confirms the OIDC/provenance publish path.
+
 ## Troubleshooting
 
 ### `404 Not Found` on publish
 
 - Confirm the package name in `package.json` is exactly `@amoshydra/oktoso`.
 - Confirm the trusted publisher entry uses repo `amoshydra/oktoso` and workflow
-  `publish.yml`.
+  `release.yml`.
 - Confirm the npm account owns or belongs to the `@amoshydra` scope.
 - Confirm the package is public.
 
@@ -78,12 +99,17 @@ Check the repository, workflow filename, and environment fields.
 
 ### Version already exists
 
-npm does not allow republishing an existing version. Bump `package.json`, commit,
-and create a new tag. The currently published version is `0.1.0`. The repository is prepared at
-`0.1.1` for the first trusted-publishing release; tag it only after the npm
-trusted-publisher entry is saved.
+npm does not allow republishing an existing version. Close the release PR, bump
+the version through a new conventional commit, and let release-please open a new
+PR.
 
 ### npm CLI too old
 
 Trusted publishing requires npm 11.5.1 or newer. The workflow checks this and
 fails with a clear message. Node 24 images currently ship a suitable npm.
+
+### Release PR was not created
+
+- Confirm the push was to `main`.
+- Confirm the commit messages use conventional prefixes.
+- Confirm the workflow has `contents: write` and `pull-requests: write`.
