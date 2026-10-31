@@ -88,7 +88,8 @@ Publish a scoped package publicly with:
 - [x] Rename package to `@amoshydra/oktoso`; binary `oktoso`.
 - [x] Rename workspace packages to `@amoshydra/oktoso-*`.
 - [x] Add `publishConfig`, `files`, and `prepublishOnly`.
-- [ ] Verify `npx` from a clean temporary directory after publishing.
+- [x] Add the tag-driven GitHub Actions workflow with npm OIDC publishing and provenance.
+- [x] Verify `npx` from a clean temporary directory after publishing.
 - [x] Rename the GitHub repository to `oktoso`.
 - Keep **agent hub** as the descriptive subtitle, not the package name.
 
