@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
-import type { Diagnostics } from "@agent-hub/contracts";
+import type { Diagnostics } from "@amoshydra/oktoso-contracts";
 import type { EventBus } from "../../services/event-bus";
 import type { ProviderRegistry } from "../../services/provider-registry";
-import type { StateStore } from "@agent-hub/storage";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AppEnv } from "../types";
 import { VERSION } from "../../version";
 

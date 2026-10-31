@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { JsonStateStore } from "@agent-hub/storage";
+import { JsonStateStore } from "@amoshydra/oktoso-storage";
 import { parseArgs, usage, type CliOptions } from "./cli/args";
 import {
   formatHubStatus,
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
     } catch (error) {
       process.stderr.write(
         `Unable to read hub config: ${error instanceof Error ? error.message : String(error)}\n` +
-          "Run npx agent-hub once to create it.\n",
+          "Run npx @amoshydra/oktoso once to create it.\n",
       );
       process.exitCode = 1;
       return;
@@ -240,7 +240,7 @@ async function main(): Promise<void> {
 
     if (await isPortOpen(config)) {
       process.stderr.write(
-        `Port ${config.port} is in use, but it is not an Agent Hub.\n` +
+        `Port ${config.port} is in use, but it is not an Oktoso.\n` +
           `Use --port <port> or stop the process using it.\n`,
       );
       process.exitCode = 1;
@@ -248,8 +248,8 @@ async function main(): Promise<void> {
     }
 
     process.stderr.write(
-      `Agent Hub is not running at ${pairingRequestUrl(config)}.\n` +
-        "Start it with: npx agent-hub\n",
+      `Oktoso is not running at ${pairingRequestUrl(config)}.\n` +
+        "Start it with: npx @amoshydra/oktoso\n",
     );
     process.exitCode = 1;
     return;
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
 
   if (!pairMode) {
     // Probe the target before touching state, logs, or provider credentials.
-    // A second `agent-hub` should be a status check even when the current shell
+    // A second `oktoso` should be a status check even when the current shell
     // does not have the provider secrets from the running hub.
     try {
       const target = await loadHubTarget(options.configPath);
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
       if (await isPortOpen(target)) {
         process.stderr.write(
           `Port ${target.port} is already in use by another process.\n` +
-            `Start Agent Hub on another port with: npx agent-hub --port ${target.port < 65_535 ? target.port + 1 : 8_787}\n`,
+            `Start Oktoso on another port with: npx @amoshydra/oktoso --port ${target.port < 65_535 ? target.port + 1 : 8_787}\n`,
         );
         process.exitCode = 1;
         return;
@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     if (options.host) config.host = options.host;
     if (options.port) config.port = options.port;
 
-    // A second `agent-hub` invocation is a status check, not a crash. Probe
+    // A second `oktoso` invocation is a status check, not a crash. Probe
     // the configured port before opening state or the terminal UI.
     const running = await probeHub(config);
     if (running) {
@@ -460,7 +460,7 @@ async function main(): Promise<void> {
     if (await isPortOpen(config)) {
       process.stderr.write(
         `Port ${config.port} is already in use by another process.\n` +
-          `Start Agent Hub on another port with: npx agent-hub --port ${config.port < 65_535 ? config.port + 1 : 8_787}\n`,
+          `Start Oktoso on another port with: npx @amoshydra/oktoso --port ${config.port < 65_535 ? config.port + 1 : 8_787}\n`,
       );
       await logFile?.close();
       process.exitCode = 1;
@@ -624,7 +624,7 @@ async function main(): Promise<void> {
 
     const printPlainStartup = (): void => {
       console.log("");
-      console.log(`Agent Hub ${VERSION} listening on ${hubWebUrl}`);
+      console.log(`Oktoso ${VERSION} listening on ${hubWebUrl}`);
       if (bootstrapped.created) {
         printPairingPanel(config, auth!.issuePairing(), {
           firstRun: true,
@@ -728,7 +728,7 @@ async function main(): Promise<void> {
         }
         process.stderr.write(
           `Port ${config.port} is already in use by another process.\n` +
-            `Start Agent Hub on another port with: npx agent-hub --port ${config.port < 65_535 ? config.port + 1 : 8_787}\n`,
+            `Start Oktoso on another port with: npx @amoshydra/oktoso --port ${config.port < 65_535 ? config.port + 1 : 8_787}\n`,
         );
       } else {
         process.stderr.write(
@@ -797,7 +797,7 @@ async function main(): Promise<void> {
       );
     } else {
       process.stderr.write(
-        `${pairMode ? "Unable to create a pairing link" : "Unable to start Agent Hub"}: ${message}\n`,
+        `${pairMode ? "Unable to create a pairing link" : "Unable to start Oktoso"}: ${message}\n`,
       );
     }
     await logFile?.close();

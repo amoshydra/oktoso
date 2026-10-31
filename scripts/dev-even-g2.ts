@@ -45,7 +45,7 @@ const env = {
 
 const child = spawn(
   "pnpm",
-  ["--filter", "@agent-hub/even-realities-g2", "dev"],
+  ["--filter", "@amoshydra/oktoso-even-g2", "dev"],
   { env, stdio: "inherit" },
 );
 

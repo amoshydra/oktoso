@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { zDraftInput, zSessionRef } from "@agent-hub/contracts";
+import { zDraftInput, zSessionRef } from "@amoshydra/oktoso-contracts";
 import type { DraftService } from "../../services/draft-service";
 import type { AppEnv } from "../types";
 import { badRequest } from "../../domain/errors";

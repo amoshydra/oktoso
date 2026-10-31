@@ -1,4 +1,4 @@
-import type { HubEvent } from "@agent-hub/contracts";
+import type { HubEvent } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import { SseParser } from "./sse-parser";
 

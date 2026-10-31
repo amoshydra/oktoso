@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { zAttentionActionInput, zAttentionType } from "@agent-hub/contracts";
+import { zAttentionActionInput, zAttentionType } from "@amoshydra/oktoso-contracts";
 import type { AttentionService } from "../../services/attention-service";
 import type { AppEnv } from "../types";
 import { badRequest } from "../../domain/errors";
@@ -15,7 +15,7 @@ export function registerAttentionRoutes(
     }
     return c.json(
       await attention.list({
-        ...(type ? { type: type as import("@agent-hub/contracts").AttentionType } : {}),
+        ...(type ? { type: type as import("@amoshydra/oktoso-contracts").AttentionType } : {}),
         ...(c.req.query("sessionRef")
           ? { sessionRef: c.req.query("sessionRef") }
           : {}),

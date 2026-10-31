@@ -98,12 +98,12 @@ export function formatHubStatus(
 ): string {
   const url = webUrl(config);
   const lines = [
-    `Agent Hub ${probe.version} is ${options.alreadyRunning ? "already " : ""}running at ${url}`,
+    `Oktoso ${probe.version} is ${options.alreadyRunning ? "already " : ""}running at ${url}`,
     `  ${probe.pid ? `pid ${probe.pid} · ` : ""}up ${formatUptime(probe.uptimeMs)} · event seq ${probe.eventSeq}`,
     "",
     `  Web UI   ${url}`,
-    "  Pair     npx agent-hub pair",
-    "  Status   npx agent-hub status",
+    "  Pair     npx @amoshydra/oktoso pair",
+    "  Status   npx @amoshydra/oktoso status",
   ];
 
   if (probe.pid) {

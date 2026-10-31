@@ -18,15 +18,15 @@ import type {
   ReplyOption,
   SendAnswer,
   Session,
-} from "@agent-hub/contracts";
-import { HubClient, messageFromHubEvent } from "@agent-hub/client";
+} from "@amoshydra/oktoso-contracts";
+import { HubClient, messageFromHubEvent } from "@amoshydra/oktoso-client";
 import {
   chatScrollStep,
   clampLine,
   frameSignature,
   pageChoices,
   wrapText,
-} from "@agent-hub/wearable-core";
+} from "@amoshydra/oktoso-wearable-core";
 import {
   activityForMessages,
   buildChat,
@@ -42,7 +42,7 @@ import {
 } from "./answer-model";
 import { glassInput } from "./input";
 
-const TOKEN_KEY = "agent-hub-even-g2-token";
+const TOKEN_KEY = "oktoso-even-g2-token";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Screen =
@@ -635,7 +635,7 @@ function scheduleEventRefresh(action: () => void | Promise<void>): void {
 
 function showLoading(body: string): void {
   if (!bridge) return;
-  if (setPreview("AGENT HUB", body, "Please wait")) {
+  if (setPreview("OKTOSO", body, "Please wait")) {
     void showPage(textPage(body, "Please wait"));
   }
 }
@@ -1791,8 +1791,8 @@ function render(): void {
   updatePhoneQuestion();
   updatePhoneState();
   if (!client) {
-    const body = "Pair in phone\n\nOpen Agent Hub for\nEven G2 on your phone\nto pair or enter a token.";
-    if (setPreview("AGENT HUB", body, "Phone setup")) {
+    const body = "Pair in phone\n\nOpen Oktoso for\nEven G2 on your phone\nto pair or enter a token.";
+    if (setPreview("OKTOSO", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
     }
     return;
@@ -1815,14 +1815,14 @@ function render(): void {
     ];
     if (
       setPreview(
-        "AGENT HUB",
+        "OKTOSO",
         items.join("\n"),
         "Tap open   Swipe move",
         items,
       )
     ) {
       void showPage(
-        listPage("AGENT HUB", items, "Tap open   Swipe move"),
+        listPage("OKTOSO", items, "Tap open   Swipe move"),
       );
     }
     return;
@@ -2171,7 +2171,7 @@ function textPage(body: string, footer: string, header?: string): RebuildPageCon
       containerID: 1,
       containerName: "header",
       isEventCapture: 0,
-      content: header ?? "AGENT HUB",
+      content: header ?? "OKTOSO",
     }),
     new TextContainerProperty({
       xPosition: 0,
@@ -2416,7 +2416,7 @@ async function init(): Promise<void> {
             containerID: 1,
             containerName: "body",
             isEventCapture: 1,
-            content: "Agent Hub\nConnecting…",
+            content: "Oktoso\nConnecting…",
           }),
         ],
       }),

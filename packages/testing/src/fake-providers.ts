@@ -32,7 +32,7 @@ interface FakeOpenCodeSession {
 const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
   {
     id: "ses_auth",
-    projectID: "project-agent-hub",
+    projectID: "project-oktoso",
     agent: "build",
     model: { id: "claude-sonnet", providerID: "commandcode", variant: "max" },
     cost: 0.42,
@@ -40,11 +40,11 @@ const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
     outcome: "succeeded",
     time: { created: 1_792_970_000_000, updated: 1_792_970_180_000, idle: 1_792_970_170_000, viewed: 1_792_970_100_000 },
     title: "Fix auth race in gateway",
-    location: { directory: "/home/me/agent-hub" },
+    location: { directory: "/home/me/oktoso" },
   },
   {
     id: "ses_index",
-    projectID: "project-agent-hub-api",
+    projectID: "project-oktoso-api",
     agent: "build",
     model: { id: "deepseek-v4.1-flash", providerID: "commandcode" },
     cost: 0.18,
@@ -52,11 +52,11 @@ const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
     outcome: "succeeded",
     time: { created: 1_792_968_000_000, updated: 1_792_968_900_000, idle: 1_792_968_890_000 },
     title: "Refactor session index",
-    location: { directory: "/home/me/agent-hub-api" },
+    location: { directory: "/home/me/oktoso-api" },
   },
   {
     id: "ses_rust",
-    projectID: "project-agent-hub",
+    projectID: "project-oktoso",
     agent: "build",
     model: { id: "claude-sonnet", providerID: "commandcode" },
     cost: 0.07,
@@ -64,7 +64,7 @@ const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
     outcome: "failed",
     time: { created: 1_792_960_000_000, updated: 1_792_960_300_000, idle: 1_792_960_290_000 },
     title: "Port hub to Rust",
-    location: { directory: "/home/me/agent-hub" },
+    location: { directory: "/home/me/oktoso" },
   },
 ];
 
@@ -359,14 +359,14 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
 
   if (path === "/api/permission/request" && request.method === "GET") {
     sendJson(response, 200, {
-      location: { directory: "/home/me/agent-hub" },
+      location: { directory: "/home/me/oktoso" },
       data: fakePermission ? [fakePermission] : [],
     });
     return;
   }
   if (path === "/api/form" && request.method === "GET") {
     sendJson(response, 200, {
-      location: { directory: "/home/me/agent-hub" },
+      location: { directory: "/home/me/oktoso" },
       data: fakeForm ? [fakeForm] : [],
     });
     return;
@@ -410,7 +410,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   if (path === "/api/agent" && request.method === "GET") {
     sendJson(response, 200, {
       data: [{ id: "build", name: "Build" }],
-      location: { directory: "/home/me/agent-hub" },
+      location: { directory: "/home/me/oktoso" },
     });
     return;
   }
@@ -424,7 +424,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
           name: "Claude Sonnet",
         },
       ],
-      location: { directory: "/home/me/agent-hub" },
+      location: { directory: "/home/me/oktoso" },
     });
     return;
   }
@@ -436,7 +436,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       : {};
     const session = {
       id: `ses_fake_${now.toString(36)}`,
-      projectID: "project-agent-hub",
+      projectID: "project-oktoso",
       agent: typeof body.agent === "string" ? body.agent : "build",
       model:
         body.model && typeof body.model === "object"
@@ -446,7 +446,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: now, updated: now },
       title: typeof body.title === "string" && body.title ? body.title : "Untitled session",
-      location: { directory: location.directory ?? "/home/me/agent-hub" },
+      location: { directory: location.directory ?? "/home/me/oktoso" },
     };
     OPENCODE_SESSIONS.unshift(session);
     OPENCODE_MESSAGES[session.id] = [];

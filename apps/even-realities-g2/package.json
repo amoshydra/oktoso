@@ -1,5 +1,5 @@
 {
-  "name": "@agent-hub/even-realities-g2",
+  "name": "@amoshydra/oktoso-even-g2",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
-    "@agent-hub/client": "workspace:*",
-    "@agent-hub/contracts": "workspace:*",
-    "@agent-hub/wearable-core": "workspace:*",
+    "@amoshydra/oktoso-client": "workspace:*",
+    "@amoshydra/oktoso-contracts": "workspace:*",
+    "@amoshydra/oktoso-wearable-core": "workspace:*",
     "@evenrealities/even_hub_sdk": "^0.0.16"
   },
   "devDependencies": {

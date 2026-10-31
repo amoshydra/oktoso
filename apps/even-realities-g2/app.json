@@ -1,7 +1,7 @@
 {
-  "package_id": "com.amoshydra.agenthub.eveng2",
+  "package_id": "com.amoshydra.oktoso.eveng2",
   "edition": "202601",
-  "name": "Agent Hub G2",
+  "name": "Oktoso G2",
   "version": "0.1.0",
   "min_app_version": "2.2.10",
   "min_sdk_version": "0.0.16",
@@ -9,7 +9,7 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Connects to the self-hosted Agent Hub.",
+      "desc": "Connects to the self-hosted Oktoso.",
       "whitelist": [
         "http://127.0.0.1:8787",
         "https://hub.example.com"

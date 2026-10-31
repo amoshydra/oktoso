@@ -26,7 +26,7 @@ import type {
   Session,
   SessionListQuery,
   SessionPage,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
   runEventStream,

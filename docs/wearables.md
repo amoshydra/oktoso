@@ -6,8 +6,8 @@ The hub API is the shared surface for all wearable clients. Device apps are thin
 
 - App: `apps/even-realities-g2`
 - Hosted path: `/apps/even-g2/`
-- Package: `@agent-hub/even-realities-g2`
-- Display name: **Agent Hub G2** (manifest limit is 20 characters; the phone surface says “Agent Hub for Even G2”)
+- Package: `@amoshydra/oktoso-even-g2`
+- Display name: **Oktoso G2** (manifest limit is 20 characters; the phone surface says “Oktoso for Even G2”)
 - Target: Even Hub plugin for Even G2
 - Shared logic: `packages/wearable-core`
 
@@ -79,7 +79,7 @@ The hub serves `/apps/<app-id>/` generically, so future glass or watch apps can 
 For the optional packaged build, provide the hub at build time and whitelist its origin. The committed `app.json` only contains local and placeholder origins:
 
 ```sh
-VITE_HUB_URL=https://hub.example.com pnpm --filter @agent-hub/even-realities-g2 build
+VITE_HUB_URL=https://hub.example.com pnpm --filter @amoshydra/oktoso-even-g2 build
 HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
 

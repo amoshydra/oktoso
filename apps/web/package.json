@@ -1,5 +1,5 @@
 {
-  "name": "@agent-hub/web",
+  "name": "@amoshydra/oktoso-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,9 +8,9 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@agent-hub/client": "workspace:*",
-    "@agent-hub/contracts": "workspace:*",
-    "@agent-hub/ui": "workspace:*",
+    "@amoshydra/oktoso-client": "workspace:*",
+    "@amoshydra/oktoso-contracts": "workspace:*",
+    "@amoshydra/oktoso-ui": "workspace:*",
     "dompurify": "^3.4.17",
     "marked": "^18.1.1",
     "react": "^19.3.1",

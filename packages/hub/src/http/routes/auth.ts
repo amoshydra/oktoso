@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { zPairingExchange } from "@agent-hub/contracts";
+import { zPairingExchange } from "@amoshydra/oktoso-contracts";
 import type { AuthService } from "../../auth/service";
 import { AppError, badRequest, unauthorized } from "../../domain/errors";
 import { clearHubSessionCookie } from "../auth-cookie";

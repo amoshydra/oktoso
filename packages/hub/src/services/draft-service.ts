@@ -1,5 +1,5 @@
-import type { Draft } from "@agent-hub/contracts";
-import type { StateStore } from "@agent-hub/storage";
+import type { Draft } from "@amoshydra/oktoso-contracts";
+import type { StateStore } from "@amoshydra/oktoso-storage";
 
 export interface DraftServiceOptions {
   now?: () => number;

@@ -12,18 +12,18 @@ import type {
   ProviderOptions,
   Session,
   SessionStatus,
-} from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
 import {
   HubClient,
   HubError,
   messageFromHubEvent,
   type ConnectionStatus,
-} from "@agent-hub/client";
+} from "@amoshydra/oktoso-client";
 import { renderMarkdown } from "./markdown";
 import { canScanPairingQr, scanPairingQr } from "./qr-scanner";
 
-const TOKEN_KEY = "agent-hub-token";
-const THEME_KEY = "agent-hub-theme";
+const TOKEN_KEY = "oktoso-token";
+const THEME_KEY = "oktoso-theme";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type AuthState = "checking" | "signed-out" | "signed-in";
@@ -356,8 +356,8 @@ export function App() {
     return (
       <div className="login-page">
         <div className="login-card boot-card">
-          <div className="brand-mark">AH</div>
-          <h1>Agent Hub</h1>
+          <div className="brand-mark">OK</div>
+          <h1>Oktoso</h1>
           <p>Checking the hub connection…</p>
           <div className="loading-line" />
         </div>
@@ -428,7 +428,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="rail" aria-label="Primary navigation">
-        <div className="rail-logo" aria-label="Agent Hub">
+        <div className="rail-logo" aria-label="Oktoso">
           AH
         </div>
         <nav className="rail-nav">
@@ -490,7 +490,7 @@ export function App() {
               <>
                 <section className="hero">
                   <div>
-                    <p className="eyebrow">Agent Hub</p>
+                    <p className="eyebrow">Oktoso</p>
                     <h2>Runtime online</h2>
                     <p>
                       The hub API, authentication, durable state, event bus, and provider
@@ -757,8 +757,8 @@ function Login(props: {
         {props.theme === "dark" ? "☀" : "☾"}
       </button>
       <div className="login-card">
-        <div className="brand-mark">AH</div>
-        <p className="eyebrow">Agent Hub</p>
+        <div className="brand-mark">OK</div>
+        <p className="eyebrow">Oktoso</p>
         <h1>One workbench for your agents.</h1>
         <p className="login-copy">
           Enter the hub token, or open a pairing link from the hub. On first run, the hub prints a link when it starts. Provider credentials stay on the hub and never reach this client.
@@ -2016,7 +2016,7 @@ function NewSessionForm(props: {
               <input
                 value={directory}
                 list="new-session-directories"
-                placeholder="/home/me/agent-hub"
+                placeholder="/home/me/oktoso"
                 onChange={(event) => setDirectory((event.currentTarget as HTMLInputElement).value)}
               />
               <datalist id="new-session-directories">

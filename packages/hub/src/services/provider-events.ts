@@ -1,5 +1,5 @@
-import type { Message } from "@agent-hub/contracts";
-import type { ProviderEvent } from "@agent-hub/providers";
+import type { Message } from "@amoshydra/oktoso-contracts";
+import type { ProviderEvent } from "@amoshydra/oktoso-providers";
 import type { EventBus } from "./event-bus";
 import type { ProviderRegistry } from "./provider-registry";
 import type { SessionService } from "./session-service";

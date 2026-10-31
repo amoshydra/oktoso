@@ -150,12 +150,12 @@ export function parseArgs(
 }
 
 export function usage(version: string): string {
-  return `Agent Hub ${version}
+  return `Oktoso ${version}
 
 Usage:
-  agent-hub [options]
-  agent-hub pair [--url <url>] [--config <path>]
-  agent-hub status [--config <path>]
+  oktoso [options]
+  oktoso pair [--url <url>] [--config <path>]
+  oktoso status [--config <path>]
 
 Options:
   --config <path>    Hub config file (default: ./hub.config.json)
@@ -176,9 +176,9 @@ Keys:
   p pair   l logs   r refresh   o open   Ctrl+C quit   ? help
 
 Logs:
-  Linux/Termux  $XDG_STATE_HOME/agent-hub/logs/hub.log
-  macOS         ~/Library/Logs/Agent Hub/hub.log
-  Windows       %LOCALAPPDATA%\\AgentHub\\Logs\\hub.log
+  Linux/Termux  $XDG_STATE_HOME/oktoso/logs/hub.log
+  macOS         ~/Library/Logs/Oktoso/hub.log
+  Windows       %LOCALAPPDATA%\\Oktoso\\Logs\\hub.log
   HUB_LOG_DIR        Override the log directory
   HUB_LOG_MAX_BYTES  Rotate hub.log at this byte size (default 26214400)
 `;

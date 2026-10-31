@@ -127,8 +127,8 @@ const sessions = [
     providerID: 'desktop-opencode',
     nativeID: 'ses_auth',
     title: 'Fix auth race in gateway',
-    project: 'agent-hub',
-    directory: '/home/me/agent-hub',
+    project: 'oktoso',
+    directory: '/home/me/oktoso',
     agent: 'build',
     model: 'claude-sonnet',
     status: 'running',
@@ -160,8 +160,8 @@ const sessions = [
     providerID: 'laptop-opencode',
     nativeID: 'ses_index',
     title: 'Refactor session index',
-    project: 'agent-hub-api',
-    directory: '/home/me/agent-hub-api',
+    project: 'oktoso-api',
+    directory: '/home/me/oktoso-api',
     agent: 'build',
     model: 'claude-sonnet',
     status: 'idle',
@@ -226,8 +226,8 @@ const sessions = [
     providerID: 'desktop-opencode',
     nativeID: 'ses_rust',
     title: 'Port hub to Rust',
-    project: 'agent-hub',
-    directory: '/home/me/agent-hub',
+    project: 'oktoso',
+    directory: '/home/me/oktoso',
     agent: 'build',
     model: 'claude-sonnet',
     status: 'error',
@@ -265,8 +265,8 @@ const sessions = [
     providerID: 'laptop-opencode',
     nativeID: 'ses_glasses',
     title: 'Even G2 inbox prototype',
-    project: 'agent-hub-glasses',
-    directory: '/home/me/agent-hub-glasses',
+    project: 'oktoso-glasses',
+    directory: '/home/me/oktoso-glasses',
     agent: 'build',
     model: 'claude-sonnet',
     status: 'idle',
@@ -367,10 +367,10 @@ let toastTimer;
 
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem('agent-hub-theme', theme);
+  localStorage.setItem('oktoso-theme', theme);
 }
 
-const savedTheme = localStorage.getItem('agent-hub-theme') || 'dark';
+const savedTheme = localStorage.getItem('oktoso-theme') || 'dark';
 setTheme(savedTheme);
 
 function toast(text) {
@@ -430,7 +430,7 @@ function renderRail() {
   const count = attention.filter((item) => item.priority === 'blocking').length;
 
   document.getElementById('rail').innerHTML = `
-    <div class="rail-logo" title="Agent Hub">AH</div>
+    <div class="rail-logo" title="Oktoso">OK</div>
     ${items
       .map(
         ([view, label, iconName]) => `
@@ -960,7 +960,7 @@ function renderSettings() {
           </section>
           <section class="settings-card">
             <h3>About</h3>
-            <p>Agent Hub prototype. Design phase, mock data only.</p>
+            <p>Oktoso prototype. Design phase, mock data only.</p>
             <div class="settings-row"><span>Version</span><span>0.0.0</span></div>
             <div class="settings-row"><span>Providers</span><span>${providers.length}</span></div>
           </section>
@@ -1146,7 +1146,7 @@ function openNewSession() {
           </div>
           <div class="field">
             <label for="new-project">Project directory</label>
-            <input id="new-project" value="/home/me/agent-hub" />
+            <input id="new-project" value="/home/me/oktoso" />
           </div>
           <div class="field">
             <label for="new-agent">Agent</label>
@@ -1180,7 +1180,7 @@ function closeModal() {
 function createSessionFromForm() {
   const providerID = document.getElementById('new-provider').value;
   const title = document.getElementById('new-title').value.trim() || 'Untitled session';
-  const project = document.getElementById('new-project').value.trim() || 'agent-hub';
+  const project = document.getElementById('new-project').value.trim() || 'oktoso';
   const agent = document.getElementById('new-agent').value.trim() || 'build';
   const model = document.getElementById('new-model').value.trim() || 'claude-sonnet';
   const prompt = document.getElementById('new-prompt').value.trim();

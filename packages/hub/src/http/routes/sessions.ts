@@ -5,8 +5,8 @@ import {
   zReplyMode,
   zSendInput,
   zSessionListQuery,
-} from "@agent-hub/contracts";
-import type { SendResult } from "@agent-hub/contracts";
+} from "@amoshydra/oktoso-contracts";
+import type { SendResult } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "../../services/session-service";
 import type { ReplyService } from "../../services/reply-service";
 import type { QuestionService } from "../../services/question-service";

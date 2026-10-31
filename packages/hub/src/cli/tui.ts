@@ -435,7 +435,7 @@ export class TerminalUi {
     if (columns < 50 || rows < 16) {
       this.writeFrame([
         "",
-        center(this.theme.bold("Agent Hub"), columns),
+        center(this.theme.bold("Oktoso"), columns),
         center(
           this.theme.muted("Terminal is too small for the dashboard."),
           columns,
@@ -466,7 +466,7 @@ export class TerminalUi {
     const snapshot = this.options.snapshot();
     const header = boxedPanel({
       width: columns,
-      title: "Agent Hub",
+      title: "Oktoso",
       right: `v${snapshot.version}`,
       theme: this.theme,
       lines: [

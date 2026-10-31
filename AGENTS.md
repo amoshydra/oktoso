@@ -1,4 +1,4 @@
-# Agent Hub — Agent Instructions
+# Oktoso — Agent Instructions
 
 ## UI work starts here
 

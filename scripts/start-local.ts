@@ -11,7 +11,7 @@ const env = {
   ...process.env,
   HUB_CONFIG: process.env.HUB_CONFIG ?? "hub.config.dev.json",
   HUB_HOST: process.env.HUB_HOST ?? "0.0.0.0",
-  HUB_TOKEN: process.env.HUB_TOKEN ?? "dev-token-agent-hub",
+  HUB_TOKEN: process.env.HUB_TOKEN ?? "dev-token-oktoso",
   OPENCODE_BASE_URL: process.env.OPENCODE_BASE_URL ?? "http://127.0.0.1:4101",
   OPENCODE_USERNAME: process.env.OPENCODE_USERNAME ?? "opencode",
   OPENCODE_PASSWORD: process.env.OPENCODE_PASSWORD ?? "dev-opencode-password",

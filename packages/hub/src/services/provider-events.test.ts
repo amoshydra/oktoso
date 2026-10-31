@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { HubEvent, Message } from "@agent-hub/contracts";
-import { OpenCodeAdapter, type ProviderAdapter, type ProviderEvent } from "@agent-hub/providers";
-import { MemoryStateStore } from "@agent-hub/storage";
+import type { HubEvent, Message } from "@amoshydra/oktoso-contracts";
+import { OpenCodeAdapter, type ProviderAdapter, type ProviderEvent } from "@amoshydra/oktoso-providers";
+import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import {
   createFakeProviderServer,
   type FakeProviderServer,
-} from "@agent-hub/testing";
+} from "@amoshydra/oktoso-testing";
 import { createLogger } from "../lib/logger";
 import { EventBus } from "./event-bus";
 import type { ProviderRegistry } from "./provider-registry";

@@ -1,6 +1,6 @@
-# Agent Hub
+# Oktoso
 
-A hub-first session hub for AI agents. One place to see what needs attention, browse sessions, start chats, and reply across OpenCode, Open WebUI, Hermes, and other providers.
+Oktoso is a hub-first session hub for AI agents. One place to see what needs attention, browse sessions, start chats, and reply across OpenCode, Open WebUI, Hermes, and other providers.
 
 The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceable: web, mobile, desktop, Even G2 glasses, and VR.
 
@@ -41,12 +41,12 @@ pnpm dev
 
 - Web: `http://localhost:5175`
 - Hub API: `http://127.0.0.1:8787`
-- Development token: `dev-token-agent-hub` (prefilled in the dev login; run `pnpm pair:dev` to use a link instead)
+- Development token: `dev-token-oktoso` (prefilled in the dev login; run `pnpm pair:dev` to use a link instead)
 - OpenCode read/write: session index, transcript, composer, new sessions, and interrupt
 - Open WebUI: chats, current branches, models, new chats, and prompt sends
 - Providers: OpenCode and Open WebUI adapters; Hermes remains a health-only fake
 - Attention: permissions, forms, unread sessions, failures, provider-backed actions, and live navigation badges
-- Wearables: `apps/even-realities-g2` (Agent Hub G2), shared wearable core, phone pairing/keyboard, and hub-side reply assistance settings
+- Wearables: `apps/even-realities-g2` (Oktoso G2), shared wearable core, phone pairing/keyboard, and hub-side reply assistance settings
 
 `pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. Real provider credentials belong in the ignored `.env.local` file:
 
@@ -60,7 +60,7 @@ OPENWEBUI_API_KEY=...
 
 When those variables are present, the matching providers use the real instances instead of the fake ones. Omitting a provider's base URL leaves that provider on its local fake endpoint. The dev command does not start the frozen prototype.
 
-`.env.local` and `.data/` are ignored. Keep `.env.local` at mode `0600`. The committed `dev-token-agent-hub` is a local-only owner token; generate a long random `HUB_TOKEN` for any reachable deployment. Rotating it revokes every paired session.
+`.env.local` and `.data/` are ignored. Keep `.env.local` at mode `0600`. The committed `dev-token-oktoso` is a local-only owner token; generate a long random `HUB_TOKEN` for any reachable deployment. Rotating it revokes every paired session.
 
 ## Prototype
 
@@ -87,7 +87,7 @@ pnpm start
 
 It creates `hub.config.json` with no providers, generates a persistent owner token, prints it once, and starts the hub. On that first start it also prints a one-time pairing link once the server is listening. Add providers to the config and restart. An explicitly requested `--config` or `HUB_CONFIG` path is never created implicitly.
 
-`pnpm start` runs the built `dist/hub.js`. The same entry point is exposed as the `agent-hub` bin for an npx install: `npx agent-hub` starts the hub, and `npx agent-hub pair` connects to a running hub.
+`pnpm start` runs the built `dist/hub.js`. The same entry point is exposed as the `oktoso` bin for an npx install: `npx @amoshydra/oktoso` starts the hub, and `npx @amoshydra/oktoso pair` connects to a running hub.
 
 ## Pairing a browser or wearable
 
@@ -103,7 +103,7 @@ For a background process or a second terminal, run:
 pnpm pair
 ```
 
-With the packaged CLI, that is `npx agent-hub pair`. It prints one-time links for loopback and LAN addresses. The links expire in five minutes and work once. The owner token is never shared. For the built server:
+With the packaged CLI, that is `npx @amoshydra/oktoso pair`. It prints one-time links for loopback and LAN addresses. The links expire in five minutes and work once. The owner token is never shared. For the built server:
 
 ```sh
 node dist/hub.js --pair
@@ -122,7 +122,7 @@ Opening a pairing page does not consume the code, so chat link previews are safe
 In a foreground TTY, the hub renders a full-screen dashboard:
 
 ```text
-╭─ Agent Hub ──────────────────────────────── v0.1.0 ─╮
+╭─ Oktoso ──────────────────────────────── v0.1.0 ─╮
 │ http://127.0.0.1:8787        up 12m 04s   json       │
 ├──────────────────────────────────────────────────────┤
 │ Providers 2/3   Sessions 12   Attention 3    1 SSE   │
@@ -150,31 +150,31 @@ On first run the hub opens a setup panel with the owner token shown once. Press 
 
 ### Running the command again
 
-If Agent Hub is already listening on the configured host and port, a second `npx agent-hub` does not crash with `EADDRINUSE`. It prints a status card and exits:
+If Oktoso is already listening on the configured host and port, a second `npx @amoshydra/oktoso` does not crash with `EADDRINUSE`. It prints a status card and exits:
 
 ```text
-Agent Hub 0.1.0 is already running at http://127.0.0.1:8787
+Oktoso 0.1.0 is already running at http://127.0.0.1:8787
   pid 1234 · up 12m 04s · event seq 1042
 
   Web UI   http://127.0.0.1:8787
-  Pair     npx agent-hub pair
-  Status   npx agent-hub status
+  Pair     npx @amoshydra/oktoso pair
+  Status   npx @amoshydra/oktoso status
   Stop     Ctrl+C in the original terminal, or kill 1234
 ```
 
 Useful forms:
 
 ```sh
-npx agent-hub status          # is it running, and where?
-npx agent-hub pair            # pair a device against the running hub
-npx agent-hub --port 8788     # after stopping the current hub
-npx agent-hub --host 0.0.0.0  # override the bind host on next start
+npx @amoshydra/oktoso status          # is it running, and where?
+npx @amoshydra/oktoso pair            # pair a device against the running hub
+npx @amoshydra/oktoso --port 8788     # after stopping the current hub
+npx @amoshydra/oktoso --host 0.0.0.0  # override the bind host on next start
 ```
 
 A second instance needs its own state and log directories; stop the current hub first, or run it with separate directories:
 
 ```sh
-HUB_DATA_DIR=.data-8788 HUB_LOG_DIR=.logs-8788 npx agent-hub --port 8788
+HUB_DATA_DIR=.data-8788 HUB_LOG_DIR=.logs-8788 npx @amoshydra/oktoso --port 8788
 ```
 
 If the port is occupied by a different process, the command says so and suggests another port. No stack trace.
@@ -182,14 +182,14 @@ If the port is occupied by a different process, the command says so and suggests
 Structured logs do not appear in the dashboard. In TUI mode they go to the platform log directory:
 
 ```text
-Linux/Termux  $XDG_STATE_HOME/agent-hub/logs/hub.log
-macOS         ~/Library/Logs/Agent Hub/hub.log
-Windows       %LOCALAPPDATA%\AgentHub\Logs\hub.log
+Linux/Termux  $XDG_STATE_HOME/oktoso/logs/hub.log
+macOS         ~/Library/Logs/Oktoso/hub.log
+Windows       %LOCALAPPDATA%\Oktoso\Logs\hub.log
 ```
 
 Only two files are kept: `hub.log` for the current run and `hub.log.prev` for the previous run. A run rotates at 25 MiB, replacing the previous file if a single run is that long. `--log-file`, `--log-dir`, `--no-log-file`, and `HUB_LOG_MAX_BYTES` override the defaults.
 
-Use `--plain` for a scrollback-friendly session; human output stays on stdout and JSON logs go to stderr. Use `--log-json` for services and process managers. A non-TTY process never starts the TUI; pair it with `npx agent-hub pair` from any terminal. `--help` lists all flags.
+Use `--plain` for a scrollback-friendly session; human output stays on stdout and JSON logs go to stderr. Use `--log-json` for services and process managers. A non-TTY process never starts the TUI; pair it with `npx @amoshydra/oktoso pair` from any terminal. `--help` lists all flags.
 
 ## Even G2 URL hosting
 
@@ -215,7 +215,7 @@ Open a pairing link, or enter a token if the app is loaded from another origin. 
 The optional `.ehpk` flow still exists:
 
 ```sh
-VITE_HUB_URL=https://hub.example.com pnpm --filter @agent-hub/even-realities-g2 build
+VITE_HUB_URL=https://hub.example.com pnpm --filter @amoshydra/oktoso-even-g2 build
 HUB_ORIGIN=https://hub.example.com pnpm pack:even-g2
 ```
 

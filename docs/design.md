@@ -1,10 +1,10 @@
-# Agent Hub Design
+# Oktoso Design
 
-Working name: Agent Hub. The name can change without affecting the architecture.
+Oktoso is the product name. The architecture does not depend on it.
 
 ## 1. Purpose
 
-Agent Hub gives one place to work with sessions from several AI systems. You open it, see which sessions need you, browse the rest, start a new chat, and reply. It works the same from a browser, a phone, a desktop app, Even G2 glasses, or a VR client.
+Oktoso gives one place to work with sessions from several AI systems. You open it, see which sessions need you, browse the rest, start a new chat, and reply. It works the same from a browser, a phone, a desktop app, Even G2 glasses, or a VR client.
 
 The hub is the product. The clients are views over one HTTP API.
 
@@ -53,7 +53,7 @@ Web / mobile / desktop        Even G2 glasses        VR / WebXR
                          │  HTTPS + SSE / WebSocket
                          ▼
                  ┌───────────────┐
-                 │   Agent Hub   │
+                 │   Oktoso   │
                  │  Node/TS      │
                  │               │
                  │  providers    │
@@ -356,7 +356,7 @@ The contract is generated from `packages/contracts` and written to `docs/openapi
 
 Base path: `/api/v1`.
 
-Auth: owner or session `Authorization: Bearer <token>` on every API route except `/api/v1/health`, `POST /api/v1/auth/connect`, and `/api/v1/auth/signout`. A paired browser uses the `agent_hub_session_<port>` HttpOnly cookie instead of a header. The human `/pair/<code>` page is outside `/api/v1` and is public.
+Auth: owner or session `Authorization: Bearer <token>` on every API route except `/api/v1/health`, `POST /api/v1/auth/connect`, and `/api/v1/auth/signout`. A paired browser uses the `oktoso_session_<port>` HttpOnly cookie instead of a header. The human `/pair/<code>` page is outside `/api/v1` and is public.
 
 ### Routes
 
@@ -401,8 +401,8 @@ GET /api/v1/sessions?provider=desktop-opencode&status=idle&limit=50
       "providerID": "desktop-opencode",
       "nativeID": "ses_123",
       "title": "Fix auth race in gateway",
-      "project": "agent-hub",
-      "directory": "/home/me/agent-hub",
+      "project": "oktoso",
+      "directory": "/home/me/oktoso",
       "agent": "build",
       "model": "anthropic/claude-sonnet",
       "status": "idle",
@@ -519,7 +519,7 @@ Content-Type: application/json
 {
   "providerID": "desktop-opencode",
   "title": "Investigate auth race",
-  "directory": "/home/me/agent-hub",
+  "directory": "/home/me/oktoso",
   "agent": "build",
   "model": "anthropic/claude-sonnet",
   "text": "Start by reading the auth middleware."
@@ -621,11 +621,11 @@ The hub has one owner credential and any number of paired device sessions.
 2. In a foreground terminal, `p` and Enter issue a fresh link at any time without stopping the server. Later starts show a one-line reminder. Background and service deployments run the pair command instead.
 3. The CLI reads only the host, port, and owner token from the config, authenticates with the owner token, and calls `POST /api/v1/auth/pair`. Provider secrets are not required.
 4. The hub returns a 128-bit URL-safe code. It is single-use, expires in five minutes, lives in an in-memory cache capped at 1000 live codes, and is lost on restart.
-5. `GET /pair/<code>` serves a confirmation page and does not consume the code. Link previews and chat unfurlers can fetch it safely. If the browser already holds a valid session cookie, the page offers “Open Agent Hub” and “Pair again.”
+5. `GET /pair/<code>` serves a confirmation page and does not consume the code. Link previews and chat unfurlers can fetch it safely. If the browser already holds a valid session cookie, the page offers “Open Oktoso” and “Pair again.”
 6. `POST /pair/<code>` consumes the code, sets an `HttpOnly; SameSite=Lax` session cookie, and returns `303 /`. Machine clients use `POST /api/v1/auth/connect` with a JSON `{ "code": ... }` body and receive `{ token, expiresAt }`. An expired, reused, or restart-invalidated page tells the operator to press `p` in the hub terminal; if the browser already holds a valid session cookie, it redirects to `/`.
-7. A session token is `<expiry>.<HMAC-SHA256(key, expiry)>`, where `key = HMAC-SHA256(ownerToken, "agent-hub-session-v1")`. It lasts 30 days, is stateless, and is verified in constant time.
+7. A session token is `<expiry>.<HMAC-SHA256(key, expiry)>`, where `key = HMAC-SHA256(ownerToken, "oktoso-session-v1")`. It lasts 30 days, is stateless, and is verified in constant time.
 8. A cookie-authenticated session refreshes to a fresh 30-day token when it is within seven days of expiry. The middleware rotates the cookie transparently. Bearer clients call `POST /api/v1/auth/refresh`. Old stateless tokens remain valid until their original expiry.
-9. The cookie is named `agent_hub_session_<port>` when the Host includes a port and `agent_hub_session` otherwise. It uses `Path=/` and sets `Secure` when the request is HTTPS or `X-Forwarded-Proto: https`.
+9. The cookie is named `oktoso_session_<port>` when the Host includes a port and `oktoso_session` otherwise. It uses `Path=/` and sets `Secure` when the request is HTTPS or `X-Forwarded-Proto: https`.
 10. Rotating `HUB_TOKEN` invalidates every paired session. Per-device revocation requires stored device tokens, which is deferred to the Devices screen.
 
 When stdout is a TTY and a LAN address exists, the terminal output includes a compact **Scan to pair** QR encoding the LAN `/pair/<code>` link. On supported secure-context browsers, the login screen offers a camera scanner using the Barcode Detection API; otherwise the phone camera app is the fallback.
@@ -662,14 +662,14 @@ The foreground CLI is a dashboard, not a log stream:
 - The TUI uses a small custom ANSI renderer with alternate screen, raw key input, resize handling, and clean terminal restoration. It is not React/Ink and adds no native modules.
 - `--plain` keeps the scrollback-friendly output: human output on stdout, JSON logs on stderr.
 - `--log-json` writes JSON logs to stdout and disables the TUI for service managers.
-- A non-TTY process never starts the TUI. Pairing for a service uses `agent-hub pair` from any terminal, which calls the running hub over HTTP.
+- A non-TTY process never starts the TUI. Pairing for a service uses `oktoso pair` from any terminal, which calls the running hub over HTTP.
 - A second start against a live hub probes `/api/v1/health` before opening state or the TUI. It prints a status card (version, pid, uptime, web URL, pair/status/stop hints) and exits successfully. `status` performs the same probe; `pair` connects to the running hub; `--host` and `--port` override the bind target. If another process owns the port, the command reports it and suggests another port instead of throwing `EADDRINUSE`. A second instance needs separate state and log directories.
 
 Structured logs in TUI mode go to the platform log directory:
 
-- Linux/Termux: `$XDG_STATE_HOME/agent-hub/logs/hub.log` (usually `~/.local/state/agent-hub/logs/`)
-- macOS: `~/Library/Logs/Agent Hub/hub.log`
-- Windows: `%LOCALAPPDATA%\AgentHub\Logs\hub.log`
+- Linux/Termux: `$XDG_STATE_HOME/oktoso/logs/hub.log` (usually `~/.local/state/oktoso/logs/`)
+- macOS: `~/Library/Logs/Oktoso/hub.log`
+- Windows: `%LOCALAPPDATA%\Oktoso\Logs\hub.log`
 
 Only `hub.log` (current run) and `hub.log.prev` (previous run) are kept. A run rotates at 25 MiB, replacing the previous file when it is long enough. `HUB_LOG_DIR`, `HUB_LOG_MAX_BYTES`, `--log-file`, `--log-dir`, and `--no-log-file` override the defaults. Files use `0600`; directories use `0700`. Info and above are persisted by default; `--verbose` adds debug.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemoryStateStore } from "@agent-hub/storage";
+import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { IdempotencyService } from "./idempotency";
 
 describe("IdempotencyService", () => {

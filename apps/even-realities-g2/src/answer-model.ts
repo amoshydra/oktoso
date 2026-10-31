@@ -3,8 +3,8 @@ import type {
   PendingQuestion,
   QuestionPrompt,
   SendAnswer,
-} from "@agent-hub/contracts";
-import { clampLine, wrapText } from "@agent-hub/wearable-core";
+} from "@amoshydra/oktoso-contracts";
+import { clampLine, wrapText } from "@amoshydra/oktoso-wearable-core";
 
 export type AnswerAction =
   | "type"

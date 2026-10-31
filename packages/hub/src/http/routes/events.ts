@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { HubEvent } from "@agent-hub/contracts";
+import type { HubEvent } from "@amoshydra/oktoso-contracts";
 import type { EventBus } from "../../services/event-bus";
 import type { AppEnv } from "../types";
 import { badRequest } from "../../domain/errors";

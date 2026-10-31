@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message } from "@agent-hub/contracts";
+import type { Message } from "@amoshydra/oktoso-contracts";
 import { parseQuestion } from "./question-parser";
 
 function message(
