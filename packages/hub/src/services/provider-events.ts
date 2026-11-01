@@ -1,5 +1,5 @@
 import type { Message } from "@amoshydra/oktoso-contracts";
-import type { ProviderEvent } from "@amoshydra/oktoso-providers";
+import type { ProviderAdapter, ProviderEvent } from "@amoshydra/oktoso-providers";
 import type { EventBus } from "./event-bus";
 import type { ProviderRegistry } from "./provider-registry";
 import type { SessionService } from "./session-service";
@@ -8,7 +8,7 @@ import type { Logger } from "../lib/logger";
 
 export class ProviderEventService {
   private readonly controller = new AbortController();
-  private readonly unsubscribes: Array<() => void> = [];
+  private readonly subscriptions = new Map<string, () => void>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly messageTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pendingMessages = new Map<string, ProviderEvent>();
@@ -29,31 +29,48 @@ export class ProviderEventService {
     this.started = true;
 
     for (const adapter of this.registry.adapters()) {
-      if (!adapter.subscribe) continue;
-      try {
-        const unsubscribe = await adapter.subscribe(
-          (event) => this.handle(event),
-          this.controller.signal,
-        );
-        this.unsubscribes.push(unsubscribe);
-      } catch (error) {
-        this.logger.warn("Provider event subscription failed", {
-          providerID: adapter.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      await this.subscribe(adapter);
+    }
+  }
+
+  async subscribe(adapter: ProviderAdapter): Promise<void> {
+    if (!this.started || !adapter.subscribe) return;
+    this.unsubscribe(adapter.id);
+    try {
+      const unsubscribe = await adapter.subscribe(
+        (event) => this.handle(event),
+        this.controller.signal,
+      );
+      this.subscriptions.set(adapter.id, unsubscribe);
+    } catch (error) {
+      this.logger.warn("Provider event subscription failed", {
+        providerID: adapter.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private unsubscribe(id: string): void {
+    const unsubscribe = this.subscriptions.get(id);
+    if (!unsubscribe) return;
+    this.subscriptions.delete(id);
+    try {
+      unsubscribe();
+    } catch {
+      // Ignore provider shutdown errors.
     }
   }
 
   stop(): void {
     this.controller.abort();
-    for (const unsubscribe of this.unsubscribes.splice(0)) {
+    for (const unsubscribe of this.subscriptions.values()) {
       try {
         unsubscribe();
       } catch {
         // Ignore provider shutdown errors.
       }
     }
+    this.subscriptions.clear();
     for (const timer of this.timers.values()) clearTimeout(timer);
     for (const timer of this.messageTimers.values()) clearTimeout(timer);
     this.timers.clear();

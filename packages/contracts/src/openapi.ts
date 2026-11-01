@@ -35,6 +35,8 @@ import {
   zSessionRefresh,
   zProvider,
   zProviderCapabilities,
+  zProviderInput,
+  zProviderUpdateInput,
   zProviderHealth,
   zProviderOptions,
   zQuestionPrompt,
@@ -72,6 +74,11 @@ const ProviderCapabilitiesSchema = registry.register(
   zProviderCapabilities,
 );
 const ProviderSchema = registry.register("Provider", zProvider);
+const ProviderInputSchema = registry.register("ProviderInput", zProviderInput);
+const ProviderUpdateInputSchema = registry.register(
+  "ProviderUpdateInput",
+  zProviderUpdateInput,
+);
 const ProviderHealthSchema = registry.register("ProviderHealth", zProviderHealth);
 const AgentOptionSchema = registry.register("AgentOption", zAgentOption);
 const ModelOptionSchema = registry.register("ModelOption", zModelOption);
@@ -268,6 +275,49 @@ registry.registerPath({
       description: "Providers",
       content: json(z.object({ data: z.array(ProviderSchema) })),
     },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/providers",
+  tags: ["providers"],
+  summary: "Add a provider",
+  description:
+    "Adds a provider to the hub config, hot-loads its adapter, invalidates provider caches, and returns the provider with its latest health status. Credentials are write-only.",
+  request: {
+    body: { content: json(ProviderInputSchema), required: true },
+  },
+  responses: {
+    201: {
+      description: "Provider added",
+      content: json(z.object({ data: ProviderSchema })),
+    },
+    400: errorResponse("Invalid provider input"),
+    409: errorResponse("Provider ID already exists"),
+    501: errorResponse("Provider management is not configured"),
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/providers/{providerID}",
+  tags: ["providers"],
+  summary: "Update a provider",
+  description:
+    "Updates a provider in the hub config and hot-loads its adapter. Omit the secret to keep the existing credential.",
+  request: {
+    params: providerParams,
+    body: { content: json(ProviderUpdateInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Provider updated",
+      content: json(z.object({ data: ProviderSchema })),
+    },
+    400: errorResponse("Invalid provider input"),
+    404: errorResponse("Provider not found"),
+    501: errorResponse("Provider management is not configured"),
   },
 });
 

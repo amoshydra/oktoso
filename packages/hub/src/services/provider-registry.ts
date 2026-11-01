@@ -36,29 +36,51 @@ export class ProviderRegistry {
     private readonly logger: Logger,
   ) {
     for (const config of providers) {
-      this.runtimes.set(config.id, {
-        config,
-        status: "unknown",
-        ...(config.type === "opencode"
+      this.runtimes.set(config.id, this.createRuntime(config));
+    }
+  }
+
+  add(config: ProviderConfig): void {
+    if (this.runtimes.has(config.id)) {
+      throw new Error(`Provider ${config.id} is already configured`);
+    }
+    this.runtimes.set(config.id, this.createRuntime(config));
+  }
+
+  remove(id: string): void {
+    this.runtimes.delete(id);
+  }
+
+  replace(config: ProviderConfig): void {
+    if (!this.runtimes.has(config.id)) {
+      throw new Error(`Provider ${config.id} is not configured`);
+    }
+    this.runtimes.set(config.id, this.createRuntime(config));
+  }
+
+  private createRuntime(config: ProviderConfig): ProviderRuntimeState {
+    return {
+      config,
+      status: "unknown",
+      ...(config.type === "opencode"
+        ? {
+            adapter: new OpenCodeAdapter({
+              id: config.id,
+              baseUrl: config.baseUrl,
+              username: config.auth?.kind === "basic" ? config.auth.username : undefined,
+              password: config.auth?.kind === "basic" ? config.auth.password : "",
+            }),
+          }
+        : config.type === "openwebui"
           ? {
-              adapter: new OpenCodeAdapter({
+              adapter: new OpenWebUIAdapter({
                 id: config.id,
                 baseUrl: config.baseUrl,
-                username: config.auth?.kind === "basic" ? config.auth.username : undefined,
-                password: config.auth?.kind === "basic" ? config.auth.password : "",
+                token: config.auth?.kind === "bearer" ? config.auth.token : "",
               }),
             }
-          : config.type === "openwebui"
-            ? {
-                adapter: new OpenWebUIAdapter({
-                  id: config.id,
-                  baseUrl: config.baseUrl,
-                  token: config.auth?.kind === "bearer" ? config.auth.token : "",
-                }),
-              }
-            : {}),
-      });
-    }
+          : {}),
+    };
   }
 
   adapters(): ProviderAdapter[] {
@@ -193,6 +215,10 @@ export class ProviderRegistry {
       name: runtime.config.name ?? runtime.config.id,
       baseUrl: runtime.config.baseUrl,
       enabled: runtime.config.enabled,
+      authKind: runtime.config.auth?.kind ?? "none",
+      ...(runtime.config.auth?.kind === "basic"
+        ? { authUsername: runtime.config.auth.username }
+        : {}),
       status: runtime.status,
       ...(runtime.version ? { version: runtime.version } : {}),
       ...(runtime.lastCheckedAt ? { lastCheckedAt: runtime.lastCheckedAt } : {}),

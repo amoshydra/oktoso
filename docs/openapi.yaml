@@ -292,6 +292,14 @@ components:
           type: string
         enabled:
           type: boolean
+        authKind:
+          type: string
+          enum:
+            - basic
+            - bearer
+            - none
+        authUsername:
+          type: string
         status:
           type: string
           enum:
@@ -351,6 +359,128 @@ components:
         - enabled
         - status
         - capabilities
+    ProviderInput:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-zA-Z0-9._-]+$
+        type:
+          type: string
+          enum:
+            - opencode
+            - openwebui
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        baseUrl:
+          type: string
+          format: uri
+        auth:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - basic
+                username:
+                  type: string
+                  minLength: 1
+                  default: opencode
+                password:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - password
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - bearer
+                token:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - token
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - none
+              required:
+                - kind
+        enabled:
+          type: boolean
+          default: true
+      required:
+        - id
+        - type
+        - baseUrl
+    ProviderUpdateInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - opencode
+            - openwebui
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        baseUrl:
+          type: string
+          format: uri
+        auth:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - basic
+                username:
+                  type: string
+                  minLength: 1
+                  default: opencode
+                password:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - bearer
+                token:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - none
+              required:
+                - kind
+        enabled:
+          type: boolean
+          default: true
+      required:
+        - type
+        - baseUrl
     ProviderHealth:
       type: object
       properties:
@@ -1876,6 +2006,95 @@ paths:
                       $ref: "#/components/schemas/Provider"
                 required:
                   - data
+    post:
+      tags:
+        - providers
+      summary: Add a provider
+      description: Adds a provider to the hub config, hot-loads its adapter, invalidates provider caches, and returns the provider with its latest health status. Credentials are write-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderInput"
+      responses:
+        "201":
+          description: Provider added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Provider"
+                required:
+                  - data
+        "400":
+          description: Invalid provider input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Provider ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider management is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/providers/{providerID}:
+    put:
+      tags:
+        - providers
+      summary: Update a provider
+      description: Updates a provider in the hub config and hot-loads its adapter. Omit the secret to keep the existing credential.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: providerID
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdateInput"
+      responses:
+        "200":
+          description: Provider updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Provider"
+                required:
+                  - data
+        "400":
+          description: Invalid provider input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider management is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/providers/{providerID}/check:
     post:
       tags:

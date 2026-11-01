@@ -646,6 +646,9 @@ Keep the existing `/api/v1` contract and add:
 | `GET` | `/api/v1/auth/check` | Validate the owner or session credential before loading the app |
 | `GET` | `/pair/{code}` | Human confirmation page; does not consume the code |
 | `POST` | `/pair/{code}` | Human pairing action; consumes the code and sets the session cookie |
+| `GET` | `/api/v1/providers` | List configured providers and health |
+| `POST` | `/api/v1/providers` | Add a provider, persist config, hot-load adapter, check health |
+| `PUT` | `/api/v1/providers/{id}` | Update a provider, preserve omitted secrets, hot-load adapter |
 | `GET` | `/api/v1/providers/{id}/options` | Agents, models, directories, defaults |
 | `POST` | `/api/v1/sessions/{ref}/read` | Mark a session read and sync the marker |
 | `GET` | `/api/v1/diagnostics` | Authenticated operational state |

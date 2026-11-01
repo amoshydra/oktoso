@@ -344,9 +344,10 @@ The session view is the core reading and reply surface.
 
 - Each provider row shows health, type, address, version, and capabilities.
 - Add and edit forms include base URL, token or password, label, and enabled state.
+- Saving writes the provider to `hub.config.json`, hot-loads the adapter without a hub restart, invalidates provider caches, and runs a health check.
 - Check runs a health request and updates the row.
 - Capability chips explain why an action is hidden.
-- Provider credentials never render after save.
+- Provider credentials never render after save. Editing leaves the secret blank to keep the existing credential.
 
 ## 10. Search
 
