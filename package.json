@@ -1,6 +1,6 @@
 {
   "name": "@amoshydra/oktoso",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": false,
   "description": "Oktoso — hub and control plane for AI agents across providers and wearable clients.",
   "license": "MIT",
