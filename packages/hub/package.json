@@ -7,10 +7,12 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@amoshydra/oktoso-client": "workspace:*",
     "@amoshydra/oktoso-contracts": "workspace:*",
     "@amoshydra/oktoso-providers": "workspace:*",
     "@amoshydra/oktoso-storage": "workspace:*",
     "@hono/node-server": "^2.1.5",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "hono": "^4.13.14",
     "string-width": "^8.3.0",
     "uqr": "^0.1.3"
