@@ -7,16 +7,20 @@ The hub owns provider credentials, indexing, attention, and event fan-out. The G
 app is a thin client served by the hub at `/apps/even-g2/`; it never talks to a
 provider directly.
 
-> The screenshots below come from the repository's fake provider fixture. No real
-> account, session, or provider data is shown.
+**Inbox**
 
-<p align="center">
-  <img src="docs/glass-inbox.png" width="576" alt="Oktoso G2 inbox with symbolic attention rows">
-</p>
+![Oktoso G2 inbox](docs/glass-inbox.png)
 
-| Answer a question | Symbol legend |
-|---|---|
-| <img src="docs/glass-answer.png" width="420" alt="Oktoso G2 answer screen"> | <img src="docs/glass-symbols.png" width="420" alt="Oktoso G2 symbol legend"> |
+**Answer**
+
+![Oktoso G2 answer screen](docs/glass-answer.png)
+
+**Symbols**
+
+![Oktoso G2 symbol legend](docs/glass-symbols.png)
+
+Screenshot capture and framing are documented in
+[`docs/screenshot-procedure.md`](docs/screenshot-procedure.md).
 
 ## What it does
 
@@ -226,5 +230,7 @@ still require hardware.
   and device limits
 - [`../../docs/g2-hardware-validation.md`](../../docs/g2-hardware-validation.md) —
   scripted hardware acceptance run
+- [`docs/screenshot-procedure.md`](docs/screenshot-procedure.md) — capture,
+  background generation, and opaque framing procedure
 - [`../../docs/design.md`](../../docs/design.md) — hub architecture and provider
   model
