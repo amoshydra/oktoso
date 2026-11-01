@@ -10,8 +10,9 @@ The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at 
 ```text
 Home
 ├─ Inbox            attention items
-├─ Recent           five most recent sessions
-└─ Current          last opened session, when available
+├─ Recent           five most recent root sessions
+├─ Current          last opened session, when available
+└─ Symbols          glyph legend
 
 Inbox
 └─ Attention        permission / form / error / unread detail
@@ -41,6 +42,7 @@ Back always follows where you came from:
 - reply / choices → chat or More, depending on where reply was opened
 - attention → inbox
 - inbox / recent → home
+- symbols → home
 - failure → the screen that started the action
 
 ## Interaction grammar
@@ -178,6 +180,13 @@ The G2 font was checked in the simulator. These single-cell glyphs render:
 
 `⚿`, `✓`, `↳`, `✕`, `✖`, and `✔` do not render and must not be used. The row
 prefix is `glyph + space` for a primary session and `› + glyph` for a child.
+
+The legend is always discoverable:
+
+- Home has a `Symbols` row. It opens a `SYMBOLS` list with every glyph and its
+  meaning, including the `›?` and `›■` child examples.
+- The phone surface has a collapsible **Symbol guide** below the glasses preview.
+- The legend is read-only; swipe to see all rows and double-tap Back to leave.
 
 ## Text policy
 

@@ -7,6 +7,30 @@ import { clampLine } from "@amoshydra/oktoso-wearable-core";
 
 export const SUBAGENT_GLYPH = "›";
 
+export interface LegendEntry {
+  glyph: string;
+  label: string;
+}
+
+export const GLYPH_LEGEND: LegendEntry[] = [
+  { glyph: "●", label: "Unread" },
+  { glyph: "?", label: "Question" },
+  { glyph: "■", label: "Permission" },
+  { glyph: "▲", label: "Approval" },
+  { glyph: "!", label: "Error" },
+  { glyph: "▶", label: "Running" },
+  { glyph: "▼", label: "Offline" },
+  { glyph: "◇", label: "Idle" },
+  { glyph: "◆", label: "Attention" },
+  { glyph: SUBAGENT_GLYPH, label: "Subagent prefix" },
+  { glyph: `${SUBAGENT_GLYPH}?`, label: "Child question" },
+  { glyph: `${SUBAGENT_GLYPH}■`, label: "Child permission" },
+];
+
+export function legendRows(): string[] {
+  return GLYPH_LEGEND.map((entry) => `${entry.glyph}  ${entry.label}`);
+}
+
 const ATTENTION_GLYPHS: Record<AttentionType, string> = {
   permission: "■",
   approval: "▲",

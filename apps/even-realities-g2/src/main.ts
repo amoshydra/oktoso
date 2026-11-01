@@ -57,6 +57,7 @@ import {
   sessionHeader,
   sessionRowLabel,
   sessionMarker,
+  legendRows,
 } from "./labels";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
@@ -79,7 +80,8 @@ type Screen =
   | "answer-stale"
   | "reply"
   | "choices"
-  | "failure";
+  | "failure"
+  | "legend";
 
 interface AppState {
   screen: Screen;
@@ -2445,6 +2447,12 @@ function back(): void {
     state.selectedAttention = undefined;
     state.notice = undefined;
     render();
+    return;
+  }
+  if (state.screen === "legend") {
+    state.screen = "home";
+    state.notice = undefined;
+    render();
   }
 }
 
@@ -2469,7 +2477,8 @@ function handleInlineFailure(): void {
 function handleListClick(index: number): void {
   switch (state.screen) {
     case "home": {
-      const failureIndex = 2 + (state.sessionTitle ? 1 : 0);
+      const symbolsIndex = state.sessionTitle ? 3 : 2;
+      const failureIndex = symbolsIndex + 1;
       if (state.failure && index === failureIndex) {
         handleInlineFailure();
       } else if (index === 0) {
@@ -2480,6 +2489,9 @@ function handleListClick(index: number): void {
         void openSessions();
       } else if (index === 2 && state.sessionRef) {
         void openChat(state.sessionRef, state.sessionTitle ?? "Session", "home");
+      } else if (index === symbolsIndex) {
+        state.screen = "legend";
+        render();
       }
       break;
     }
@@ -2537,6 +2549,8 @@ function handleListClick(index: number): void {
       break;
     case "failure":
       performFailureAction(index);
+      break;
+    case "legend":
       break;
     default:
       break;
@@ -2656,11 +2670,20 @@ function render(): void {
             )}`,
           ]
         : []),
+      "Symbols",
       ...(state.failure ? [failureRowLabel()] : []),
     ];
     const footer = `Tap open   Swipe move   ${streamLabel()}`;
     if (setPreview("OKTOSO", items.join("\n"), footer, items)) {
       void showPage(listPage("OKTOSO", items, footer));
+    }
+    return;
+  }
+  if (state.screen === "legend") {
+    const items = legendRows();
+    const footer = "Swipe   Back ×2";
+    if (setPreview("SYMBOLS", items.join("\n"), footer, items)) {
+      void showPage(listPage("SYMBOLS", items, footer));
     }
     return;
   }
