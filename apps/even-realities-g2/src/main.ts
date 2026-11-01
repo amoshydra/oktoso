@@ -1,8 +1,6 @@
 import {
   CreateStartUpPageContainer,
   EvenAppBridge,
-  ListContainerProperty,
-  ListItemContainerProperty,
   RebuildPageContainer,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -52,6 +50,7 @@ import {
 } from "./answer-model";
 import { glassInput } from "./input";
 import { classifyFailure, type FailureInfo } from "./failure";
+import { listPage, textPage } from "./layout";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -2989,141 +2988,6 @@ async function showPage(page: RebuildPageContainer): Promise<void> {
   } catch (error) {
     log(`Display update failed: ${errorMessage(error)}`);
   }
-}
-
-function textPage(body: string, footer: string, header?: string): RebuildPageContainer {
-  const texts = [
-    new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 0,
-      width: 576,
-      height: 36,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRadius: 0,
-      paddingLength: 4,
-      containerID: 1,
-      containerName: "header",
-      isEventCapture: 0,
-      content: header ?? "OKTOSO",
-    }),
-    new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 38,
-      width: 576,
-      height: 204,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRadius: 4,
-      paddingLength: 4,
-      containerID: 2,
-      containerName: "body",
-      isEventCapture: 1,
-      content: body,
-    }),
-    new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 246,
-      width: 576,
-      height: 42,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRadius: 0,
-      paddingLength: 4,
-      containerID: 3,
-      containerName: "footer",
-      isEventCapture: 0,
-      content: footer,
-    }),
-  ];
-  return new RebuildPageContainer({ containerTotalNum: 3, textObject: texts });
-}
-
-function listPage(
-  header: string,
-  items: string[],
-  footer: string,
-  body?: string,
-): RebuildPageContainer {
-  const headerHeight = 32;
-  const bodyHeight = body ? 56 : 0;
-  const bodyY = headerHeight;
-  const listY = headerHeight + bodyHeight;
-  const listHeight = 244 - listY;
-  const texts = [
-    new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 0,
-      width: 576,
-      height: headerHeight,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRadius: 0,
-      paddingLength: 4,
-      containerID: 1,
-      containerName: "header",
-      isEventCapture: 0,
-      content: header,
-    }),
-  ];
-  if (body) {
-    texts.push(
-      new TextContainerProperty({
-        xPosition: 0,
-        yPosition: bodyY,
-        width: 576,
-        height: bodyHeight,
-        borderWidth: 0,
-        borderColor: 5,
-        borderRadius: 0,
-        paddingLength: 4,
-        containerID: 2,
-        containerName: "summary",
-        isEventCapture: 0,
-        content: body,
-      }),
-    );
-  }
-  const list = new ListContainerProperty({
-    xPosition: 0,
-    yPosition: listY,
-    width: 576,
-    height: listHeight,
-    borderWidth: 0,
-    borderColor: 5,
-    borderRadius: 4,
-    paddingLength: 0,
-    containerID: body ? 3 : 2,
-    containerName: "list",
-    isEventCapture: 1,
-    itemContainer: new ListItemContainerProperty({
-      itemCount: Math.max(1, items.length),
-      itemWidth: 568,
-      itemName: items.length ? items : ["(empty)"],
-      isItemSelectBorderEn: 1,
-    }),
-  });
-  texts.push(
-    new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 246,
-      width: 576,
-      height: 42,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRadius: 0,
-      paddingLength: 4,
-      containerID: 4,
-      containerName: "footer",
-      isEventCapture: 0,
-      content: footer,
-    }),
-  );
-  return new RebuildPageContainer({
-    containerTotalNum: body ? 4 : 3,
-    textObject: texts,
-    listObject: [list],
-  });
 }
 
 function attentionLabel(item: Attention): string {
