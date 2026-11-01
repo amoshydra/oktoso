@@ -660,7 +660,7 @@ The foreground CLI is a dashboard, not a log stream:
 
 - Header: bind URL, uptime, storage; status: providers, sessions, attention, SSE, event/request/error counts.
 - Activity feed: selected domain events and warnings; raw request logs stay out.
-- `p` opens a pairing modal with the primary LAN link, QR, and a live countdown. `c` copies, `o` opens, `p` regenerates, `esc` closes.
+- `p` opens a pairing modal with the primary LAN link, QR, and expiry time. `c` copies the link, `t` copies the code only, `o` opens, `p` regenerates, `esc` closes. The panel does not repaint on a timer, so terminal selection survives. After a device pairs, it returns to the dashboard after five seconds.
 - `l` toggles a bounded in-memory logs view; `j`/`k` scroll. `r` re-checks providers. `o` opens the web UI. `?` shows keys. `Ctrl+C` quits.
 - First run opens a setup panel with the owner token once; `p` moves to pairing.
 - The TUI uses a small custom ANSI renderer with alternate screen, raw key input, resize handling, and clean terminal restoration. It is not React/Ink and adds no native modules.

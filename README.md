@@ -169,10 +169,11 @@ Keys:
 - `r` — re-check providers and refresh caches
 - `o` — open the web UI, or the pairing link while the modal is open
 - `c` — copy the pairing link or the first-run owner token
+- `t` — copy only the pairing code while the pairing modal is open
 - `?` — key help
 - `Ctrl+C` — quit
 
-On first run the hub opens a setup panel with the owner token shown once. Press `p` to pair. The pairing modal keeps the QR and primary LAN link while the countdown updates.
+On first run the hub opens a setup panel with the owner token shown once. Press `p` to pair. The pairing modal keeps the QR, primary LAN link, and expiry time visible without repainting, so the link stays selectable. After a device pairs, the panel returns to the dashboard after five seconds.
 
 ### Running the command again
 

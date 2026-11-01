@@ -380,7 +380,7 @@ Every screen needs these states:
 - **Disconnected hub:** persistent banner with reconnect and last sync time.
 - **No attention:** calm empty inbox with a link to sessions.
 - **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error.
-- **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Oktoso** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal.
+- **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Oktoso** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal. It uses the same self-hosted Inter and IBM Plex Mono stacks as the app so it does not depend on the web build or an external CDN.
 
 ## 13. Visual language
 

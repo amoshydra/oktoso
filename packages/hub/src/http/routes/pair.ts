@@ -7,6 +7,10 @@ import {
 } from "../auth-cookie";
 import { isSameOriginRequest, requestHost } from "../origin";
 import type { AppEnv } from "../types";
+import {
+  IBM_PLEX_MONO_400_LATIN_BASE64,
+  INTER_VARIABLE_LATIN_BASE64,
+} from "./pair-fonts";
 
 export interface PairRouteDeps {
   auth: AuthService;
@@ -54,14 +58,28 @@ function pageShell(title: string, body: string): string {
   <meta name="referrer" content="no-referrer">
   <title>${escapeHtml(title)}</title>
   <style>
+    @font-face {
+      font-family: "Inter Variable";
+      font-style: normal;
+      font-display: swap;
+      font-weight: 100 900;
+      src: url("data:font/woff2;base64,${INTER_VARIABLE_LATIN_BASE64}") format("woff2-variations");
+    }
+    @font-face {
+      font-family: "IBM Plex Mono";
+      font-style: normal;
+      font-display: swap;
+      font-weight: 400;
+      src: url("data:font/woff2;base64,${IBM_PLEX_MONO_400_LATIN_BASE64}") format("woff2");
+    }
     :root { color-scheme: dark; }
-    body { font-family: system-ui, sans-serif; margin: 0; background: #08090b; color: #f4f6f9; }
+    body { font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 0; background: #08090b; color: #f4f6f9; }
     main { max-width: 32rem; margin: 12vh auto; padding: 0 1.5rem; }
     .brand { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #2a2f38; color: #f4f6f9; font-size: 12px; font-weight: 700; margin-bottom: 24px; }
     .eyebrow { margin: 0 0 8px; color: #8f97a5; font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
     h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.25; letter-spacing: -.03em; }
     p { color: #b5bcc8; line-height: 1.5; }
-    code { color: #f4f6f9; }
+    code { color: #f4f6f9; font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .meta { font-size: 12px; }
     form { margin: 24px 0 16px; }
     button { width: 100%; min-height: 44px; padding: 12px 16px; border: 1px solid #5f6878; border-radius: 8px; background: #f4f6f9; color: #08090b; font: inherit; font-weight: 600; cursor: pointer; }
