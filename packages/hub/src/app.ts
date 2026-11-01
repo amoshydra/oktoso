@@ -8,6 +8,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { HubConfig } from "./config/schema";
 import type { EventBus } from "./services/event-bus";
 import type { ProviderRegistry } from "./services/provider-registry";
+import type { ProviderAdminService } from "./services/provider-admin";
 import type { SessionService } from "./services/session-service";
 import type { AttentionService } from "./services/attention-service";
 import type { DraftService } from "./services/draft-service";
@@ -42,6 +43,7 @@ export interface AppDependencies {
   store: StateStore;
   eventBus: EventBus;
   registry: ProviderRegistry;
+  providerAdmin?: ProviderAdminService;
   sessions: SessionService;
   attention: AttentionService;
   drafts: DraftService;
@@ -90,7 +92,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   });
   registerAuthRoutes(app, { auth, version: VERSION });
   registerPairRoutes(app, { auth });
-  registerProviderRoutes(app, deps.registry);
+  registerProviderRoutes(app, deps.registry, deps.providerAdmin);
   registerSessionRoutes(
     app,
     deps.sessions,

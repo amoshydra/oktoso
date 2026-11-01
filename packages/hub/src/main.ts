@@ -41,6 +41,7 @@ import type {
 import { AuthService } from "./auth/service";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
+import { ProviderAdminService } from "./services/provider-admin";
 import { SessionService } from "./services/session-service";
 import { ProviderEventService } from "./services/provider-events";
 import { AttentionService } from "./services/attention-service";
@@ -494,6 +495,14 @@ async function main(): Promise<void> {
       logger,
       attention,
     );
+    const providerAdmin = new ProviderAdminService(
+      registry,
+      sessions,
+      attention,
+      providerEvents,
+      logger,
+      options.configPath,
+    );
 
     const bundledRoot = dirname(fileURLToPath(import.meta.url));
     const configuredWebRoot = config.webRoot
@@ -518,6 +527,7 @@ async function main(): Promise<void> {
       store,
       eventBus,
       registry,
+      providerAdmin,
       sessions,
       attention,
       drafts,

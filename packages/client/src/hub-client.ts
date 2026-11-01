@@ -17,7 +17,9 @@ import type {
   PairingSession,
   SessionRefresh,
   Provider,
+  ProviderInput,
   ProviderOptions,
+  ProviderUpdateInput,
   QuestionPrompt,
   QuestionSummaryPage,
   ReplyMode,
@@ -93,6 +95,25 @@ export class HubClient {
 
   async providers(): Promise<Provider[]> {
     const response = await this.request<{ data: Provider[] }>("/api/v1/providers");
+    return response.data;
+  }
+
+  async addProvider(input: ProviderInput): Promise<Provider> {
+    const response = await this.request<{ data: Provider }>("/api/v1/providers", {
+      method: "POST",
+      body: input,
+    });
+    return response.data;
+  }
+
+  async updateProvider(
+    id: string,
+    input: ProviderUpdateInput,
+  ): Promise<Provider> {
+    const response = await this.request<{ data: Provider }>(
+      `/api/v1/providers/${encodeURIComponent(id)}`,
+      { method: "PUT", body: input },
+    );
     return response.data;
   }
 

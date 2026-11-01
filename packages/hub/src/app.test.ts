@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { appErrorFor, createApp } from "./app";
@@ -9,6 +9,7 @@ import { loadConfig } from "./config/load";
 import { createLogger } from "./lib/logger";
 import { EventBus } from "./services/event-bus";
 import { ProviderRegistry } from "./services/provider-registry";
+import { ProviderAdminService } from "./services/provider-admin";
 import { SessionService } from "./services/session-service";
 import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
@@ -43,6 +44,7 @@ async function createTestApp(options: {
   cors?: string[];
   appsRoot?: string;
   auth?: AuthService;
+  providerConfigPath?: string;
 } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
@@ -62,11 +64,22 @@ async function createTestApp(options: {
   const settings = new AssistantSettingsService(store);
   const replies = new ReplyService(settings, sessions, logger);
   const questions = new QuestionService(sessions);
+  const providerAdmin = options.providerConfigPath
+    ? new ProviderAdminService(
+        registry,
+        sessions,
+        attention,
+        undefined,
+        logger,
+        options.providerConfigPath,
+      )
+    : undefined;
   const app = createApp({
     config,
     store,
     eventBus,
     registry,
+    ...(providerAdmin ? { providerAdmin } : {}),
     sessions,
     attention,
     drafts,
@@ -507,6 +520,51 @@ describe("hub app", () => {
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
+  it("adds a provider, persists it, and hot-loads the adapter", async () => {
+    const root = await tempRoot();
+    const configPath = join(root, "hub.config.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({ token, providers: [] }, null, 2),
+      { mode: 0o600 },
+    );
+    const { app, registry, fake } = await createTestApp({
+      providerConfigPath: configPath,
+    });
+
+    const response = await app.request("/api/v1/providers", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: "second-opencode",
+        type: "opencode",
+        name: "Second OpenCode",
+        baseUrl: fake.url,
+        auth: { kind: "basic", username: "opencode", password: "secret" },
+        enabled: true,
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      data: {
+        id: "second-opencode",
+        authKind: "basic",
+        status: "online",
+      },
+    });
+    expect(registry.list().some((provider) => provider.id === "second-opencode")).toBe(true);
+
+    const saved = JSON.parse(await readFile(configPath, "utf8")) as {
+      providers: Array<{ id: string }>;
+    };
+    expect(saved.providers.map((provider) => provider.id)).toEqual([
+      "second-opencode",
+    ]);
   });
 
   it("lists providers and diagnostics with auth", async () => {

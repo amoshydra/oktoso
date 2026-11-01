@@ -603,6 +603,8 @@ The hub stores read markers and attention acknowledgements. Provider-native read
 Use SQLite when Node's `node:sqlite` is available. Fall back to a JSON file for small deployments. The schema is small:
 
 - `providers`: config is loaded from the hub config file, not stored in the database.
+  The authenticated owner/session UI writes additions and edits back to that
+  file and hot-loads the adapter; credentials are write-only in API responses.
 - `read_markers`: session ref, last viewed event or timestamp, updatedAt.
 - `drafts`: session ref, client device ID, text, updatedAt.
 - `attention_state`: attention ID, acknowledgedAt, snoozedUntil.

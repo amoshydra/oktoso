@@ -9,7 +9,10 @@ import type {
   Message,
   MessagePart,
   Provider,
+  ProviderAuthKind,
+  ProviderInput,
   ProviderOptions,
+  ProviderUpdateInput,
   Session,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
@@ -99,6 +102,9 @@ export function App() {
   const [health, setHealth] = useState<Health>();
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerEditor, setProviderEditor] = useState<
+    { mode: "add" | "edit"; provider?: Provider } | undefined
+  >();
   const [attentionCount, setAttentionCount] = useState(0);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
   const [events, setEvents] = useState<HubEvent[]>([]);
@@ -150,6 +156,7 @@ export function App() {
     setHealth(undefined);
     setDiagnostics(undefined);
     setProviders([]);
+    setProviderEditor(undefined);
     setAttentionCount(0);
     setEvents([]);
     setError(undefined);
@@ -371,20 +378,35 @@ export function App() {
       <div className="panel-head">
         <div>
           <h2>Providers</h2>
-          <p>Configured endpoints, health, versions, and normalized capabilities.</p>
+          <p>
+            Configured endpoints, health, versions, and normalized capabilities.
+            Credentials are written to the hub config and never returned.
+          </p>
         </div>
-        <button
-          className="btn small"
-          type="button"
-          disabled={checkingProviders}
-          onClick={() => client && void checkProviders(client)}
-        >
-          {checkingProviders ? "Checking…" : "Recheck"}
-        </button>
+        <div className="panel-actions">
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => setProviderEditor({ mode: "add" })}
+          >
+            + Add
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            disabled={checkingProviders}
+            onClick={() => client && void checkProviders(client)}
+          >
+            {checkingProviders ? "Checking…" : "Recheck"}
+          </button>
+        </div>
       </div>
       <div className="provider-list">
         {providers.length === 0 ? (
-          <div className="empty">No providers configured.</div>
+          <div className="empty">
+            No providers configured. Use <strong>+ Add</strong> to connect
+            OpenCode or Open WebUI.
+          </div>
         ) : (
           providers.map((provider) => (
             <div className="provider-row" key={provider.id}>
@@ -400,10 +422,33 @@ export function App() {
                 <i />
                 {provider.status}
               </span>
+              <button
+                className="btn ghost small"
+                type="button"
+                onClick={() => setProviderEditor({ mode: "edit", provider })}
+              >
+                Edit
+              </button>
             </div>
           ))
         )}
       </div>
+      {providerEditor && client ? (
+        <ProviderForm
+          key={`${providerEditor.mode}:${providerEditor.provider?.id ?? "new"}`}
+          client={client}
+          provider={providerEditor.provider}
+          onClose={() => setProviderEditor(undefined)}
+          onSaved={(saved) => {
+            setProviders((current) => {
+              const index = current.findIndex((item) => item.id === saved.id);
+              if (index < 0) return [...current, saved];
+              return current.map((item) => (item.id === saved.id ? saved : item));
+            });
+            setProviderEditor(undefined);
+          }}
+        />
+      ) : null}
     </article>
   );
 
@@ -1888,6 +1933,258 @@ function SessionsView(props: {
         ) : null}
       </section>
     </>
+  );
+}
+
+function ProviderForm(props: {
+  client: HubClient;
+  provider?: Provider;
+  onClose: () => void;
+  onSaved: (provider: Provider) => void;
+}) {
+  const editing = props.provider;
+  const initialType = editing?.type === "openwebui" ? "openwebui" : "opencode";
+  const initialAuth: ProviderAuthKind =
+    editing?.authKind ??
+    (initialType === "openwebui" ? "bearer" : "basic");
+  const [id, setId] = useState(editing?.id ?? "");
+  const [type, setType] = useState<"opencode" | "openwebui">(initialType);
+  const [name, setName] = useState(editing?.name ?? "");
+  const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? "");
+  const [authKind, setAuthKind] = useState<ProviderAuthKind>(initialAuth);
+  const [username, setUsername] = useState(
+    editing?.authUsername ?? "opencode",
+  );
+  const [secret, setSecret] = useState("");
+  const [enabled, setEnabled] = useState(editing?.enabled ?? true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const authChanged = Boolean(editing) && editing?.authKind !== authKind;
+  const secretRequired =
+    authKind !== "none" && (!editing || authChanged);
+
+  const chooseType = (next: "opencode" | "openwebui") => {
+    setType(next);
+    setAuthKind(next === "openwebui" ? "bearer" : "basic");
+    if (next === "opencode" && !username.trim()) setUsername("opencode");
+  };
+
+  const submit = async () => {
+    if (submitting) return;
+    const providerID = id.trim();
+    if (!/^[a-zA-Z0-9._-]+$/.test(providerID)) {
+      setError("Use letters, numbers, dot, underscore, or dash for the ID.");
+      return;
+    }
+    try {
+      new URL(baseUrl.trim());
+    } catch {
+      setError("Enter a valid base URL including the scheme.");
+      return;
+    }
+    if (secretRequired && !secret.trim()) {
+      setError(
+        authKind === "basic"
+          ? "Enter the password for this provider."
+          : "Enter the token for this provider.",
+      );
+      return;
+    }
+
+    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      if (!editing) {
+        const auth: ProviderInput["auth"] =
+          authKind === "none"
+            ? { kind: "none" }
+            : authKind === "basic"
+              ? {
+                  kind: "basic",
+                  username: username.trim() || "opencode",
+                  password: secret,
+                }
+              : { kind: "bearer", token: secret };
+        const saved = await props.client.addProvider({
+          id: providerID,
+          type,
+          ...(name.trim() ? { name: name.trim() } : {}),
+          baseUrl: normalizedBaseUrl,
+          auth,
+          enabled,
+        });
+        props.onSaved(saved);
+        return;
+      }
+
+      const auth: ProviderUpdateInput["auth"] =
+        authKind === "none"
+          ? { kind: "none" }
+          : authKind === "basic"
+            ? {
+                kind: "basic",
+                username: username.trim() || "opencode",
+                ...(secret ? { password: secret } : {}),
+              }
+            : {
+                kind: "bearer",
+                ...(secret ? { token: secret } : {}),
+              };
+      const saved = await props.client.updateProvider(editing.id, {
+        type,
+        ...(name.trim() ? { name: name.trim() } : {}),
+        baseUrl: normalizedBaseUrl,
+        auth,
+        enabled,
+      });
+      props.onSaved(saved);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save the provider");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const authChoices: Array<[ProviderAuthKind, string]> =
+    type === "openwebui"
+      ? [
+          ["bearer", "Bearer token"],
+          ["none", "No authentication"],
+        ]
+      : [
+          ["basic", "Basic auth"],
+          ["none", "No authentication"],
+        ];
+
+  return (
+    <form
+      className="provider-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="panel-head">
+        <div>
+          <h3>{editing ? "Edit provider" : "Add provider"}</h3>
+          <p>
+            Stored in the hub config file. Credentials are write-only and never
+            returned by the API.
+          </p>
+        </div>
+        <button className="btn ghost small" type="button" onClick={props.onClose}>
+          Close
+        </button>
+      </div>
+
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Provider ID</span>
+          <input
+            value={id}
+            disabled={Boolean(editing)}
+            placeholder="desktop-opencode"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setId((event.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+        <label className="form-field">
+          <span>Type</span>
+          <select
+            value={type}
+            onChange={(event) =>
+              chooseType((event.currentTarget as HTMLSelectElement).value as "opencode" | "openwebui")
+            }
+          >
+            <option value="opencode">OpenCode</option>
+            <option value="openwebui">Open WebUI</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Name</span>
+          <input
+            value={name}
+            placeholder="Desktop OpenCode"
+            onChange={(event) => setName((event.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+        <label className="form-field">
+          <span>Base URL</span>
+          <input
+            value={baseUrl}
+            placeholder="http://127.0.0.1:4096"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setBaseUrl((event.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+        <label className="form-field">
+          <span>Authentication</span>
+          <select
+            value={authKind}
+            onChange={(event) =>
+              setAuthKind((event.currentTarget as HTMLSelectElement).value as ProviderAuthKind)
+            }
+          >
+            {authChoices.map(([value, label]) => (
+              <option value={value} key={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        {authKind === "basic" ? (
+          <label className="form-field">
+            <span>Username</span>
+            <input
+              value={username}
+              autoComplete="off"
+              onChange={(event) => setUsername((event.currentTarget as HTMLInputElement).value)}
+            />
+          </label>
+        ) : null}
+        {authKind !== "none" ? (
+          <label className="form-field span-2">
+            <span>{authKind === "basic" ? "Password" : "API token"}</span>
+            <input
+              type="password"
+              value={secret}
+              autoComplete="new-password"
+              placeholder={
+                editing && !authChanged
+                  ? "Leave blank to keep the current credential"
+                  : "Required"
+              }
+              onChange={(event) => setSecret((event.currentTarget as HTMLInputElement).value)}
+            />
+          </label>
+        ) : null}
+        <label className="check-field span-2">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled((event.currentTarget as HTMLInputElement).checked)}
+          />
+          Enabled
+        </label>
+      </div>
+
+      {error ? <div className="form-error" role="alert">{error}</div> : null}
+
+      <div className="form-actions">
+        <button className="btn small" type="button" onClick={props.onClose}>
+          Cancel
+        </button>
+        <button className="btn primary small" type="submit" disabled={submitting}>
+          {submitting
+            ? "Saving…"
+            : editing
+              ? "Save provider"
+              : "Add provider"}
+        </button>
+      </div>
+    </form>
   );
 }
 
