@@ -6,11 +6,11 @@ import type {
   QuestionPrompt,
   QuestionRisk,
 } from "@amoshydra/oktoso-contracts";
+import {
+  isDestructiveText,
+  isSensitiveText,
+} from "../lib/destructive";
 
-const DESTRUCTIVE =
-  /\b(delete|remove|drop|reset|overwrite|wipe|truncate|force[- ]push|revoke|rotate|destroy|kill|rm\s+-rf)\b/i;
-const SENSITIVE =
-  /\b(password|passphrase|token|secret|api[- ]key|credential|private[- ]key)\b/i;
 const COURTESY =
   /^(anything else|does (that|this) make sense|any questions|all good|sound good|thoughts|let me know|thanks|thank you|cheers)\b/i;
 const INFORMATION_REQUEST =
@@ -77,11 +77,11 @@ function truncate(value: string, max: number): string {
 }
 
 function isDestructive(value: string): boolean {
-  return DESTRUCTIVE.test(value);
+  return isDestructiveText(value);
 }
 
 function isSensitive(value: string): boolean {
-  return SENSITIVE.test(value);
+  return isSensitiveText(value);
 }
 
 function choiceRisk(value: string): {

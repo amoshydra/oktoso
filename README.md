@@ -143,6 +143,19 @@ Paired browsers use the 30-day HttpOnly session cookie and do not store the toke
 
 Opening a pairing page does not consume the code, so chat link previews are safe. Pressing **Pair this device** consumes it. After five minutes, the page shows an expired message telling you to press `p` in the hub terminal; if that browser is already paired, it goes straight to the app.
 
+## MCP for agents
+
+An MCP client such as OpenCode can use Oktoso as its control plane:
+
+```sh
+oktoso mcp              # read-only tools
+oktoso mcp --allow-write
+```
+
+The bridge speaks MCP over stdio, reads the hub config, and calls the hub REST API with the config token. Read-only is the default. Write tools cover sending, creating, interrupting, marking read, and acting on attention. The server refuses writes to the OpenCode session that invoked it and requires `confirm: true` before approving an attention item.
+
+See [`docs/mcp-northbound.md`](docs/mcp-northbound.md) for the OpenCode config, tool list, controller prompt, and safety rules.
+
 ## Terminal UI
 
 In a foreground TTY, the hub renders a full-screen dashboard:

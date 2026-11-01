@@ -1,7 +1,7 @@
 import { defaultConfigPath } from "../config/paths";
 
 export interface CliOptions {
-  command: "serve" | "pair" | "status";
+  command: "serve" | "pair" | "status" | "mcp";
   configPath: string;
   explicitConfig: boolean;
   host?: string;
@@ -11,6 +11,7 @@ export interface CliOptions {
   logJson: boolean;
   verbose: boolean;
   noColor: boolean;
+  allowWrite: boolean;
   logFile?: string;
   logDir?: string;
   noLogFile: boolean;
@@ -37,7 +38,7 @@ export function parseArgs(
   env: Env = process.env,
   platform: NodeJS.Platform = process.platform,
 ): CliOptions {
-  let command: "serve" | "pair" | "status" = "serve";
+  let command: "serve" | "pair" | "status" | "mcp" = "serve";
   let configPath = env.HUB_CONFIG ?? defaultConfigPath(env, platform);
   let explicitConfig = Boolean(env.HUB_CONFIG);
   let host: string | undefined;
@@ -47,6 +48,7 @@ export function parseArgs(
   let logJson = false;
   let verbose = false;
   let noColor = Boolean(env.NO_COLOR);
+  let allowWrite = false;
   let logFile: string | undefined;
   let logDir = env.HUB_LOG_DIR;
   let noLogFile = false;
@@ -62,6 +64,10 @@ export function parseArgs(
         break;
       case "status":
         command = "status";
+        break;
+      case "mcp":
+      case "--mcp":
+        command = "mcp";
         break;
       case "--host": {
         const read = readValue(argv, index, arg);
@@ -105,6 +111,9 @@ export function parseArgs(
       case "--no-color":
         noColor = true;
         break;
+      case "--allow-write":
+        allowWrite = true;
+        break;
       case "--log-file": {
         const read = readValue(argv, index, arg);
         logFile = read.value;
@@ -144,6 +153,7 @@ export function parseArgs(
     logJson,
     verbose,
     noColor,
+    allowWrite,
     logFile,
     logDir,
     noLogFile,
@@ -159,6 +169,7 @@ Usage:
   oktoso [options]
   oktoso pair [--url <url>] [--config <path>]
   oktoso status [--config <path>]
+  oktoso mcp [--allow-write] [--url <url>] [--config <path>]
 
 Options:
   --config <path>    Hub config file (default: see Config below)
@@ -171,7 +182,8 @@ Options:
   --log-file <path>  Persistent log file
   --log-dir <path>   Log directory
   --no-log-file      Disable the persistent log file
-  --url <url>        Base URL for pairing links (pair command)
+  --url <url>        Base URL for pairing links or the MCP hub endpoint
+  --allow-write      Enable write tools in the MCP server (read-only by default)
   --help, -h         Show this help
   --version, -v      Show the version
 

@@ -23,6 +23,7 @@ import {
   primaryPairingUrl,
 } from "./cli/pairing-panel";
 import { createTheme } from "./cli/terminal";
+import { runMcpCommand } from "./cli/mcp-command";
 import { TerminalUi } from "./cli/tui";
 import type { PairingLinkInfo, UiSnapshot } from "./cli/types";
 import {
@@ -227,6 +228,24 @@ async function main(): Promise<void> {
         `Using ./hub.config.json from the working directory. Move it to ${defaultConfigPath()} or set HUB_CONFIG to keep it elsewhere.\n`,
       );
     }
+  }
+
+  if (options.command === "mcp") {
+    try {
+      await runMcpCommand({
+        configPath: options.configPath,
+        url: options.url,
+        allowWrite: options.allowWrite,
+      });
+    } catch (error) {
+      process.stderr.write(
+        `Unable to start the MCP server: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      process.exitCode = 1;
+    }
+    return;
   }
 
   if (options.command === "status") {

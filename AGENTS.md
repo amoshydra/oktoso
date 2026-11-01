@@ -127,5 +127,6 @@ Keep the dependency rules and vertical-slice order from the code structure docum
 - The hub is the product; clients are thin and replaceable.
 - Provider APIs are the source of truth.
 - No ACP requirement and no local agent processes on the hub.
+- MCP northbound is allowed through the `oktoso mcp` bridge; do not move agent processes into the hub.
 - No networking, tunnel, TLS, or discovery logic in the hub. The operator owns reachability.
 - Run on Node 24+, including Termux. Prefer pure JavaScript dependencies and no native modules.
