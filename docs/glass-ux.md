@@ -198,8 +198,10 @@ required fields, and submits through the existing
 automatically. Successful submission removes the attention item and refreshes the
 inbox.
 
-Frame signatures and scroll acceleration now have unit coverage. Hardware input,
-latency, reconnect behavior, and long-session reading position use the scripted
+Frame signatures, scroll acceleration, and container-level layout snapshots now
+have unit coverage. The layout tests pin the 576×288 bounds, footer position, list
+item mapping, and the single event-capturing container. Hardware input, latency,
+reconnect behavior, and long-session reading position still use the scripted
 checklist in [`g2-hardware-validation.md`](g2-hardware-validation.md). Run
 `pnpm build:single-port && pnpm hardware:check` before the hardware session.
 

@@ -211,5 +211,7 @@ counters for any latency failure.
 - Four rows are visible; longer lists scroll.
 - Voice capture and STT are not implemented. The phone remains the keyboard for
   long or free-form answers.
-- Hardware validation cannot run in CI. The preflight script only checks the
-  manifest and build artifacts.
+- Hardware validation cannot run in CI. The preflight script checks the
+  manifest and build artifacts, and `layout.test.ts` snapshots container
+  geometry, footer position, and the one-capture rule. Real input, latency, and
+  reconnect behavior still need the glasses.
