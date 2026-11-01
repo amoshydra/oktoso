@@ -161,6 +161,9 @@ Seed or open a session with at least 300 readable lines.
 | D4 | Open that attention item. | The summary shows the question text; the action reads `Answer in chat`. |
 | D5 | Answer the question and return to Home/Inbox. | The marker clears without reopening the session. |
 | D6 | Put the hub behind a slow or failing provider. | Discovery omissions do not clear existing markers; the app stays usable. |
+| D7 | Let a subagent finish without asking anything. | No `●` unread row appears for the child; Recent still shows only root sessions. |
+| D8 | Trigger a child permission or provider-native question. | The inbox shows a `›■` or `›?` row, and the detail still resolves the child prompt. |
+| D9 | Check the status glyphs. | `● ? ■ ▲ ! ▶ ▼ ◇ ◆ ›` render without tofu; `⚿`, `✓`, `↳`, `✕`, `✖`, `✔` are not used. |
 
 ## Attention and forms
 

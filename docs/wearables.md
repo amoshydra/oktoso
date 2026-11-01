@@ -22,7 +22,8 @@ The first slice is deliberately narrow:
 - reply menu with canned and 4B-assisted suggestions
 - question reply: when the latest assistant message asks a question, the chat footer shows `? Answer`; the ANSWER list contains choices plus `Type answer`, `More`, and `Read chat`. The list is the only capture container; the footer is a hint. Destructive choices confirm. The phone card shows the question and choice buttons above the keyboard.
 - multiple-question batches: `ANSWER · 2 questions` routes to `Answer on phone`; the phone card shows every question with its own choices and text field, then sends one numbered message and all answer metadata.
-- question discovery: `GET /api/v1/questions` returns compact summaries for up to ten sessions. Home marks the current question, recent rows read `QUESTION`, and unread inbox rows become `QUESTION` with the question text in the detail.
+- question discovery: `GET /api/v1/questions` returns compact summaries for up to ten sessions. Home marks the current question and inbox rows use fixed glyphs for question, permission, approval, unread, and error states.
+- subagent-aware attention: child sessions are excluded from `UNREAD`/`ERROR` noise and from the root-only Recent list. Child permissions and provider-native questions stay visible with a `›` marker because they can block the parent task.
 - question detection at `GET /api/v1/sessions/:ref/question`; derived from the latest completed assistant message, with no provider-side question API
 - stale-question protection: answer sends carry the question ID, message ID, and revision; a changed or resolved question returns `409` and the glasses show `ANSWER · changed` with `Review` / `Read chat`
 - idempotent answer retry: one key per answer draft; the hub caches the accepted result for five minutes

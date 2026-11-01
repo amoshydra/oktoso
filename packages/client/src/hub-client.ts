@@ -110,6 +110,7 @@ export class HubClient {
   async sessions(query: SessionListQuery = {}): Promise<SessionPage> {
     const params = new URLSearchParams();
     if (query.provider) params.set("provider", query.provider);
+    if (query.scope) params.set("scope", query.scope);
     if (query.status) params.set("status", query.status);
     if (query.q) params.set("q", query.q);
     if (query.cursor) params.set("cursor", query.cursor);

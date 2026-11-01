@@ -1449,6 +1449,8 @@ components:
           type: string
         sessionRef:
           type: string
+        parentRef:
+          type: string
         type:
           type: string
           enum:
@@ -1551,6 +1553,8 @@ components:
               id:
                 type: string
               sessionRef:
+                type: string
+              parentRef:
                 type: string
               type:
                 type: string
@@ -1936,6 +1940,14 @@ paths:
             type: string
           required: false
           name: provider
+          in: query
+        - schema:
+            type: string
+            enum:
+              - all
+              - root
+          required: false
+          name: scope
           in: query
         - schema:
             type: string

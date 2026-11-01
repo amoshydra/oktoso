@@ -1445,8 +1445,8 @@ Instead:
 - Opening the session marks it read; the question marker persists until answered.
 - The existing `UNREAD` attention row remains the triage entry. The hub exposes
   compact summaries at `GET /api/v1/questions?ref=…` for up to ten sessions. The
-  G2 home, recent, and inbox surfaces use it to relabel the row `QUESTION` and
-  show the question text. Summaries are cached briefly and provider failures are
+  G2 home, recent, and inbox surfaces use it to show the question glyph (`?`)
+  and the question text. Summaries are cached briefly and provider failures are
   reported separately so an outage does not clear a marker.
 
 ### 9.2 Labels
@@ -1455,9 +1455,9 @@ Instead:
 |---|---|
 | Home current row | `Current · ? <session>` |
 | Chat footer | `? Answer · L456-461/461 · M30/30` |
-| Inbox row (when cheap) | `QUESTION · <session>` |
+| Inbox row (when cheap) | `? <session>` |
 | Inbox summary (when cheap) | `<question text>` (clamp 54) |
-| Provider-native question | `QUESTION · <session>` (unchanged) |
+| Provider-native question | `? <session>` (unchanged) |
 
 Read the two `QUESTION` rows carefully: the provider-native one opens the
 attention form, the chat-derived one opens chat at the question. The detail
@@ -1474,6 +1474,12 @@ resolved question.
 
 A `questions` filter on the session list remains a future addition. Do not create
 a new blocking attention type for chat-derived questions.
+
+Sessions with `parentRef` are child sessions. The G2 Recent list requests
+`scope=root`, and child unread/error items are suppressed. Child provider-native
+permissions and questions remain visible with `parentRef` so the glasses can mark
+them as subagent work. This is deliberate for OpenCode, where a child permission
+prompt may not propagate to the parent UI and can stall the parent turn.
 
 ---
 

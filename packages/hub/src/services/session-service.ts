@@ -118,6 +118,7 @@ export class SessionService {
     const search = query.q?.trim().toLowerCase();
 
     let data = [...this.sessions.values()];
+    if (query.scope === "root") data = data.filter((session) => !session.parentRef);
     if (query.provider) data = data.filter((session) => session.providerID === query.provider);
     if (query.status) data = data.filter((session) => session.status === query.status);
     if (search) {
