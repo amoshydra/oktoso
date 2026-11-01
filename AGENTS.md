@@ -39,6 +39,7 @@ Six roles only:
 | `--text-lg` | 16px | Topbar/page titles, inbox card titles |
 | `--text-xl` | 20px | Chat document title |
 
+- Sans: Inter Variable. Mono: IBM Plex Mono. Do not add a third family.
 - Weights: 400, 500, 600, 700 only.
 - Chat prose line height: 1.6. UI copy: 1.5. Titles: 1.3.
 - Use tabular figures for times, costs, and token counts.

@@ -445,11 +445,12 @@ The type scale has six roles, not a continuum of half-steps:
 | `text-lg` | 16px | Topbar/page titles, inbox card titles |
 | `text-xl` | 20px | Chat document title |
 
-- UI: system sans stack, 14px base.
+- Sans: Inter Variable, self-hosted through Fontsource, 14px base.
+- Mono: IBM Plex Mono, self-hosted through Fontsource.
 - Weights: 400, 500, 600, 700 only.
 - Line height: 1.6 for chat prose, 1.5 for UI copy, 1.3 for titles.
 - Numeric metadata uses tabular figures.
-- Code and identifiers: system monospace.
+- Code and identifiers use IBM Plex Mono.
 
 ### Spacing and shape
 
