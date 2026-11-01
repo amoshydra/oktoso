@@ -1,3 +1,5 @@
+import { defaultConfigPath } from "../config/paths";
+
 export interface CliOptions {
   command: "serve" | "pair" | "status";
   configPath: string;
@@ -33,9 +35,10 @@ function readValue(
 export function parseArgs(
   argv: string[] = process.argv.slice(2),
   env: Env = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): CliOptions {
   let command: "serve" | "pair" | "status" = "serve";
-  let configPath = env.HUB_CONFIG ?? "./hub.config.json";
+  let configPath = env.HUB_CONFIG ?? defaultConfigPath(env, platform);
   let explicitConfig = Boolean(env.HUB_CONFIG);
   let host: string | undefined;
   let port: number | undefined;
@@ -158,7 +161,7 @@ Usage:
   oktoso status [--config <path>]
 
 Options:
-  --config <path>    Hub config file (default: ./hub.config.json)
+  --config <path>    Hub config file (default: see Config below)
   --host <host>      Override the bind host
   --port <port>      Override the bind port
   --plain            No TUI; human output on stdout, JSON logs on stderr
@@ -174,6 +177,15 @@ Options:
 
 Keys:
   p pair   l logs   r refresh   o open   Ctrl+C quit   ? help
+
+Config:
+  Linux/Termux  $XDG_CONFIG_HOME/oktoso/hub.config.json  (~/.config by default)
+  macOS         ~/Library/Application Support/Oktoso/hub.config.json
+  Windows       %LOCALAPPDATA%\\Oktoso\\hub.config.json
+  HUB_CONFIG        Override the config path
+  The file holds the owner and provider credentials and must be 0600.
+  A legacy ./hub.config.json in the working directory is used when the
+  platform config does not exist yet.
 
 Logs:
   Linux/Termux  $XDG_STATE_HOME/oktoso/logs/hub.log

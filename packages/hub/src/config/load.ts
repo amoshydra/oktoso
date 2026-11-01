@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { defaultDataDir } from "./paths";
+import { assertConfigFilePermissions } from "./permissions";
 import {
   zHubConfig,
   zHubPairingConfig,
@@ -33,9 +35,13 @@ export async function loadConfig(
   filePath: string,
   env: Env = process.env,
 ): Promise<HubConfig> {
+  await assertConfigFilePermissions(filePath);
   const raw = JSON.parse(await readFile(filePath, "utf8")) as unknown;
   const interpolated = interpolate(raw, env) as Record<string, unknown>;
 
+  if (interpolated.dataDir === undefined) {
+    interpolated.dataDir = defaultDataDir(env);
+  }
   if (env.HUB_HOST) interpolated.host = env.HUB_HOST;
   if (env.HUB_PORT) interpolated.port = env.HUB_PORT;
   if (env.HUB_TOKEN) interpolated.token = env.HUB_TOKEN;
@@ -58,6 +64,7 @@ export async function loadHubTarget(
   filePath: string,
   env: Env = process.env,
 ): Promise<HubTarget> {
+  await assertConfigFilePermissions(filePath);
   const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
     string,
     unknown
@@ -78,6 +85,7 @@ export async function loadPairingConfig(
   filePath: string,
   env: Env = process.env,
 ): Promise<HubPairingConfig> {
+  await assertConfigFilePermissions(filePath);
   const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
     string,
     unknown

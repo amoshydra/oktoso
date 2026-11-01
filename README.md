@@ -87,7 +87,19 @@ Starting without a config bootstraps an empty local workspace:
 pnpm start
 ```
 
-It creates `hub.config.json` with no providers, generates a persistent owner token, prints it once, and starts the hub. On that first start it also prints a one-time pairing link once the server is listening. Add providers to the config and restart. An explicitly requested `--config` or `HUB_CONFIG` path is never created implicitly.
+It creates the hub config with no providers, generates a persistent owner token, prints it once, and starts the hub. On that first start it also prints a one-time pairing link once the server is listening. Add providers to the config and restart. An explicitly requested `--config` or `HUB_CONFIG` path is never created implicitly.
+
+The config lives with the rest of your user configuration, not in the working directory:
+
+| Platform | Config |
+|---|---|
+| Linux, Termux | `$XDG_CONFIG_HOME/oktoso/hub.config.json` (`~/.config/oktoso/hub.config.json` by default) |
+| macOS | `~/Library/Application Support/Oktoso/hub.config.json` |
+| Windows | `%LOCALAPPDATA%\Oktoso\hub.config.json` |
+
+`--config <path>` or `HUB_CONFIG` overrides it. A legacy `./hub.config.json` in the working directory is still used when the platform config does not exist yet, and the hub prints one warning line when it falls back. Runtime state defaults to the platform state directory (`$XDG_STATE_HOME/oktoso`, `~/Library/Application Support/Oktoso/data`, `%LOCALAPPDATA%\Oktoso\data`), so read markers and drafts do not fork per working directory.
+
+The file holds the owner token and every provider credential. It is created `0600` inside a `0700` directory, and the hub refuses to start when the file is readable or writable by another account, printing the `chmod 600` command to run.
 
 `pnpm start` runs the built `dist/hub.js`. The same entry point is exposed as the `oktoso` bin for an npx install: `npx @amoshydra/oktoso` starts the hub, and `npx @amoshydra/oktoso pair` connects to a running hub.
 

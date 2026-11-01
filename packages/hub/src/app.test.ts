@@ -48,10 +48,18 @@ async function createTestApp(options: {
 } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
-  const config = await loadConfig(
-    new URL("../test/fixtures/hub.config.json", import.meta.url).pathname,
-    { HUB_TOKEN: token, OPENCODE_PASSWORD: "secret" },
+  // The loader refuses a config that other accounts can read, and git cannot
+  // store 0600, so copy the tracked fixture into an owner-only temp file.
+  const configPath = join(await tempRoot(), "hub.config.json");
+  await writeFile(
+    configPath,
+    await readFile(new URL("../test/fixtures/hub.config.json", import.meta.url), "utf8"),
+    { mode: 0o600 },
   );
+  const config = await loadConfig(configPath, {
+    HUB_TOKEN: token,
+    OPENCODE_PASSWORD: "secret",
+  });
   config.providers[0]!.baseUrl = fake.url;
   if (options.cors) config.cors = options.cors;
   const store = options.store ?? new MemoryStateStore();
