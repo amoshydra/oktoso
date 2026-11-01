@@ -34,7 +34,8 @@ The first slice is deliberately narrow:
 - overlapping chat fetches are sequenced, and chat rendering is serialized
 - phone keyboard fallback
 - opening a session stores a hub read marker so web and glass agree on unread state
-- offline/retry polling; recent-session and chat-open loading panels
+- offline/retry polling with distinct auth, offline, provider-offline, timeout, rate-limit, not-found, and server states; recent-session and chat-open loading panels
+- live/reconnecting/polling status on the home footer and phone connection pill
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 - a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 

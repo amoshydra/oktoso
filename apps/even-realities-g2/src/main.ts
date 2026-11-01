@@ -51,6 +51,7 @@ import {
   type BatchAnswerDraft,
 } from "./answer-model";
 import { glassInput } from "./input";
+import { classifyFailure, type FailureInfo } from "./failure";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,7 +72,8 @@ type Screen =
   | "answer-confirm"
   | "answer-stale"
   | "reply"
-  | "choices";
+  | "choices"
+  | "failure";
 
 interface AppState {
   screen: Screen;
@@ -113,7 +115,10 @@ interface AppState {
   answerKeyText?: string;
   pendingAnswerChoice?: AnswerChoice;
   notice?: string;
-  error?: string;
+  failure?: FailureInfo;
+  failureReturnScreen: Screen;
+  chatFailure?: FailureInfo;
+  streamStatus: "connecting" | "live" | "reconnecting" | "polling";
 }
 
 interface BatchAnswerState {
@@ -156,6 +161,8 @@ const state: AppState = {
   answerKey: undefined,
   answerKeyText: undefined,
   pendingAnswerChoice: undefined,
+  failureReturnScreen: "home",
+  streamStatus: "connecting",
 };
 
 let bridge: EvenAppBridge | undefined;
@@ -181,6 +188,7 @@ let eventController: AbortController | undefined;
 let eventStreamOpen = false;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let eventRefreshActions: Array<() => void | Promise<void>> = [];
+let failureRetry: (() => void | Promise<void>) | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
 let phoneFormItem: Attention | undefined;
@@ -236,6 +244,139 @@ function setPairingStatus(message: string, error = false): void {
 function updateBridgeStats(): void {
   if (!bridge) return;
   bridgeStatus.textContent = `Bridge · ${inputCount} input · ${frameCount} frames · input ${lastInputMs} ms · frame ${lastFrameMs} ms`;
+}
+
+function setStreamStatus(
+  status: AppState["streamStatus"],
+): void {
+  state.streamStatus = status;
+  if (status === "live") setConnection("Connected · live");
+  else if (state.failure && failureAffectsConnection(state.failure)) {
+    setConnection(state.failure.title, true);
+  }
+  else if (status === "connecting") setConnection("Connecting…");
+  else if (status === "reconnecting") setConnection("Reconnecting…");
+  else setConnection("Connected · polling");
+  if (
+    bridge &&
+    (state.screen === "home" ||
+      state.screen === "sessions" ||
+      state.screen === "inbox" ||
+      state.screen === "chat")
+  ) {
+    render();
+  }
+}
+
+function markRequestSuccess(): void {
+  if (!client) return;
+  setConnection(eventStreamOpen ? "Connected · live" : "Connected · polling");
+}
+
+function failureAffectsConnection(failure: FailureInfo): boolean {
+  return failure.kind !== "not-found" && failure.kind !== "conflict";
+}
+
+function markStreamUnreachable(failure: FailureInfo): void {
+  if (
+    failure.kind === "offline" ||
+    failure.kind === "timeout" ||
+    failure.kind === "server"
+  ) {
+    eventStreamOpen = false;
+  }
+}
+
+function clearFailure(): void {
+  const hadFailure = Boolean(state.failure ?? state.chatFailure);
+  state.failure = undefined;
+  state.chatFailure = undefined;
+  failureRetry = undefined;
+  if (hadFailure) markRequestSuccess();
+}
+
+function showFailure(
+  error: unknown,
+  options: {
+    returnScreen?: Screen;
+    retry?: () => void | Promise<void>;
+  } = {},
+): FailureInfo {
+  const failure = classifyFailure(error);
+  markStreamUnreachable(failure);
+  state.failure = failure;
+  state.chatFailure = undefined;
+  state.failureReturnScreen =
+    options.returnScreen ??
+    (state.screen === "failure" ? state.failureReturnScreen : state.screen);
+  failureRetry = options.retry;
+  state.screen = "failure";
+  if (failureAffectsConnection(failure)) setConnection(failure.title, true);
+  else markRequestSuccess();
+  updatePhoneState();
+  render();
+  log(`Failure: ${failure.kind} · ${failure.title}`);
+  return failure;
+}
+
+function isAuthFailure(error: unknown): boolean {
+  return classifyFailure(error).kind === "auth";
+}
+
+function failureMessage(error: unknown): string {
+  return classifyFailure(error).short;
+}
+
+function failureRowLabel(error: FailureInfo | undefined = state.failure): string {
+  if (!error) return "";
+  if (error.action === "pair") return "Pair this phone";
+  if (error.action === "back") return `Back · ${error.title}`;
+  return `Retry · ${error.title}`;
+}
+
+function failureActions(): Array<{
+  id: "retry" | "pair" | "back";
+  label: string;
+}> {
+  const failure = state.failure;
+  if (!failure) return [];
+  const actions: Array<{ id: "retry" | "pair" | "back"; label: string }> = [];
+  if (failure.action === "pair") {
+    actions.push({ id: "pair", label: "Pair this phone" });
+  } else if (failure.action === "retry") {
+    actions.push({ id: "retry", label: "Retry" });
+  }
+  actions.push({ id: "back", label: "Back" });
+  return actions;
+}
+
+function retryFailure(): void {
+  const retry = failureRetry;
+  const target = state.failureReturnScreen;
+  state.failure = undefined;
+  state.chatFailure = undefined;
+  failureRetry = undefined;
+  state.screen = target === "failure" ? "home" : target;
+  render();
+  if (retry) void retry();
+  else void refreshCurrent();
+}
+
+function focusPairing(): void {
+  setPairingStatus(
+    "Session expired. Create a new pairing code, then pair this phone again.",
+    true,
+  );
+  pairingCodeInput.scrollIntoView({ block: "center", behavior: "smooth" });
+  pairingCodeInput.focus();
+}
+
+function streamLabel(): string {
+  if (state.failure?.kind === "offline") return "Offline";
+  if (state.failure?.kind === "auth") return "Pair";
+  if (state.streamStatus === "reconnecting") return "Reconnecting";
+  if (state.streamStatus === "live") return "Live";
+  return "Polling";
 }
 
 function setPhoneStatus(message: string, error = false): void {
@@ -431,7 +572,11 @@ async function submitPhoneForm(): Promise<void> {
     await refreshInbox();
     render();
   } catch (error) {
-    setPhoneFormStatus(errorMessage(error), true);
+    if (isAuthFailure(error)) {
+      showFailure(error, { returnScreen: "attention" });
+      return;
+    }
+    setPhoneFormStatus(failureMessage(error), true);
   } finally {
     phoneFormSubmit.disabled = false;
   }
@@ -639,6 +784,8 @@ async function activateClient(hub: HubClient): Promise<void> {
   const tokenInput = byId<HTMLInputElement>("hub-token");
   tokenInput.value = "";
   tokenInput.placeholder = storedToken ? "Saved token" : "Paired with cookie";
+  hidePhoneForm();
+  clearFailure();
   setConnection("Connected");
   log("Hub connected");
   startEventStream();
@@ -805,6 +952,8 @@ async function restoreConnection(): Promise<void> {
       byId<HTMLInputElement>("hub-token").placeholder = storedToken
         ? "Saved token"
         : "Paired with cookie";
+      hidePhoneForm();
+      clearFailure();
       setConnection("Connected");
       log("Restored hub session");
       startEventStream();
@@ -836,7 +985,17 @@ function startEventStream(): void {
       after: 0,
       signal: controller.signal,
       onStatus: (status) => {
+        if (controller !== eventController) return;
         eventStreamOpen = status === "open";
+        setStreamStatus(
+          status === "open"
+            ? "live"
+            : status === "reconnecting"
+              ? "reconnecting"
+              : status === "connecting"
+                ? "connecting"
+                : "polling",
+        );
         log(`Hub events: ${status}`);
       },
       onEvent: (event) => {
@@ -903,10 +1062,25 @@ function startEventStream(): void {
       },
     })
     .catch((error) => {
-      if (!controller.signal.aborted) {
-        eventStreamOpen = false;
-        log(`Hub events stopped: ${errorMessage(error)}`);
+      if (controller.signal.aborted) return;
+      eventStreamOpen = false;
+      const failure = classifyFailure(error);
+      if (failure.kind === "auth") {
+        const returnScreen =
+          state.screen === "home" ||
+          state.screen === "inbox" ||
+          state.screen === "sessions" ||
+          state.screen === "chat"
+            ? state.screen
+            : state.returnScreen;
+        showFailure(error, {
+          returnScreen,
+          retry: () => startEventStream(),
+        });
+      } else {
+        setStreamStatus("polling");
       }
+      log(`Hub events stopped: ${failure.kind} · ${failure.title}`);
     });
 }
 
@@ -936,15 +1110,22 @@ async function openSessions(): Promise<void> {
   try {
     const page = await client.sessions({ limit: 5 });
     state.sessions = page.data;
-    state.error = undefined;
+    clearFailure();
+    markRequestSuccess();
     state.screen = "sessions";
     render();
     void refreshQuestionSummaries(page.data.map((session) => session.ref));
   } catch (error) {
-    state.error = errorMessage(error);
+    if (isAuthFailure(error)) {
+      showFailure(error, { returnScreen: "home", retry: () => openSessions() });
+      return;
+    }
+    const failure = classifyFailure(error);
+    markStreamUnreachable(failure);
+    state.failure = failure;
     state.screen = "sessions";
     render();
-    log(`Session list failed: ${state.error}`);
+    log(`Session list failed: ${failure.kind} · ${failure.title}`);
   }
 }
 
@@ -956,7 +1137,7 @@ async function refreshInbox(): Promise<void> {
   const previousScreen = state.screen;
   const previousSignature = attentionListSignature(state.attention);
   const previousTotal = state.attentionTotal;
-  const previousError = state.error;
+  const previousFailure = state.failure;
   try {
     const page = await client.attention();
     state.attentionTotal = page.data.length;
@@ -967,24 +1148,36 @@ async function refreshInbox(): Promise<void> {
     ) {
       hidePhoneForm();
     }
-    state.error = undefined;
+    if (state.screen !== "failure") clearFailure();
+    markRequestSuccess();
     if (state.screen === "pairing") state.screen = "home";
     const changed =
       previousScreen !== state.screen ||
       previousSignature !== attentionListSignature(state.attention) ||
       previousTotal !== state.attentionTotal ||
-      Boolean(previousError) !== false;
+      previousFailure !== undefined;
     updatePhoneState();
     if (changed) render();
     void refreshQuestionSummaries(discoveryRefs());
   } catch (error) {
-    state.error = errorMessage(error);
+    if (isAuthFailure(error)) {
+      showFailure(error, {
+        returnScreen: state.screen === "inbox" ? "inbox" : "home",
+        retry: () => refreshInbox(),
+      });
+      return;
+    }
+    const failure = classifyFailure(error);
+    markStreamUnreachable(failure);
+    state.failure = failure;
+    if (state.screen === "chat") state.chatFailure = failure;
     if (state.screen === "pairing") state.screen = "home";
     const changed =
       previousScreen !== state.screen ||
-      previousError !== state.error;
+      previousFailure?.kind !== failure.kind ||
+      previousFailure?.message !== failure.message;
     if (changed) render();
-    log(`Inbox refresh failed: ${state.error}`);
+    log(`Inbox refresh failed: ${failure.kind} · ${failure.title}`);
   }
 }
 
@@ -998,7 +1191,7 @@ async function openAttention(index: number): Promise<void> {
   const item = state.attention[index];
   if (!item) return;
   state.selectedAttention = item;
-  state.error = undefined;
+  clearFailure();
   state.screen = "attention";
   if (item.fields?.length && !canUseGlassForm(item)) showPhoneForm(item);
   else hidePhoneForm();
@@ -1123,7 +1316,11 @@ async function submitGlassForm(item: Attention): Promise<void> {
     await refreshInbox();
     render();
   } catch (error) {
-    state.formError = errorMessage(error);
+    if (isAuthFailure(error)) {
+      showFailure(error, { returnScreen: "attention" });
+      return;
+    }
+    state.formError = failureMessage(error);
     render();
   } finally {
     state.formBusy = false;
@@ -1153,9 +1350,11 @@ async function performAttention(index: number): Promise<void> {
     state.selectedAttention = undefined;
     await refreshInbox();
   } catch (error) {
-    state.error = errorMessage(error);
-    render();
-    log(`Attention action failed: ${state.error}`);
+    showFailure(error, {
+      returnScreen: "attention",
+      retry: () => performAttention(index),
+    });
+    log(`Attention action failed: ${failureMessage(error)}`);
   }
 }
 
@@ -1192,7 +1391,7 @@ async function openChat(
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   state.screen = "chat";
-  state.error = undefined;
+  clearFailure();
   state.notice = undefined;
   hidePhoneForm();
   updatePhoneState();
@@ -1278,6 +1477,7 @@ async function sendAnswer(
     state.pendingAnswerText = undefined;
     state.pendingAnswerChoice = undefined;
     rememberQuestionSummary(ref, null);
+    markRequestSuccess();
     state.screen = "answer-sent";
     updatePhoneQuestion();
     if (source === "phone") {
@@ -1309,11 +1509,19 @@ async function sendAnswer(
       return;
     }
 
-    state.answerError = errorMessage(error);
+    const failure = classifyFailure(error);
+    if (failure.kind === "auth") {
+      showFailure(error, {
+        returnScreen: "chat",
+        retry: () => sendAnswer(text, source, choice),
+      });
+      return;
+    }
+    state.answerError = failure.short;
     state.screen = "answer";
-    if (source === "phone") setPhoneStatus(state.answerError, true);
+    if (source === "phone") setPhoneStatus(failure.short, true);
     render();
-    log(`Answer send failed: ${state.answerError}`);
+    log(`Answer send failed: ${failure.kind} · ${failure.title}`);
   }
 }
 
@@ -1663,6 +1871,7 @@ async function sendBatchAnswers(): Promise<void> {
     state.answerKey = undefined;
     state.answerKeyText = undefined;
     rememberQuestionSummary(ref, null);
+    markRequestSuccess();
     state.screen = "answer-sent";
     setPhoneStatus("Answers sent.");
     updatePhoneQuestion();
@@ -1691,12 +1900,20 @@ async function sendBatchAnswers(): Promise<void> {
       return;
     }
 
-    state.answerError = errorMessage(error);
+    const failure = classifyFailure(error);
+    if (failure.kind === "auth") {
+      showFailure(error, {
+        returnScreen: "chat",
+        retry: () => sendBatchAnswers(),
+      });
+      return;
+    }
+    state.answerError = failure.short;
     state.screen = "answer";
-    setPhoneStatus(state.answerError, true);
+    setPhoneStatus(failure.short, true);
     updatePhoneQuestion();
     render();
-    log(`Batch answer send failed: ${state.answerError}`);
+    log(`Batch answer send failed: ${failure.kind} · ${failure.title}`);
   }
 }
 
@@ -1731,8 +1948,9 @@ async function loadChat(quiet: boolean): Promise<void> {
       : initialViewport(built, CHAT_VISIBLE_LINES);
     state.chatOffset = viewport.offset;
     state.chatNewBelow = viewport.newBelow;
-    state.error = undefined;
+    state.chatFailure = undefined;
     state.chatLoading = false;
+    markRequestSuccess();
     const changed =
       previousLines.length !== state.chatLines.length ||
       previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -1747,10 +1965,24 @@ async function loadChat(quiet: boolean): Promise<void> {
     updatePhoneState();
   } catch (error) {
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
-    state.error = errorMessage(error);
+    const failure = classifyFailure(error);
+    markStreamUnreachable(failure);
+    if (failure.kind === "auth" || state.chatMessages.length === 0) {
+      showFailure(error, {
+        returnScreen: state.returnScreen,
+        retry: () =>
+          openChat(
+            ref,
+            state.sessionTitle ?? "Session",
+            state.returnScreen,
+          ),
+      });
+      return;
+    }
+    state.chatFailure = failure;
     state.chatLoading = false;
     render();
-    log(`Chat load failed: ${state.error}`);
+    log(`Chat load failed: ${failure.kind} · ${failure.title}`);
   }
 }
 
@@ -1839,6 +2071,7 @@ function chatView(): { header: string; body: string; footer: string } {
       `${first}-${last}/${total}`,
       messageLabel,
       state.chatActivity,
+      state.chatFailure?.short ?? "",
       state.chatNewBelow ? "New below" : "",
       hint,
     ]
@@ -1924,13 +2157,16 @@ async function openReply(): Promise<void> {
     const options = await client.replyOptions(state.sessionRef, "reply");
     state.replyOptions = options.data;
     state.screen = "reply";
-    state.error = undefined;
+    clearFailure();
+    markRequestSuccess();
     state.notice = undefined;
     render();
   } catch (error) {
-    state.error = errorMessage(error);
-    render();
-    log(`Reply options failed: ${state.error}`);
+    showFailure(error, {
+      returnScreen: state.replyReturnScreen,
+      retry: () => openReply(),
+    });
+    log(`Reply options failed: ${failureMessage(error)}`);
   }
 }
 
@@ -2028,9 +2264,11 @@ async function executeReply(option: ReplyOption): Promise<void> {
       await loadChat(false);
     }
   } catch (error) {
-    state.error = errorMessage(error);
-    render();
-    log(`Reply failed: ${state.error}`);
+    showFailure(error, {
+      returnScreen: state.replyReturnScreen,
+      retry: () => executeReply(option),
+    });
+    log(`Reply failed: ${failureMessage(error)}`);
   }
 }
 
@@ -2083,14 +2321,24 @@ async function performChoice(index: number): Promise<void> {
     state.notice = "Choice sent.";
     await loadChat(false);
   } catch (error) {
-    state.error = errorMessage(error);
-    render();
-    log(`Choice send failed: ${state.error}`);
+    showFailure(error, {
+      returnScreen: "choices",
+      retry: () => performChoice(index),
+    });
+    log(`Choice send failed: ${failureMessage(error)}`);
   }
 }
 
 function back(): void {
   hidePhoneForm();
+  if (state.screen === "failure") {
+    const target = state.failureReturnScreen;
+    state.failure = undefined;
+    failureRetry = undefined;
+    state.screen = target === "failure" ? "home" : target;
+    render();
+    return;
+  }
   if (state.screen === "answer") {
     state.screen = "chat";
     state.answerMode = false;
@@ -2189,10 +2437,31 @@ function back(): void {
   }
 }
 
+function handleInlineFailure(): void {
+  const failure = state.failure;
+  if (!failure) return;
+  if (failure.action === "pair") {
+    focusPairing();
+    return;
+  }
+  if (failure.action === "back") {
+    clearFailure();
+    state.screen = "home";
+    render();
+    return;
+  }
+  clearFailure();
+  if (state.screen === "sessions") void openSessions();
+  else void refreshInbox();
+}
+
 function handleListClick(index: number): void {
   switch (state.screen) {
-    case "home":
-      if (index === 0) {
+    case "home": {
+      const failureIndex = 2 + (state.sessionTitle ? 1 : 0);
+      if (state.failure && index === failureIndex) {
+        handleInlineFailure();
+      } else if (index === 0) {
         state.screen = "inbox";
         render();
         void refreshInbox();
@@ -2200,20 +2469,22 @@ function handleListClick(index: number): void {
         void openSessions();
       } else if (index === 2 && state.sessionRef) {
         void openChat(state.sessionRef, state.sessionTitle ?? "Session", "home");
-      } else if (state.error) {
-        void refreshInbox();
       }
       break;
+    }
     case "sessions": {
       const session = state.sessions[index];
       if (session) void openChat(session.ref, session.title, "sessions");
+      else if (state.failure && index === state.sessions.length) {
+        handleInlineFailure();
+      }
       break;
     }
     case "inbox":
-      if (state.attention.length === 0 && state.error) {
-        void refreshInbox();
-      } else {
+      if (state.attention[index]) {
         void openAttention(index);
+      } else if (state.failure && index === state.attention.length) {
+        handleInlineFailure();
       }
       break;
     case "glass-form": {
@@ -2253,12 +2524,19 @@ function handleListClick(index: number): void {
     case "choices":
       void performChoice(index);
       break;
+    case "failure":
+      performFailureAction(index);
+      break;
     default:
       break;
   }
 }
 
 function handleTextClick(): void {
+  if (state.screen === "failure") {
+    performFailureAction(0);
+    return;
+  }
   if (state.screen === "chat") {
     if (state.question) openAnswer();
     else void openReply();
@@ -2311,6 +2589,14 @@ async function processEvents(): Promise<void> {
   }
 }
 
+function performFailureAction(index: number): void {
+  const action = failureActions()[index];
+  if (!action) return;
+  if (action.id === "retry") retryFailure();
+  else if (action.id === "pair") focusPairing();
+  else back();
+}
+
 function render(): void {
   if (!bridge) return;
   updatePhoneQuestion();
@@ -2320,6 +2606,25 @@ function render(): void {
       "Pair in phone\n\nScan the hub QR\nor paste its code.\nThen connect.";
     if (setPreview("OKTOSO", body, "Phone setup")) {
       void showPage(textPage(body, "Phone setup"));
+    }
+    return;
+  }
+  if (state.screen === "failure") {
+    const failure = state.failure;
+    if (!failure) {
+      state.screen = "home";
+      render();
+      return;
+    }
+    const actions = failureActions();
+    const items = actions.map((action) => action.label);
+    const body = wrapText(failure.message, 54, 2).join("\n");
+    const footer =
+      failure.action === "pair"
+        ? "Pair again to continue"
+        : "Tap choose · Back ×2";
+    if (setPreview(failure.header, body, footer, items)) {
+      void showPage(listPage(failure.header, items, footer, body));
     }
     return;
   }
@@ -2337,19 +2642,11 @@ function render(): void {
             )}`,
           ]
         : []),
-      ...(state.error ? ["Retry connection"] : []),
+      ...(state.failure ? [failureRowLabel()] : []),
     ];
-    if (
-      setPreview(
-        "OKTOSO",
-        items.join("\n"),
-        "Tap open   Swipe move",
-        items,
-      )
-    ) {
-      void showPage(
-        listPage("OKTOSO", items, "Tap open   Swipe move"),
-      );
+    const footer = `Tap open   Swipe move   ${streamLabel()}`;
+    if (setPreview("OKTOSO", items.join("\n"), footer, items)) {
+      void showPage(listPage("OKTOSO", items, footer));
     }
     return;
   }
@@ -2363,21 +2660,19 @@ function render(): void {
             54,
           ),
         )
-      : [state.error ? "Offline · back to retry" : "No recent sessions"];
+      : [state.failure?.title ?? "No recent sessions"];
+    if (state.failure) items.push(failureRowLabel());
+    const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
     if (
       setPreview(
         `RECENT ${state.sessions.length}`,
         items.join("\n"),
-        "Tap open   Swipe move   Back ×2",
+        footer,
         items,
       )
     ) {
       void showPage(
-        listPage(
-          `RECENT ${state.sessions.length}`,
-          items,
-          "Tap open   Swipe move   Back ×2",
-        ),
+        listPage(`RECENT ${state.sessions.length}`, items, footer),
       );
     }
     return;
@@ -2390,22 +2685,19 @@ function render(): void {
             54,
           ),
         )
-      : [state.error ? "Offline · double-tap to retry" : "Nothing needs you"];
-    if (state.error) items.push("Retry connection");
+      : [state.failure?.title ?? "Nothing needs you"];
+    if (state.failure) items.push(failureRowLabel());
+    const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
     if (
       setPreview(
         `ATTENTION ${state.attention.length}`,
         items.join("\n"),
-        "Tap open   Swipe move   Back ×2",
+        footer,
         items,
       )
     ) {
       void showPage(
-        listPage(
-          `ATTENTION ${state.attention.length}`,
-          items,
-          "Tap open   Swipe move   Back ×2",
-        ),
+        listPage(`ATTENTION ${state.attention.length}`, items, footer),
       );
     }
     return;
@@ -2918,12 +3210,20 @@ async function sendPhone(): Promise<void> {
   try {
     await client.sendMessage(state.sessionRef, { text });
     phoneText.value = "";
+    markRequestSuccess();
     setPhoneStatus("Sent.");
     state.screen = "chat";
     await loadChat(false);
     await loadQuestion(state.sessionRef);
   } catch (error) {
-    setPhoneStatus(errorMessage(error), true);
+    if (isAuthFailure(error)) {
+      showFailure(error, {
+        returnScreen: "chat",
+        retry: () => sendPhone(),
+      });
+      return;
+    }
+    setPhoneStatus(failureMessage(error), true);
   } finally {
     syncPhoneSession();
   }

@@ -175,11 +175,13 @@ Seed or open a session with at least 300 readable lines.
 
 | ID | Action | Expected |
 |---|---|---|
-| F1 | Stop the hub while the app is open. | The existing screen remains readable; the app shows an offline/retry state. |
-| F2 | Start the hub again. | The app reconnects without a relaunch when credentials are still valid. |
-| F3 | Revoke the owner token and restart the hub. | The app shows a re-pair/connection error; no crash loop. |
-| F4 | Make a provider fail while opening Recent. | The loading state ends with an error; Back returns Home. |
-| F5 | Open Chat while a provider is slow. | `Opening session…` appears immediately; Back still works. |
+| F1 | Stop the hub while the app is open. | The existing screen remains readable; a failed action shows `HUB OFFLINE` with Retry/Back, and background refresh adds an inline retry row. |
+| F2 | Start the hub again and tap Retry. | The app reconnects without a relaunch when credentials are still valid. |
+| F3 | Revoke the owner token and restart the hub. | A request shows `SESSION EXPIRED` with `Pair this phone`; no crash loop. |
+| F4 | Make a provider fail while opening Recent. | The loading state ends with an inline `Retry · Agent offline` row; Back returns Home. |
+| F5 | Open Chat while a provider is slow. | `Opening session…` appears immediately; Back still works. A timeout shows `TIMEOUT` with Retry/Back. |
+| F6 | Drop SSE while keeping HTTP available. | The home footer changes from `Live` to `Polling` or `Reconnecting`; the phone pill matches. |
+| F7 | Trigger a 429 from the hub. | The failure reads `HUB BUSY` and offers Retry. |
 
 ## Results
 
