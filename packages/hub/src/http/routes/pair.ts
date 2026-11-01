@@ -6,7 +6,7 @@ import {
   isSecureRequest,
   setHubSessionCookie,
 } from "../auth-cookie";
-import { isSameOriginRequest, requestHost } from "../origin";
+import { isPairingRequestAllowed, requestHost } from "../origin";
 import type { AppEnv } from "../types";
 
 export interface PairRouteDeps {
@@ -141,7 +141,13 @@ export function registerPairRoutes(
 
   app.post("/pair/:code", (c) => {
     noStore(c);
-    if (c.req.header("origin") && !isSameOriginRequest(c)) {
+    if (!isPairingRequestAllowed(c)) {
+      c.get("logger").warn("pairing origin rejected", {
+        origin: c.req.header("origin") ?? null,
+        host: requestHost(c) ?? null,
+        forwardedHost: c.req.header("x-forwarded-host") ?? null,
+        site: c.req.header("sec-fetch-site") ?? null,
+      });
       throw new AppError(
         "forbidden",
         "Cross-origin pairing request rejected",
