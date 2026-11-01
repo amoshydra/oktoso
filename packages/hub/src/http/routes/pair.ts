@@ -56,6 +56,8 @@ function pageShell(title: string, body: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#08090b">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <title>${escapeHtml(title)}</title>
   <style>
     @font-face {
@@ -75,7 +77,8 @@ function pageShell(title: string, body: string): string {
     :root { color-scheme: dark; }
     body { font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 0; background: #08090b; color: #f4f6f9; }
     main { max-width: 32rem; margin: 12vh auto; padding: 0 1.5rem; }
-    .brand { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #2a2f38; color: #f4f6f9; font-size: 12px; font-weight: 700; margin-bottom: 24px; }
+    .brand { width: 40px; height: 40px; margin-bottom: 24px; }
+    .brand svg { display: block; }
     .eyebrow { margin: 0 0 8px; color: #8f97a5; font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
     h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.25; letter-spacing: -.03em; }
     p { color: #b5bcc8; line-height: 1.5; }
@@ -90,7 +93,13 @@ function pageShell(title: string, body: string): string {
 </head>
 <body>
   <main>
-    <div class="brand">AH</div>
+    <div class="brand" role="img" aria-label="Oktoso">
+      <svg width="40" height="40" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+        <rect width="512" height="512" rx="116" fill="#a9bdff"/>
+        <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="#07080b" stroke-width="44" stroke-linejoin="round"/>
+        <circle cx="256" cy="256" r="44" fill="#07080b"/>
+      </svg>
+    </div>
     <p class="eyebrow">Oktoso</p>
     ${body}
   </main>

@@ -222,14 +222,6 @@ svg {
 .rail-logo {
   width: 36px;
   height: 36px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
-  color: var(--on-accent);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: var(--text-sm);
-  letter-spacing: -0.03em;
   margin-bottom: 8px;
 }
 
