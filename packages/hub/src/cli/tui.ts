@@ -1,7 +1,6 @@
 import type { LogRecord } from "../lib/logger";
 import {
   boxedPanel,
-  formatCountdown,
   formatExpiry,
   pairingUrl,
   primaryPairingUrl,
@@ -116,6 +115,8 @@ export class TerminalUi {
   private renderTimer?: NodeJS.Timeout;
   private tickTimer?: NodeJS.Timeout;
   private noticeTimer?: NodeJS.Timeout;
+  private pairedTimer?: NodeJS.Timeout;
+  private lastFrame = "";
   private readonly onKey = (data: Buffer | string) => this.handleKey(data.toString());
   private readonly onResize = () => this.render();
 
@@ -140,6 +141,7 @@ export class TerminalUi {
     }
 
     this.active = true;
+    this.lastFrame = "";
     process.stdin.setEncoding("utf8");
     process.stdin.resume();
     process.stdin.on("data", this.onKey);
@@ -155,6 +157,8 @@ export class TerminalUi {
     if (this.renderTimer) clearTimeout(this.renderTimer);
     if (this.tickTimer) clearInterval(this.tickTimer);
     if (this.noticeTimer) clearTimeout(this.noticeTimer);
+    this.clearPairedTimer();
+    this.lastFrame = "";
     process.stdin.off("data", this.onKey);
     process.stdout.off("resize", this.onResize);
     try {
@@ -191,7 +195,10 @@ export class TerminalUi {
     }
 
     if (record.msg === "pairing redeemed") {
-      if (this.pairing) this.pairingState = "paired";
+      if (this.pairing) {
+        this.pairingState = "paired";
+        this.scheduleDashboardReturn();
+      }
       this.addActivity({
         at: Date.parse(record.time) || Date.now(),
         label: "pairing",
@@ -213,6 +220,7 @@ export class TerminalUi {
   }
 
   showSetup(info: SetupInfo): void {
+    this.clearPairedTimer();
     this.setup = info;
     this.pairing = undefined;
     this.help = false;
@@ -221,6 +229,7 @@ export class TerminalUi {
   }
 
   showPairing(pairing: PairingLinkInfo): void {
+    this.clearPairedTimer();
     this.pairing = pairing;
     this.pairingState = "active";
     this.setup = undefined;
@@ -321,7 +330,9 @@ export class TerminalUi {
       if (this.setup) {
         this.setup = undefined;
       } else if (this.pairing) {
+        this.clearPairedTimer();
         this.pairing = undefined;
+        this.pairingState = "active";
       } else if (this.help) {
         this.help = false;
       } else if (this.logsView) {
@@ -361,6 +372,13 @@ export class TerminalUi {
         if (this.pairing && this.pairingState === "active") {
           const url = this.pairingUrl();
           if (url) this.copy(url, "Pairing link copied");
+          continue;
+        }
+      }
+
+      if (key === "t") {
+        if (this.pairing && this.pairingState === "active") {
+          this.copy(this.pairing.code, "Pairing code copied");
           continue;
         }
       }
@@ -424,6 +442,23 @@ export class TerminalUi {
       `\x1b]52;c;${Buffer.from(value).toString("base64")}\x07`,
     );
     this.notify(message);
+  }
+
+  private scheduleDashboardReturn(): void {
+    this.clearPairedTimer();
+    this.pairedTimer = setTimeout(() => {
+      this.pairedTimer = undefined;
+      if (this.pairingState !== "paired") return;
+      this.pairing = undefined;
+      this.pairingState = "active";
+      this.scheduleRender();
+    }, 5_000);
+  }
+
+  private clearPairedTimer(): void {
+    if (!this.pairedTimer) return;
+    clearTimeout(this.pairedTimer);
+    this.pairedTimer = undefined;
   }
 
   private render(): void {
@@ -603,6 +638,7 @@ export class TerminalUi {
         "r      re-check providers",
         "o      open the web UI or pairing link",
         "c      copy link or owner token",
+        "t      copy the pairing code only",
         "esc    close this help",
         "Ctrl+C quit",
       ],
@@ -621,14 +657,16 @@ export class TerminalUi {
     const link = base && this.pairing
       ? pairingUrl(base, this.pairing.code)
       : undefined;
+    const notice = this.notice ? [truncate(this.notice, inner)] : [];
 
     if (this.pairingState === "paired") {
       const panel = boxedPanel({
         lines: [
           "Paired.",
-          "This browser now has a 30-day session cookie.",
+          "The device now has a 30-day session.",
           "",
-          "esc close",
+          "Returning to the dashboard in 5 seconds.",
+          "esc close now",
         ],
         width,
         title: "Pair a device",
@@ -642,9 +680,10 @@ export class TerminalUi {
       const panel = boxedPanel({
         lines: [
           link ?? "No server URLs available.",
+          ...notice,
           "",
           "Expired. Press p for a new link.",
-          "c copy · p new · esc close",
+          "p new · esc close",
         ],
         width,
         title: "Pair a device",
@@ -659,6 +698,7 @@ export class TerminalUi {
     const topLines = [
       truncate(link, inner),
       `Expires at ${expires}`,
+      ...notice,
     ];
 
     let lines: string[];
@@ -668,7 +708,7 @@ export class TerminalUi {
       const right = [
         ...wrap("Scan with your phone camera or open the link.", textWidth),
         "",
-        ...wrap("c copy · p new · o open · esc close", textWidth),
+        ...wrap("c link · t code · p new · o open · esc close", textWidth),
       ];
       const side: string[] = [];
       const height = Math.max(qr.length, right.length);
@@ -683,7 +723,7 @@ export class TerminalUi {
         ...topLines,
         "",
         "QR hidden: terminal is too narrow.",
-        "c copy · p new · o open · esc close",
+        "c link · t code · p new · o open · esc close",
       ];
     }
 
@@ -691,7 +731,7 @@ export class TerminalUi {
       lines,
       width,
       title: "Pair a device",
-      right: formatCountdown(this.pairing!.expiresAt),
+      right: "active",
       theme: this.theme,
     });
 
@@ -699,16 +739,17 @@ export class TerminalUi {
       const compact = [
         truncate(link, inner),
         `Expires at ${expires}`,
+        ...notice,
         "",
         "QR hidden to fit this terminal. Use the link.",
         "",
-        "c copy · p new · o open · esc close",
+        "c link · t code · p new · o open · esc close",
       ];
       panel = boxedPanel({
         lines: compact,
         width,
         title: "Pair a device",
-        right: formatCountdown(this.pairing!.expiresAt),
+        right: "active",
         theme: this.theme,
       });
     }
@@ -732,6 +773,12 @@ export class TerminalUi {
       if (index < rows - 1) frame.push("\n");
     }
     frame.push("\x1b[J");
-    process.stdout.write(frame.join(""));
+    const output = frame.join("");
+    // Repainting an unchanged frame steals the terminal selection and moves
+    // the cursor. The pairing panel is static by design, so only write when
+    // the screen actually changes.
+    if (output === this.lastFrame) return;
+    this.lastFrame = output;
+    process.stdout.write(output);
   }
 }

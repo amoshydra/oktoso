@@ -244,7 +244,11 @@ describe("hub app", () => {
 
     const page = await app.request(`/pair/${pairing.code}`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Pair this device");
+    const html = await page.text();
+    expect(html).toContain("Pair this device");
+    expect(html).toContain('font-family: "Inter Variable"');
+    expect(html).toContain('font-family: "IBM Plex Mono"');
+    expect(html).toContain("data:font/woff2;base64,");
     expect(page.headers.get("set-cookie")).toBeNull();
 
     const exchange = await app.request("/api/v1/auth/connect", {
