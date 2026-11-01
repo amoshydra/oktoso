@@ -1514,11 +1514,16 @@ a new blocking attention type for chat-derived questions.
 ### 10.1 Error copy rules
 
 - Name the failing layer: hub, session/auth, provider, or question.
-- Always give the next action: `Retry`, `Reconnect in phone`, `Review`,
-  `Read chat`.
+- Always give the next action: `Retry`, `Pair this phone`, `Review`, `Read chat`.
 - Do not show HTTP status codes or stack traces on the glass.
 - Keep the user's answer visible on every error screen.
-- Back always works on `error` and `stale`.
+- Back always works on `failure`, `error`, and `stale`.
+- The failure screen copy is centralized in the G2 failure classifier:
+  `SESSION EXPIRED`, `HUB OFFLINE`, `AGENT OFFLINE`, `PROVIDER SIGN-IN`,
+  `TIMEOUT`, `HUB BUSY`, `NOT FOUND`, `CHANGED`, `HUB ERROR`, and a generic
+  `ERROR` fallback.
+- Background list failures stay inline as `Retry · <state>`; auth failures always
+  open the pairing action.
 
 ### 10.2 Idempotency and duplicate sends
 

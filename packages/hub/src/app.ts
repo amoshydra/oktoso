@@ -170,12 +170,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   app.onError((error, c) => {
     const requestId = c.get("requestId");
     const logger = c.get("logger") ?? deps.logger;
-    const appError =
-      error instanceof AppError
-        ? error
-        : error instanceof ProviderError
-          ? providerAppError(error)
-          : new AppError("internal", "Internal server error", 500);
+    const appError = appErrorFor(error);
 
     logger.error("request failed", {
       code: appError.code,
@@ -199,6 +194,24 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   });
 
   return app;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
+export function appErrorFor(error: unknown): AppError {
+  if (error instanceof AppError) return error;
+  if (error instanceof ProviderError) return providerAppError(error);
+  if (isTimeoutError(error)) {
+    return new AppError("timeout", "The hub request timed out", 504, {
+      retryable: true,
+    });
+  }
+  return new AppError("internal", "Internal server error", 500);
 }
 
 function providerAppError(error: ProviderError): AppError {

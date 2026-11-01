@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createApp } from "./app";
+import { appErrorFor, createApp } from "./app";
 import { AuthService } from "./auth/service";
 import { SESSION_TTL_SECONDS } from "./auth/session";
 import { loadConfig } from "./config/load";
@@ -87,6 +87,16 @@ afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
+});
+
+describe("hub error mapping", () => {
+  it("maps operation timeouts to a retryable 504", () => {
+    expect(appErrorFor(new DOMException("timed out", "TimeoutError"))).toMatchObject({
+      code: "timeout",
+      status: 504,
+      retryable: true,
+    });
+  });
 });
 
 describe("hub app", () => {

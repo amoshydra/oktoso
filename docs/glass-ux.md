@@ -23,6 +23,9 @@ Chat
 ├─ Type             phone keyboard handoff
 ├─ Reply            canned, 4B, and numbered choices
 └─ Phone keyboard   longer text fallback
+
+Failure (any screen)
+└─ Auth / offline / provider / timeout   Retry or Pair this phone, Back
 ```
 
 The phone surface owns pairing, the multi-question batch form, and the
@@ -38,6 +41,7 @@ Back always follows where you came from:
 - reply / choices → chat or More, depending on where reply was opened
 - attention → inbox
 - inbox / recent → home
+- failure → the screen that started the action
 
 ## Interaction grammar
 
@@ -152,10 +156,19 @@ new attention type:
 
 - SSE is the primary update path. The four-second polling loop runs only while
   SSE is disconnected.
+- The home footer reports `Live`, `Polling`, or `Reconnecting`, so the reader
+  knows whether updates are pushed or polled. The phone connection pill reports
+  the same state.
 - Reconnect and resync must preserve the reader's line unless new content is being
   followed intentionally.
-- Auth, offline, provider failure, and timeout need distinct short messages.
-- Back must always work, including on error screens.
+- Auth, offline, provider failure, and timeout have distinct states:
+  - `SESSION EXPIRED` → `Pair this phone`, `Back`
+  - `HUB OFFLINE` → `Retry`, `Back`
+  - `AGENT OFFLINE` → `Retry`, `Back`
+  - `TIMEOUT` → `Retry`, `Back`
+- A failed listen action uses the failure screen. A failed background refresh
+  keeps the current list and appends a `Retry · <state>` row.
+- Back must always work, including on failure screens.
 - Recent sessions and chat open immediately show a loading panel; provider calls
   may take longer than the first frame. The list refresh is cached for 30 seconds
   on the hub, but a cold refresh waits for every provider.
