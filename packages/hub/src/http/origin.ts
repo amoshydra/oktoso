@@ -37,18 +37,3 @@ export function isSameOriginRequest(c: Context<AppEnv>): boolean {
 
   return false;
 }
-
-/**
- * Pairing is a capability flow: the single-use code is the secret, not a
- * cookie. In-app browsers and QR handoffs sometimes report Origin: null with
- * cross-site metadata even though the form is the pairing page. Accept that
- * case, but reject a concrete foreign origin.
- */
-export function isPairingRequestAllowed(c: Context<AppEnv>): boolean {
-  if (isSameOriginRequest(c)) return true;
-  const origin = c.req.header("origin");
-  const site = c.req.header("sec-fetch-site");
-  // Legacy webviews may send neither header. Pairing codes are single-use and
-  // high entropy, so allow that fallback only for the pairing POST.
-  return origin === "null" || (!origin && !site);
-}

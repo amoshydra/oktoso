@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Context } from "hono";
 import type { AppEnv } from "./types";
-import { isPairingRequestAllowed, isSameOriginRequest } from "./origin";
+import { isSameOriginRequest } from "./origin";
 
 function context(headers: Record<string, string>): Context<AppEnv> {
   const normalized = Object.fromEntries(
@@ -69,27 +69,4 @@ describe("isSameOriginRequest", () => {
     expect(isSameOriginRequest(context({ host: "hub.local" }))).toBe(false);
   });
 
-  it("accepts null-origin pairing posts but rejects foreign origins", () => {
-    expect(
-      isPairingRequestAllowed(context({ host: "hub.local" })),
-    ).toBe(true);
-    expect(
-      isPairingRequestAllowed(
-        context({
-          host: "hub.local",
-          origin: "null",
-          "sec-fetch-site": "cross-site",
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      isPairingRequestAllowed(
-        context({
-          host: "hub.local",
-          origin: "https://evil.example",
-          "sec-fetch-site": "cross-site",
-        }),
-      ),
-    ).toBe(false);
-  });
 });

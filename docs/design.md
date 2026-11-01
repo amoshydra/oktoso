@@ -638,6 +638,8 @@ Clients may send a session token as a Bearer header or rely on the cookie. Brows
 
 Cookie-authenticated mutations must come from the hub's own origin: the hub checks `Origin`, falling back to `Sec-Fetch-Site`. This is the CSRF boundary that bearer-only auth did not need.
 
+The pairing confirmation POST is different: it is not cookie-authenticated and the single-use pairing code is the capability. Embedded webviews and QR handoffs may report a foreign or null `Origin`, so the POST logs an origin mismatch but still redeems the code. Viewing the pairing page remains side-effect free.
+
 ### Rules
 
 - Provider credentials live in `hub.config.json` or environment variables referenced by the config.

@@ -266,6 +266,27 @@ describe("hub app", () => {
     expect(await check.json()).toMatchObject({ auth: { kind: "session" } });
   });
 
+  it("accepts a pairing confirmation from an embedded webview origin", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { code } = (await pair.json()) as { code: string };
+
+    const form = await app.request(`/pair/${code}`, {
+      method: "POST",
+      headers: {
+        Origin: "https://even.app",
+        "Sec-Fetch-Site": "cross-site",
+      },
+    });
+    expect(form.status).toBe(303);
+    expect(form.headers.get("set-cookie")).toContain("oktoso_session=");
+  });
+
   it("shows an already-paired page without consuming a valid link", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
