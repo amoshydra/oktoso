@@ -1,5 +1,8 @@
 # Wearables
 
+For the G2 client overview, screenshots, symbols, pairing, and packaging, start
+with [`../apps/even-realities-g2/README.md`](../apps/even-realities-g2/README.md).
+
 The hub API is the shared surface for all wearable clients. Device apps are thin display/input adapters; they never talk to providers directly and never hold provider credentials.
 
 ## Even G2
