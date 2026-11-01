@@ -7,6 +7,7 @@ import type {
   ProviderUpdateInput,
 } from "@amoshydra/oktoso-contracts";
 import { zProviderConfig, type ProviderConfig } from "../config/schema";
+import { assertConfigFilePermissions } from "../config/permissions";
 import { badRequest, conflict, notFound } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { AttentionService } from "./attention-service";
@@ -165,6 +166,7 @@ export class ProviderAdminService {
   }
 
   private async read(): Promise<RawHubConfig> {
+    await assertConfigFilePermissions(this.configPath);
     const raw = JSON.parse(await readFile(this.configPath, "utf8")) as unknown;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       throw badRequest("Hub config must be a JSON object");
@@ -175,7 +177,7 @@ export class ProviderAdminService {
   private async write(config: RawHubConfig): Promise<void> {
     const content = `${JSON.stringify(config, null, 2)}\n`;
     const directory = dirname(this.configPath);
-    await mkdir(directory, { recursive: true });
+    await mkdir(directory, { recursive: true, mode: 0o700 });
     const tempPath = `${this.configPath}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(tempPath, content, { mode: 0o600 });
     await rename(tempPath, this.configPath);

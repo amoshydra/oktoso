@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -129,6 +129,22 @@ describe("ProviderAdminService", () => {
         enabled: true,
       },
     ]);
+  });
+
+  it("refuses to touch a config that other accounts can read", async () => {
+    const { path, config } = await fixture();
+    await chmod(path, 0o644);
+    const { service } = harness({ path, config });
+
+    await expect(
+      service.add({
+        id: "second",
+        type: "openwebui",
+        baseUrl: config.baseUrl,
+        auth: { kind: "bearer", token: "another-secret" },
+        enabled: true,
+      }),
+    ).rejects.toThrow(/must be 0600/);
   });
 
   it("rejects a duplicate provider without writing again", async () => {

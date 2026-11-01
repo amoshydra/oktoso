@@ -730,6 +730,8 @@ Configuration:
 
 Environment substitution keeps secrets out of the file. The operator manages WireGuard, DNS, TLS, and reachability.
 
+The file is created at the platform config path (`$XDG_CONFIG_HOME/oktoso/hub.config.json`, `~/Library/Application Support/Oktoso/hub.config.json`, `%LOCALAPPDATA%\Oktoso\hub.config.json`) with mode `0600`, not in the working directory. `--config` and `HUB_CONFIG` override the path, and a legacy `./hub.config.json` is used only when the platform config is absent. The hub refuses to start when the file is accessible to another account.
+
 ## 14. Performance
 
 The old `er-hello` bridge had clear bottlenecks:
