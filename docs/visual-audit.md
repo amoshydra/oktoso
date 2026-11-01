@@ -119,6 +119,7 @@ The remaining problems were hierarchy, rhythm, and semantics:
 ### Second-pass changes
 
 - **Six type roles:** 10, 11, 12, 14, 16, and 20px. Body and chat prose are 14px. Page and card titles are 16px. Only 400, 500, 600, and 700 weights remain.
+- **Typefaces:** Inter Variable for the UI and IBM Plex Mono for code and identifiers, self-hosted through Fontsource. The six-size scale and weight rules are unchanged.
 - **A stronger page frame:** the topbar owns the page title. Duplicate content headings were removed, and page content now aligns to the topbar instead of floating in a centered column.
 - **State color is exclusive:** provider marks are neutral in lists. Provider accents appear only on the Providers screen. Unread is title weight, not a second dot. Attention has one amber marker.
 - **A spacing and radius system:** 4, 8, 12, 16, 24, and 32px spacing; 4, 8, 12, 16, and pill radii. Optical 2px exceptions remain for rails and count badges.
