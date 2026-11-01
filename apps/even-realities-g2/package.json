@@ -9,7 +9,9 @@
     "build:hosted": "tsc --noEmit && vite build --base=/apps/even-g2/ --outDir=../../dist/apps/even-g2",
     "simulate": "evenhub-simulator http://localhost:5176",
     "pack": "node scripts/pack.mjs",
-    "hardware:check": "node scripts/hardware-check.mjs"
+    "hardware:check": "node scripts/hardware-check.mjs",
+    "frame:screenshot": "bash scripts/frame-screenshot.sh",
+    "frame:screenshots": "bash scripts/frame-screenshot.sh docs/captures/inbox.png docs/glass-inbox.png && bash scripts/frame-screenshot.sh docs/captures/answer.png docs/glass-answer.png && bash scripts/frame-screenshot.sh docs/captures/symbols.png docs/glass-symbols.png"
   },
   "dependencies": {
     "@amoshydra/oktoso-client": "workspace:*",

@@ -99,6 +99,18 @@ Before calling UI work complete:
 - Update `docs/ui-ia.md` and `docs/visual-audit.md` when the system changes.
 - Keep the prototype and the written design contract in sync.
 
+## G2 screenshots
+
+Follow [`apps/even-realities-g2/docs/screenshot-procedure.md`](apps/even-realities-g2/docs/screenshot-procedure.md).
+
+- Capture raw frames at 576x288 from fixture data only.
+- Keep raw captures in `apps/even-realities-g2/docs/captures/`.
+- Commit opaque 1280x720 README images, never transparent framebuffer PNGs.
+- Do not draw a black screen panel or bezel; the G2 waveguide is transparent.
+- Use one fixed background for every G2 screenshot, with `0x8` background blur and a sharp UI.
+- Regenerate with `pnpm --filter @amoshydra/oktoso-even-g2 frame:screenshots`.
+- Review the final images in both GitHub light and dark mode.
+
 ## Implementation work
 
 Before adding packages, routes, provider code, storage, or client data layers, read:

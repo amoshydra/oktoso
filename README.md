@@ -2,11 +2,11 @@
 
 Oktoso is a hub-first session hub for AI agents. One place to see what needs attention, browse sessions, start chats, and reply across OpenCode, Open WebUI, Hermes, and other providers.
 
-The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceable: web, mobile, desktop, [Even G2 glasses](apps/even-realities-g2/README.md), and VR.
+The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceable: web, mobile, desktop, Even G2 glasses, and VR.
 
 ## Status
 
-Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the [Even G2 client](apps/even-realities-g2/README.md) has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
+Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
 
 ## Documents
 
@@ -18,10 +18,13 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.1` reference and change policy
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
-- [`apps/even-realities-g2/README.md`](apps/even-realities-g2/README.md) - Even G2 client, screenshots, pairing, symbols, subagent policy, packaging, and hardware validation
 - [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
 - [`docs/publishing.md`](docs/publishing.md) - npm trusted publishing and release workflow
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data
+
+## Apps
+
+- [Even G2](apps/even-realities-g2/README.md) — glanceable attention and reply surface for the glasses.
 
 ## Principles
 
@@ -46,7 +49,6 @@ pnpm dev
 - Open WebUI: chats, current branches, models, new chats, and prompt sends
 - Providers: OpenCode and Open WebUI adapters; Hermes remains a health-only fake
 - Attention: permissions, forms, unread sessions, failures, provider-backed actions, and live navigation badges
-- Wearables: [`apps/even-realities-g2`](apps/even-realities-g2/README.md) (Oktoso G2), shared wearable core, phone pairing/keyboard, and hub-side reply assistance settings
 
 `pnpm dev` starts the hub, Vite, fake Open WebUI/Hermes servers, and a fake OpenCode server. Real provider credentials belong in the ignored `.env.local` file:
 
@@ -190,21 +192,6 @@ Windows       %LOCALAPPDATA%\Oktoso\Logs\hub.log
 Only two files are kept: `hub.log` for the current run and `hub.log.prev` for the previous run. A run rotates at 25 MiB, replacing the previous file if a single run is that long. `--log-file`, `--log-dir`, `--no-log-file`, and `HUB_LOG_MAX_BYTES` override the defaults.
 
 Use `--plain` for a scrollback-friendly session; human output stays on stdout and JSON logs go to stderr. Use `--log-json` for services and process managers. A non-TTY process never starts the TUI; pair it with `npx @amoshydra/oktoso pair` from any terminal. `--help` lists all flags.
-
-## Even G2 URL hosting
-
-The hub serves the glass app at `/apps/even-g2/`. See the
-[G2 README](apps/even-realities-g2/README.md) for the client screens, pairing,
-symbols, subagent policy, packaging, and hardware validation.
-
-```sh
-pnpm build:single-port
-pnpm start:local
-```
-
-`start:local` loads `.env.local`, uses the dev provider config, binds
-`0.0.0.0:8787`, and starts the built hub. For production, use
-`HUB_CONFIG=./hub.config.json node dist/hub.js`.
 
 ## Stack
 
