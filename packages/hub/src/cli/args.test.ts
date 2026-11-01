@@ -36,6 +36,17 @@ describe("CLI arguments", () => {
     expect(options.verbose).toBe(true);
   });
 
+  it("parses the mcp command and read-write opt-in", () => {
+    const readOnly = parseArgs(["mcp", "--url", "http://127.0.0.1:8787"]);
+    expect(readOnly.command).toBe("mcp");
+    expect(readOnly.allowWrite).toBe(false);
+    expect(readOnly.url).toBe("http://127.0.0.1:8787");
+
+    const readWrite = parseArgs(["mcp", "--allow-write"]);
+    expect(readWrite.command).toBe("mcp");
+    expect(readWrite.allowWrite).toBe(true);
+  });
+
   it("rejects invalid ports and unknown options", () => {
     expect(() => parseArgs(["--port", "0"])).toThrow(/--port/);
     expect(() => parseArgs(["--nope"])).toThrow(/Unknown option/);
