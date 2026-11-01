@@ -91,6 +91,18 @@ It creates `hub.config.json` with no providers, generates a persistent owner tok
 
 `pnpm start` runs the built `dist/hub.js`. The same entry point is exposed as the `oktoso` bin for an npx install: `npx @amoshydra/oktoso` starts the hub, and `npx @amoshydra/oktoso pair` connects to a running hub.
 
+## Provider credentials
+
+Add providers from the Providers screen, or in the config file, with the base URL and a credential the provider issues. Credentials are write-only: the API never returns them, and leaving the password blank while editing keeps the stored value.
+
+| Provider | Authentication | Where the credential comes from |
+|---|---|---|
+| OpenCode | Basic auth, username `opencode` | `opencode service get password` on the machine that runs OpenCode, or `.password` in `~/.local/state/opencode/service.json` |
+| Open WebUI | Bearer token | **Settings → Account → API keys** in Open WebUI |
+| Hermes | Bearer token | The `API_SERVER_KEY` its API server was started with |
+
+The provider form shows the same hint under the credential field. OpenCode generates its service password once and keeps it across restarts; if it is ever regenerated, update the provider or the row shows `auth-error`.
+
 ## Pairing a browser or wearable
 
 Pairing avoids copying the owner token into every client.

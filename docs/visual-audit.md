@@ -124,6 +124,7 @@ The remaining problems were hierarchy, rhythm, and semantics:
 - **A spacing and radius system:** 4, 8, 12, 16, 24, and 32px spacing; 4, 8, 12, 16, and pill radii. Optical 2px exceptions remain for rails and count badges.
 - **One focus language:** buttons and links get a 2px accent outline. Inputs get the same outline at a tighter offset. Their old box-shadow rings were removed.
 - **Responsive containment:** details becomes a right-side overlay below 1320px and a column above it. Filter chips wrap below 420px. Provider machine names drop below 480px. The external chat action drops below 360px. Form fields are 16px to avoid browser zoom. Modal footers are pinned while the form body scrolls.
+- **Inline credential hints:** the provider form explains where its secret comes from with the existing muted hint type at 12px, so no new control, color, or component enters the system. Prose stays on the shared 1.5 line height and inline commands use IBM Plex Mono.
 - **Accessibility labels:** session status, unread, and needs-attention states now have screen-reader text instead of relying on a colored dot.
 
 The card border remains softer than the control border. Cards are structural; controls must clear 3:1. Pushing every card edge to 3:1 would turn the interface into a wireframe.

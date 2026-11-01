@@ -2160,6 +2160,21 @@ function ProviderForm(props: {
             />
           </label>
         ) : null}
+        {authKind !== "none" ? (
+          <p className="form-note">
+            {type === "opencode" ? (
+              <>
+                Run <code>opencode service get password</code> on the machine that
+                runs OpenCode. The username is <code>opencode</code>.
+              </>
+            ) : (
+              <>
+                Create the key in Open WebUI under{" "}
+                <strong>Settings → Account → API keys</strong>.
+              </>
+            )}
+          </p>
+        ) : null}
         <label className="check-field span-2">
           <input
             type="checkbox"
