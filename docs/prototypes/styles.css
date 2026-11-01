@@ -2157,6 +2157,18 @@ html[data-theme="light"] .message-body pre {
   }
 }
 
+html[data-capture] *,
+html[data-capture] *::before,
+html[data-capture] *::after {
+  animation: none !important;
+  transition: none !important;
+  caret-color: transparent !important;
+}
+
+html[data-capture] .toast {
+  display: none !important;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

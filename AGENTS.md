@@ -99,6 +99,7 @@ Before calling UI work complete:
 - Check inbox, sessions, chat, details, providers, settings, search, and the new-session modal.
 - Confirm no horizontal overflow at narrow widths.
 - Check the browser console for errors.
+- Run `pnpm brand:check`; if it reports changed sources, run `pnpm brand:screens` and commit the images and manifest.
 - Update `docs/ui-ia.md` and `docs/visual-audit.md` when the system changes.
 - Keep the prototype and the written design contract in sync.
 
