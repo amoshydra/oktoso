@@ -24,6 +24,7 @@ import {
   scanPairingQr,
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
+import { BrandMark } from "./BrandMark";
 import { renderMarkdown } from "./markdown";
 
 const TOKEN_KEY = "oktoso-token";
@@ -364,7 +365,9 @@ export function App() {
     return (
       <div className="login-page">
         <div className="login-card boot-card">
-          <div className="brand-mark">OK</div>
+          <div className="brand-mark">
+            <BrandMark size={40} />
+          </div>
           <h1>Oktoso</h1>
           <p>Checking the hub connection…</p>
           <div className="loading-line" />
@@ -474,8 +477,8 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="rail" aria-label="Primary navigation">
-        <div className="rail-logo" aria-label="Oktoso">
-          AH
+        <div className="rail-logo" role="img" aria-label="Oktoso" title="Oktoso">
+          <BrandMark size={36} />
         </div>
         <nav className="rail-nav">
           {RAIL_VIEWS.map((id) => {
@@ -803,7 +806,9 @@ function Login(props: {
         {props.theme === "dark" ? "☀" : "☾"}
       </button>
       <div className="login-card">
-        <div className="brand-mark">OK</div>
+        <div className="brand-mark">
+          <BrandMark size={40} />
+        </div>
         <p className="eyebrow">Oktoso</p>
         <h1>One workbench for your agents.</h1>
         <p className="login-copy">
