@@ -1,4 +1,9 @@
-const now = Date.now();
+const captureParam = new URLSearchParams(location.search).get("capture");
+const captureMode =
+  captureParam === "inbox" || captureParam === "session" ? captureParam : null;
+const captureNow = captureMode ? Date.UTC(2026, 9, 27, 10, 52, 0) : undefined;
+const now = captureNow ?? Date.now();
+const nowMs = () => captureNow ?? Date.now();
 const minute = 60_000;
 const hour = 60 * minute;
 const day = 24 * hour;
@@ -48,7 +53,7 @@ function esc(value) {
 }
 
 function relative(ts) {
-  const delta = Date.now() - ts;
+  const delta = nowMs() - ts;
   if (delta < minute) return 'now';
   const minutes = Math.floor(delta / minute);
   if (minutes < 60) return `${minutes}m`;
@@ -378,7 +383,7 @@ function setTheme(theme) {
   localStorage.setItem('oktoso-theme', theme);
 }
 
-const savedTheme = localStorage.getItem('oktoso-theme') || 'dark';
+const savedTheme = captureMode ? 'dark' : localStorage.getItem('oktoso-theme') || 'dark';
 setTheme(savedTheme);
 
 function toast(text) {
@@ -416,9 +421,9 @@ function groupSessions(list) {
   for (const session of list) {
     const label = session.pinned
       ? 'Pinned'
-      : Date.now() - session.updated < day
+      : nowMs() - session.updated < day
         ? 'Today'
-        : Date.now() - session.updated < 2 * day
+        : nowMs() - session.updated < 2 * day
           ? 'Yesterday'
           : 'Earlier';
     if (!groups.has(label)) groups.set(label, []);
@@ -1050,7 +1055,9 @@ function renderApp() {
   if (state.view === 'chat') {
     requestAnimationFrame(() => {
       const transcript = document.getElementById('transcript');
-      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+      if (transcript) {
+        transcript.scrollTop = captureMode === 'session' ? 0 : transcript.scrollHeight;
+      }
     });
   }
   if (state.view === 'search') {
@@ -1091,7 +1098,7 @@ function handleAttentionAction(action, id) {
       session.messages.push({
         role: 'assistant',
         text: 'Retrying with the last prompt. The SSE parser now skips comment frames.',
-        time: Date.now(),
+        time: nowMs(),
         streaming: true,
       });
     }
@@ -1111,9 +1118,9 @@ function answerQuestion(id, index) {
 function sendMessage(text) {
   const session = selectedSession();
   if (!text.trim()) return;
-  session.messages.push({ role: 'user', text: text.trim(), time: Date.now() });
+  session.messages.push({ role: 'user', text: text.trim(), time: nowMs() });
   session.status = 'running';
-  session.updated = Date.now();
+  session.updated = nowMs();
   renderApp();
   toast('Message sent');
 
@@ -1121,11 +1128,11 @@ function sendMessage(text) {
     session.messages.push({
       role: 'assistant',
       text: 'I picked that up. The next step is to verify the change against the failing case, then report back with the diff and the test result.',
-      time: Date.now(),
+      time: nowMs(),
       streaming: false,
     });
     session.status = 'idle';
-    session.updated = Date.now();
+    session.updated = nowMs();
     renderApp();
     toast('Reply received');
   }, 1100);
@@ -1193,7 +1200,7 @@ function createSessionFromForm() {
   const model = document.getElementById('new-model').value.trim() || 'claude-sonnet';
   const prompt = document.getElementById('new-prompt').value.trim();
   const provider = providerByID(providerID);
-  const ref = `${providerID}:ses_${Date.now()}`;
+  const ref = `${providerID}:ses_${nowMs()}`;
 
   sessions.unshift({
     ref,
@@ -1206,16 +1213,16 @@ function createSessionFromForm() {
     model,
     status: 'running',
     unread: false,
-    updated: Date.now(),
-    createdAt: Date.now(),
+    updated: nowMs(),
+    createdAt: nowMs(),
     cost: 0,
     tokens: '0',
     messages: [
-      ...(prompt ? [{ role: 'user', text: prompt, time: Date.now() }] : []),
+      ...(prompt ? [{ role: 'user', text: prompt, time: nowMs() }] : []),
       {
         role: 'assistant',
         text: `Starting ${title} in ${provider?.name || providerID}. I will read the project first, then report back.`,
-        time: Date.now(),
+        time: nowMs(),
         streaming: true,
       },
     ],
@@ -1417,4 +1424,13 @@ modalBackdrop.addEventListener('click', (event) => {
   if (event.target === modalBackdrop) closeModal();
 });
 
+if (captureMode === 'session') {
+  state.view = 'chat';
+  state.selectedRef = 'desktop-opencode:ses_auth';
+  state.detailsOpen = false;
+  state.detailsClosed = false;
+}
+if (captureMode) {
+  document.documentElement.dataset.capture = captureMode;
+}
 renderApp();

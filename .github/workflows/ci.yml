@@ -19,6 +19,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm brand:check
       - run: pnpm openapi:check
       - run: pnpm build:single-port
       - run: pnpm hardware:check

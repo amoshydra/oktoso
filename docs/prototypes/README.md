@@ -27,3 +27,10 @@ Open <http://127.0.0.1:4174>.
 ## Scope
 
 The prototype covers the information architecture, visual language, and key flows from `docs/ui-ia.md`. It does not call real provider APIs. Data resets on reload.
+
+## README captures
+
+`?capture=inbox` and `?capture=session` are deterministic capture modes for the
+README images. They freeze the clock, force the dark theme, disable animation,
+and open the session at the top. `pnpm brand:screens` uses them; see
+[`docs/brand/README.md`](../brand/README.md).

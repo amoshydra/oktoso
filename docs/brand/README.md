@@ -36,6 +36,7 @@ node for 16px and 32px. Do not use the small geometry for the app icon.
 | `oktoso-mark-mono.svg` | Single-color glyph for stamps and dark/light one-color use |
 | `banner.png` | README hero, 1600 × 560 |
 | `banner.html` | Banner source; renders with the prototype fonts and a 1440 × 900 screenshot |
+| `manifest.json` | Source and output hashes used by `pnpm brand:check` |
 
 Web assets live in `apps/web/public/`: `favicon.ico`, `favicon.svg`,
 `favicon-16.png`, `favicon-32.png`, `favicon-48.png`, `apple-touch-icon.png`,
@@ -43,9 +44,49 @@ Web assets live in `apps/web/public/`: `favicon.ico`, `favicon.svg`,
 `site.webmanifest`. For the GitHub repository avatar, upload
 `apps/web/public/icon-512.png`; GitHub applies its own circular mask.
 
-## Regenerate
+## Regenerate screenshots and banner
 
-Raster icons need `rsvg-convert` and ImageMagick:
+The README images are generated together:
+
+```sh
+pnpm install
+pnpm exec playwright install chromium   # once per machine
+pnpm brand:screens
+pnpm brand:check
+```
+
+Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome` to use an existing
+Chromium instead of the bundled browser. Playwright is a development dependency
+and is not shipped in the npm package.
+
+`brand:screens` serves the repository on an ephemeral loopback port, loads the
+prototype in its deterministic capture modes, and writes:
+
+- `docs/screenshots/inbox.png` at 1440 × 900.
+- `docs/screenshots/session.png` at 1440 × 1100.
+- `docs/brand/banner.png` at 1600 × 560.
+- `docs/brand/manifest.json` with the source and output hashes.
+
+Capture mode (`?capture=inbox` or `?capture=session`) fixes the clock, forces the
+dark theme, disables animation, and opens the **Fix auth race in gateway**
+session with the transcript at the top. Every image is captured at 2× and
+downsampled in the browser, so no ImageMagick, Python server, or desktop browser
+is involved.
+
+`brand:check` does not launch a browser. It verifies that the source files still
+match the manifest, the generated images match their hashes and dimensions, the
+README terminal sample is rectangular, and the app icons have the right sizes.
+CI runs it. If it reports changed sources, run `pnpm brand:screens` and commit
+the updated images and manifest.
+
+The `banner.html` screenshot must be refreshed before the banner is rendered;
+`brand:screens` already does both in order. For a manual capture, open
+`docs/brand/banner.html` at 1600 × 560 and capture at 2×.
+
+## Regenerate icons
+
+Icons change only when the mark or the fixed icon palette changes. They need
+`rsvg-convert` and ImageMagick:
 
 ```sh
 rsvg-convert -w 16 -h 16 docs/brand/oktoso-mark-small.svg -o /tmp/favicon-16.png
@@ -58,17 +99,3 @@ rsvg-convert -w 512 -h 512 docs/brand/oktoso-mark.svg -o apps/web/public/icon-51
 rsvg-convert -w 192 -h 192 docs/brand/oktoso-mark-square.svg -o apps/web/public/maskable-192.png
 rsvg-convert -w 512 -h 512 docs/brand/oktoso-mark-square.svg -o apps/web/public/maskable-512.png
 ```
-
-The banner is a static HTML composition. Open `docs/brand/banner.html` in a
-browser at 1600 × 560 and capture at 2×; the committed `banner.png` is that
-capture downsampled to 1600 × 560. The screenshot inside it comes from the
-prototype with mock data:
-
-```sh
-python3 -m http.server 4174 --bind 127.0.0.1 --directory docs/prototypes
-```
-
-Refresh `docs/screenshots/inbox.png` (1440 × 900) and
-`docs/screenshots/session.png` (1440 × 1100) from the prototype before
-regenerating the banner. The session capture is the **Fix auth race in gateway**
-session with the transcript scrolled to the top.

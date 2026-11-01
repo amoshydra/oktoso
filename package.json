@@ -38,18 +38,21 @@
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "openapi:check": "tsx scripts/generate-openapi.ts --check",
     "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes",
+    "brand:screens": "tsx scripts/brand/screens.ts",
+    "brand:check": "tsx scripts/brand/check.ts",
     "prepublishOnly": "pnpm build:single-port",
     "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check"
   },
   "devDependencies": {
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@types/node": "^24.19.2",
-    "tsx": "^4.23.15",
+    "playwright": "^1.64.1",
     "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.0.5",
     "yaml": "^2.9.1",
-    "zod": "^4.6.7",
-    "@asteasolutions/zod-to-openapi": "^9.1.0"
+    "zod": "^4.6.7"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
