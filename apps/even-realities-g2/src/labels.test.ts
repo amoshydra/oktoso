@@ -8,6 +8,8 @@ import {
   attentionGlyph,
   attentionHeader,
   attentionRowLabel,
+  GLYPH_LEGEND,
+  legendRows,
   sessionGlyph,
   sessionHeader,
   sessionRowLabel,
@@ -72,6 +74,26 @@ describe("G2 labels", () => {
     expect(sessionGlyph(session({ status: "running" }), false)).toBe("▶");
     expect(sessionGlyph(session({ status: "offline" }), false)).toBe("▼");
     expect(sessionGlyph(session(), false)).toBe("◇");
+  });
+
+  it("keeps a complete legend for every rendered symbol", () => {
+    expect(legendRows()).toEqual([
+      "●  Unread",
+      "?  Question",
+      "■  Permission",
+      "▲  Approval",
+      "!  Error",
+      "▶  Running",
+      "▼  Offline",
+      "◇  Idle",
+      "◆  Attention",
+      "›  Subagent prefix",
+      "›?  Child question",
+      "›■  Child permission",
+    ]);
+    expect(new Set(GLYPH_LEGEND.map((entry) => entry.glyph)).size).toBe(
+      GLYPH_LEGEND.length,
+    );
   });
 
   it("renders session rows and headers with the subagent marker", () => {

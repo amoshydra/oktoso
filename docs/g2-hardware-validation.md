@@ -164,6 +164,8 @@ Seed or open a session with at least 300 readable lines.
 | D7 | Let a subagent finish without asking anything. | No `●` unread row appears for the child; Recent still shows only root sessions. |
 | D8 | Trigger a child permission or provider-native question. | The inbox shows a `›■` or `›?` row, and the detail still resolves the child prompt. |
 | D9 | Check the status glyphs. | `● ? ■ ▲ ! ▶ ▼ ◇ ◆ ›` render without tofu; `⚿`, `✓`, `↳`, `✕`, `✖`, `✔` are not used. |
+| D10 | Open Home → **Symbols**. | The full legend scrolls, every row is readable, and Back returns Home. |
+| D11 | Open the phone **Symbol guide**. | It expands and matches the glass legend. |
 
 ## Attention and forms
 

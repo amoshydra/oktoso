@@ -41,6 +41,10 @@
       .question-choices button:only-child { width: 100%; }
       .question-choices button[aria-pressed="true"] { border-color: var(--accent); background: #25314a; }
       .scan-video { width: 100%; margin-top: 12px; border-radius: 8px; background: #000; aspect-ratio: 4 / 3; object-fit: cover; }
+      details.panel summary { cursor: pointer; font-weight: 600; }
+      .symbol-row { display: grid; grid-template-columns: 2.5em 1fr; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; }
+      .symbol-row .glyph { font-size: 16px; text-align: center; }
+      .symbol-row .meaning { color: var(--ink); }
       .batch-question { padding-top: 14px; border-top: 1px solid var(--line); margin-top: 14px; }
       .batch-question:first-child { padding-top: 0; border-top: 0; margin-top: 0; }
       .batch-question h3 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -125,6 +129,25 @@
         <button id="sim-down" type="button">↓ Down</button>
       </div>
     </section>
+
+    <details class="panel">
+      <summary>Symbol guide</summary>
+      <p class="hint" style="margin-top:8px">The same guide is available on the glasses from Home → Symbols.</p>
+      <div style="margin-top:8px">
+        <div class="symbol-row"><span class="glyph">●</span><span class="meaning">Unread</span></div>
+        <div class="symbol-row"><span class="glyph">?</span><span class="meaning">Question</span></div>
+        <div class="symbol-row"><span class="glyph">■</span><span class="meaning">Permission</span></div>
+        <div class="symbol-row"><span class="glyph">▲</span><span class="meaning">Approval</span></div>
+        <div class="symbol-row"><span class="glyph">!</span><span class="meaning">Error</span></div>
+        <div class="symbol-row"><span class="glyph">▶</span><span class="meaning">Running</span></div>
+        <div class="symbol-row"><span class="glyph">▼</span><span class="meaning">Offline</span></div>
+        <div class="symbol-row"><span class="glyph">◇</span><span class="meaning">Idle</span></div>
+        <div class="symbol-row"><span class="glyph">◆</span><span class="meaning">Attention</span></div>
+        <div class="symbol-row"><span class="glyph">›</span><span class="meaning">Subagent prefix</span></div>
+        <div class="symbol-row"><span class="glyph">›?</span><span class="meaning">Child question</span></div>
+        <div class="symbol-row"><span class="glyph">›■</span><span class="meaning">Child permission</span></div>
+      </div>
+    </details>
 
     <section class="panel">
       <h2>Glasses bridge</h2>
