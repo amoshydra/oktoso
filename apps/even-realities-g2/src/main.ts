@@ -51,6 +51,13 @@ import {
 import { glassInput } from "./input";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
+import {
+  attentionHeader,
+  attentionRowLabel,
+  sessionHeader,
+  sessionRowLabel,
+  sessionMarker,
+} from "./labels";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -84,6 +91,7 @@ interface AppState {
   sessionRef?: string;
   sessionTitle?: string;
   sessionProject?: string;
+  sessionParentRef?: string;
   chatMessages: Message[];
   chatLines: string[];
   chatLineMessages: number[];
@@ -584,7 +592,10 @@ async function submitPhoneForm(): Promise<void> {
 function syncPhoneSession(): void {
   const hasSession = Boolean(state.sessionRef);
   phoneSession.textContent = hasSession
-    ? clampLine(state.sessionTitle ?? state.sessionRef ?? "", 48)
+    ? clampLine(
+        `${sessionMarker(state.sessionParentRef, false)}${state.sessionTitle ?? state.sessionRef ?? ""}`,
+        48,
+      )
     : "No session open";
   phoneSend.textContent = state.answerMode ? "Send answer" : "Send to session";
   phoneSend.disabled =
@@ -719,7 +730,7 @@ function answerHeader(prefix = "ANSWER"): string {
     );
   }
   return clampLine(
-    `${prefix} · ${state.sessionTitle ?? "Session"}`,
+    `${prefix} · ${sessionMarker(state.sessionParentRef, false)}${state.sessionTitle ?? "Session"}`,
     40,
   );
 }
@@ -1107,7 +1118,7 @@ async function openSessions(): Promise<void> {
   if (!client) return;
   showLoading("Loading recent\nsessions…");
   try {
-    const page = await client.sessions({ limit: 5 });
+    const page = await client.sessions({ limit: 5, scope: "root" });
     state.sessions = page.data;
     clearFailure();
     markRequestSuccess();
@@ -1182,7 +1193,7 @@ async function refreshInbox(): Promise<void> {
 
 function attentionListSignature(items: Attention[]): string {
   return items
-    .map((item) => `${attentionLabel(item)}|${item.title}`)
+    .map((item) => `${attentionRowLabel(item)}|${item.title}`)
     .join("\n");
 }
 
@@ -1367,6 +1378,7 @@ async function openChat(
   state.sessionRef = ref;
   state.sessionTitle = title;
   state.sessionProject = undefined;
+  state.sessionParentRef = undefined;
   state.returnScreen = origin;
   state.chatMessages = [];
   state.chatLines = [];
@@ -1401,6 +1413,7 @@ async function openChat(
     .then((session) => {
       if (state.sessionRef !== ref) return;
       state.sessionProject = session.project;
+      state.sessionParentRef = session.parentRef;
       if (state.screen === "chat") render();
     })
     .catch(() => undefined);
@@ -1668,7 +1681,7 @@ function updatePhoneQuestion(): void {
   const formal = Boolean(state.question?.attentionID);
   const batch = isBatchQuestion();
   phoneQuestionSession.textContent = clampLine(
-    state.sessionTitle ?? state.sessionRef ?? "",
+    `${sessionMarker(state.sessionParentRef, false)}${state.sessionTitle ?? state.sessionRef ?? ""}`,
     48,
   );
   phoneQuestionText.textContent = formal
@@ -2079,12 +2092,11 @@ function chatView(): { header: string; body: string; footer: string } {
     60,
   );
   return {
-    header: clampLine(
-      state.sessionProject
-        ? `${state.sessionProject} · ${state.sessionTitle ?? "Session"}`
-        : (state.sessionTitle ?? "Session"),
-      40,
-    ),
+    header: sessionHeader({
+      parentRef: state.sessionParentRef,
+      project: state.sessionProject,
+      title: state.sessionTitle ?? "Session",
+    }),
     body: visible.join("\n"),
     footer,
   };
@@ -2633,7 +2645,10 @@ function render(): void {
       "Recent sessions",
       ...(state.sessionTitle
         ? [
-            `Current · ${questionSummaryFor(state.sessionRef) ? "? " : ""}${clampLine(
+            `Current · ${sessionMarker(
+              state.sessionParentRef,
+              Boolean(questionSummaryFor(state.sessionRef)),
+            )}${clampLine(
               state.sessionProject
                 ? `${state.sessionProject} · ${state.sessionTitle}`
                 : state.sessionTitle,
@@ -2652,11 +2667,9 @@ function render(): void {
   if (state.screen === "sessions") {
     const items = state.sessions.length
       ? state.sessions.map((session) =>
-          clampLine(
-            questionSummaryFor(session.ref)
-              ? `QUESTION · ${session.title}`
-              : `${session.unread ? "UNREAD" : session.status.toUpperCase()} · ${session.title}`,
-            54,
+          sessionRowLabel(
+            session,
+            Boolean(questionSummaryFor(session.ref)),
           ),
         )
       : [state.failure?.title ?? "No recent sessions"];
@@ -2679,10 +2692,7 @@ function render(): void {
   if (state.screen === "inbox") {
     const items = state.attention.length
       ? state.attention.map((item) =>
-          clampLine(
-            `${attentionLabel(item)} · ${item.title}`,
-            54,
-          ),
+          attentionRowLabel(item),
         )
       : [state.failure?.title ?? "Nothing needs you"];
     if (state.failure) items.push(failureRowLabel());
@@ -2752,7 +2762,7 @@ function render(): void {
     const summary = wrapText(summaryText, 54, 2).join("\n");
     if (
       setPreview(
-        `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
+        attentionHeader(item),
         [summary, ...actions.map((action) => clampLine(action.label, 54))].join("\n"),
         "Tap choose   Back ×2",
         actions.map((action) => clampLine(action.label, 54)),
@@ -2760,7 +2770,7 @@ function render(): void {
     ) {
       void showPage(
         listPage(
-          `${attentionLabel(item)} · ${clampLine(item.title, 35)}`,
+          attentionHeader(item),
           actions.map((action) => clampLine(action.label, 54)),
           "Tap choose   Back ×2",
           summary,
@@ -2987,26 +2997,6 @@ async function showPage(page: RebuildPageContainer): Promise<void> {
     updateBridgeStats();
   } catch (error) {
     log(`Display update failed: ${errorMessage(error)}`);
-  }
-}
-
-function attentionLabel(item: Attention): string {
-  if (item.type === "unread" && questionSummaryFor(item.sessionRef)) {
-    return "QUESTION";
-  }
-  switch (item.type) {
-    case "permission":
-      return "PERMISSION";
-    case "approval":
-      return "APPROVAL";
-    case "question":
-      return "QUESTION";
-    case "unread":
-      return "UNREAD";
-    case "error":
-      return "ERROR";
-    default:
-      return "ATTENTION";
   }
 }
 

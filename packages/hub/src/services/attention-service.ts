@@ -139,9 +139,28 @@ export class AttentionService {
         }
       }
 
+      // A blocking provider form already represents the session's next action.
+      // Do not add an unread row for the same session.
+      const blockingRefs = new Set(
+        [...next.values()]
+          .filter(
+            (item) =>
+              item.type === "permission" ||
+              item.type === "approval" ||
+              item.type === "question",
+          )
+          .map((item) => item.sessionRef),
+      );
+
+      // Child sessions are implementation detail for the parent task. They
+      // should not create unread/error noise. Provider-native permission and
+      // question items are still kept above because they can block the parent;
+      // OpenCode does not reliably propagate those prompts to the parent UI.
       const unreadSessions = sessionPage.data
         .filter(
           (session) =>
+            !session.parentRef &&
+            !blockingRefs.has(session.ref) &&
             session.status !== "error" &&
             session.unread &&
             this.now() - session.updatedAt <= this.unreadWindowMs,
@@ -151,6 +170,7 @@ export class AttentionService {
       const unreadRefs = new Set(unreadSessions.map((session) => session.ref));
 
       for (const session of sessionPage.data) {
+        if (session.parentRef) continue;
         if (session.status === "error") {
           const item: Attention = {
             id: `${session.providerID}:error:${session.nativeID}:${session.updatedAt}`,
@@ -265,9 +285,11 @@ export class AttentionService {
     session: Session | undefined,
   ): Attention {
     if (!session) return item;
+    const parent = session.parentRef ? { parentRef: session.parentRef } : {};
     if (item.type === "permission" || item.type === "approval") {
       return {
         ...item,
+        ...parent,
         title: session.title,
         summary: item.summary || item.title,
       };
@@ -275,11 +297,12 @@ export class AttentionService {
     if (item.type === "question") {
       return {
         ...item,
+        ...parent,
         title: session.title,
         summary: [item.title, item.summary].filter(Boolean).join(" · "),
       };
     }
-    return item;
+    return { ...item, ...parent };
   }
 
   private async emitChanges(

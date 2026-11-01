@@ -37,6 +37,7 @@ export const zSessionPage = z.object({
 
 export const zSessionListQuery = z.object({
   provider: z.string().optional(),
+  scope: z.enum(["all", "root"]).optional(),
   status: zSessionStatus.optional(),
   q: z.string().optional(),
   cursor: z.string().optional(),

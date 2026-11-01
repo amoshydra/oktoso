@@ -129,6 +129,21 @@ Attention contains:
 The glass shows the first five attention rows. The home screen shows the total
 count. Older unread sessions are intentionally not pushed onto the glasses.
 
+### Subagents
+
+Sessions with `parentRef` are child sessions. They are implementation detail for
+the parent task and do not create `UNREAD` or `ERROR` attention items by default.
+The phone's Recent list requests `scope=root`, so it shows primary sessions only.
+
+Provider-native permissions and questions from child sessions are still shown,
+because they can block the parent task. They carry `parentRef`, and the glass
+prefixes the row with `›`. This matters for OpenCode: child permission prompts
+are not reliably propagated to the parent UI, and a dropped prompt can leave the
+parent's turn busy indefinitely. The hub's global permission/form poll is the
+fallback path for those child prompts. A plain-text question from a child is not
+a blocking form; it returns to the parent as task output and is not surfaced as a
+separate question marker.
+
 ## Question discovery
 
 The home, recent, and inbox surfaces mark pending questions without creating a
@@ -138,11 +153,31 @@ new attention type:
   sessions. The hub caches summaries briefly and reports provider failures
   separately, so an outage never looks like an answered question.
 - The home current row reads `Current · ? <session>`.
-- A recent-session row reads `QUESTION · <session>`.
-- An unread inbox row becomes `QUESTION · <session>`, its detail shows the
-  question text, and its chat action reads `Answer in chat`.
+- A recent-session row uses `?` for a pending question and `●` for unread.
+- An unread inbox row becomes `? <session>`, its detail shows the question text,
+  and its chat action reads `Answer in chat`.
 - Opening the chat loads the full prompt and clears the marker when the question
   is gone. Answering from any client removes the marker on the next refresh.
+
+## Glyphs
+
+The G2 font was checked in the simulator. These single-cell glyphs render:
+
+| Glyph | Meaning |
+|---|---|
+| `●` | unread |
+| `?` | question |
+| `■` | permission |
+| `▲` | approval |
+| `!` | error |
+| `▶` | running |
+| `▼` | offline |
+| `◇` | idle |
+| `◆` | generic attention |
+| `›` | subagent / child session |
+
+`⚿`, `✓`, `↳`, `✕`, `✖`, and `✔` do not render and must not be used. The row
+prefix is `glyph + space` for a primary session and `› + glyph` for a child.
 
 ## Text policy
 

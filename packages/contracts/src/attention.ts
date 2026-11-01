@@ -34,6 +34,7 @@ export const zAttentionSummary = z.object({
 export const zAttention = z.object({
   id: z.string(),
   sessionRef: z.string(),
+  parentRef: z.string().optional(),
   type: zAttentionType,
   priority: zAttentionPriority,
   title: z.string(),

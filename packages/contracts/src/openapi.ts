@@ -304,6 +304,7 @@ registry.registerPath({
   request: {
     query: z.object({
       provider: z.string().optional(),
+      scope: z.enum(["all", "root"]).optional(),
       status: z.enum(["running", "idle", "error", "offline"]).optional(),
       q: z.string().optional(),
       cursor: z.string().optional(),
