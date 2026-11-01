@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { chmod } from "node:fs/promises";
 import { loadEnvFile } from "node:process";
 
 try {
@@ -6,6 +7,10 @@ try {
 } catch {
   // .env.local is optional; the dev default matches scripts/dev.ts.
 }
+
+const configPath = "hub.config.dev.json";
+// The hub refuses a config that other accounts can read. Git cannot store 0600.
+await chmod(configPath, 0o600).catch(() => undefined);
 
 const env = {
   ...process.env,
@@ -20,7 +25,7 @@ const child = spawn(
     "packages/hub/src/main.ts",
     "--pair",
     "--config",
-    "hub.config.dev.json",
+    configPath,
   ],
   { stdio: "inherit", env },
 );

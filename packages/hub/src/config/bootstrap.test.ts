@@ -33,7 +33,7 @@ describe("ensureConfig", () => {
     };
     expect(config.token).toBe(result.generatedToken);
     expect(config.providers).toEqual([]);
-    expect(config.dataDir).toBe(".data");
+    expect(config.dataDir).toMatch(/oktoso$/);
     expect((await stat(configPath)).mode & 0o777).toBe(0o600);
 
     const second = await ensureConfig(configPath, {
@@ -72,5 +72,21 @@ describe("ensureConfig", () => {
         logger,
       }),
     ).rejects.toThrow(/Hub config not found/);
+  });
+
+  it("creates missing parent directories with owner-only access", async () => {
+    const root = await mkdtemp(join(tmpdir(), "oktoso-bootstrap-"));
+    roots.push(root);
+    const configPath = join(root, "nested", "oktoso", "hub.config.json");
+
+    const result = await ensureConfig(configPath, {
+      explicit: false,
+      env: {},
+      logger,
+    });
+
+    expect(result.created).toBe(true);
+    expect((await stat(join(root, "nested", "oktoso"))).mode & 0o777).toBe(0o700);
+    expect((await stat(configPath)).mode & 0o777).toBe(0o600);
   });
 });

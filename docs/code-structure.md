@@ -169,9 +169,11 @@ oktoso/
         main.ts
         app.ts
         config/
-          schema.ts
+          bootstrap.ts
           load.ts
-          env.ts
+          paths.ts
+          permissions.ts
+          schema.ts
         domain/
           ids.ts
           errors.ts

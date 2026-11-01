@@ -33,6 +33,7 @@ import {
 import { createLogger, type LogLevel, type LogRecord } from "./lib/logger";
 import { ensureConfig } from "./config/bootstrap";
 import { loadConfig, loadHubTarget, loadPairingConfig } from "./config/load";
+import { defaultConfigPath, resolveConfigPath } from "./config/paths";
 import type {
   HubConfig,
   HubPairingConfig,
@@ -214,6 +215,18 @@ async function main(): Promise<void> {
   if (options.version) {
     process.stdout.write(`${VERSION}\n`);
     return;
+  }
+
+  // An explicit --config or HUB_CONFIG always wins. Otherwise prefer the
+  // platform config and fall back to a legacy repo-local file, warning once.
+  if (!options.explicitConfig) {
+    const resolved = resolveConfigPath({ env: process.env });
+    options.configPath = resolved.path;
+    if (resolved.legacy) {
+      process.stderr.write(
+        `Using ./hub.config.json from the working directory. Move it to ${defaultConfigPath()} or set HUB_CONFIG to keep it elsewhere.\n`,
+      );
+    }
   }
 
   if (options.command === "status") {
@@ -445,6 +458,7 @@ async function main(): Promise<void> {
     }
 
     const config = await loadConfig(options.configPath);
+    logger.info("hub config loaded", { path: options.configPath });
     if (options.host) config.host = options.host;
     if (options.port) config.port = options.port;
 

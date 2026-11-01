@@ -15,10 +15,15 @@ placeholders.
 Oktoso is hub-owned: provider credentials stay on the hub and are never sent
 to web or wearable clients.
 
-- Put provider credentials in the ignored `.env.local` or in a local
-  `hub.config.json` that is never committed.
-- `.env.local` and `.data/` are gitignored. Keep their filesystem permissions
-  restricted (`0600` for `.env.local`, `0700` for `.data`).
+- Put provider credentials in the ignored `.env.local` or in the hub config,
+  which lives in the platform config directory (`$XDG_CONFIG_HOME/oktoso`,
+  `~/Library/Application Support/Oktoso`, `%LOCALAPPDATA%\Oktoso`) rather than
+  the working directory. An explicit `--config` or `HUB_CONFIG` path is used
+  as given.
+- The config holds the owner token and provider credentials, so the hub refuses
+  to read or start with a file that is not `0600` and creates it owner-only on
+  first run. `.env.local` and `.data/` are gitignored. Keep their filesystem
+  permissions restricted (`0600` for `.env.local`, `0700` for `.data`).
 - `HUB_TOKEN` is the owner and recovery credential. Use a long random value and
   put the hub behind TLS, WireGuard, Tailscale, or another trusted transport.
 - Pairing links are short-lived credentials. A link works once, expires in five

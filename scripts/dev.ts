@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { chmod } from "node:fs/promises";
 import { loadEnvFile } from "node:process";
 import { createFakeProviderServers } from "@amoshydra/oktoso-testing";
 
@@ -7,6 +8,11 @@ try {
 } catch {
   // .env.local is optional; the fake OpenCode provider is the default.
 }
+
+const configPath = "hub.config.dev.json";
+// The hub refuses a config that other accounts can read. Git cannot store 0600,
+// so fix the committed dev config before every run.
+await chmod(configPath, 0o600).catch(() => undefined);
 
 const token = "dev-token-oktoso";
 const providers = await createFakeProviderServers();
@@ -42,7 +48,7 @@ console.log(
 
 const hub = spawn(
   "pnpm",
-  ["exec", "tsx", "packages/hub/src/main.ts", "--config", "hub.config.dev.json"],
+  ["exec", "tsx", "packages/hub/src/main.ts", "--config", configPath],
   { stdio: "inherit", env },
 );
 const web = spawn(

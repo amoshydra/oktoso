@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { Logger } from "../lib/logger";
+import { defaultDataDir } from "./paths";
 
 export interface EnsureConfigOptions {
   explicit: boolean;
@@ -33,12 +35,13 @@ export async function ensureConfig(
     host: "127.0.0.1",
     port: 8787,
     token,
-    dataDir: ".data",
+    dataDir: defaultDataDir(options.env ?? process.env),
     cors: [],
     providers: [],
   };
 
   try {
+    await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
       encoding: "utf8",
       flag: "wx",
