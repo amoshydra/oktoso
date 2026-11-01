@@ -1,12 +1,11 @@
 import type { Context, Hono } from "hono";
 import type { AuthService } from "../../auth/service";
-import { AppError } from "../../domain/errors";
 import {
   getHubSessionCookie,
   isSecureRequest,
   setHubSessionCookie,
 } from "../auth-cookie";
-import { isPairingRequestAllowed, requestHost } from "../origin";
+import { isSameOriginRequest, requestHost } from "../origin";
 import type { AppEnv } from "../types";
 
 export interface PairRouteDeps {
@@ -141,18 +140,17 @@ export function registerPairRoutes(
 
   app.post("/pair/:code", (c) => {
     noStore(c);
-    if (!isPairingRequestAllowed(c)) {
-      c.get("logger").warn("pairing origin rejected", {
+    // A pairing code is a single-use capability, not a cookie. Embedded
+    // webviews and QR handoffs can report a different Origin, so the POST is
+    // accepted as long as the code is valid. The GET page still prevents link
+    // previews from consuming it. Log mismatches for diagnostics.
+    if (!isSameOriginRequest(c)) {
+      c.get("logger").warn("pairing origin mismatch", {
         origin: c.req.header("origin") ?? null,
         host: requestHost(c) ?? null,
         forwardedHost: c.req.header("x-forwarded-host") ?? null,
         site: c.req.header("sec-fetch-site") ?? null,
       });
-      throw new AppError(
-        "forbidden",
-        "Cross-origin pairing request rejected",
-        403,
-      );
     }
 
     const consumed = deps.auth.consumePairing(c.req.param("code"));
