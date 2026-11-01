@@ -30,6 +30,14 @@ function icon(name, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || ''}</svg>`;
 }
 
+function brandMark(size = 36) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+    <rect width="512" height="512" rx="116" fill="var(--accent)"/>
+    <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="var(--on-accent)" stroke-width="44" stroke-linejoin="round"/>
+    <circle cx="256" cy="256" r="44" fill="var(--on-accent)"/>
+  </svg>`;
+}
+
 function esc(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -430,7 +438,7 @@ function renderRail() {
   const count = attention.filter((item) => item.priority === 'blocking').length;
 
   document.getElementById('rail').innerHTML = `
-    <div class="rail-logo" title="Oktoso">OK</div>
+    <div class="rail-logo" role="img" aria-label="Oktoso" title="Oktoso">${brandMark(36)}</div>
     ${items
       .map(
         ([view, label, iconName]) => `

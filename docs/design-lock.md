@@ -33,6 +33,7 @@ Allowed without a new design version:
 
 - typo and copy corrections that do not change hierarchy or meaning;
 - accessibility fixes that do not change the visual system;
+- brand mark and app-icon assets that reuse the existing accent/on-accent pair;
 - browser/rendering fixes;
 - extraction of the frozen tokens into `packages/ui`;
 - implementation details that do not alter the approved screens or tokens.

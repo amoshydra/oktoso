@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oktoso banner</title>
+    <style>
+      @font-face {
+        font-family: "Inter";
+        src: url("../prototypes/fonts/inter-latin-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Plex";
+        src: url("../prototypes/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+        font-weight: 500;
+        font-style: normal;
+        font-display: block;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #000;
+      }
+
+      .banner {
+        position: relative;
+        width: 1600px;
+        height: 560px;
+        overflow: hidden;
+        background: #0b0d11;
+        color: #f4f6f9;
+        font-family: "Inter", sans-serif;
+      }
+
+      .bg-glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(860px 560px at 92% 46%, rgb(169 189 255 / 14%), transparent 70%),
+          radial-gradient(620px 420px at 4% 108%, rgb(169 189 255 / 7%), transparent 70%);
+      }
+
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgb(169 189 255 / 3%) 1px, transparent 1px),
+          linear-gradient(90deg, rgb(169 189 255 / 3%) 1px, transparent 1px);
+        background-size: 64px 64px;
+        mask-image: radial-gradient(900px 620px at 76% 50%, #000, transparent 82%);
+      }
+
+      .halo {
+        position: absolute;
+        right: -60px;
+        top: -70px;
+        z-index: 1;
+        width: 760px;
+        height: 760px;
+        border-radius: 50%;
+        background: radial-gradient(closest-side, rgb(169 189 255 / 16%), transparent);
+        filter: blur(2px);
+      }
+
+      .copy {
+        position: absolute;
+        left: 96px;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        width: 620px;
+        height: 560px;
+      }
+
+      .lock {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .mark {
+        flex: 0 0 92px;
+        width: 92px;
+        height: 92px;
+      }
+
+      .wordmark {
+        font-size: 86px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .tagline {
+        max-width: 560px;
+        margin-top: 24px;
+        color: #b5bcc8;
+        font-size: 24px;
+        font-weight: 400;
+        line-height: 1.35;
+        letter-spacing: -0.01em;
+      }
+
+      .meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 38px;
+      }
+
+      .rule {
+        width: 32px;
+        height: 1px;
+        background: #3f4652;
+      }
+
+      .cats {
+        color: #a9bdff;
+        font-family: "Plex", monospace;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .shot-wrap {
+        position: absolute;
+        top: 15px;
+        right: 40px;
+        z-index: 2;
+        width: 850px;
+        height: 531px;
+        filter: drop-shadow(0 30px 60px rgb(0 0 0 / 66%));
+      }
+
+      .shot {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid #3f4652;
+        border-radius: 14px;
+      }
+
+      .sheen {
+        position: absolute;
+        inset: 0;
+        border-radius: 14px;
+        background: linear-gradient(120deg, rgb(169 189 255 / 7%), transparent 26%);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="banner">
+      <div class="bg-glow"></div>
+      <div class="grid"></div>
+      <div class="halo"></div>
+      <div class="copy">
+        <div class="lock">
+          <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+            <rect width="512" height="512" rx="116" fill="#a9bdff" />
+            <path
+              d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z"
+              fill="none"
+              stroke="#07080b"
+              stroke-width="44"
+              stroke-linejoin="round"
+            />
+            <circle cx="256" cy="256" r="44" fill="#07080b" />
+          </svg>
+          <div class="wordmark">Oktoso</div>
+        </div>
+        <div class="tagline">One hub for every agent session.</div>
+        <div class="meta">
+          <span class="rule"></span>
+          <span class="cats">OpenCode · Open WebUI · Hermes · Even G2</span>
+        </div>
+      </div>
+      <div class="shot-wrap">
+        <img class="shot" src="../screenshots/inbox.png" alt="" />
+        <div class="sheen"></div>
+      </div>
+    </div>
+  </body>
+</html>

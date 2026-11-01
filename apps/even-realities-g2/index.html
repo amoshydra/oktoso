@@ -11,7 +11,8 @@
       body { padding: 20px; max-width: 640px; margin: 0 auto; }
       h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.02em; }
       p { margin: 0; color: var(--muted); }
-      .brand { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(145deg, #b8c8ff, #7e98f4); color: #080b10; font-weight: 800; margin-bottom: 16px; }
+      .brand { width: 36px; height: 36px; margin-bottom: 16px; }
+      .brand svg { display: block; }
       .panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
       .panel h2 { margin: 0 0 4px; font-size: 15px; }
       .panel .hint { font-size: 12px; }
@@ -22,7 +23,7 @@
       fieldset label { margin-top: 6px; color: var(--ink); }
       textarea { min-height: 72px; resize: vertical; }
       button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
-      button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 650; }
+      button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 600; }
       button:disabled { opacity: .5; }
       .row { display: flex; gap: 8px; align-items: center; }
       .status { color: var(--accent); font-size: 12px; margin-top: 8px; min-height: 18px; }
@@ -53,7 +54,13 @@
     </style>
   </head>
   <body>
-    <div class="brand">OK</div>
+    <div class="brand" role="img" aria-label="Oktoso">
+      <svg width="36" height="36" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+        <rect width="512" height="512" rx="116" fill="#a9bdff"/>
+        <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="#07080b" stroke-width="44" stroke-linejoin="round"/>
+        <circle cx="256" cy="256" r="44" fill="#07080b"/>
+      </svg>
+    </div>
     <h1>Oktoso for Even G2</h1>
     <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge.</p>
 

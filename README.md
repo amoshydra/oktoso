@@ -1,8 +1,24 @@
-# Oktoso
+<p align="center">
+  <img src="docs/brand/banner.png" alt="Oktoso — one hub for every agent session" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@amoshydra/oktoso"><img src="https://img.shields.io/npm/v/@amoshydra/oktoso?color=3550c8&label=npm" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3550c8" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A524-3550c8" alt="Node.js 24 or newer">
+</p>
 
 Oktoso is a hub-first session hub for AI agents. One place to see what needs attention, browse sessions, start chats, and reply across OpenCode, Open WebUI, Hermes, and other providers.
 
 The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceable: web, mobile, desktop, Even G2 glasses, and VR.
+
+## Screens
+
+<p align="center">
+  <img src="docs/screenshots/session.png" alt="An Oktoso session with the provider, live reasoning, tool activity, details, and a shell permission waiting for approval" width="100%">
+</p>
+
+<p align="center"><sub>Provider context, live reasoning, tool activity, and the permission waiting for you.</sub></p>
 
 ## Status
 
@@ -16,6 +32,7 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
 - [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.1` reference and change policy
+- [`docs/brand/README.md`](docs/brand/README.md) - brand mark, app icons, and banner assets
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
 - [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
@@ -148,18 +165,18 @@ Opening a pairing page does not consume the code, so chat link previews are safe
 In a foreground TTY, the hub renders a full-screen dashboard:
 
 ```text
-╭─ Oktoso ──────────────────────────────── v0.1.0 ─╮
-│ http://127.0.0.1:8787        up 12m 04s   json       │
-├──────────────────────────────────────────────────────┤
-│ Providers 2/3   Sessions 12   Attention 3    1 SSE   │
-│ Event 1042      Requests 142  Errors 0                │
-├──────────────────────────────────────────────────────┤
-│ Activity                                             │
-│ 18:52:01  desktop-opencode  online                   │
-│ 18:52:04  attention         permission · Fix auth    │
-├──────────────────────────────────────────────────────┤
-│ p pair · l logs · r refresh · o open · ^C quit · ? help│
-╰──────────────────────────────────────────────────────╯
+╭─ Oktoso ──────────────────────────────────────────── v0.1.0 ─╮
+│ http://127.0.0.1:8787                      up 12m 04s   json │
+├──────────────────────────────────────────────────────────────┤
+│ Providers 2/3   Sessions 12   Attention 3              1 SSE │
+│ Event 1042      Requests 142  Errors 0       p pair · ? help │
+├──────────────────────────────────────────────────────────────┤
+│ Activity                                                     │
+│ 18:52:01  desktop-opencode  online                           │
+│ 18:52:04  attention         permission · Fix auth            │
+├──────────────────────────────────────────────────────────────┤
+│ p pair · l logs · r refresh · o open · ^C quit · ? help      │
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 Keys:

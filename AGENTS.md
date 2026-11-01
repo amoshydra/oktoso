@@ -8,6 +8,8 @@ Any change that affects UI, layout, styling, copy, responsive behavior, accessib
 2. [`docs/ui-ia.md`](docs/ui-ia.md) — the source of truth for information architecture, screens, flows, visual language, type scale, spacing, and responsive behavior.
 3. [`docs/visual-audit.md`](docs/visual-audit.md) — the design rationale, contrast measurements, component rules, and known follow-ups.
 
+Brand assets and their usage rules live in [`docs/brand/README.md`](docs/brand/README.md).
+
 If implementation and documentation disagree, treat the documentation as the design intent and update both in the same change.
 
 Do not change the IA, routes, screen structure, or interaction model unless the user explicitly asks. Visual refinement is not permission to redesign the product.

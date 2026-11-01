@@ -203,10 +203,28 @@ The type scale, spacing, radii, palette, semantic color rules, navigation, and a
 - The server-rendered `/pair/<code>` confirmation page sits outside the app shell and uses the same neutral palette.
 - The action is hidden on unsupported or insecure browsers. The phone camera app remains the fallback.
 
+## Brand mark (2026-11-02)
+
+The placeholder `OK` and `AH` blocks were replaced by the Oktoso mark: an accent
+tile with a dark octagonal hub and a centered node.
+
+- The mark uses only `--accent` and `--on-accent`, so it follows the active dark
+  or light theme. It adds no type, spacing, radius, or color token.
+- Sizes are 36px in the rail and 40px on the signed-out and pairing surfaces.
+  The rail mark is the only logo in the app shell; page content does not repeat
+  it. The Even G2 phone setup page uses the same 36px mark.
+- The pairing page uses the fixed dark-theme mark and the shared favicon.
+- `apps/web` now ships `favicon.ico`, an SVG favicon, 16/32/48px PNG fallbacks,
+  an Apple touch icon, 192/512px app icons, maskable icons, and a web manifest.
+  The geometry and regeneration steps are in [`brand/README.md`](brand/README.md).
+- The README banner is composed from the prototype at 1440px and the same mark.
+  It changes no product screen.
+
 ## Files changed
 
 - `docs/prototypes/styles.css`: tokens, surfaces, borders, controls, attention cards, chat, details, providers, settings, mobile nav.
 - `docs/ui-ia.md`: visual tokens, type scale, spacing, responsive rules, and provider/state semantics updated.
 - `docs/prototypes/app.js`: neutral provider labels, unread-by-weight, single page headings, pinned modal form, and screen-reader state labels.
 - `docs/visual-audit.md`: this audit and the before/after measurements.
-- `README.md`: link to the audit.
+- `docs/brand/`, `apps/web/public/`, `docs/screenshots/`: brand mark, favicons, app icons, banner, and README imagery.
+- `README.md`: link to the audit and the brand banner/screenshot.

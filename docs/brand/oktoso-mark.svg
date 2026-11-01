@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Oktoso</title>
+  <rect width="512" height="512" rx="116" fill="#a9bdff"/>
+  <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="#07080b" stroke-width="44" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="44" fill="#07080b"/>
+</svg>

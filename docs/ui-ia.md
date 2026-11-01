@@ -388,6 +388,8 @@ Every screen needs these states:
 
 Quiet, precise, and work-focused. The interface should disappear behind the conversation. Avoid decorative gradients, oversized headings, and card-heavy dashboards.
 
+The brand mark is one accent tile with a dark octagonal hub and a centered node. It appears at 36px in the rail and 40px on the signed-out and pairing surfaces. It is the only logo in the shell; do not repeat it in page content or use it as a decorative icon. The same geometry supplies the favicon and app icons; those are fixed dark-theme artwork.
+
 ### Color
 
 The visual system uses a layered neutral palette. Borders and surface shifts carry structure. Color is reserved for state and action.
