@@ -218,7 +218,8 @@ tile with a dark octagonal hub and a centered node.
   an Apple touch icon, 192/512px app icons, maskable icons, and a web manifest.
   The geometry and regeneration steps are in [`brand/README.md`](brand/README.md).
 - The README banner is composed from the prototype at 1440px and the same mark.
-  It changes no product screen.
+  It changes no product screen. `pnpm brand:screens` regenerates the screenshots
+  and banner, and CI runs `pnpm brand:check` to catch stale sources or images.
 
 ## Files changed
 
