@@ -286,6 +286,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Attachment button, disabled when the provider does not support attachments.
 - Agent, model, and reasoning selectors when the provider exposes options. Reasoning is the provider’s model variant; a model with no variants shows no reasoning selector. Changing a selector updates the session and refreshes the document header and details.
 - The selectors are disabled while the agent is running, and a failed change restores the previous values with an inline error.
+- On mobile, the compact composer selects stay at 12px; text entry fields remain 16px to avoid browser zoom.
 - Slash commands later.
 - Voice button on mobile and glasses. Desktop can use the browser microphone later.
 - Wearable clients can show short reply options from deterministic steering, a configured 4B model, or extracted agent choices.
