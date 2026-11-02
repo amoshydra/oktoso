@@ -133,6 +133,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     }),
     logger: deps.logger,
     version: VERSION,
+    events: deps.eventBus,
   });
   registerDiagnosticsRoute(app, {
     startedAt,

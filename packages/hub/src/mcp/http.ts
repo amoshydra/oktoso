@@ -4,6 +4,7 @@ import type { Hono } from "hono";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import type { HubEvent } from "@amoshydra/oktoso-contracts";
 import type { HubConfig, McpTokenConfig } from "../config/schema";
 import type { AppEnv } from "../http/types";
 import type { Logger } from "../lib/logger";
@@ -39,6 +40,9 @@ export interface McpRouteDependencies {
   api: McpHubApi;
   logger: Logger;
   version: string;
+  events?: {
+    subscribe(listener: (event: HubEvent) => void): () => void;
+  };
 }
 
 export interface McpRouteHandle {
@@ -366,6 +370,7 @@ export function registerMcpRoutes(
       ...(client.tools ? { tools: client.tools } : {}),
       timeoutMs: client.timeoutMs,
       onCall: (record) => audit.record(client.id, record),
+      ...(deps.events ? { events: deps.events } : {}),
     });
     session = {
       transport,

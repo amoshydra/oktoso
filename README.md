@@ -186,7 +186,7 @@ The hub can also host the same tools at `/mcp` over Streamable HTTP. Enable `mcp
 }
 ```
 
-Hosted calls are rate-limited, time-limited, session-bound to their token, and appended to `<dataDir>/mcp-audit.jsonl`. See [`docs/mcp-northbound.md`](docs/mcp-northbound.md) for the full config, OpenCode remote setup, tool list, controller prompt, and safety rules.
+Hosted calls are rate-limited, time-limited, session-bound to their token, and appended to `<dataDir>/mcp-audit.jsonl`. Sessions also expose `oktoso://attention` and `oktoso://sessions` resources with subscription updates. See [`docs/mcp-northbound.md`](docs/mcp-northbound.md) for the full config, OpenCode remote setup, tool list, controller prompt, and safety rules.
 
 ## Terminal UI
 

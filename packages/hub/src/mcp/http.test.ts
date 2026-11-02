@@ -3,8 +3,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { ResourceUpdatedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import type {
   AttentionPage,
+  HubEvent,
   Provider,
   SessionPage,
 } from "@amoshydra/oktoso-contracts";
@@ -58,6 +62,7 @@ function createApi() {
 async function harness(options: {
   tokens: Array<Record<string, unknown>>;
   audit?: boolean;
+  events?: { subscribe(listener: (event: HubEvent) => void): () => void };
 }) {
   const root = await tempRoot();
   const config = zHubConfig.parse({
@@ -79,6 +84,7 @@ async function harness(options: {
     api,
     logger,
     version: "test",
+    ...(options.events ? { events: options.events } : {}),
   })!;
   handles.push(handle);
   return { app, handle, config, api, sendMessage, root };
@@ -420,5 +426,59 @@ describe("hosted MCP route", () => {
       tool: "providers_list",
       ok: true,
     });
+  });
+
+  it("serves resources and pushes update notifications over HTTP", async () => {
+    const listeners = new Set<(event: HubEvent) => void>();
+    const events = {
+      subscribe(listener: (event: HubEvent) => void) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+    const { app } = await harness({
+      tokens: [{ id: "reader", token: "reader-token-long-enough" }],
+      events,
+    });
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL("http://oktoso.test/mcp"),
+      {
+        fetch: async (input, init) => app.request(input.toString(), init),
+        requestInit: {
+          headers: { Authorization: "Bearer reader-token-long-enough" },
+        },
+      },
+    );
+    const client = new Client({ name: "resource-test", version: "1.0.0" });
+    await client.connect(transport);
+    try {
+      const listed = await client.listResources();
+      expect(listed.resources.map((resource) => resource.uri)).toEqual(
+        expect.arrayContaining(["oktoso://attention", "oktoso://sessions"]),
+      );
+
+      const read = await client.readResource({ uri: "oktoso://attention" });
+      const payload = JSON.parse((read.contents[0] as { text: string }).text);
+      expect(payload.data).toEqual([]);
+
+      const updates: string[] = [];
+      client.setNotificationHandler(
+        ResourceUpdatedNotificationSchema,
+        (notification) => {
+          updates.push(notification.params.uri);
+        },
+      );
+      await client.subscribeResource({ uri: "oktoso://attention" });
+      for (const listener of listeners) {
+        listener({ seq: 1, type: "attention.updated", data: {}, at: 1 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(updates).toEqual(["oktoso://attention"]);
+    } finally {
+      await client.close();
+    }
   });
 });

@@ -1,9 +1,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ResourceUpdatedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { describe, expect, it, vi } from "vitest";
 import type {
   Attention,
   AttentionPage,
+  HubEvent,
   MessagePage,
   Provider,
   QuestionPrompt,
@@ -14,6 +16,7 @@ import type {
 import {
   createOktosoMcpServer,
   type McpHubApi,
+  type OktosoMcpOptions,
 } from "./server";
 
 const provider: Provider = {
@@ -99,13 +102,18 @@ function fakeApi(overrides: Partial<McpHubApi> = {}): McpHubApi {
   return api;
 }
 
-async function connect(api: McpHubApi, allowWrite = false) {
+async function connect(
+  api: McpHubApi,
+  allowWrite = false,
+  options: Partial<OktosoMcpOptions> = {},
+) {
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
   const server = createOktosoMcpServer({
     api,
     version: "test",
     allowWrite,
+    ...options,
   });
   await server.connect(serverTransport);
 
@@ -292,6 +300,66 @@ describe("Oktoso MCP server", () => {
       });
       expect(result.isError).toBe(true);
       expect(toolText(result)).toContain("hub is offline");
+    } finally {
+      await close();
+    }
+  });
+
+  it("serves resources and notifies subscribers", async () => {
+    const listeners = new Set<(event: HubEvent) => void>();
+    const events = {
+      subscribe(listener: (event: HubEvent) => void) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+    const { client, close } = await connect(fakeApi(), false, { events });
+    try {
+      const listed = await client.listResources();
+      expect(listed.resources.map((resource) => resource.uri)).toEqual(
+        expect.arrayContaining(["oktoso://attention", "oktoso://sessions"]),
+      );
+
+      const attention = await client.readResource({
+        uri: "oktoso://attention",
+      });
+      const payload = JSON.parse(
+        (attention.contents[0] as { text: string }).text,
+      );
+      expect(payload.data[0].id).toBe("attention-1");
+
+      const updates: string[] = [];
+      client.setNotificationHandler(
+        ResourceUpdatedNotificationSchema,
+        (notification) => {
+          updates.push(notification.params.uri);
+        },
+      );
+      await client.subscribeResource({ uri: "oktoso://attention" });
+      for (const listener of listeners) {
+        listener({
+          seq: 1,
+          type: "attention.updated",
+          data: {},
+          at: 1,
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(updates).toEqual(["oktoso://attention"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("hides resources that the tool allowlist excludes", async () => {
+    const { client, close } = await connect(fakeApi(), false, {
+      tools: ["providers_list"],
+    });
+    try {
+      const listed = await client.listResources();
+      expect(listed.resources).toEqual([]);
     } finally {
       await close();
     }
