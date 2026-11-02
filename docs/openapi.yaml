@@ -11,6 +11,7 @@ tags:
   - name: auth
   - name: providers
   - name: sessions
+  - name: attachments
   - name: drafts
   - name: questions
   - name: attention
@@ -260,6 +261,14 @@ components:
           type: boolean
         attachments:
           type: boolean
+        attach:
+          type: boolean
+        branches:
+          type: boolean
+        fork:
+          type: boolean
+        retry:
+          type: boolean
         search:
           type: boolean
         options:
@@ -276,6 +285,10 @@ components:
         - permissions
         - forms
         - attachments
+        - attach
+        - branches
+        - fork
+        - retry
         - search
         - options
         - markRead
@@ -333,6 +346,14 @@ components:
               type: boolean
             attachments:
               type: boolean
+            attach:
+              type: boolean
+            branches:
+              type: boolean
+            fork:
+              type: boolean
+            retry:
+              type: boolean
             search:
               type: boolean
             options:
@@ -349,6 +370,10 @@ components:
             - permissions
             - forms
             - attachments
+            - attach
+            - branches
+            - fork
+            - retry
             - search
             - options
             - markRead
@@ -1485,7 +1510,12 @@ components:
       properties:
         text:
           type: string
-          minLength: 1
+        attachments:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          maxItems: 5
         answer:
           type: object
           properties:
@@ -1557,6 +1587,128 @@ components:
           type: string
       required:
         - accepted
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+        name:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: integer
+      required:
+        - id
+        - name
+        - mimeType
+        - size
+        - createdAt
+    BranchPoint:
+      type: object
+      properties:
+        messageId:
+          type: string
+          minLength: 1
+        parentId:
+          type:
+            - string
+            - "null"
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+            - system
+            - tool
+        siblingIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          minItems: 1
+        index:
+          type: integer
+          minimum: 0
+        count:
+          type: integer
+          exclusiveMinimum: 0
+      required:
+        - messageId
+        - parentId
+        - role
+        - siblingIds
+        - index
+        - count
+    BranchPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              messageId:
+                type: string
+                minLength: 1
+              parentId:
+                type:
+                  - string
+                  - "null"
+              role:
+                type: string
+                enum:
+                  - user
+                  - assistant
+                  - system
+                  - tool
+              siblingIds:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                minItems: 1
+              index:
+                type: integer
+                minimum: 0
+              count:
+                type: integer
+                exclusiveMinimum: 0
+            required:
+              - messageId
+              - parentId
+              - role
+              - siblingIds
+              - index
+              - count
+      required:
+        - data
+    BranchSwitchInput:
+      type: object
+      properties:
+        siblingId:
+          type: string
+          minLength: 1
+      required:
+        - siblingId
+    ForkInput:
+      type: object
+      properties:
+        before:
+          type: string
+          minLength: 1
+    RetryInput:
+      type: object
+      properties:
+        messageId:
+          type: string
+          minLength: 1
+      required:
+        - messageId
     AttentionType:
       type: string
       enum:
@@ -2459,6 +2611,229 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/branches:
+    get:
+      tags:
+        - sessions
+      summary: List in-chat branch points
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Branch points
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchPage"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - sessions
+      summary: Switch an in-chat branch
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchSwitchInput"
+      responses:
+        "200":
+          description: Branch switched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+                required:
+                  - accepted
+        "400":
+          description: Invalid branch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or branch not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support branches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/retry:
+    post:
+      tags:
+        - sessions
+      summary: Retry an assistant message as a new sibling
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryInput"
+      responses:
+        "202":
+          description: Retry accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendResult"
+        "400":
+          description: Invalid retry target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or message not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/fork:
+    post:
+      tags:
+        - sessions
+      summary: Fork a session
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForkInput"
+      responses:
+        "200":
+          description: Forked session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          description: Invalid fork input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or message not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support forking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/attachments:
+    post:
+      tags:
+        - attachments
+      summary: Stage an attachment for a message
+      description: Uploads one file to the hub. Staged attachments expire after one hour and are removed after a successful send.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "201":
+          description: Staged attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+        "400":
+          description: Invalid or unsupported attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Attachment is too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/attachments/{id}:
+    delete:
+      tags:
+        - attachments
+      summary: Delete a staged attachment
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Deleted
   /api/v1/sessions/{ref}/interrupt:
     post:
       tags:

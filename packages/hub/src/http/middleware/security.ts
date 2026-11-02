@@ -1,10 +1,12 @@
 import type { MiddlewareHandler } from "hono";
+import { MAX_ATTACHMENT_BYTES } from "@amoshydra/oktoso-contracts";
 import type { AppEnv } from "../types";
 import { AppError } from "../../domain/errors";
 import { MAX_AUDIO_BODY_BYTES, MAX_JSON_BODY_BYTES } from "../limits";
 
 const UPLOAD_BODY_LIMITS = new Map<string, number>([
   ["/api/v1/transcribe", MAX_AUDIO_BODY_BYTES],
+  ["/api/v1/attachments", MAX_ATTACHMENT_BYTES],
 ]);
 
 export function securityHeaders(): MiddlewareHandler<AppEnv> {

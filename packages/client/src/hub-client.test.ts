@@ -200,6 +200,126 @@ describe("HubClient.transcribe", () => {
   });
 });
 
+describe("HubClient.attachments and branches", () => {
+  it("uploads an attachment as multipart", async () => {
+    let captured: { url: string; init: RequestInit | undefined } | undefined;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      captured = { url: String(input), init };
+      return new Response(
+        JSON.stringify({
+          data: {
+            id: "att_1",
+            name: "notes.txt",
+            mimeType: "text/plain",
+            size: 5,
+            createdAt: 1,
+          },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "http://hub", token: "token", fetchImpl });
+
+    const attachment = await hub.uploadAttachment(
+      new File(["hello"], "notes.txt", { type: "text/plain" }),
+    );
+    expect(attachment).toMatchObject({ id: "att_1", name: "notes.txt" });
+    expect(captured?.url).toBe("http://hub/api/v1/attachments");
+    expect(captured?.init?.method).toBe("POST");
+    const headers = new Headers(captured?.init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer token");
+    const form = captured?.init?.body as FormData;
+    const file = form.get("file") as File;
+    expect(file.name).toBe("notes.txt");
+    expect(file.type).toBe("text/plain");
+  });
+
+  it("lists, switches, and forks branches", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      if (
+        String(input).endsWith("/branches") &&
+        (init?.method === undefined || init.method === "GET")
+      ) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                messageId: "msg_b",
+                parentId: "msg_user",
+                role: "assistant",
+                siblingIds: ["msg_a", "msg_b"],
+                index: 1,
+                count: 2,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (String(input).endsWith("/fork")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              ref: "desktop-opencode:ses_child",
+              providerID: "desktop-opencode",
+              nativeID: "ses_child",
+              title: "Fork",
+              status: "idle",
+              unread: false,
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ accepted: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "http://hub", token: "token", fetchImpl });
+
+    const points = await hub.branches("desktop-opencode:ses_auth");
+    expect(points).toHaveLength(1);
+    expect(points[0]?.messageId).toBe("msg_b");
+
+    await hub.switchBranch("desktop-opencode:ses_auth", "msg_a");
+    expect(calls[1]?.url).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/branches",
+    );
+    expect(calls[1]?.init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({
+      siblingId: "msg_a",
+    });
+
+    const retried = await hub.retryMessage(
+      "desktop-opencode:ses_auth",
+      "msg_b",
+    );
+    expect(retried).toEqual({ accepted: true });
+    expect(calls[2]?.url).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/retry",
+    );
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
+      messageId: "msg_b",
+    });
+
+    const child = await hub.forkSession("desktop-opencode:ses_auth", {
+      before: "msg_answer",
+    });
+    expect(child.ref).toBe("desktop-opencode:ses_child");
+    expect(calls[3]?.url).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/fork",
+    );
+    expect(JSON.parse(String(calls[3]?.init?.body))).toEqual({
+      before: "msg_answer",
+    });
+  });
+});
+
 describe("HubClient.setSessionSelection", () => {
   it("posts the model and agent and returns the updated session", async () => {
     let captured: { url: string; init: RequestInit | undefined } | undefined;

@@ -1,8 +1,11 @@
 import type { Hono } from "hono";
 import {
+  zBranchSwitchInput,
   zCreateSessionInput,
+  zForkInput,
   zMessagesQuery,
   zReplyMode,
+  zRetryInput,
   zSendInput,
   zSessionListQuery,
   zSessionSelectionInput,
@@ -53,6 +56,47 @@ export function registerSessionRoutes(
     const mode = zReplyMode.safeParse(c.req.query("mode") ?? "reply");
     if (!mode.success) throw badRequest("Invalid reply-option mode");
     return c.json(await replies.list(ref, mode.data));
+  });
+
+  app.get("/api/v1/sessions/:ref/branches", async (c) => {
+    const ref = c.req.param("ref");
+    return c.json({ data: await sessions.listBranches(ref) });
+  });
+
+  app.post("/api/v1/sessions/:ref/branches", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zBranchSwitchInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid branch switch input", {
+        issues: parsed.error.issues,
+      });
+    }
+    const ref = c.req.param("ref");
+    await sessions.switchBranch(ref, parsed.data.siblingId);
+    return c.json({ accepted: true });
+  });
+
+  app.post("/api/v1/sessions/:ref/retry", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zRetryInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid retry input", { issues: parsed.error.issues });
+    }
+    const result = await sessions.retryMessage(
+      c.req.param("ref"),
+      parsed.data.messageId,
+    );
+    return c.json(result, 202);
+  });
+
+  app.post("/api/v1/sessions/:ref/fork", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zForkInput.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw badRequest("Invalid fork input", { issues: parsed.error.issues });
+    }
+    const session = await sessions.fork(c.req.param("ref"), parsed.data);
+    return c.json({ data: session });
   });
 
   app.get("/api/v1/sessions/:ref/messages", async (c) => {
@@ -154,7 +198,12 @@ export function registerSessionRoutes(
     }
 
     // `answer` is hub-only metadata; providers receive the plain message.
-    const result = await sessions.sendMessage(ref, { text: parsed.data.text });
+    const result = await sessions.sendMessage(ref, {
+      text: parsed.data.text,
+      ...(parsed.data.attachments
+        ? { attachments: parsed.data.attachments }
+        : {}),
+    });
     questions.invalidate(ref);
     if (cacheKey) await idempotency.set(cacheKey, result);
     return c.json(result, 202);

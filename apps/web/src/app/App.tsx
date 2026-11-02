@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_BYTES,
+} from "@amoshydra/oktoso-contracts";
 import type {
   AssistantView,
+  Attachment,
   Attention,
   AttentionType,
+  BranchPoint,
   Diagnostics,
   Health,
   HubEvent,
@@ -722,6 +728,7 @@ export function App() {
                     detailsOpen={detailsOpen}
                     onDetailsOpenChange={setDetailsOpen}
                     onSessionChange={setActiveSession}
+                    onOpenSession={openSession}
                     onBack={() => setSelectedSessionRef(undefined)}
                   />
                 </div>
@@ -2920,6 +2927,7 @@ function SessionDetail(props: {
   detailsOpen: boolean;
   onDetailsOpenChange: (open: boolean) => void;
   onSessionChange: (session: Session | undefined) => void;
+  onOpenSession: (ref: string) => void;
   onBack: () => void;
 }) {
   const [session, setSession] = useState<Session>();
@@ -2944,6 +2952,13 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(0);
+  const [attachmentError, setAttachmentError] = useState<string>();
+  const [branches, setBranches] = useState<BranchPoint[]>([]);
+  const [branchBusy, setBranchBusy] = useState<string>();
+  const [retryBusy, setRetryBusy] = useState<string>();
+  const [branchError, setBranchError] = useState<string>();
   const [dictation, setDictation] = useState<DictationState>({ phase: "idle" });
   const [dictationElapsedMs, setDictationElapsedMs] = useState(0);
   const [dictationEnabled, setDictationEnabled] = useState(false);
@@ -2975,6 +2990,9 @@ function SessionDetail(props: {
     dictation.phase === "starting" ||
     dictation.phase === "recording" ||
     dictation.phase === "transcribing";
+  const attachSupported = Boolean(sessionProvider?.capabilities.attach);
+  const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const getScroller = () => transcriptRef.current;
 
@@ -3182,7 +3200,7 @@ function SessionDetail(props: {
   }, [dictation]);
 
   const refreshLatest = useCallback(
-    async (forceBottom = false) => {
+    async (forceBottom = false, replace = false) => {
       const [nextSession, page] = await Promise.all([
         props.client.session(props.sessionRef),
         props.client.messages(props.sessionRef, {
@@ -3193,8 +3211,8 @@ function SessionDetail(props: {
       const latest = [...page.data].reverse();
       const stick = forceBottom || nearBottom();
       setSession(nextSession);
-      setMessages((current) => mergeMessages(current, latest));
-      setOlderCursor((current) => current ?? page.cursor.next);
+      setMessages((current) => (replace ? latest : mergeMessages(current, latest)));
+      setOlderCursor((current) => (replace ? page.cursor.next : current ?? page.cursor.next));
       if (stick) pendingScroll.current = { mode: "bottom" };
     },
     [props.client, props.sessionRef],
@@ -3234,21 +3252,132 @@ function SessionDetail(props: {
     }
   }, [olderCursor, loadingOlder, props.client, props.sessionRef]);
 
+  const refreshBranches = useCallback(async () => {
+    if (!branchesSupported) {
+      setBranches([]);
+      return;
+    }
+    try {
+      setBranches(await props.client.branches(props.sessionRef));
+    } catch {
+      setBranches([]);
+    }
+  }, [branchesSupported, props.client, props.sessionRef]);
+
+  useEffect(() => {
+    void refreshBranches();
+  }, [refreshBranches]);
+
+  const retryMessage = async (messageId: string) => {
+    if (retryBusy) return;
+    setRetryBusy(messageId);
+    setBranchError(undefined);
+    try {
+      await props.client.retryMessage(props.sessionRef, messageId);
+      await refreshLatest(true, true);
+      await refreshBranches();
+      setAtBottom(true);
+    } catch (reason) {
+      setBranchError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to retry the message.",
+      );
+    } finally {
+      setRetryBusy(undefined);
+    }
+  };
+
+  const switchBranch = async (point: BranchPoint, siblingId: string) => {
+    if (branchBusy) return;
+    setBranchBusy(point.messageId);
+    setBranchError(undefined);
+    try {
+      await props.client.switchBranch(props.sessionRef, siblingId);
+      await refreshLatest(true, true);
+      await refreshBranches();
+      setAtBottom(true);
+    } catch (reason) {
+      setBranchError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to switch the branch.",
+      );
+    } finally {
+      setBranchBusy(undefined);
+    }
+  };
+
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending || dictationBusy) return;
+    const attachmentIDs = attachments.map((attachment) => attachment.id);
+    if (
+      (!text && attachmentIDs.length === 0) ||
+      sending ||
+      dictationBusy ||
+      uploadingAttachments > 0
+    ) {
+      return;
+    }
     setSending(true);
     setSendError(undefined);
     try {
-      await props.client.sendMessage(props.sessionRef, { text });
+      await props.client.sendMessage(props.sessionRef, {
+        text,
+        ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}),
+      });
+      setAttachments([]);
       await discardDraft();
       setSession((current) => (current ? { ...current, status: "running" } : current));
-      window.setTimeout(() => void refreshLatest(true).catch(() => undefined), 500);
+      window.setTimeout(() => {
+        void refreshLatest(true).catch(() => undefined);
+        void refreshBranches();
+      }, 500);
     } catch (reason) {
       setSendError(reason instanceof Error ? reason.message : "Unable to send the prompt");
     } finally {
       setSending(false);
     }
+  };
+
+  const uploadAttachments = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAttachmentError(undefined);
+    let count = attachments.length;
+    for (const file of Array.from(files)) {
+      if (count >= MAX_ATTACHMENTS_PER_MESSAGE) {
+        setAttachmentError(
+          `You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files.`,
+        );
+        break;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setAttachmentError(`${file.name} is larger than 20 MB.`);
+        continue;
+      }
+      count += 1;
+      setUploadingAttachments((current) => current + 1);
+      try {
+        const attachment = await props.client.uploadAttachment(file);
+        setAttachments((current) => [...current, attachment]);
+      } catch (reason) {
+        setAttachmentError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to upload the attachment.",
+        );
+      } finally {
+        setUploadingAttachments((current) => Math.max(0, current - 1));
+      }
+    }
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+  };
+
+  const removeAttachment = async (id: string) => {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== id),
+    );
+    await props.client.deleteAttachment(id).catch(() => undefined);
   };
 
   const interrupt = async () => {
@@ -3607,8 +3736,10 @@ function SessionDetail(props: {
   const latestQuestion = latestQuestionText(messages);
   const transcriptItems = groupTranscript(messages);
   const composerHint =
-    dictation.phase === "starting"
-      ? "Starting dictation…"
+    uploadingAttachments > 0
+      ? "Uploading attachment…"
+      : dictation.phase === "starting"
+        ? "Starting dictation…"
       : dictation.phase === "recording"
         ? "Recording…"
         : dictation.phase === "transcribing"
@@ -3702,6 +3833,18 @@ function SessionDetail(props: {
                       key={item.message.id}
                       client={props.client}
                       resource={resource}
+                      branchPoint={branches.find(
+                        (point) =>
+                          point.messageId === item.message.id &&
+                          point.role === "assistant",
+                      )}
+                      branchBusy={branchBusy === item.message.id}
+                      onSwitchBranch={(point, siblingId) =>
+                        void switchBranch(point, siblingId)
+                      }
+                      canRetry={Boolean(sessionProvider?.capabilities.retry)}
+                      retryBusy={retryBusy === item.message.id}
+                      onRetry={(messageId) => void retryMessage(messageId)}
                       suppressError={Boolean(errorAttention)}
                     />
                   ) : (
@@ -3772,6 +3915,32 @@ function SessionDetail(props: {
               </div>
             ) : null}
 
+            {attachmentError ? (
+              <div className="alert" role="alert">
+                {attachmentError}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setAttachmentError(undefined)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
+            {branchError ? (
+              <div className="alert" role="alert">
+                {branchError}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setBranchError(undefined)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
             <div className="chat-composer-wrap">
               {!atBottom ? (
                 <button className="chat-jump" type="button" onClick={jumpToLatest}>
@@ -3786,6 +3955,42 @@ function SessionDetail(props: {
                   void send();
                 }}
               >
+                {attachSupported ? (
+                  <input
+                    ref={attachmentInputRef}
+                    id="chat-attachment-input"
+                    name="attachment"
+                    type="file"
+                    multiple
+                    hidden
+                    accept="image/png,image/jpeg,image/gif,image/webp,image/avif,application/pdf,application/json,text/plain,text/markdown,text/csv"
+                    onChange={(event) =>
+                      void uploadAttachments(event.currentTarget.files)
+                    }
+                  />
+                ) : null}
+                {attachments.length > 0 ? (
+                  <div className="composer-attachments">
+                    {attachments.map((attachment) => (
+                      <div className="composer-attachment" key={attachment.id}>
+                        <span className="composer-attachment-name">
+                          {attachment.name}
+                        </span>
+                        <span className="composer-attachment-size">
+                          {formatFileSize(attachment.size)}
+                        </span>
+                        <button
+                          className="composer-attachment-remove"
+                          type="button"
+                          aria-label={`Remove ${attachment.name}`}
+                          onClick={() => void removeAttachment(attachment.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <textarea
                   id="chat-composer-input"
                   name="message"
@@ -3939,6 +4144,16 @@ function SessionDetail(props: {
                     {composerHint}
                   </span>
                   <div className="composer-actions">
+                    {attachSupported ? (
+                      <button
+                        className="composer-voice"
+                        type="button"
+                        disabled={uploadingAttachments > 0}
+                        onClick={() => attachmentInputRef.current?.click()}
+                      >
+                        {uploadingAttachments > 0 ? "Uploading…" : "Attach"}
+                      </button>
+                    ) : null}
                     {dictationSupported ? (
                       <button
                         className={`composer-voice ${dictation.phase === "recording" ? "recording" : ""}`}
@@ -3983,7 +4198,12 @@ function SessionDetail(props: {
                       className="btn primary small composer-send"
                       type="submit"
                       aria-label={sending ? "Sending message" : "Send message"}
-                      disabled={sending || !draft.trim() || dictationBusy}
+                      disabled={
+                        sending ||
+                        (!draft.trim() && attachments.length === 0) ||
+                        dictationBusy ||
+                        uploadingAttachments > 0
+                      }
                     >
                       <span className="composer-send-label">
                         {sending ? "Sending…" : "Send"}
@@ -4020,6 +4240,7 @@ function SessionDetail(props: {
             onClick={() => props.onDetailsOpenChange(false)}
           />
           <SessionDetails
+            client={props.client}
             session={session}
             provider={sessionProvider}
             markingRead={markingRead}
@@ -4027,6 +4248,7 @@ function SessionDetail(props: {
             onClose={() => props.onDetailsOpenChange(false)}
             onMarkRead={() => void markRead()}
             onInterrupt={() => void interrupt()}
+            onOpenSession={props.onOpenSession}
           />
         </>
       ) : null}
@@ -4145,10 +4367,61 @@ function CopyMessageButton(props: { text: string }) {
   );
 }
 
+function BranchPicker(props: {
+  point: BranchPoint;
+  busy: boolean;
+  onSwitch: (siblingId: string) => void;
+}) {
+  const { point } = props;
+  return (
+    <div
+      className="message-branch"
+      aria-label={`Response ${point.index + 1} of ${point.count}`}
+    >
+      <button
+        className="message-branch-button"
+        type="button"
+        aria-label="Previous response"
+        disabled={props.busy || point.index <= 0}
+        onClick={() => {
+          const sibling = point.siblingIds[point.index - 1];
+          if (sibling) props.onSwitch(sibling);
+        }}
+      >
+        ‹
+      </button>
+      <span className="message-branch-count" aria-hidden="true">
+        {point.index + 1} / {point.count}
+      </span>
+      <span className="sr-only">
+        Response {point.index + 1} of {point.count}
+      </span>
+      <button
+        className="message-branch-button"
+        type="button"
+        aria-label="Next response"
+        disabled={props.busy || point.index >= point.count - 1}
+        onClick={() => {
+          const sibling = point.siblingIds[point.index + 1];
+          if (sibling) props.onSwitch(sibling);
+        }}
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 function TranscriptMessage(props: {
   message: Message;
   client: HubClient;
   resource: ResourceContext;
+  branchPoint?: BranchPoint;
+  branchBusy?: boolean;
+  onSwitchBranch?: (point: BranchPoint, siblingId: string) => void;
+  canRetry?: boolean;
+  retryBusy?: boolean;
+  onRetry?: (messageId: string) => void;
   suppressError?: boolean;
 }) {
   const message = props.message;
@@ -4185,9 +4458,32 @@ function TranscriptMessage(props: {
           ))
         )}
       </div>
-      {copyText ? (
+      {copyText || props.branchPoint || props.canRetry ? (
         <div className="chat-message-actions">
-          <CopyMessageButton text={copyText} />
+          <div className="chat-message-actions-left">
+            {props.branchPoint && props.onSwitchBranch ? (
+              <BranchPicker
+                point={props.branchPoint}
+                busy={Boolean(props.branchBusy)}
+                onSwitch={(siblingId) =>
+                  props.onSwitchBranch?.(props.branchPoint!, siblingId)
+                }
+              />
+            ) : null}
+          </div>
+          <div className="chat-message-actions-right">
+            {props.canRetry && copyText ? (
+              <button
+                className="message-action"
+                type="button"
+                disabled={props.retryBusy}
+                onClick={() => props.onRetry?.(message.id)}
+              >
+                {props.retryBusy ? "Retrying…" : "Retry"}
+              </button>
+            ) : null}
+            {copyText ? <CopyMessageButton text={copyText} /> : null}
+          </div>
         </div>
       ) : null}
     </article>
@@ -4249,6 +4545,7 @@ function DateSeparator(props: { at: number }) {
 }
 
 function SessionDetails(props: {
+  client: HubClient;
   session: Session;
   provider: Provider | undefined;
   markingRead: boolean;
@@ -4256,10 +4553,13 @@ function SessionDetails(props: {
   onClose: () => void;
   onMarkRead: () => void;
   onInterrupt: () => void;
+  onOpenSession: (ref: string) => void;
 }) {
   const { session, provider } = props;
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string>();
+  const [forking, setForking] = useState(false);
+  const [forkError, setForkError] = useState<string>();
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const providerUrl =
@@ -4322,6 +4622,22 @@ function SessionDetails(props: {
     }
   };
 
+  const forkSession = async () => {
+    if (forking) return;
+    setForking(true);
+    setForkError(undefined);
+    try {
+      const forked = await props.client.forkSession(session.ref);
+      props.onOpenSession(forked.ref);
+    } catch (reason) {
+      setForkError(
+        reason instanceof Error ? reason.message : "Unable to fork the session.",
+      );
+    } finally {
+      setForking(false);
+    }
+  };
+
   return (
     <aside
       className="chat-details"
@@ -4359,7 +4675,9 @@ function SessionDetails(props: {
           {session.directory ? <Detail label="Directory" value={session.directory} /> : null}
           {session.agent ? <Detail label="Agent" value={session.agent} mono={false} /> : null}
           {session.model ? <Detail label="Model" value={session.model} /> : null}
-          {session.parentRef ? <Detail label="Parent session" value={session.parentRef} /> : null}
+          {session.parentRef ? (
+          <Detail label="Parent session" value={session.parentRef} />
+        ) : null}
         </section>
 
         <section className="chat-details-section">
@@ -4397,6 +4715,25 @@ function SessionDetails(props: {
         <button className="btn small" type="button" onClick={() => void copyReference()}>
           {copied ? "Copied" : "Copy reference"}
         </button>
+        {session.parentRef ? (
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => props.onOpenSession(session.parentRef!)}
+          >
+            Open parent
+          </button>
+        ) : null}
+        {provider?.capabilities.fork ? (
+          <button
+            className="btn small"
+            type="button"
+            disabled={forking}
+            onClick={() => void forkSession()}
+          >
+            {forking ? "Forking…" : "Fork session"}
+          </button>
+        ) : null}
         <button
           className="btn small"
           type="button"
@@ -4416,7 +4753,7 @@ function SessionDetails(props: {
           </button>
         ) : null}
         <span className="chat-details-notice" aria-live="polite">
-          {notice ?? ""}
+          {forkError ?? notice ?? ""}
         </span>
       </div>
     </aside>
@@ -4577,6 +4914,7 @@ function MessagePartView(props: {
   if (part.type === "file") {
     const image = resolveSessionResource(part.url, props.resource, "image");
     const link = resolveSessionResource(part.url, props.resource, "link");
+    const dataUrl = part.url?.startsWith("data:") ? part.url : undefined;
     const isImage =
       Boolean(part.mimeType?.startsWith("image/")) ||
       (!part.mimeType &&
@@ -4597,13 +4935,17 @@ function MessagePartView(props: {
             {part.mimeType ? (
               <span className="message-file-meta">{part.mimeType}</span>
             ) : null}
-            <AttachmentButton
-              client={props.client}
-              providerID={props.resource.providerID}
-              url={link.url ?? image.url}
-              viaProxy={link.attachment || image.attachment}
-              name={part.name}
-            />
+            {dataUrl ? (
+              <DataAttachmentButton url={dataUrl} name={part.name} />
+            ) : (
+              <AttachmentButton
+                client={props.client}
+                providerID={props.resource.providerID}
+                url={link.url ?? image.url}
+                viaProxy={link.attachment || image.attachment}
+                name={part.name}
+              />
+            )}
           </figcaption>
         </figure>
       );
@@ -4613,13 +4955,17 @@ function MessagePartView(props: {
       <div className="message-file">
         <span className="message-file-name">{part.name}</span>
         {part.mimeType ? <span className="message-file-meta">{part.mimeType}</span> : null}
-        <AttachmentButton
-          client={props.client}
-          providerID={props.resource.providerID}
-          url={link.url}
-          viaProxy={link.attachment}
-          name={part.name}
-        />
+        {dataUrl ? (
+          <DataAttachmentButton url={dataUrl} name={part.name} />
+        ) : (
+          <AttachmentButton
+            client={props.client}
+            providerID={props.resource.providerID}
+            url={link.url}
+            viaProxy={link.attachment}
+            name={part.name}
+          />
+        )}
       </div>
     );
   }
@@ -4636,6 +4982,12 @@ function MessagePartView(props: {
   );
 }
 
+async function downloadDataUrl(url: string, name: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Unable to read the attachment");
+  saveBlob(await response.blob(), name);
+}
+
 async function downloadAttachment(
   client: HubClient,
   providerID: string,
@@ -4643,6 +4995,10 @@ async function downloadAttachment(
   name: string,
 ): Promise<void> {
   const blob = await client.attachment(providerID, url);
+  saveBlob(blob, name);
+}
+
+function saveBlob(blob: Blob, name: string): void {
   const objectURL = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectURL;
@@ -4713,6 +5069,38 @@ function AttachmentImage(props: {
       decoding="async"
       onError={() => setFailed(true)}
     />
+  );
+}
+
+function DataAttachmentButton(props: { url: string; name: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const open = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await downloadDataUrl(props.url, props.name);
+    } catch {
+      setError("Unable to open the attachment");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className="message-file-action">
+      <button
+        className="message-file-open"
+        type="button"
+        disabled={busy}
+        aria-label={`Open ${props.name}`}
+        onClick={() => void open()}
+      >
+        {busy ? "Opening…" : "Open"}
+      </button>
+      {error ? <span className="message-file-error">{error}</span> : null}
+    </span>
   );
 }
 
@@ -4992,6 +5380,12 @@ function formatTokenSummary(
     `${total.toLocaleString()} total`,
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function providerErrorMessage(value: unknown): string {

@@ -242,7 +242,7 @@ The production chat now follows the design-v1 shell instead of the Phase 2 page-
 
 Verification: dark and light themes at 1440, 1024, 390, and 320px. No horizontal page overflow; code blocks and tables scroll inside their containers. The browser console is clean. Lighthouse accessibility is 100. Keyboard Escape and focus return were checked for the details overlay.
 
-Remaining: the desktop session sidebar from the prototype, retry actions for provider errors, per-code-block copy and syntax highlighting, and a final message-measure pass once the sidebar narrows the chat column. The chat still has no model, agent, or reasoning-effort selector; those values are set at session creation and can be changed in the provider UI. Open WebUI branch switching also stays in the provider UI because the normalized transcript carries only the active branch. Attachment upload is not implemented.
+Remaining: the desktop session sidebar from the prototype, message editing as a tree operation, per-code-block copy and syntax highlighting, Open WebUI attachment sending, a full session-family tree, and a final message-measure pass once the sidebar narrows the chat column.
 
 ## Session selection picker (2026-11-02)
 
@@ -353,6 +353,69 @@ type scale, spacing, radii, surfaces, borders, and focus grammar.
   fields without `id`/`name` (the composer textarea was given both; provider
   selects remain the existing pattern).
 
+## Attachment and branching revision (design-v1.3)
+
+The composer and transcript gained capability-gated attachments and branches.
+No new type, spacing, radius, or color tokens were introduced.
+
+### Attachments
+
+- One quiet `Attach` action in the composer when `provider.capabilities.attach`
+  is true. It is 11px/28px desktop and 44px mobile, using the existing
+  `composer-voice` grammar.
+- Staged files are a wrapping row above the textarea. Each chip is an 8px
+  control surface with a 12px name, an 11px tabular size, and a remove control.
+  The name truncates; the chip never exceeds the composer width. The remove
+  target is 44px on mobile.
+- Send is enabled when there is text or at least one attachment. Attachment-only
+  sends are supported. Sending is disabled while an upload is in flight.
+- The composer stays within the existing card grammar: the chips are controls,
+  not nested cards. No new bordered metadata rows.
+- Upload is capped at 20 MB per file and five files per message. The accept
+  list is images, PDF, JSON, plain text, Markdown, and CSV. Unsupported or
+  oversized files produce the existing inline alert with Dismiss.
+- The hub stores staged files under `<dataDir>/attachments`, expires them after
+  one hour, and removes them after a successful send. The client sees only
+  metadata.
+
+### Branches and forks
+
+- In-chat branch points render one quiet picker under the active assistant
+  message, beside Copy. It is a pill: 28px arrow buttons on desktop, 44px on
+  mobile, 11px count. Previous/Next are disabled at the ends rather than
+  disappearing.
+- Switching replaces the visible path and starts at the latest message. The
+  picker updates to the new index/count. The action is disabled while switching.
+- When `retry` is available, one quiet `Retry` action sits beside Copy. It
+  reads `Retrying…` while the new sibling runs, then refreshes the transcript
+  and picker. The old answer is never overwritten; it remains a branch sibling.
+- OpenCode session-level forks live in the details panel as a single
+  `Fork session` action. A forked session shows its parent reference and an
+  `Open parent` action. There is no new tree screen or sidebar section.
+- Capability gating: no `attach` means no upload action; no `branches` means no
+  picker; no `fork` means no fork action. The API returns a capability error if
+  a client calls an unsupported action.
+
+### Verification
+
+- Live OpenCode: uploaded `tmp-attachment.txt` (49 B), sent it with a prompt,
+  saw the user message render `tmp-attachment.txt` / `text/plain`, and received
+  `ORANGE` from the model. The staged file was deleted after send. The test
+  session was deleted from the provider.
+- Live OpenCode fork: `Fork session` opened a `(fork #1)` session with a new
+  reference and the inherited history; the fork was deleted afterward.
+- Fake Open WebUI: the branch fixture rendered `‹ 2 / 2 ›` under
+  "Alternative two."; Previous replaced the transcript with
+  "Alternative one." → "Continue alternative one." → "Answer one." and the
+  picker became `‹ 1 / 2 ›`.
+- Fake Open WebUI retry: Retry on "Alternative two." created a new sibling, the
+  picker became `‹ 3 / 3 ›`, and the transcript showed the new reply. The old
+  answers remained reachable through the picker.
+- Mobile: the branch arrows and attachment remove control are 44px; the
+  attachment chip fits at 390px; no horizontal overflow.
+- Tests: 240 total after the attachment/branching slice. Typecheck, web/hub
+  builds, and OpenAPI check pass.
+
 ## Files changed
 
 - `apps/web/src/app/App.tsx`: chat shell, desktop session sidebar, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
@@ -405,4 +468,32 @@ type scale, spacing, radii, surfaces, borders, and focus grammar.
 - `docs/design.md`: ADR-012.
 - `docs/design-lock.md`: design-v1.2.
 - `docs/ui-ia.md`: copy and dictation rules.
+- `docs/visual-audit.md`: this section.
+
+### design-v1.3 attachment and branching slice
+
+- `packages/contracts/src/messages.ts`: attachment, branch point, branch switch, and fork schemas; attachment limits.
+- `packages/contracts/src/common.ts`: `attach`, `branches`, and `fork` capabilities.
+- `packages/contracts/src/openapi.ts`: attachment upload/delete, branches, fork, and multipart schemas.
+- `packages/providers/src/types.ts`: provider attachment input and branch/fork adapter methods.
+- `packages/providers/src/opencode/adapter.ts`: data-URI prompt files, inline file normalization, and session forks.
+- `packages/providers/src/openwebui/adapter.ts`: branch listing, branch switching, retry-as-a-sibling, and read-only attachment capability.
+- `packages/hub/src/services/attachment-store.ts`: staged file storage, limits, expiry, and cleanup.
+- `packages/hub/src/services/session-service.ts`: attachment resolution, branch/retry service methods, and fork creation.
+- `packages/hub/src/http/routes/attachments.ts`: upload and delete routes.
+- `packages/hub/src/http/routes/sessions.ts`: branch, retry, and fork routes.
+- `packages/hub/src/http/middleware/security.ts`: 20 MiB attachment route limit.
+- `packages/hub/src/app.ts`, `packages/hub/src/main.ts`: attachment store wiring.
+- `packages/client/src/hub-client.ts`: upload/delete, branches, switch, and fork methods.
+- `apps/web/src/app/App.tsx`: attachment chips/upload/send, branch picker, fork/parent actions, and capability gating.
+- `apps/web/src/styles.css`: attachment chips, branch picker, and mobile targets.
+- `packages/hub/src/app.test.ts`: staged upload/send/cleanup, capability rejection, branch switching, retry, and fork coverage.
+- `packages/hub/src/providers/opencode-live.test.ts`: attachment normalization and fork coverage.
+- `packages/hub/src/providers/openwebui-adapter.test.ts`: branch listing/switch and retry coverage.
+- `packages/client/src/hub-client.test.ts`: upload/branch/retry/fork client coverage.
+- `packages/testing/src/fake-providers.ts`: attachment echo, branch fixture, and fork endpoint.
+- `docs/openapi.yaml`: regenerated attachment/branch/fork schemas.
+- `docs/interaction-contract.md`: implementation status and API details.
+- `docs/design-lock.md`: design-v1.3.
+- `docs/ui-ia.md`: attachment, branch, and fork rules.
 - `docs/visual-audit.md`: this section.
