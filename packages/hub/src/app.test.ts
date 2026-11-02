@@ -15,6 +15,7 @@ import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
+import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { VERSION } from "./version";
 import {
@@ -39,12 +40,19 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
+function formAudio(bytes: Uint8Array, type: string): FormData {
+  const form = new FormData();
+  form.set("audio", new File([new Uint8Array(bytes)], "clip", { type }));
+  return form;
+}
+
 async function createTestApp(options: {
   store?: StateStore;
   cors?: string[];
   appsRoot?: string;
   auth?: AuthService;
   providerConfigPath?: string;
+  transcriptionFetch?: typeof fetch;
 } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
@@ -71,6 +79,11 @@ async function createTestApp(options: {
   const drafts = new DraftService(store);
   const settings = new AssistantSettingsService(store);
   const replies = new ReplyService(settings, sessions, logger);
+  const transcription = new TranscriptionService(
+    settings,
+    logger,
+    options.transcriptionFetch,
+  );
   const questions = new QuestionService(sessions);
   const providerAdmin = options.providerConfigPath
     ? new ProviderAdminService(
@@ -93,13 +106,27 @@ async function createTestApp(options: {
     drafts,
     settings,
     replies,
+    transcription,
     questions,
     logger,
     startedAt: Date.now(),
     appsRoot: options.appsRoot,
     auth: options.auth,
   });
-  return { app, eventBus, store, registry, sessions, attention, drafts, settings, replies, questions, fake };
+  return {
+    app,
+    eventBus,
+    store,
+    registry,
+    sessions,
+    attention,
+    drafts,
+    settings,
+    replies,
+    transcription,
+    questions,
+    fake,
+  };
 }
 
 afterEach(async () => {
@@ -991,6 +1018,183 @@ describe("hub app", () => {
       ]),
     );
     expect(payload.data.some((item) => item.source === "model")).toBe(false);
+  });
+
+  it("transcribes audio through the configured endpoint", async () => {
+    let captured: { url: string; init: RequestInit | undefined } | undefined;
+    const transcriptionFetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      captured = { url: String(input), init };
+      return new Response(JSON.stringify({ text: "  hello from whisper  " }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const { app } = await createTestApp({ transcriptionFetch });
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const disabled = await app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array([1, 2, 3]), "audio/webm"),
+    });
+    expect(disabled.status).toBe(409);
+    expect(await disabled.json()).toMatchObject({
+      error: { code: "transcription_disabled" },
+    });
+
+    const saved = await app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        transcription: {
+          enabled: true,
+          baseUrl: "https://stt.example/v1/",
+          model: "whisper-1",
+          apiKey: "stt-secret",
+        },
+      }),
+    });
+    expect(saved.status).toBe(200);
+
+    const missing = await app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: new FormData(),
+    });
+    expect(missing.status).toBe(400);
+
+    const unsupported = await app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array([1, 2, 3]), "application/pdf"),
+    });
+    expect(unsupported.status).toBe(400);
+
+    const response = await app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array([1, 2, 3]), "audio/webm"),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: { text: "hello from whisper", model: "whisper-1" },
+    });
+    expect(captured?.url).toBe(
+      "https://stt.example/v1/audio/transcriptions",
+    );
+    const upstreamHeaders = new Headers(captured?.init?.headers);
+    expect(upstreamHeaders.get("authorization")).toBe("Bearer stt-secret");
+    const upstreamForm = captured?.init?.body as FormData;
+    expect(upstreamForm.get("model")).toBe("whisper-1");
+    expect(upstreamForm.get("response_format")).toBe("json");
+    const file = upstreamForm.get("file") as File;
+    expect(file.name).toBe("audio.webm");
+    expect(file.type).toBe("audio/webm");
+    expect(file.size).toBe(3);
+  });
+
+  it("does not apply the JSON body limit to transcription audio", async () => {
+    const transcriptionFetch = (async () =>
+      new Response(JSON.stringify({ text: "large clip" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+    const { app } = await createTestApp({ transcriptionFetch });
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    await app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        transcription: {
+          enabled: true,
+          baseUrl: "https://stt.example/v1",
+          model: "whisper-1",
+        },
+      }),
+    });
+
+    const response = await app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array(1_100_000), "audio/webm"),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { text: "large clip" },
+    });
+  });
+
+  it("maps transcription endpoint failures and timeouts", async () => {
+    const failing = (async () =>
+      new Response("upstream exploded", { status: 503 })) as typeof fetch;
+    const failingApp = await createTestApp({ transcriptionFetch: failing });
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    await failingApp.app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        transcription: {
+          enabled: true,
+          baseUrl: "https://stt.example/v1",
+          model: "whisper-1",
+        },
+      }),
+    });
+    const failed = await failingApp.app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array([1]), "audio/webm"),
+    });
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toMatchObject({
+      error: { code: "transcription_failed", retryable: true },
+    });
+
+    const timeoutFetch = (async () => {
+      throw new DOMException("timed out", "TimeoutError");
+    }) as typeof fetch;
+    const timeoutApp = await createTestApp({ transcriptionFetch: timeoutFetch });
+    await timeoutApp.app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        transcription: {
+          enabled: true,
+          baseUrl: "https://stt.example/v1",
+          model: "whisper-1",
+        },
+      }),
+    });
+    const timedOut = await timeoutApp.app.request("/api/v1/transcribe", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formAudio(new Uint8Array([1]), "audio/webm"),
+    });
+    expect(timedOut.status).toBe(504);
+    expect(await timedOut.json()).toMatchObject({
+      error: { code: "transcription_timeout", retryable: true },
+    });
+  });
+
+  it("allows the web client to request the microphone", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/api/v1/health");
+    expect(response.headers.get("permissions-policy")).toContain(
+      "microphone=(self)",
+    );
   });
 
   it("persists drafts across a JSON state reload", async () => {

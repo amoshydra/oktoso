@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding.
+Status: in progress. Phase 0 foundation and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. The chat interaction contract is documented in [`interaction-contract.md`](interaction-contract.md); message copy and hub-backed dictation are implemented. Attachments and branching remain later slices.
 
 Goal: prove the hub with one provider and one client.
 
@@ -52,6 +52,7 @@ Deliverables:
   - `/api/v1/sessions/:ref/messages` POST
   - `/api/v1/sessions/:ref/selection` POST
   - `/api/v1/attachments?provider=&url=`
+  - `/api/v1/transcribe` POST
   - `/api/v1/sessions` POST
   - `/api/v1/events`
   - `/api/v1/auth/pair`

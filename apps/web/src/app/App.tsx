@@ -26,6 +26,12 @@ import {
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
 import { BrandMark } from "./BrandMark";
+import {
+  appendTranscript,
+  formatDictationDuration,
+  messageCopyText,
+  pickAudioMimeType,
+} from "./chat-actions";
 import { renderMarkdown } from "./markdown";
 import {
   resolveSessionResource,
@@ -1191,7 +1197,11 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
         <div className="panel-head">
           <div>
             <h2>Voice transcription</h2>
-            <p>Optional speech-to-text path for G2 and future wearable microphone input.</p>
+            <p>
+              Optional speech-to-text path for the web composer and future
+              wearable microphone input. Audio goes through the hub to the
+              configured OpenAI-compatible endpoint.
+            </p>
           </div>
           <span className="mode-badge">{view?.transcription.hasApiKey ? "key saved" : "optional"}</span>
         </div>
@@ -1260,6 +1270,11 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             />
           </label>
         </div>
+        <p className="form-note">
+          Browser dictation requires HTTPS or localhost and microphone
+          permission. The hub does not store the audio; the endpoint key stays
+          on the hub.
+        </p>
         <div className="form-actions">
           <button className="btn small" type="button" onClick={() => void loadModels("transcription")}>
             Load models
@@ -2715,8 +2730,16 @@ type PendingScroll =
   | { mode: "preserve"; height: number; top: number };
 
 const MESSAGE_PAGE_SIZE = 200;
+const MAX_DICTATION_MS = 120_000;
 
 type DraftStatus = "idle" | "saving" | "saved" | "error";
+
+type DictationState =
+  | { phase: "idle" }
+  | { phase: "starting" }
+  | { phase: "recording"; startedAt: number }
+  | { phase: "transcribing" }
+  | { phase: "error"; message: string };
 
 function useSessionDraft(client: HubClient, sessionRef: string) {
   const [text, setTextState] = useState("");
@@ -2921,6 +2944,18 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
+  const [dictation, setDictation] = useState<DictationState>({ phase: "idle" });
+  const [dictationElapsedMs, setDictationElapsedMs] = useState(0);
+  const [dictationEnabled, setDictationEnabled] = useState(false);
+  const dictationStream = useRef<MediaStream | null>(null);
+  const dictationRecorder = useRef<MediaRecorder | null>(null);
+  const dictationChunks = useRef<Blob[]>([]);
+  const dictationAbort = useRef<AbortController | null>(null);
+  const dictationStopTimer = useRef<number | undefined>(undefined);
+  const dictationMounted = useRef(true);
+  const dictationStopRef = useRef<() => void>(() => undefined);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const transcriptRef = useRef<HTMLElement | null>(null);
   const pendingScroll = useRef<PendingScroll | undefined>(undefined);
   const messagesRef = useRef<Message[]>([]);
@@ -2930,6 +2965,16 @@ function SessionDetail(props: {
   const sessionProvider = session
     ? props.providers.find((provider) => provider.id === session.providerID)
     : undefined;
+
+  const dictationSupported =
+    dictationEnabled &&
+    window.isSecureContext &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== "undefined";
+  const dictationBusy =
+    dictation.phase === "starting" ||
+    dictation.phase === "recording" ||
+    dictation.phase === "transcribing";
 
   const getScroller = () => transcriptRef.current;
 
@@ -2956,6 +3001,185 @@ function SessionDetail(props: {
         : "smooth",
     });
   };
+
+  const cleanupDictation = useCallback(() => {
+    if (dictationStopTimer.current) {
+      clearTimeout(dictationStopTimer.current);
+      dictationStopTimer.current = undefined;
+    }
+    dictationAbort.current?.abort();
+    dictationAbort.current = null;
+
+    const recorder = dictationRecorder.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = null;
+      try {
+        recorder.stop();
+      } catch {
+        // The recorder may already be tearing down.
+      }
+    }
+    dictationRecorder.current = null;
+    stopMediaStream(dictationStream.current);
+    dictationStream.current = null;
+    dictationChunks.current = [];
+  }, []);
+
+  async function transcribeDictation() {
+    const recorder = dictationRecorder.current;
+    const mimeType =
+      recorder?.mimeType || pickAudioMimeType() || "audio/webm";
+    const chunks = dictationChunks.current;
+    dictationChunks.current = [];
+    dictationRecorder.current = null;
+
+    const blob = new Blob(chunks, { type: mimeType });
+    if (blob.size === 0) {
+      setDictation({
+        phase: "error",
+        message: "No audio was captured. Try again.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    dictationAbort.current = controller;
+    setDictation({ phase: "transcribing" });
+    try {
+      const result = await props.client.transcribe(blob, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const text = result.text.trim();
+      if (!text) {
+        setDictation({
+          phase: "error",
+          message: "No speech was detected. Try again.",
+        });
+        return;
+      }
+      updateDraft(appendTranscript(draftRef.current, text));
+      setDictation({ phase: "idle" });
+    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setDictation({
+        phase: "error",
+        message:
+          reason instanceof Error
+            ? reason.message
+            : "Unable to transcribe the recording.",
+      });
+    } finally {
+      if (dictationAbort.current === controller) dictationAbort.current = null;
+    }
+  }
+
+  async function startDictation() {
+    if (!dictationSupported || dictationBusy) return;
+    setDictation({ phase: "starting" });
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!dictationMounted.current) {
+        stopMediaStream(stream);
+        return;
+      }
+      const mimeType = pickAudioMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      dictationStream.current = stream;
+      dictationRecorder.current = recorder;
+      dictationChunks.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) dictationChunks.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        cleanupDictation();
+        setDictation({
+          phase: "error",
+          message: "Recording failed. Check the microphone and try again.",
+        });
+      };
+      recorder.onstop = () => {
+        void transcribeDictation();
+      };
+      recorder.start(250);
+      setDictation({ phase: "recording", startedAt: Date.now() });
+    } catch (reason) {
+      cleanupDictation();
+      setDictation({ phase: "error", message: microphoneErrorMessage(reason) });
+    }
+  }
+
+  function stopDictation() {
+    const recorder = dictationRecorder.current;
+    if (recorder && recorder.state !== "inactive") {
+      setDictation({ phase: "transcribing" });
+      recorder.stop();
+    }
+    stopMediaStream(dictationStream.current);
+    dictationStream.current = null;
+  }
+
+  dictationStopRef.current = stopDictation;
+
+  useEffect(() => {
+    let cancelled = false;
+    void props.client
+      .assistantSettings()
+      .then((view) => {
+        if (!cancelled) setDictationEnabled(view.transcription.enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setDictationEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client]);
+
+  useEffect(() => {
+    dictationMounted.current = true;
+    return () => {
+      dictationMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setDictation({ phase: "idle" });
+    setDictationElapsedMs(0);
+    return () => cleanupDictation();
+  }, [props.sessionRef, cleanupDictation]);
+
+  useEffect(() => {
+    if (dictation.phase !== "recording") {
+      setDictationElapsedMs(0);
+      return;
+    }
+    const startedAt = dictation.startedAt;
+    setDictationElapsedMs(Date.now() - startedAt);
+    const timer = window.setInterval(() => {
+      setDictationElapsedMs(Date.now() - startedAt);
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [dictation]);
+
+  useEffect(() => {
+    if (dictation.phase !== "recording") return;
+    const remaining = Math.max(
+      0,
+      MAX_DICTATION_MS - (Date.now() - dictation.startedAt),
+    );
+    dictationStopTimer.current = window.setTimeout(() => {
+      dictationStopRef.current();
+    }, remaining);
+    return () => {
+      if (dictationStopTimer.current) {
+        clearTimeout(dictationStopTimer.current);
+        dictationStopTimer.current = undefined;
+      }
+    };
+  }, [dictation]);
 
   const refreshLatest = useCallback(
     async (forceBottom = false) => {
@@ -3012,7 +3236,7 @@ function SessionDetail(props: {
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || dictationBusy) return;
     setSending(true);
     setSendError(undefined);
     try {
@@ -3383,9 +3607,15 @@ function SessionDetail(props: {
   const latestQuestion = latestQuestionText(messages);
   const transcriptItems = groupTranscript(messages);
   const composerHint =
-    draftStatus === "idle" && session?.status === "running"
-      ? "Agent running · Ctrl/⌘ Enter to queue"
-      : draftStatusLabel(draftStatus);
+    dictation.phase === "starting"
+      ? "Starting dictation…"
+      : dictation.phase === "recording"
+        ? "Recording…"
+        : dictation.phase === "transcribing"
+          ? "Transcribing…"
+          : draftStatus === "idle" && session?.status === "running"
+            ? "Agent running · Ctrl/⌘ Enter to queue"
+            : draftStatusLabel(draftStatus);
   const resource: ResourceContext = {
     baseUrl: sessionProvider?.baseUrl,
     providerID: session?.providerID,
@@ -3529,6 +3759,19 @@ function SessionDetail(props: {
               </div>
             ) : null}
 
+            {dictation.phase === "error" ? (
+              <div className="alert" role="alert">
+                {dictation.message}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setDictation({ phase: "idle" })}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
             <div className="chat-composer-wrap">
               {!atBottom ? (
                 <button className="chat-jump" type="button" onClick={jumpToLatest}>
@@ -3544,6 +3787,8 @@ function SessionDetail(props: {
                 }}
               >
                 <textarea
+                  id="chat-composer-input"
+                  name="message"
                   rows={2}
                   value={draft}
                   aria-label={`Reply to ${session.title}`}
@@ -3559,6 +3804,40 @@ function SessionDetail(props: {
                     }
                   }}
                 />
+                {dictation.phase === "starting" ||
+                dictation.phase === "recording" ||
+                dictation.phase === "transcribing" ? (
+                  <>
+                    <span className="sr-only" role="status" aria-live="polite">
+                      {dictation.phase === "starting"
+                        ? "Starting dictation"
+                        : dictation.phase === "recording"
+                          ? "Recording"
+                          : "Transcribing"}
+                    </span>
+                    <div className="composer-dictation">
+                      <span
+                        className="composer-dictation-dot"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {dictation.phase === "starting"
+                          ? "Starting dictation…"
+                          : dictation.phase === "recording"
+                            ? "Recording"
+                            : "Transcribing…"}
+                      </span>
+                      {dictation.phase === "recording" ? (
+                        <span
+                          className="composer-dictation-time"
+                          aria-hidden="true"
+                        >
+                          {formatDictationDuration(dictationElapsedMs)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
                 <div className="chat-composer-bar">
                   {showSelection ? (
                     <div
@@ -3660,6 +3939,36 @@ function SessionDetail(props: {
                     {composerHint}
                   </span>
                   <div className="composer-actions">
+                    {dictationSupported ? (
+                      <button
+                        className={`composer-voice ${dictation.phase === "recording" ? "recording" : ""}`}
+                        type="button"
+                        disabled={
+                          dictation.phase === "starting" ||
+                          dictation.phase === "transcribing"
+                        }
+                        aria-pressed={dictation.phase === "recording"}
+                        aria-label={
+                          dictation.phase === "recording"
+                            ? "Stop dictation"
+                            : dictation.phase === "transcribing"
+                              ? "Transcribing"
+                              : "Start dictation"
+                        }
+                        onClick={() => {
+                          if (dictation.phase === "recording") stopDictation();
+                          else void startDictation();
+                        }}
+                      >
+                        {dictation.phase === "starting"
+                          ? "Starting…"
+                          : dictation.phase === "recording"
+                            ? "Stop"
+                            : dictation.phase === "transcribing"
+                              ? "Transcribing…"
+                              : "Dictate"}
+                      </button>
+                    ) : null}
                     {session.status === "running" ? (
                       <button
                         className="btn small"
@@ -3674,7 +3983,7 @@ function SessionDetail(props: {
                       className="btn primary small composer-send"
                       type="submit"
                       aria-label={sending ? "Sending message" : "Send message"}
-                      disabled={sending || !draft.trim()}
+                      disabled={sending || !draft.trim() || dictationBusy}
                     >
                       <span className="composer-send-label">
                         {sending ? "Sending…" : "Send"}
@@ -3789,6 +4098,53 @@ function isActivityMessage(message: Message): boolean {
   );
 }
 
+function CopyMessageButton(props: { text: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "error">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const reset = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState("idle"), 2_000);
+  };
+
+  const copy = async () => {
+    const copied = await copyTextToClipboard(props.text);
+    setState(copied ? "copied" : "error");
+    reset();
+  };
+
+  return (
+    <>
+      <button
+        className="message-action"
+        type="button"
+        data-copied={state === "copied" ? "true" : undefined}
+        onClick={() => void copy()}
+      >
+        {state === "copied"
+          ? "Copied"
+          : state === "error"
+            ? "Copy failed"
+            : "Copy"}
+      </button>
+      <span className="sr-only" role="status" aria-live="polite">
+        {state === "copied"
+          ? "Copied to clipboard"
+          : state === "error"
+            ? "Copy failed"
+            : ""}
+      </span>
+    </>
+  );
+}
+
 function TranscriptMessage(props: {
   message: Message;
   client: HubClient;
@@ -3796,6 +4152,10 @@ function TranscriptMessage(props: {
   suppressError?: boolean;
 }) {
   const message = props.message;
+  const copyText =
+    message.role === "assistant" && !message.streaming
+      ? messageCopyText(message)
+      : "";
   return (
     <article className={`chat-message ${message.role}`}>
       <div className="chat-message-role">
@@ -3825,6 +4185,11 @@ function TranscriptMessage(props: {
           ))
         )}
       </div>
+      {copyText ? (
+        <div className="chat-message-actions">
+          <CopyMessageButton text={copyText} />
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -4438,6 +4803,56 @@ function formatJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the selection fallback for non-secure origins.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus({ preventScroll: true });
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+function stopMediaStream(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
+function microphoneErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Microphone permission was denied. Allow microphone access and try again.";
+    }
+    if (error.name === "NotFoundError") {
+      return "No microphone was found.";
+    }
+    if (error.name === "NotReadableError") {
+      return "The microphone is already in use by another app.";
+    }
+  }
+  return "Unable to start recording. Check the microphone and try again.";
 }
 
 function relativeTime(at: number): string {
