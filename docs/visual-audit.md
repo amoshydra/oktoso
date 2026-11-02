@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
@@ -192,7 +192,7 @@ The transcript reading model changed after live providers exposed 1,000+ message
 - Older pages load at the top with scroll anchoring; the oldest message is never the initial page.
 - Message prose renders sanitized Markdown.
 - Tool/reasoning rows are compact disclosures; consecutive tool-only assistant turns collapse into an "Agent activity" block.
-- The session title, back action, and interrupt control stay in a sticky transcript header.
+- The session title, back action, and status stay in the fixed topbar; interrupt stays in the pinned composer and details panel.
 
 The type scale, spacing, radii, palette, semantic color rules, navigation, and all other screens remain `design-v1`. The pre-existing prototype remains the visual reference for those surfaces.
 
@@ -221,11 +221,86 @@ tile with a dark octagonal hub and a centered node.
   It changes no product screen. `pnpm brand:screens` regenerates the screenshots
   and banner, and CI runs `pnpm brand:check` to catch stale sources or images.
 
+## Chat shell revision (2026-11-02)
+
+The production chat now follows the design-v1 shell instead of the Phase 2 page-flow layout. No new type, spacing, radius, or color tokens were introduced.
+
+- The fixed topbar owns the session title as the page `h1`, the provider/status subline, the back action, and the details toggle. The duplicate 12px sticky header and the hero card were removed.
+- The transcript is its own scroll region. The composer is pinned below it, so replying no longer requires scrolling to the end.
+- A floating "Jump to latest" control appears when the reader is scrolled away from the bottom and reads "Input needed" when blocking attention is waiting below.
+- Details is a 300px column above 1320px, a right-side overlay from 761 to 1319px, and a bottom sheet at 760px and below. The overlay traps Tab, closes on Escape or the scrim, and restores focus.
+- Permission, approval, question, and error attention render inline at the end of the transcript. Permission actions and the question form were verified against the fake providers; resolving a request removes the card without a page reload.
+- Date separators group messages by day. Timestamps show the hour and minute instead of seconds. Role labels read `You` and `Agent`.
+- Provider errors extract the provider message instead of dumping JSON. The message error remains as a fallback when no attention item exists.
+- Developer chrome was removed from the chat and global footer: the phase badge, the design-reference footer, and phase suffixes in the topbar. No phase copy remains in the product surfaces.
+- Mobile send is right-aligned because the composer actions have their own flex group. The hint no longer needs to act as a spacer.
+- The activity chevron is now an `aria-hidden` element, so it no longer enters the disclosure's accessible name. The composer has an explicit label. Status and error states keep their text labels.
+- Markdown links and image sources resolve against the provider base URL instead of the hub origin. Absolute URLs stay absolute, `mailto:` and `tel:` links stay local, and unsafe schemes or data images are removed. Safe data images render; unresolvable images become an inline fallback.
+- File parts use the same resolver. Image files render inline with a caption; other files keep an Open action. Open WebUI image/file content parts and `files` arrays are normalized into file parts, and OpenCode form descriptions are preserved as question detail.
+- An opened agent activity group stays open while new activity appends because the disclosure key is now the first message in the group, not the changing last message.
+- The details panel falls back to the provider base URL when a session has no native URL, so OpenCode sessions also get an Open in provider action.
+
+Verification: dark and light themes at 1440, 1024, 390, and 320px. No horizontal page overflow; code blocks and tables scroll inside their containers. The browser console is clean. Lighthouse accessibility is 100. Keyboard Escape and focus return were checked for the details overlay.
+
+Remaining: the desktop session sidebar from the prototype, retry actions for provider errors, copy and syntax highlighting for code blocks, and a final message-measure pass once the sidebar narrows the chat column. The chat still has no model, agent, or reasoning-effort selector; those values are set at session creation and can be changed in the provider UI. Open WebUI branch switching also stays in the provider UI because the normalized transcript carries only the active branch. Attachment upload is not implemented.
+
+## Session selection picker (2026-11-02)
+
+The composer now exposes the provider’s session selection instead of leaving model and agent control to provider-native screens.
+
+- The picker loads `ProviderOptions` for the session provider. Agent and model selects appear when the provider returns options; a reasoning select appears only when the selected model exposes variants.
+- Agent and model labels use the provider’s names. Variant IDs are humanized (`max` → `Max`) because OpenCode does not provide labels for them.
+- Changing a selector posts to `/api/v1/sessions/{ref}/selection` and updates the session. The document header, details panel, and picker stay in sync.
+- OpenCode uses its dedicated `/api/session/{id}/agent` and `/api/session/{id}/model` routes. Model variants are sent as `Model.Ref.variant`.
+- Open WebUI updates the chat’s `models` array; it has no agent or variant selector.
+- The picker is disabled while the agent is running. A failed change restores the previous values and shows an inline error.
+- The picker wraps to two rows at 390px and three at 320px; it does not cause horizontal overflow.
+
+Verified at 1440, 390, and 320px in dark mode. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
+
+Remaining: per-message model overrides are not implemented, the New session form still creates with the provider default variant, and providers that do not expose options get no picker.
+
+## Attachment proxy (2026-11-02)
+
+Private provider images and files now render through the hub instead of the browser hitting the provider directly.
+
+- `GET /api/v1/attachments?provider=<id>&url=<absolute URL>` requires hub auth and uses the selected provider’s credentials.
+- The provider adapter resolves the request. It only accepts URLs on the configured provider origin, rejects credential-bearing URLs, follows at most three same-origin redirects, and caps the body at 20 MB.
+- The hub serves only known raster image types inline. Other known types are downloaded; unknown types are forced to `application/octet-stream`. Every response sets `X-Content-Type-Options: nosniff`, a sandbox CSP, and a private cache policy.
+- The web client fetches provider resources with its normal hub auth, then renders a blob URL. This works for both paired cookie auth and the pasted owner-token fallback; a plain `<img src="/api/v1/...">` would drop the bearer header.
+- Markdown images, image file parts, and file Open actions all use the same path. Third-party public images still load directly.
+- Verified with provider resource tests for same-origin fetches, same-origin redirects, cross-origin rejection, 20 MB limits, auth errors, and missing files; hub tests for inline/download headers, cross-origin rejection, and auth; and a browser run with the owner-token fallback where markdown images and image file parts rendered from blob URLs.
+- The desktop session sidebar and branch/model controls remain broader follow-ups.
+
+Files changed: `packages/providers/src/http/resource.ts`, `packages/providers/src/types.ts`, both provider adapters, `packages/hub/src/http/routes/attachments.ts`, `packages/hub/src/app.ts`, `packages/client/src/hub-client.ts`, `apps/web/src/app/markdown.ts`, `apps/web/src/app/App.tsx`, `packages/testing/src/fake-providers.ts`, and the new provider/hub/web tests.
+
 ## Files changed
 
-- `docs/prototypes/styles.css`: tokens, surfaces, borders, controls, attention cards, chat, details, providers, settings, mobile nav.
-- `docs/ui-ia.md`: visual tokens, type scale, spacing, responsive rules, and provider/state semantics updated.
-- `docs/prototypes/app.js`: neutral provider labels, unread-by-weight, single page headings, pinned modal form, and screen-reader state labels.
+- `apps/web/src/app/App.tsx`: chat shell, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
+- `apps/web/src/app/markdown.ts`: provider-relative link and image resolution, provider-image marking, safe image rendering, image fallbacks.
+- `apps/web/src/app/urls.ts`: link, image, and attachment URL resolver with safe-scheme and same-origin rules.
+- `apps/web/src/app/urls.test.ts`: resolver and same-origin coverage.
+- `apps/web/src/styles.css`: chat layout, pinned composer, details column/overlay/sheet, inline attention, date separators, mobile composer actions, image attachments, selection picker.
+- `packages/providers/src/http/resource.ts`: provider resource fetch, same-origin validation, redirect limits, size cap.
+- `packages/providers/src/http/resource.test.ts`: resource proxy coverage.
+- `packages/providers/src/types.ts`: provider resource method.
+- `packages/providers/src/opencode/adapter.ts`: form description detail, authenticated resource fetch.
+- `packages/providers/src/openwebui/adapter.ts`: image and file content normalization, authenticated resource fetch.
+- `packages/hub/src/http/routes/attachments.ts`: authenticated attachment proxy and response policy.
+- `packages/hub/src/app.ts`: attachment route registration.
+- `packages/hub/src/app.test.ts`: proxy headers, cross-origin, and auth coverage.
+- `packages/client/src/hub-client.ts`: authenticated blob fetch for attachments, session selection.
+- `packages/client/src/hub-client.test.ts`: send, attachment, and selection client coverage.
+- `packages/contracts/src/common.ts`: model variants in provider options.
+- `packages/contracts/src/sessions.ts`: session selection input.
+- `packages/contracts/src/openapi.ts`: selection route and schemas.
+- `packages/hub/src/http/routes/sessions.ts`: session selection route.
+- `packages/hub/src/services/session-service.ts`: provider selection pass-through and cache update.
+- `packages/hub/src/providers/openwebui-adapter.test.ts`: Open WebUI model options and switching.
+- `docs/openapi.yaml`: regenerated selection route and schemas.
+- `packages/testing/src/fake-providers.ts`: question detail, attachment fixtures, selection endpoints, agent and model variants.
+- `docs/ui-ia.md`: chat header, transcript, composer, details, mobile, and attachment rules updated to the shipped shell.
+- `docs/design-lock.md`: chat shell alignment.
 - `docs/visual-audit.md`: this audit and the before/after measurements.
 - `docs/brand/`, `apps/web/public/`, `docs/screenshots/`: brand mark, favicons, app icons, banner, and README imagery.
 - `README.md`: link to the audit and the brand banner/screenshot.

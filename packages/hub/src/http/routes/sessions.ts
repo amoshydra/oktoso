@@ -5,6 +5,7 @@ import {
   zReplyMode,
   zSendInput,
   zSessionListQuery,
+  zSessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
 import type { SendResult } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "../../services/session-service";
@@ -157,6 +158,22 @@ export function registerSessionRoutes(
     questions.invalidate(ref);
     if (cacheKey) await idempotency.set(cacheKey, result);
     return c.json(result, 202);
+  });
+
+  app.post("/api/v1/sessions/:ref/selection", async (c) => {
+    const ref = c.req.param("ref");
+    if (!ref) throw notFound("Session not found");
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zSessionSelectionInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid session selection", {
+        issues: parsed.error.issues,
+      });
+    }
+    if (!parsed.data.model && !parsed.data.agent) {
+      throw badRequest("A model or agent is required");
+    }
+    return c.json(await sessions.setSessionOptions(ref, parsed.data));
   });
 
   app.post("/api/v1/sessions/:ref/interrupt", async (c) => {

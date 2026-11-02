@@ -8,6 +8,7 @@ import type {
   Session,
   SessionListQuery,
   SessionPage,
+  SessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
 import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
@@ -184,6 +185,31 @@ export class SessionService {
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });
     return result;
+  }
+
+  async setSessionOptions(
+    ref: string,
+    input: SessionSelectionInput,
+  ): Promise<Session> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.setSessionOptions) {
+      throw notImplemented("This provider does not support changing the model or agent");
+    }
+
+    await adapter.setSessionOptions(ref, input, AbortSignal.timeout(15_000));
+    const cached = this.sessions.get(ref);
+    const fetched = await this.get(ref).catch(() => undefined);
+    const base = fetched ?? cached;
+    if (!base) throw notFound("Session not found");
+
+    const updated: Session = {
+      ...base,
+      ...(input.model ? { model: input.model } : {}),
+      ...(input.agent ? { agent: input.agent } : {}),
+    };
+    this.sessions.set(ref, updated);
+    return updated;
   }
 
   async create(input: CreateSessionInput): Promise<Session> {

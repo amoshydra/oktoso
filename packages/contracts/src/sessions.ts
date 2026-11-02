@@ -53,9 +53,15 @@ export const zCreateSessionInput = z.object({
   text: z.string().optional(),
 });
 
+export const zSessionSelectionInput = z.object({
+  model: z.string().min(1).optional(),
+  agent: z.string().min(1).optional(),
+});
+
 export type SessionStatus = z.infer<typeof zSessionStatus>;
 export type TokenUsage = z.infer<typeof zTokenUsage>;
 export type Session = z.infer<typeof zSession>;
 export type SessionPage = z.infer<typeof zSessionPage>;
 export type SessionListQuery = z.infer<typeof zSessionListQuery>;
 export type CreateSessionInput = z.infer<typeof zCreateSessionInput>;
+export type SessionSelectionInput = z.infer<typeof zSessionSelectionInput>;

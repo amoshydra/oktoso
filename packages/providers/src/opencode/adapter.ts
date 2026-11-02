@@ -16,8 +16,9 @@ import type {
   SessionPage,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
-import type { ProviderAdapter } from "../types";
+import type { ProviderAdapter, ProviderResource } from "../types";
 import { ProviderError } from "../errors";
+import { readProviderResource } from "../http/resource";
 import { readSse } from "../http/sse";
 
 export interface OpenCodeAdapterOptions {
@@ -121,12 +122,17 @@ interface OpenCodeFormInfo {
   id: string;
   sessionID: string;
   title: string;
+  description?: string;
+  message?: string;
+  question?: string;
   fields: OpenCodeFormField[];
 }
 
 interface OpenCodeAgent {
   id: string;
   name: string;
+  mode?: string;
+  hidden?: boolean;
 }
 
 interface OpenCodeModel {
@@ -134,6 +140,9 @@ interface OpenCodeModel {
   modelID: string;
   providerID: string;
   name: string;
+  enabled?: boolean;
+  type?: string;
+  variants?: Array<{ id: string }>;
 }
 
 const openCodeCapabilities: ProviderCapabilities = {
@@ -301,14 +310,64 @@ export class OpenCodeAdapter implements ProviderAdapter {
       this.request<{ data: OpenCodeModel[] }>("/api/model", {}, signal),
     ]);
     return {
-      agents: agents.data.map((agent) => ({ id: agent.id, label: agent.name })),
-      models: models.data.map((model) => ({
-        id: `${model.providerID}/${model.modelID}`,
-        label: model.name,
-        provider: model.providerID,
-      })),
+      agents: agents.data
+        .filter(
+          (agent) =>
+            !agent.hidden &&
+            (agent.mode === undefined || agent.mode === "primary" || agent.mode === "all"),
+        )
+        .map((agent) => ({ id: agent.id, label: agent.name })),
+      models: models.data
+        .filter(
+          (model) =>
+            model.enabled !== false &&
+            (model.type === undefined || model.type === "chat"),
+        )
+        .map((model) => ({
+          id: `${model.providerID}/${model.modelID}`,
+          label: model.name,
+          provider: model.providerID,
+          ...(model.variants && model.variants.length > 0
+            ? {
+                variants: model.variants.map((variant) => ({
+                  id: variant.id,
+                  label: variantLabel(variant.id),
+                })),
+              }
+            : {}),
+        })),
       directories: [],
     };
+  }
+
+  async setSessionOptions(
+    ref: string,
+    input: { model?: string; agent?: string },
+    signal: AbortSignal,
+  ): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    if (input.agent) {
+      await this.request(
+        `/api/session/${encodeURIComponent(nativeID)}/agent`,
+        {},
+        signal,
+        "POST",
+        { agent: input.agent },
+      );
+    }
+    if (input.model) {
+      const model = parseModel(input.model);
+      if (!model) {
+        throw new ProviderError("invalid_request", "Invalid model selection");
+      }
+      await this.request(
+        `/api/session/${encodeURIComponent(nativeID)}/model`,
+        {},
+        signal,
+        "POST",
+        { model },
+      );
+    }
   }
 
   async listAttention(
@@ -425,6 +484,16 @@ export class OpenCodeAdapter implements ProviderAdapter {
     }
 
     throw new ProviderError("unsupported", `Unsupported attention kind: ${kind}`);
+  }
+
+  async readResource(url: string, signal: AbortSignal): Promise<ProviderResource> {
+    return readProviderResource({
+      url,
+      baseUrl: this.baseUrl,
+      headers: { Authorization: this.authorization },
+      signal,
+      providerLabel: "OpenCode",
+    });
   }
 
   async markRead(ref: string, signal: AbortSignal): Promise<void> {
@@ -731,15 +800,20 @@ export class OpenCodeAdapter implements ProviderAdapter {
       }
     }
 
+    const detail = [form.description, form.message, form.question].find(
+      (value) => typeof value === "string" && value.trim().length > 0,
+    );
     return {
       id: `${this.id}:form:${form.sessionID}:${form.id}`,
       sessionRef: `${this.id}:${form.sessionID}`,
       type: "question",
       priority: "blocking",
       title: form.title,
-      summary: supported
-        ? `${fields.length} field${fields.length === 1 ? "" : "s"} need an answer`
-        : "This form needs the provider UI",
+      summary:
+        detail?.trim() ??
+        (supported
+          ? `${fields.length} field${fields.length === 1 ? "" : "s"} need an answer`
+          : "This form needs the provider UI"),
       createdAt: Date.now(),
       actions: [
         ...(supported
@@ -906,6 +980,12 @@ function modelRef(model: { id: string; providerID: string; variant?: string }): 
     ? model.id
     : `${model.providerID}/${model.id}`;
   return model.variant ? `${value}#${model.variant}` : value;
+}
+
+function variantLabel(value: string): string {
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function parseModel(

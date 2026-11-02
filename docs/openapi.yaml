@@ -509,6 +509,16 @@ components:
       required:
         - id
         - label
+    ModelVariant:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+      required:
+        - id
+        - label
     ModelOption:
       type: object
       properties:
@@ -518,6 +528,18 @@ components:
           type: string
         provider:
           type: string
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+            required:
+              - id
+              - label
       required:
         - id
         - label
@@ -547,6 +569,18 @@ components:
                 type: string
               provider:
                 type: string
+              variants:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                  required:
+                    - id
+                    - label
             required:
               - id
               - label
@@ -768,6 +802,15 @@ components:
       required:
         - providerID
         - title
+    SessionSelectionInput:
+      type: object
+      properties:
+        model:
+          type: string
+          minLength: 1
+        agent:
+          type: string
+          minLength: 1
     Draft:
       type: object
       properties:
@@ -2263,6 +2306,54 @@ paths:
                 $ref: "#/components/schemas/Session"
         "404":
           description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/selection:
+    post:
+      tags:
+        - sessions
+      summary: Change the session model or agent
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionSelectionInput"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          description: Invalid selection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support changing the selection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
           content:
             application/json:
               schema:

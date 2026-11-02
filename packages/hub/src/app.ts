@@ -30,6 +30,7 @@ import { registerHealthRoutes } from "./http/routes/health";
 import { registerAuthRoutes } from "./http/routes/auth";
 import { registerPairRoutes } from "./http/routes/pair";
 import { registerProviderRoutes } from "./http/routes/providers";
+import { registerAttachmentRoutes } from "./http/routes/attachments";
 import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerQuestionRoutes } from "./http/routes/questions";
 import { registerDraftRoutes } from "./http/routes/drafts";
@@ -93,6 +94,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerAuthRoutes(app, { auth, version: VERSION });
   registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry, deps.providerAdmin);
+  registerAttachmentRoutes(app, deps.registry);
   registerSessionRoutes(
     app,
     deps.sessions,

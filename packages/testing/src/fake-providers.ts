@@ -114,6 +114,18 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
           type: "text",
           text: "The failing test is in auth.test.ts. I am narrowing it to the double-refresh case. Should I continue with the double-refresh case?",
         },
+        {
+          type: "file",
+          name: "auth-race.png",
+          mimeType: "image/png",
+          url: "/api/files/auth-race.png",
+        },
+        {
+          type: "file",
+          name: "notes.txt",
+          mimeType: "text/plain",
+          url: "/api/files/notes.txt",
+        },
       ],
     },
     {
@@ -178,6 +190,7 @@ let fakeForm: Record<string, unknown> | undefined = {
   id: "frm_1",
   sessionID: "ses_index",
   title: "Choose the next model",
+  description: "Which model should the next turn use?",
   fields: [
     {
       key: "model",
@@ -197,6 +210,11 @@ let fakeForm: Record<string, unknown> | undefined = {
     },
   ],
 };
+
+const FAKE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 
 const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
 const INITIAL_PERMISSION = structuredClone(fakePermission);
@@ -424,7 +442,11 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   }
   if (path === "/api/agent" && request.method === "GET") {
     sendJson(response, 200, {
-      data: [{ id: "build", name: "Build" }],
+      data: [
+        { id: "build", name: "Build", mode: "primary", hidden: false },
+        { id: "plan", name: "Plan", mode: "primary", hidden: false },
+        { id: "explore", name: "Explore", mode: "subagent", hidden: false },
+      ],
       location: { directory: "/home/me/oktoso" },
     });
     return;
@@ -437,10 +459,56 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
           modelID: "claude-sonnet",
           providerID: "commandcode",
           name: "Claude Sonnet",
+          type: "chat",
+          enabled: true,
+          variants: [{ id: "max" }, { id: "high" }],
         },
       ],
       location: { directory: "/home/me/oktoso" },
     });
+    return;
+  }
+  const switchAgentMatch = path.match(/^\/api\/session\/([^/]+)\/agent$/);
+  if (switchAgentMatch && request.method === "POST") {
+    const session = OPENCODE_SESSIONS.find((item) => item.id === switchAgentMatch[1]);
+    if (!session) {
+      sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
+      return;
+    }
+    const body = await readBody(request);
+    if (typeof body.agent !== "string" || !body.agent) {
+      sendJson(response, 400, { _tag: "InvalidRequestError", message: "agent is required" });
+      return;
+    }
+    session.agent = body.agent;
+    broadcastEvent("session.updated", { sessionID: session.id });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const switchModelMatch = path.match(/^\/api\/session\/([^/]+)\/model$/);
+  if (switchModelMatch && request.method === "POST") {
+    const session = OPENCODE_SESSIONS.find((item) => item.id === switchModelMatch[1]);
+    if (!session) {
+      sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
+      return;
+    }
+    const body = await readBody(request);
+    const model = body.model && typeof body.model === "object"
+      ? (body.model as { id?: unknown; providerID?: unknown; variant?: unknown })
+      : undefined;
+    if (typeof model?.id !== "string" || typeof model.providerID !== "string") {
+      sendJson(response, 400, { _tag: "InvalidRequestError", message: "model is required" });
+      return;
+    }
+    session.model = {
+      id: model.id,
+      providerID: model.providerID,
+      ...(typeof model.variant === "string" ? { variant: model.variant } : {}),
+    };
+    broadcastEvent("session.updated", { sessionID: session.id });
+    response.writeHead(204);
+    response.end();
     return;
   }
   if (path === "/api/session" && request.method === "POST") {
@@ -467,6 +535,23 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     OPENCODE_MESSAGES[session.id] = [];
     broadcastEvent("session.created", { sessionID: session.id });
     sendJson(response, 200, { data: session });
+    return;
+  }
+  if (path.startsWith("/api/files/")) {
+    const name = path.split("/").at(-1) || "attachment";
+    if (name.endsWith(".txt")) {
+      response.writeHead(200, {
+        "content-type": "text/plain",
+        "content-disposition": `inline; filename="${name}"`,
+      });
+      response.end("fake attachment");
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": "image/png",
+      "content-disposition": `inline; filename="${name}"`,
+    });
+    response.end(FAKE_PNG);
     return;
   }
   if (path === "/api/info") {
@@ -622,7 +707,10 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   }
   if (path === "/api/v1/models") {
     sendJson(response, 200, {
-      data: [{ id: "fake-model", name: "Fake Model" }],
+      data: [
+        { id: "fake-model", name: "Fake Model" },
+        { id: "fake-model-2", name: "Fake Model 2" },
+      ],
     });
     return;
   }
