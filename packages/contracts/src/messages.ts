@@ -23,6 +23,17 @@ export const zMessagePart = z.discriminatedUnion("type", [
   z.object({ type: z.literal("unknown"), raw: z.unknown() }),
 ]);
 
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+
+export const zAttachment = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  mimeType: z.string(),
+  size: z.number().int().nonnegative(),
+  createdAt: z.number().int(),
+});
+
 export const zMessage = z.object({
   id: z.string(),
   sessionRef: z.string(),
@@ -56,9 +67,38 @@ export const zSendAnswer = z.object({
 });
 
 export const zSendInput = z.object({
-  text: z.string().min(1),
+  text: z.string(),
+  attachments: z
+    .array(z.string().min(1))
+    .max(MAX_ATTACHMENTS_PER_MESSAGE)
+    .optional(),
   answer: zSendAnswer.optional(),
   answers: z.array(zSendAnswer).min(1).max(20).optional(),
+});
+
+export const zBranchPoint = z.object({
+  messageId: z.string().min(1),
+  parentId: z.string().nullable(),
+  role: zMessageRole,
+  siblingIds: z.array(z.string().min(1)).min(1),
+  index: z.number().int().nonnegative(),
+  count: z.number().int().positive(),
+});
+
+export const zBranchPage = z.object({
+  data: z.array(zBranchPoint),
+});
+
+export const zBranchSwitchInput = z.object({
+  siblingId: z.string().min(1),
+});
+
+export const zForkInput = z.object({
+  before: z.string().min(1).optional(),
+});
+
+export const zRetryInput = z.object({
+  messageId: z.string().min(1),
 });
 
 export const zSendResult = z.object({
@@ -72,6 +112,12 @@ export const zMessagesQuery = z.object({
   order: z.enum(["asc", "desc"]).optional(),
 });
 
+export type Attachment = z.infer<typeof zAttachment>;
+export type BranchPoint = z.infer<typeof zBranchPoint>;
+export type BranchPage = z.infer<typeof zBranchPage>;
+export type BranchSwitchInput = z.infer<typeof zBranchSwitchInput>;
+export type ForkInput = z.infer<typeof zForkInput>;
+export type RetryInput = z.infer<typeof zRetryInput>;
 export type MessageRole = z.infer<typeof zMessageRole>;
 export type MessagePart = z.infer<typeof zMessagePart>;
 export type Message = z.infer<typeof zMessage>;

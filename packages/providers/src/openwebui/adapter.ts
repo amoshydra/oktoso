@@ -1,4 +1,5 @@
 import type {
+  BranchPoint,
   CreateSessionInput,
   Message,
   MessagePage,
@@ -87,7 +88,11 @@ const openWebUICapabilities: ProviderCapabilities = {
   interrupt: true,
   permissions: false,
   forms: false,
-  attachments: false,
+  attachments: true,
+  attach: false,
+  branches: true,
+  fork: false,
+  retry: true,
   search: false,
   options: true,
   markRead: false,
@@ -349,6 +354,179 @@ export class OpenWebUIAdapter implements ProviderAdapter {
         id: assistantID,
         user_message: userMessage,
         messages,
+        model,
+        stream: true,
+        session_id: crypto.randomUUID(),
+        background_tasks: {
+          title_generation: false,
+          tags_generation: false,
+          follow_up_generation: false,
+        },
+        features: {
+          code_interpreter: false,
+          web_search: false,
+          image_generation: false,
+          memory: false,
+        },
+      },
+      signal,
+    );
+
+    await this.waitForCompletion(nativeID, assistantID, signal);
+    this.summaries.delete(nativeID);
+    return { accepted: true, messageID: assistantID };
+  }
+
+  async listBranches(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<BranchPoint[]> {
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    const messages = chat.chat.history?.messages ?? {};
+    const points: BranchPoint[] = [];
+
+    for (const message of this.currentBranch(chat)) {
+      const parent = message.parentId ? messages[message.parentId] : undefined;
+      const siblingIds = parent?.childrenIds ?? [];
+      const index = siblingIds.indexOf(message.id);
+      if (siblingIds.length < 2 || index < 0) continue;
+      points.push({
+        messageId: message.id,
+        parentId: message.parentId ?? null,
+        role:
+          message.role === "user"
+            ? "user"
+            : message.role === "assistant"
+              ? "assistant"
+              : "system",
+        siblingIds,
+        index,
+        count: siblingIds.length,
+      });
+    }
+
+    return points;
+  }
+
+  async switchBranch(
+    ref: string,
+    siblingId: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    const messages = chat.chat.history?.messages;
+    if (!messages?.[siblingId]) {
+      throw new ProviderError("not_found", "Open WebUI branch message not found");
+    }
+
+    let leaf = messages[siblingId]!;
+    const seen = new Set<string>([leaf.id]);
+    for (;;) {
+      const children = (leaf.childrenIds ?? [])
+        .map((id) => messages[id])
+        .filter((message): message is OpenWebUIMessage => Boolean(message));
+      if (children.length === 0) break;
+      const next = children.sort(
+        (left, right) => (right.timestamp ?? 0) - (left.timestamp ?? 0),
+      )[0]!;
+      if (seen.has(next.id)) break;
+      seen.add(next.id);
+      leaf = next;
+    }
+
+    await this.request<OpenWebUIChat>(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      { chat: { history: { currentId: leaf.id } } },
+    );
+  }
+
+  async retryMessage(
+    ref: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<SendResult> {
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    const messages = chat.chat.history?.messages;
+    const target = messages?.[messageId];
+    if (!target || target.role !== "assistant") {
+      throw new ProviderError(
+        "invalid_request",
+        "Retry needs an assistant message",
+      );
+    }
+    const user = target.parentId ? messages?.[target.parentId] : undefined;
+    if (!user || user.role !== "user") {
+      throw new ProviderError(
+        "invalid_request",
+        "Retry needs the assistant's user message",
+      );
+    }
+
+    const model =
+      chat.chat.models?.[0] ??
+      target.model ??
+      user.models?.[0] ??
+      (await this.firstModel(signal));
+    if (!model) {
+      throw new ProviderError("invalid_request", "Open WebUI has no available models");
+    }
+
+    const assistantID = crypto.randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+    const assistant: OpenWebUIMessage = {
+      id: assistantID,
+      role: "assistant",
+      content: "",
+      parentId: user.id,
+      childrenIds: [],
+      timestamp: now,
+      model,
+      done: false,
+    };
+    user.childrenIds = [...(user.childrenIds ?? []), assistantID];
+
+    await this.request<OpenWebUIChat>(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      {
+        chat: {
+          history: {
+            currentId: assistantID,
+            messages: {
+              [user.id]: user,
+              [assistantID]: assistant,
+            },
+          },
+        },
+      },
+    );
+
+    const branch = this.currentBranch(chat);
+    const userIndex = branch.findIndex((message) => message.id === user.id);
+    const context = (userIndex >= 0 ? branch.slice(0, userIndex + 1) : branch)
+      .map((message) => ({
+        role: message.role,
+        content: contentText(message.content),
+      }))
+      .filter(
+        (message): message is { role: string; content: string } =>
+          Boolean(message.role && message.content),
+      );
+
+    await this.triggerCompletion(
+      {
+        chat_id: nativeID,
+        id: assistantID,
+        user_message: user,
+        messages: context,
         model,
         stream: true,
         session_id: crypto.randomUUID(),

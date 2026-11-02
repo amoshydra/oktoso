@@ -100,6 +100,72 @@ describe("OpenWebUIAdapter", () => {
     });
   });
 
+  it("lists and switches in-chat branches", async () => {
+    const { adapter } = await createAdapter();
+    const ref = "openwebui:chat_fake_branches";
+    const signal = AbortSignal.timeout(5_000);
+
+    const initial = await adapter.listBranches(ref, signal);
+    expect(initial).toEqual([
+      {
+        messageId: "branch-assistant-2",
+        parentId: "branch-user",
+        role: "assistant",
+        siblingIds: ["branch-assistant-1", "branch-assistant-2"],
+        index: 1,
+        count: 2,
+      },
+    ]);
+
+    await adapter.switchBranch(ref, "branch-assistant-1", signal);
+    const messages = await adapter.getMessages(ref, { limit: 100, order: "asc" }, signal);
+    const ids = messages.data.map((message) => message.id);
+    expect(ids).toContain("branch-answer-1");
+    expect(ids).not.toContain("branch-answer-2");
+
+    const after = await adapter.listBranches(ref, signal);
+    expect(after).toMatchObject([
+      {
+        messageId: "branch-assistant-1",
+        index: 0,
+        count: 2,
+      },
+    ]);
+  });
+
+  it("retries an assistant message as a new sibling", async () => {
+    const { adapter } = await createAdapter();
+    const ref = "openwebui:chat_fake_branches";
+    const signal = AbortSignal.timeout(10_000);
+
+    const result = await adapter.retryMessage(
+      ref,
+      "branch-assistant-2",
+      signal,
+    );
+    expect(result.accepted).toBe(true);
+    expect(result.messageID).toBeTruthy();
+
+    const branches = await adapter.listBranches(ref, signal);
+    expect(branches).toMatchObject([
+      {
+        messageId: result.messageID,
+        index: 2,
+        count: 3,
+      },
+    ]);
+
+    const messages = await adapter.getMessages(
+      ref,
+      { limit: 100, order: "asc" },
+      signal,
+    );
+    expect(messages.data.at(-1)).toMatchObject({
+      role: "assistant",
+      parts: [{ type: "text", text: "Fake Open WebUI reply: Show me two alternatives." }],
+    });
+  });
+
   it("lists models as options", async () => {
     const { adapter } = await createAdapter();
     const options = await adapter.getOptions(AbortSignal.timeout(5_000));

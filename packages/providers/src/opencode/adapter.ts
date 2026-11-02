@@ -2,6 +2,7 @@ import type {
   Attention,
   AttentionField,
   CreateSessionInput,
+  ForkInput,
   Message,
   MessagePage,
   MessagePart,
@@ -9,14 +10,17 @@ import type {
   ProviderCapabilities,
   ProviderHealth,
   ProviderOptions,
-  SendInput,
   SendResult,
   Session,
   SessionListQuery,
   SessionPage,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
-import type { ProviderAdapter, ProviderResource } from "../types";
+import type {
+  ProviderAdapter,
+  ProviderResource,
+  ProviderSendInput,
+} from "../types";
 import { ProviderError } from "../errors";
 import { readProviderResource } from "../http/resource";
 import { readSse } from "../http/sse";
@@ -65,6 +69,7 @@ interface OpenCodeMessageRaw {
   type: string;
   time?: { created?: number; completed?: number };
   text?: string;
+  files?: Array<Record<string, unknown>>;
   content?: Array<Record<string, unknown>>;
   agent?: string;
   model?: { id: string; providerID: string; variant?: string };
@@ -154,7 +159,11 @@ const openCodeCapabilities: ProviderCapabilities = {
   interrupt: true,
   permissions: true,
   forms: true,
-  attachments: false,
+  attachments: true,
+  attach: true,
+  branches: false,
+  fork: true,
+  retry: false,
   search: false,
   options: true,
   markRead: true,
@@ -257,21 +266,41 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
   async sendMessage(
     ref: string,
-    input: SendInput,
+    input: ProviderSendInput,
     signal: AbortSignal,
   ): Promise<SendResult> {
     const nativeID = this.nativeID(ref);
+    const files = (input.files ?? []).map((file) => ({
+      uri: `data:${file.mimeType};base64,${Buffer.from(file.data).toString("base64")}`,
+      name: file.name,
+    }));
     const response = await this.request<{ data?: { id?: string } }>(
       `/api/session/${encodeURIComponent(nativeID)}/prompt`,
       {},
       signal,
       "POST",
-      { text: input.text },
+      { text: input.text, ...(files.length > 0 ? { files } : {}) },
     );
     return {
       accepted: true,
       ...(response.data?.id ? { messageID: response.data.id } : {}),
     };
+  }
+
+  async forkSession(
+    ref: string,
+    input: ForkInput,
+    signal: AbortSignal,
+  ): Promise<Session> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}/fork`,
+      {},
+      signal,
+      "POST",
+      input.before ? { before: input.before } : {},
+    );
+    return this.toSession(response.data);
   }
 
   async createSession(
@@ -867,11 +896,17 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
   private toMessage(sessionRef: string, raw: OpenCodeMessageRaw): Message | undefined {
     if (raw.type === "user") {
+      const fileParts = (raw.files ?? [])
+        .map(toFilePart)
+        .filter((part): part is MessagePart => Boolean(part));
       return {
         id: raw.id,
         sessionRef,
         role: "user",
-        parts: raw.text ? [{ type: "text", text: raw.text }] : [],
+        parts: [
+          ...(raw.text ? [{ type: "text" as const, text: raw.text }] : []),
+          ...fileParts,
+        ],
         createdAt: raw.time?.created ?? 0,
       };
     }
@@ -1067,19 +1102,49 @@ function toMessagePart(raw: Record<string, unknown>): MessagePart {
     };
   }
   if (type === "file") {
-    const name =
-      stringValue(raw.name) ??
-      stringValue(raw.filename) ??
-      stringValue(raw.title) ??
-      "File";
+    return toFilePart(raw) ?? { type: "unknown", raw };
+  }
+  return { type: "unknown", raw };
+}
+
+function toFilePart(raw: Record<string, unknown>): MessagePart | undefined {
+  const source =
+    raw.source && typeof raw.source === "object"
+      ? (raw.source as Record<string, unknown>)
+      : undefined;
+  const name =
+    stringValue(raw.name) ??
+    stringValue(raw.filename) ??
+    stringValue(raw.title) ??
+    "File";
+  const mimeType =
+    stringValue(raw.mime) ??
+    stringValue(raw.mimeType) ??
+    "application/octet-stream";
+  const data = stringValue(raw.data);
+  const url =
+    stringValue(raw.url) ??
+    stringValue(raw.path) ??
+    stringValue(raw.uri) ??
+    (source?.type === "uri" ? stringValue(source.uri) : undefined);
+
+  if (url) {
     return {
       type: "file",
       name,
-      ...(typeof raw.mimeType === "string" ? { mimeType: raw.mimeType } : {}),
-      ...(typeof raw.url === "string" ? { url: raw.url } : {}),
+      mimeType,
+      url,
     };
   }
-  return { type: "unknown", raw };
+  if (data) {
+    return {
+      type: "file",
+      name,
+      mimeType,
+      url: `data:${mimeType};base64,${data}`,
+    };
+  }
+  return undefined;
 }
 
 function toLiveMessage(live: OpenCodeLiveMessage): Message {

@@ -1,6 +1,8 @@
 import type {
   Attention,
+  BranchPoint,
   CreateSessionInput,
+  ForkInput,
   MessagePage,
   MessagesQuery,
   ProviderCapabilities,
@@ -41,6 +43,16 @@ export interface ProviderResource {
   filename?: string;
 }
 
+export interface ProviderAttachment {
+  name: string;
+  mimeType: string;
+  data: Uint8Array;
+}
+
+export interface ProviderSendInput extends SendInput {
+  files?: ProviderAttachment[];
+}
+
 export interface ProviderAdapter {
   readonly id: string;
   readonly type: string;
@@ -54,10 +66,30 @@ export interface ProviderAdapter {
     query: MessagesQuery,
     signal: AbortSignal,
   ): Promise<MessagePage>;
-  sendMessage(ref: string, input: SendInput, signal: AbortSignal): Promise<SendResult>;
+  sendMessage(
+    ref: string,
+    input: ProviderSendInput,
+    signal: AbortSignal,
+  ): Promise<SendResult>;
   createSession(input: CreateSessionInput, signal: AbortSignal): Promise<Session>;
 
   interrupt?(ref: string, signal: AbortSignal): Promise<void>;
+  listBranches?(ref: string, signal: AbortSignal): Promise<BranchPoint[]>;
+  switchBranch?(
+    ref: string,
+    siblingId: string,
+    signal: AbortSignal,
+  ): Promise<void>;
+  forkSession?(
+    ref: string,
+    input: ForkInput,
+    signal: AbortSignal,
+  ): Promise<Session>;
+  retryMessage?(
+    ref: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<SendResult>;
   listAttention?(directories: string[], signal: AbortSignal): Promise<Attention[]>;
   actOnAttention?(
     id: string,
@@ -89,6 +121,10 @@ export const emptyCapabilities: ProviderCapabilities = {
   permissions: false,
   forms: false,
   attachments: false,
+  attach: false,
+  branches: false,
+  fork: false,
+  retry: false,
   search: false,
   options: false,
   markRead: false,

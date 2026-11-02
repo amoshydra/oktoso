@@ -1,10 +1,15 @@
 # Chat interaction contract
 
-Status: accepted for implementation. This is the contract for chat actions that
-are not part of the provider transcript model.
+Status: accepted and implemented through the attachments and branching slice.
+This is the contract for chat actions that are not part of the provider
+transcript model.
 
 - Date: 2026-11-02
-- Design version: `design-v1.2`
+- Design version: `design-v1.3`
+- Implemented: copy, dictation, OpenCode attachments, Open WebUI in-chat branch
+  switching and retry-as-a-sibling, and OpenCode session forks.
+- Deferred: Open WebUI attachment sending, message editing, and a full
+  session-family tree UI.
 - Related: [`design.md`](design.md), [`ui-ia.md`](ui-ia.md),
   [`visual-audit.md`](visual-audit.md)
 - Spike evidence: the isolated `spike/assistant-ui` branch (not merged)
@@ -24,9 +29,11 @@ This contract separates three things that are easy to conflate:
 3. **What the client renders.** The web client only renders the contract; it
    does not reach into a provider API or invent provider-specific behavior.
 
-The first implementation slice is deliberately small: the transcript copy
-action and hub-backed dictation. Attachments and branching follow only after
-their contracts are in place.
+The implementation is split into capability-gated slices. The transcript copy
+action and hub-backed dictation shipped first. OpenCode attachments, Open WebUI
+in-chat branch switching, and OpenCode session forks follow the same contract.
+Open WebUI attachment sending and retry/edit remain gated off until their
+provider paths exist.
 
 ## 2. Non-goals
 
@@ -82,9 +89,9 @@ selected -> uploading -> ready -> sending -> sent
 - The hub owns upload storage and provider forwarding.
 - The browser never receives a provider credential.
 - The hub enforces size, type, count, and same-origin rules.
-- The provider capability `attachments.send` decides whether the composer
-  exposes the control. A read-only attachment capability still renders files
-  that already exist in the transcript.
+- The provider capability `attach` decides whether the composer exposes the
+  upload control. The `attachments` capability still renders files that already
+  exist in the transcript when sending is unavailable.
 
 ### Action
 
@@ -204,7 +211,7 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 
 ## 7. API additions
 
-### Current slice
+### Implemented
 
 `POST /api/v1/transcribe`
 
@@ -222,43 +229,85 @@ constraint, not a product toggle. The Settings screen explains the requirement.
   - `502 transcription_failed` — upstream error or malformed response
   - `504 transcription_timeout` — upstream timeout
 
+`POST /api/v1/attachments`
+
+- Body: `multipart/form-data` with `file`.
+- Response: `{ "data": { id, name, mimeType, size, createdAt } }`.
+- Limit: 20 MiB, five files per message, images/PDF/JSON/text/Markdown/CSV.
+- Files are staged under `<dataDir>/attachments`, expire after one hour, and
+  are deleted after a successful send. `DELETE /api/v1/attachments/{id}`
+  removes one immediately.
+- `SendInput.attachments` carries the staged IDs. The hub reads the bytes,
+  checks the provider's `attach` capability, and passes the files to the
+  adapter. The HTTP contract never carries provider credentials or raw files
+  back to the client.
+
+`GET /api/v1/sessions/{ref}/branches`
+
+- Returns the active path's in-chat branch points:
+  `{ messageId, parentId, role, siblingIds, index, count }`.
+- `POST /api/v1/sessions/{ref}/branches` with `{ siblingId }` switches the
+  active sibling. Open WebUI moves `history.currentId` to the selected
+  sibling's deepest descendant.
+
+`POST /api/v1/sessions/{ref}/retry`
+
+- Body: `{ messageId }` of an assistant message.
+- Open WebUI creates a new assistant sibling under the same user message,
+  switches `history.currentId` to it, and runs the completion from the user
+  prompt. The branch picker exposes the old and new answers.
+- Providers without `retry` return a capability error.
+
+`POST /api/v1/sessions/{ref}/fork`
+
+- Optional `{ before?: messageId }`.
+- Creates a provider-native child session. OpenCode copies the projected
+  history before the message and returns a `Session` with `parentRef`.
+- The web details panel exposes `Fork session` and `Open parent`.
+
 The existing `GET/PUT /api/v1/settings/assistant` remains the configuration
 surface. `GET /api/v1/settings/assistant/transcription/models` remains the model
 discovery surface.
 
 ### Later slices
 
-- `POST /api/v1/attachments` and provider forwarding.
-- `GET /api/v1/sessions/{ref}/branches` and `POST .../branches/switch`.
-- `POST /api/v1/sessions/{ref}/retry`.
-- Capability flags on `Session`/`Provider`.
-
-These are not implemented by the copy/dictation slice.
+- Open WebUI attachment upload and send mapping (`attach` remains false).
+- Message editing as a tree operation.
+- A session-family tree UI beyond the parent link.
+- Attachment forwarding for provider-native file stores that require a
+  pre-upload step.
 
 ## 8. Accessibility and responsive rules
 
 - Every action has a text or `aria-label` name.
-- Copy success, dictation state, and transcription errors are announced.
+- Copy success, dictation state, attachment failures, and branch errors are
+  announced.
 - A status is never color-only.
-- The mic action is 44px on mobile; the copy action is 44px on mobile.
+- The mic action, attachment remove control, and branch arrows are 44px on
+  mobile; the copy action is 44px on mobile.
 - The dictation status row remains visible below 760px, where the composer hint
   is hidden.
 - The composer textarea remains 16px on mobile.
+- Attachment chips wrap and truncate long names; branch pickers stay on one
+  line.
 - The existing 2px accent focus outline applies to the new controls.
 - No new color, type, spacing, or radius token is introduced.
 
 ## 9. Delivery
 
-1. **This slice:** interaction contract, copy action, hub transcription route,
-   web dictation.
-2. **Attachments:** hub upload route, limits, provider send mapping, composer
-   chips, transcript rendering.
-3. **Branching:** canonical tree, Open WebUI in-chat siblings, OpenCode session
-   forks as session-level branches, retry/edit.
-4. **Production migration:** only after grouping and the frozen design hold
+1. **Done:** interaction contract, copy action, hub transcription route, web
+   dictation.
+2. **Done:** hub upload route, limits, OpenCode send mapping, composer chips,
+   transcript rendering.
+3. **Done:** Open WebUI in-chat siblings and OpenCode session forks.
+4. **Deferred:** Open WebUI attachment sending, retry/edit, and the full
+   session-family tree.
+5. **Production migration:** only after grouping and the frozen design hold
    against live provider data.
 
-## 10. Acceptance criteria for this slice
+## 10. Acceptance criteria
+
+**Copy and dictation**
 
 - Copy appears on completed assistant messages with text and copies the raw
   text parts.
@@ -271,7 +320,32 @@ These are not implemented by the copy/dictation slice.
   timed-out transcriptions with the documented errors.
 - The 1 MiB JSON limit does not block the 25 MiB audio route.
 - The web client remains usable without microphone support.
+
+**Attachments**
+
+- Uploading a file stages it, renders a chip, and supports removal.
+- Sending with text and sending attachment-only both work where `attach` is
+  true.
+- The provider receives the file bytes and the transcript normalizes the file
+  part.
+- A provider with `attach: false` rejects attachments with a capability error.
+- Staged files are deleted after a successful send and expire after an hour.
+
+**Branching**
+
+- Open WebUI branch points show the active sibling index and count under the
+  active assistant message.
+- Switching a branch replaces the visible path and updates the picker.
+- Retry creates a new assistant sibling, keeps the old answer reachable, and
+  updates the picker count.
+- OpenCode `Fork session` creates a child session and opens it; the child links
+  back to the parent.
+- A provider without branch/fork/retry support hides or rejects the action.
+
+**Design**
+
 - Dark/light, 1440/1024/390/320, and the existing screens still pass.
+- No horizontal overflow at 390 or 320.
 
 ## 11. Open questions
 
@@ -284,3 +358,10 @@ These are not implemented by the copy/dictation slice.
   explicitly or the 120-second cap fires.
 - Should copy be offered on user messages too? Current decision: assistant
   messages only for the first slice.
+- Should Open WebUI uploads use `/api/v1/files/` and pre-process the file before
+  attaching, or should the hub wait for a provider-native send path? Current
+  decision: keep `attach` false and show the read-only attachment surface.
+- Which child should an Open WebUI branch select when the target has several
+  continuations? Current decision: the most recently timestamped descendant.
+- Should the session family tree become a sidebar view or stay a parent link in
+  details? Current decision: parent link first.

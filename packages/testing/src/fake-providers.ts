@@ -18,6 +18,7 @@ interface FakeServerOptions {
 
 interface FakeOpenCodeSession {
   id: string;
+  parentID?: string;
   projectID: string;
   agent: string;
   model: { id: string; providerID: string; variant?: string };
@@ -239,6 +240,8 @@ interface FakeOwuiMessage {
   childrenIds: string[];
   timestamp: number;
   model?: string;
+  models?: string[];
+  files?: unknown[];
   done?: boolean;
   error?: unknown;
 }
@@ -307,7 +310,104 @@ function makeFakeOwuiChat(options: {
   };
 }
 
+function makeFakeOwuiBranchChat(): FakeOwuiChat {
+  const now = Math.floor(Date.now() / 1000);
+  const user = "branch-user";
+  const first = "branch-assistant-1";
+  const second = "branch-assistant-2";
+  const followFirst = "branch-follow-1";
+  const answerFirst = "branch-answer-1";
+  const followSecond = "branch-follow-2";
+  const answerSecond = "branch-answer-2";
+  return {
+    id: "chat_fake_branches",
+    title: "Fake Open WebUI branches",
+    created_at: now - 300,
+    updated_at: now,
+    last_read_at: 0,
+    active: false,
+    chat: {
+      title: "Fake Open WebUI branches",
+      models: ["fake-model"],
+      history: {
+        currentId: answerSecond,
+        messages: {
+          [user]: {
+            id: user,
+            role: "user",
+            content: "Show me two alternatives.",
+            parentId: null,
+            childrenIds: [first, second],
+            timestamp: now - 7,
+          },
+          [first]: {
+            id: first,
+            role: "assistant",
+            content: "Alternative one.",
+            parentId: user,
+            childrenIds: [followFirst],
+            timestamp: now - 6,
+            model: "fake-model",
+            done: true,
+          },
+          [followFirst]: {
+            id: followFirst,
+            role: "user",
+            content: "Continue alternative one.",
+            parentId: first,
+            childrenIds: [answerFirst],
+            timestamp: now - 5,
+            models: ["fake-model"],
+            files: [],
+          },
+          [answerFirst]: {
+            id: answerFirst,
+            role: "assistant",
+            content: "Answer one.",
+            parentId: followFirst,
+            childrenIds: [],
+            timestamp: now - 4,
+            model: "fake-model",
+            done: true,
+          },
+          [second]: {
+            id: second,
+            role: "assistant",
+            content: "Alternative two.",
+            parentId: user,
+            childrenIds: [followSecond],
+            timestamp: now - 3,
+            model: "fake-model",
+            done: true,
+          },
+          [followSecond]: {
+            id: followSecond,
+            role: "user",
+            content: "Continue alternative two.",
+            parentId: second,
+            childrenIds: [answerSecond],
+            timestamp: now - 2,
+            models: ["fake-model"],
+            files: [],
+          },
+          [answerSecond]: {
+            id: answerSecond,
+            role: "assistant",
+            content: "Answer two.",
+            parentId: followSecond,
+            childrenIds: [],
+            timestamp: now - 1,
+            model: "fake-model",
+            done: true,
+          },
+        },
+      },
+    },
+  };
+}
+
 const OWUI_CHATS = new Map<string, FakeOwuiChat>([
+  ["chat_fake_branches", makeFakeOwuiBranchChat()],
   [
     "chat_fake_openwebui",
     makeFakeOwuiChat({
@@ -562,6 +662,48 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     sendJson(response, 200, page(OPENCODE_SESSIONS, url));
     return;
   }
+  const forkMatch = path.match(/^\/api\/session\/([^/]+)\/fork$/);
+  if (forkMatch && request.method === "POST") {
+    const source = OPENCODE_SESSIONS.find(
+      (item) => item.id === forkMatch[1],
+    );
+    if (!source) {
+      sendJson(response, 404, {
+        _tag: "SessionNotFoundError",
+        message: "Session not found",
+      });
+      return;
+    }
+    const body = await readBody(request);
+    const before = typeof body.before === "string" ? body.before : undefined;
+    const sourceMessages = OPENCODE_MESSAGES[source.id] ?? [];
+    const beforeIndex = before
+      ? sourceMessages.findIndex((message) => message.id === before)
+      : -1;
+    if (before && beforeIndex === -1) {
+      sendJson(response, 404, {
+        _tag: "MessageNotFoundError",
+        message: "Message not found",
+      });
+      return;
+    }
+    const now = Date.now();
+    const id = `ses_fake_fork_${now.toString(36)}`;
+    const child: FakeOpenCodeSession = {
+      ...source,
+      id,
+      parentID: source.id,
+      title: `${source.title} (fork)`,
+      time: { created: now, updated: now },
+    };
+    OPENCODE_SESSIONS.unshift(child);
+    OPENCODE_MESSAGES[id] = sourceMessages
+      .slice(0, before ? beforeIndex : sourceMessages.length)
+      .map((message) => ({ ...message }));
+    broadcastEvent("session.created", { sessionID: id });
+    sendJson(response, 200, { data: child });
+    return;
+  }
   const sessionMatch = path.match(/^\/api\/session\/([^/]+)$/);
   if (sessionMatch && request.method === "DELETE") {
     const sessionID = sessionMatch[1] ?? "";
@@ -606,6 +748,22 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       return;
     }
     const text = typeof body.text === "string" ? body.text : "";
+    const files = Array.isArray(body.files)
+      ? body.files.map((entry) => {
+          const file =
+            entry && typeof entry === "object"
+              ? (entry as Record<string, unknown>)
+              : {};
+          const uri = typeof file.uri === "string" ? file.uri : "";
+          const match = /^data:([^;]+);base64,(.*)$/.exec(uri);
+          return {
+            data: match?.[2] ?? "",
+            mime: match?.[1] ?? "application/octet-stream",
+            source: { type: "inline" },
+            name: typeof file.name === "string" ? file.name : "Attachment",
+          };
+        })
+      : [];
     const now = Date.now();
     const userID = `msg_fake_${now.toString(36)}`;
     messages.push({
@@ -613,7 +771,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       type: "user",
       time: { created: now },
       text,
-      files: [],
+      files,
       agents: [],
     });
     const replyID = `msg_fake_reply_${now.toString(36)}`;
@@ -641,6 +799,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         type: "user",
         time: { created: now },
         text,
+        files,
       },
     });
     broadcastEvent("message.updated", {

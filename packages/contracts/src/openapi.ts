@@ -53,6 +53,12 @@ import {
   zSessionSelectionInput,
   zAttentionSummary,
   zTranscriptionResult,
+  zAttachment,
+  zBranchPage,
+  zBranchPoint,
+  zBranchSwitchInput,
+  zForkInput,
+  zRetryInput,
 } from "./index";
 
 extendZodWithOpenApi(z);
@@ -139,6 +145,15 @@ const MessageSchema = registry.register("Message", zMessage);
 const MessagePageSchema = registry.register("MessagePage", zMessagePage);
 const SendInputSchema = registry.register("SendInput", zSendInput);
 const SendResultSchema = registry.register("SendResult", zSendResult);
+const AttachmentSchema = registry.register("Attachment", zAttachment);
+const BranchPointSchema = registry.register("BranchPoint", zBranchPoint);
+const BranchPageSchema = registry.register("BranchPage", zBranchPage);
+const BranchSwitchInputSchema = registry.register(
+  "BranchSwitchInput",
+  zBranchSwitchInput,
+);
+const ForkInputSchema = registry.register("ForkInput", zForkInput);
+const RetryInputSchema = registry.register("RetryInput", zRetryInput);
 const AttentionTypeSchema = registry.register("AttentionType", zAttentionType);
 const AttentionPrioritySchema = registry.register(
   "AttentionPriority",
@@ -172,6 +187,7 @@ const errorResponse = (description: string) => ({
 });
 
 const params = z.object({ ref: z.string() });
+const attachmentParams = z.object({ id: z.string() });
 const providerParams = z.object({ providerID: z.string() });
 const assistantTargetParams = z.object({
   target: z.enum(["reply", "transcription"]),
@@ -467,6 +483,112 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/branches",
+  tags: ["sessions"],
+  summary: "List in-chat branch points",
+  request: { params },
+  responses: {
+    200: { description: "Branch points", content: json(BranchPageSchema) },
+    404: errorResponse("Session not found"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/branches",
+  tags: ["sessions"],
+  summary: "Switch an in-chat branch",
+  request: {
+    params,
+    body: { content: json(BranchSwitchInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Branch switched",
+      content: json(z.object({ accepted: z.boolean() })),
+    },
+    400: errorResponse("Invalid branch"),
+    404: errorResponse("Session or branch not found"),
+    501: errorResponse("Provider does not support branches"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/retry",
+  tags: ["sessions"],
+  summary: "Retry an assistant message as a new sibling",
+  request: {
+    params,
+    body: { content: json(RetryInputSchema), required: true },
+  },
+  responses: {
+    202: { description: "Retry accepted", content: json(SendResultSchema) },
+    400: errorResponse("Invalid retry target"),
+    404: errorResponse("Session or message not found"),
+    501: errorResponse("Provider does not support retry"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/fork",
+  tags: ["sessions"],
+  summary: "Fork a session",
+  request: {
+    params,
+    body: { content: json(ForkInputSchema), required: false },
+  },
+  responses: {
+    200: { description: "Forked session", content: json(SessionSchema) },
+    400: errorResponse("Invalid fork input"),
+    404: errorResponse("Session or message not found"),
+    501: errorResponse("Provider does not support forking"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/attachments",
+  tags: ["attachments"],
+  summary: "Stage an attachment for a message",
+  description:
+    "Uploads one file to the hub. Staged attachments expire after one hour and are removed after a successful send.",
+  request: {
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: z.object({
+            file: z.string().openapi({ format: "binary" }),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    201: { description: "Staged attachment", content: json(AttachmentSchema) },
+    400: errorResponse("Invalid or unsupported attachment"),
+    413: errorResponse("Attachment is too large"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/attachments/{id}",
+  tags: ["attachments"],
+  summary: "Delete a staged attachment",
+  request: { params: attachmentParams },
+  responses: {
+    204: { description: "Deleted" },
+  },
+});
+
+registry.registerPath({
   method: "post",
   path: "/api/v1/sessions/{ref}/interrupt",
   tags: ["sessions"],
@@ -751,6 +873,7 @@ export function buildOpenApiDocument() {
       { name: "auth" },
       { name: "providers" },
       { name: "sessions" },
+      { name: "attachments" },
       { name: "drafts" },
       { name: "questions" },
       { name: "attention" },
