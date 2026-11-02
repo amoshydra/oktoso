@@ -1,6 +1,6 @@
 # Oktoso — naming and roadmap
 
-Status: name and package rename applied. Publishing setup is the remaining Phase 1 work.
+Status: Phase 0 and Phase 1 complete; `v0.1.11` is published. Phase 2 (MCP northbound) is in progress. Updated 2026-11-03.
 
 ## Name
 
@@ -83,7 +83,9 @@ Publish a scoped package publicly with:
 - Web client, terminal dashboard, Even G2 question/reply flow.
 - Question detection, stale revisions, idempotent answer retry.
 
-### Phase 1 — Publishable Oktoso
+### Phase 1 — Publishable Oktoso (done)
+
+Published as `v0.1.11` on npm.
 
 - [x] Rename package to `@amoshydra/oktoso`; binary `oktoso`.
 - [x] Rename workspace packages to `@amoshydra/oktoso-*`.
@@ -91,7 +93,7 @@ Publish a scoped package publicly with:
 - [x] Add release-please and the GitHub Actions workflow for npm OIDC publishing and provenance.
 - [x] Verify `npx` from a clean temporary directory after publishing.
 - [x] Rename the GitHub repository to `oktoso`.
-- Keep **agent hub** as the descriptive subtitle, not the package name.
+- [x] Keep **agent hub** as the descriptive subtitle, not the package name.
 
 Acceptance:
 
@@ -104,7 +106,14 @@ npx @amoshydra/oktoso pair
 Starts without native modules, prints the dashboard, and serves the web/G2 apps
 from the package.
 
-### Phase 2 — MCP northbound: agents control Oktoso
+### Phase 2 — MCP northbound: agents control Oktoso (in progress)
+
+Status: an experimental stdio bridge exists on `feat/mcp-northbound`. It is
+read-only by default, adds write tools only with `--allow-write`, rejects writes
+to the caller's own session, requires `confirm: true` for approvals, and accepts
+idempotency keys for sends. It is not shipped. A hub-hosted `/mcp` endpoint,
+scoped tokens, allowlists, per-tool audit, rate limits, and event subscription
+remain.
 
 Expose Oktoso as an MCP server so external LLM agents can use it.
 
@@ -131,7 +140,7 @@ An external agent connects over MCP, lists sessions, reads a transcript, answers
 a pending question, and observes an attention event. Destructive actions are
 blocked or require approval.
 
-### Phase 3 — MCP southbound: providers and tools as patch points
+### Phase 3 — MCP southbound: providers and tools as patch points (planned)
 
 Oktoso also acts as an MCP client:
 
@@ -146,7 +155,7 @@ Acceptance:
 An agent can call a provider tool through Oktoso. A denied tool never reaches
 the provider and appears in the audit log.
 
-### Phase 4 — Continuous control
+### Phase 4 — Continuous control (planned)
 
 This is the “LLM agent continuously controls providers” layer.
 
@@ -175,7 +184,7 @@ Acceptance:
 A watcher answers a safe question, escalates a destructive one, and never sends
 duplicate actions when two agents are connected.
 
-### Phase 5 — Surfaces and ecosystem
+### Phase 5 — Surfaces and ecosystem (planned)
 
 - Web control plane: MCP connections, policies, audit, automation status.
 - G2: voice answers, suggested answers, and hardware acceptance (question discovery, pairing, and multi-question batches are implemented).

@@ -22,7 +22,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. Desktop notifications, real Hermes, and voice STT remain pending. The approved UI reference is frozen as `design-v1.1`.
+Implementation phase. `v0.1.11` ships the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix that preserves message order on refresh. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. The approved UI reference is frozen as `design-v1.3`. Remaining gaps include real Hermes, G2 voice and hardware acceptance, MCP northbound, and remote/multi-host deployment.
 
 ## Documents
 
@@ -31,7 +31,9 @@ Implementation phase. OpenCode and Open WebUI are live, the web hub has search, 
 - [`docs/code-structure.md`](docs/code-structure.md) - implementation systems, repository layout, API additions, and task sequencing
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules
-- [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.1` reference and change policy
+- [`docs/design-lock.md`](docs/design-lock.md) - frozen `design-v1.3` reference and change policy
+- [`docs/interaction-contract.md`](docs/interaction-contract.md) - chat copy, dictation, attachments, branches, retry, and fork semantics
+- [`docs/package-evaluation.md`](docs/package-evaluation.md) - assistant-ui package decision record
 - [`docs/brand/README.md`](docs/brand/README.md) - brand mark, app icons, and banner assets
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
@@ -255,4 +257,4 @@ MIT. See [`LICENSE`](LICENSE).
 
 ## Next
 
-Milestone 1 continues with the OpenCode V2 adapter, the real session/chat slice, and attention. The implementation shape is in `docs/code-structure.md`.
+Next: MCP northbound. An experimental stdio bridge on `feat/mcp-northbound` exposes the hub's read tools, with `--allow-write` for write tools, self-control rejection, a confirm gate for approvals, and idempotent sends. It is not shipped. The follow-up is a hub-hosted `/mcp` endpoint with scoped tokens and per-tool audit.
