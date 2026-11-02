@@ -41,6 +41,9 @@ import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
+import { registerMcpRoutes } from "./mcp/http";
+import { createServiceMcpApi } from "./mcp/api";
+import { SessionActions } from "./services/session-actions";
 
 export interface AppDependencies {
   config: HubConfig;
@@ -83,8 +86,14 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
         origin: wildcard ? "*" : deps.config.cors,
         credentials: !wildcard,
         allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
-        exposeHeaders: ["X-Request-Id"],
+        allowHeaders: [
+          "Authorization",
+          "Content-Type",
+          "Idempotency-Key",
+          "Mcp-Session-Id",
+          "Mcp-Protocol-Version",
+        ],
+        exposeHeaders: ["X-Request-Id", "Mcp-Session-Id"],
         maxAge: 600,
       }),
     );
@@ -100,19 +109,31 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry, deps.providerAdmin);
   registerAttachmentRoutes(app, deps.registry, deps.attachments);
-  registerSessionRoutes(
-    app,
+  const idempotency = new IdempotencyService(deps.store);
+  const actions = new SessionActions(
     deps.sessions,
-    deps.replies,
     deps.questions,
-    new IdempotencyService(deps.store),
+    idempotency,
   );
+  registerSessionRoutes(app, deps.sessions, deps.replies, actions);
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);
   registerSettingsRoutes(app, deps.settings);
   registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);
   registerEventRoutes(app, deps.eventBus);
+  registerMcpRoutes(app, {
+    config: deps.config,
+    api: createServiceMcpApi({
+      registry: deps.registry,
+      sessions: deps.sessions,
+      questions: deps.questions,
+      attention: deps.attention,
+      actions,
+    }),
+    logger: deps.logger,
+    version: VERSION,
+  });
   registerDiagnosticsRoute(app, {
     startedAt,
     eventBus: deps.eventBus,

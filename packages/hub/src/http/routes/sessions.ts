@@ -10,20 +10,17 @@ import {
   zSessionListQuery,
   zSessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
-import type { SendResult } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "../../services/session-service";
 import type { ReplyService } from "../../services/reply-service";
-import type { QuestionService } from "../../services/question-service";
-import type { IdempotencyService } from "../../services/idempotency";
+import type { SessionActions } from "../../services/session-actions";
 import type { AppEnv } from "../types";
-import { badRequest, conflict, notFound } from "../../domain/errors";
+import { badRequest, notFound } from "../../domain/errors";
 
 export function registerSessionRoutes(
   app: Hono<AppEnv>,
   sessions: SessionService,
   replies: ReplyService,
-  questions: QuestionService,
-  idempotency: IdempotencyService,
+  actions: SessionActions,
 ): void {
   app.get("/api/v1/sessions", async (c) => {
     const parsed = zSessionListQuery.safeParse(c.req.query());
@@ -119,93 +116,7 @@ export function registerSessionRoutes(
     }
     const ref = c.req.param("ref");
     const idempotencyKey = c.req.header("Idempotency-Key")?.trim();
-    const cacheKey = idempotencyKey ? `${ref}:${idempotencyKey}` : undefined;
-
-    if (cacheKey) {
-      const cached = await idempotency.get(cacheKey);
-      if (cached !== undefined) {
-        return c.json(cached as SendResult, 202);
-      }
-    }
-
-    const answer = parsed.data.answer;
-    const answers = parsed.data.answers;
-    if (answer && answers) {
-      throw badRequest("Use either answer or answers, not both");
-    }
-    if (answers) {
-      const prompt = await questions.get(ref);
-      if (!prompt) {
-        throw conflict("This question is no longer pending", {
-          reason: "question_resolved",
-        });
-      }
-      if (
-        answers.some(
-          (item) =>
-            item.messageId !== prompt.messageId ||
-            item.revision !== prompt.revision,
-        )
-      ) {
-        throw conflict("Question changed", {
-          reason: "question_changed",
-          current: prompt,
-        });
-      }
-      const known = new Set(prompt.questions.map((question) => question.id));
-      const seen = new Set<string>();
-      for (const item of answers) {
-        if (!known.has(item.questionId)) {
-          throw conflict("Question changed", {
-            reason: "question_changed",
-            current: prompt,
-          });
-        }
-        if (seen.has(item.questionId)) {
-          throw badRequest("Duplicate question in answer batch");
-        }
-        seen.add(item.questionId);
-      }
-      const missing = prompt.questions.filter(
-        (question) => !seen.has(question.id),
-      );
-      if (missing.length > 0) {
-        throw conflict("Answer every question in this batch", {
-          reason: "question_incomplete",
-          current: prompt,
-        });
-      }
-    } else if (answer) {
-      const prompt = await questions.get(ref);
-      if (!prompt) {
-        throw conflict("This question is no longer pending", {
-          reason: "question_resolved",
-        });
-      }
-      const current = prompt.questions.find(
-        (question) => question.id === answer.questionId,
-      );
-      if (
-        !current ||
-        prompt.messageId !== answer.messageId ||
-        prompt.revision !== answer.revision
-      ) {
-        throw conflict("Question changed", {
-          reason: "question_changed",
-          current: prompt,
-        });
-      }
-    }
-
-    // `answer` is hub-only metadata; providers receive the plain message.
-    const result = await sessions.sendMessage(ref, {
-      text: parsed.data.text,
-      ...(parsed.data.attachments
-        ? { attachments: parsed.data.attachments }
-        : {}),
-    });
-    questions.invalidate(ref);
-    if (cacheKey) await idempotency.set(cacheKey, result);
+    const result = await actions.send(ref, parsed.data, idempotencyKey);
     return c.json(result, 202);
   });
 

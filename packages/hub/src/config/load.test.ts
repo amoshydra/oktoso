@@ -120,6 +120,89 @@ describe("loadConfig", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("defaults MCP off with no tokens", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+    });
+    try {
+      const config = await loadConfig(filePath, {});
+      expect(config.mcp.enabled).toBe(false);
+      expect(config.mcp.tokens).toEqual([]);
+      expect(config.mcp.audit.enabled).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("loads scoped MCP tokens with defaults", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      mcp: {
+        enabled: true,
+        tokens: [
+          {
+            id: "controller",
+            token: "${MCP_TOKEN}",
+            allowWrite: true,
+            providers: ["opencode"],
+            tools: ["providers_list", "sessions_send"],
+          },
+        ],
+      },
+    });
+    try {
+      const config = await loadConfig(filePath, {
+        MCP_TOKEN: "mcp-token-long-enough",
+      });
+      expect(config.mcp.enabled).toBe(true);
+      expect(config.mcp.tokens[0]).toMatchObject({
+        id: "controller",
+        token: "mcp-token-long-enough",
+        allowWrite: true,
+        providers: ["opencode"],
+        tools: ["providers_list", "sessions_send"],
+        timeoutMs: 60_000,
+        rateLimit: { windowMs: 60_000, max: 120 },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects MCP enabled without tokens", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      mcp: { enabled: true },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /mcp\.enabled requires at least one token/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate MCP client IDs and secrets", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      mcp: {
+        enabled: true,
+        tokens: [
+          { id: "controller", token: "mcp-token-long-enough" },
+          { id: "controller", token: "mcp-token-long-enough" },
+        ],
+      },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /Duplicate MCP client ID[\s\S]*Duplicate MCP token/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("config file permissions", () => {
