@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isProviderResource, resolveProviderUrl } from "./urls";
+import {
+  attachmentProxyPath,
+  isProviderResource,
+  resolveProviderUrl,
+  resolveSessionResource,
+} from "./urls";
 
 const base = "http://127.0.0.1:4096";
 
@@ -65,5 +70,58 @@ describe("isProviderResource", () => {
     expect(isProviderResource("https://example.com/file.png", base)).toBe(false);
     expect(isProviderResource("data:image/png;base64,abc", base)).toBe(false);
     expect(isProviderResource("http://127.0.0.1:5000/file.png", base)).toBe(false);
+  });
+});
+
+describe("resolveSessionResource", () => {
+  const context = {
+    baseUrl: base,
+    providerID: "desktop-opencode",
+    providerType: "opencode",
+    directory: "/home/me/project",
+  };
+
+  it("maps OpenCode file links to the fs read endpoint", () => {
+    const resolved = resolveSessionResource("docs/spec.md", context, "link");
+    expect(resolved.attachment).toBe(true);
+    expect(resolved.url).toBe(
+      "http://127.0.0.1:4096/api/fs/read/docs/spec.md?location%5Bdirectory%5D=%2Fhome%2Fme%2Fproject",
+    );
+
+    const image = resolveSessionResource("docs/concepts/shelf.png", context, "image");
+    expect(image.attachment).toBe(true);
+    expect(image.url).toContain("/api/fs/read/docs/concepts/shelf.png");
+  });
+
+  it("leaves OpenCode provider routes and absolute links alone", () => {
+    expect(resolveSessionResource("/session/abc", context, "link")).toMatchObject({
+      attachment: false,
+      url: "http://127.0.0.1:4096/session/abc",
+    });
+    expect(
+      resolveSessionResource("https://example.com/a.png", context, "image"),
+    ).toMatchObject({ attachment: false, url: "https://example.com/a.png" });
+  });
+
+  it("resolves Open WebUI relative files against the provider base", () => {
+    const resolved = resolveSessionResource(
+      "/api/files/shot.png",
+      { baseUrl: base, providerID: "openwebui", providerType: "openwebui" },
+      "image",
+    );
+    expect(resolved).toMatchObject({
+      attachment: true,
+      url: "http://127.0.0.1:4096/api/files/shot.png",
+    });
+  });
+});
+
+describe("attachmentProxyPath", () => {
+  it("encodes the provider and resource URL", () => {
+    expect(
+      attachmentProxyPath("desktop-opencode", "http://127.0.0.1:4096/api/fs/read/a.png?x=1"),
+    ).toBe(
+      "/api/v1/attachments?provider=desktop-opencode&url=http%3A%2F%2F127.0.0.1%3A4096%2Fapi%2Ffs%2Fread%2Fa.png%3Fx%3D1",
+    );
   });
 });

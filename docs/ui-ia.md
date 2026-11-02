@@ -266,8 +266,8 @@ The session view is the core reading and reply surface.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
 - Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
-- Relative Markdown links and image sources resolve against the provider base URL. Absolute links stay absolute; `mailto:` and `tel:` links stay local; unsupported schemes and unsafe data images are removed.
-- Provider-hosted images and files load through the hub attachment proxy, which uses the provider credentials and enforces same-origin, size, redirect, and content-type rules. The browser receives a blob URL for private resources, so prompts and provider tokens stay out of image URLs.
+- Relative Markdown links and image sources resolve against the provider base URL. For OpenCode, project-relative file references resolve through the provider filesystem read endpoint with the session directory, so `docs/spec.md` and `docs/concepts/plot.png` open the actual project files rather than a provider-root URL. Absolute links stay absolute; `mailto:` and `tel:` links stay local; unsupported schemes and unsafe data images are removed.
+- Provider-hosted images and files load through the hub attachment proxy, which uses the provider credentials and enforces same-origin, size, redirect, and content-type rules. The browser receives a blob URL for private resources, so prompts and provider tokens stay out of image URLs. File links use the same proxy and download the attachment.
 - File parts use the same URL resolution. Image attachments render inline with a caption; other files keep their name, MIME type, and Open action.
 - Tool calls render as compact, collapsed rows with a humanized name, status, and hidden input/output.
 - Reasoning renders as a compact collapsed row with a character count; its Markdown is sanitized through the same renderer as message prose.
