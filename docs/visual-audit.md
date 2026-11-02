@@ -260,6 +260,19 @@ Verified at 1440, 390, and 320px in dark mode. Changing reasoning from `max` to 
 
 Remaining: per-message model overrides are not implemented, the New session form still creates with the provider default variant, and providers that do not expose options get no picker.
 
+## Chat sidebar (2026-11-02)
+
+The desktop chat now includes the prototype’s session sidebar.
+
+- The sidebar is 300px, sits between the rail and the transcript, and uses the panel surface with a right border.
+- It has search, provider and status filters, Today/Yesterday/Earlier groups, session rows, status dots, attention badges, and an active row with the raised surface, strong border, and 2px accent inset.
+- The list loads the newest 100 sessions and refreshes after session events. The active session is injected and sorted into the list if it falls outside the loaded page.
+- The transcript now has a readable measure: 728px at 1440px and 612px at 1024px, instead of 920px.
+- The sidebar is hidden and unmounted at 760px and below; mobile chat keeps the full-width route.
+- The All sessions action returns to the full list.
+
+Verified at 1440, 1024, 390, and 320px. Search, provider/status filtering, active-row switching, and All sessions were exercised against the live provider. No horizontal overflow.
+
 ## Attachment proxy (2026-11-02)
 
 Private provider images and files now render through the hub instead of the browser hitting the provider directly.
@@ -278,11 +291,11 @@ Files changed: `packages/providers/src/http/resource.ts`, `packages/providers/sr
 
 ## Files changed
 
-- `apps/web/src/app/App.tsx`: chat shell, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
+- `apps/web/src/app/App.tsx`: chat shell, desktop session sidebar, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
 - `apps/web/src/app/markdown.ts`: provider-relative link and image resolution, OpenCode filesystem links, provider-image marking, safe image rendering, image fallbacks.
 - `apps/web/src/app/urls.ts`: link, image, session-resource, and attachment URL resolver with OpenCode filesystem reads, safe-scheme, and same-origin rules.
 - `apps/web/src/app/urls.test.ts`: resolver, OpenCode filesystem, and same-origin coverage.
-- `apps/web/src/styles.css`: chat layout, pinned composer, details column/overlay/sheet, inline attention, date separators, mobile composer actions, image attachments, selection picker.
+- `apps/web/src/styles.css`: chat shell and desktop session sidebar, pinned composer, details column/overlay/sheet, inline attention, date separators, mobile composer actions, image attachments, selection picker.
 - `packages/providers/src/http/resource.ts`: provider resource fetch, same-origin validation, redirect limits, size cap.
 - `packages/providers/src/http/resource.test.ts`: resource proxy coverage.
 - `packages/providers/src/types.ts`: provider resource method.
