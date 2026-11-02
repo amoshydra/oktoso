@@ -123,6 +123,9 @@ export function App() {
   const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const [activeSession, setActiveSession] = useState<Session>();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(() =>
+    window.matchMedia("(min-width: 761px)").matches,
+  );
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const contentRef = useRef<HTMLElement | null>(null);
@@ -147,6 +150,13 @@ export function App() {
     const onChange = () => {
       if (query.matches) setDetailsOpen(false);
     };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 761px)");
+    const onChange = () => setSidebarVisible(query.matches);
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, []);
@@ -685,17 +695,30 @@ export function App() {
               />
             ) : view === "sessions" ? (
               selectedSessionRef ? (
-                <SessionDetail
-                  key={selectedSessionRef}
-                  client={client as HubClient}
-                  sessionRef={selectedSessionRef}
-                  events={events}
-                  providers={providers}
-                  detailsOpen={detailsOpen}
-                  onDetailsOpenChange={setDetailsOpen}
-                  onSessionChange={setActiveSession}
-                  onBack={() => setSelectedSessionRef(undefined)}
-                />
+                <div className="chat-shell">
+                  {sidebarVisible ? (
+                    <ChatSidebar
+                      client={client as HubClient}
+                      events={events}
+                      providers={providers}
+                      activeRef={selectedSessionRef}
+                      activeSession={activeSession}
+                      onOpen={openSession}
+                      onViewAll={() => setSelectedSessionRef(undefined)}
+                    />
+                  ) : null}
+                  <SessionDetail
+                    key={selectedSessionRef}
+                    client={client as HubClient}
+                    sessionRef={selectedSessionRef}
+                    events={events}
+                    providers={providers}
+                    detailsOpen={detailsOpen}
+                    onDetailsOpenChange={setDetailsOpen}
+                    onSessionChange={setActiveSession}
+                    onBack={() => setSelectedSessionRef(undefined)}
+                  />
+                </div>
               ) : (
                 <SessionsView
                   client={client as HubClient}
@@ -1876,6 +1899,200 @@ function SearchView(props: {
       ) : null}
     </>
   );
+}
+
+function ChatSidebar(props: {
+  client: HubClient;
+  events: HubEvent[];
+  providers: Provider[];
+  activeRef: string;
+  activeSession?: Session;
+  onOpen: (ref: string) => void;
+  onViewAll: () => void;
+}) {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [query, setQuery] = useState("");
+  const [provider, setProvider] = useState("all");
+  const [status, setStatus] = useState<SessionStatus | "all">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+
+  const load = async () => {
+    setError(undefined);
+    try {
+      const page = await props.client.sessions({ limit: 100 });
+      setSessions(page.data);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to load sessions",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [props.client]);
+
+  const liveSeq =
+    props.events.find(
+      (event) => event.type.startsWith("session.") || event.type === "resync",
+    )?.seq ?? 0;
+  useEffect(() => {
+    if (!liveSeq) return;
+    const timer = setTimeout(() => void load(), 600);
+    return () => clearTimeout(timer);
+  }, [liveSeq]);
+
+  const all = [...sessions];
+  if (
+    props.activeSession &&
+    !all.some((session) => session.ref === props.activeSession!.ref)
+  ) {
+    all.push(props.activeSession);
+  }
+  all.sort((left, right) => right.updatedAt - left.updatedAt);
+
+  const needle = query.trim().toLowerCase();
+  const filtered = all.filter((session) => {
+    if (provider !== "all" && session.providerID !== provider) return false;
+    if (status !== "all" && session.status !== status) return false;
+    if (!needle) return true;
+    return searchResultLabel(session).toLowerCase().includes(needle);
+  });
+
+  const groups: Array<{ label: string; items: Session[] }> = [];
+  for (const session of filtered) {
+    const label = sidebarGroupLabel(session.updatedAt);
+    const group = groups.find((candidate) => candidate.label === label);
+    if (group) group.items.push(session);
+    else groups.push({ label, items: [session] });
+  }
+
+  return (
+    <aside className="chat-sidebar" aria-label="Session list">
+      <div className="chat-sidebar-head">
+        <span className="chat-sidebar-label">Sessions</span>
+        <span className="chat-sidebar-count">{filtered.length}</span>
+      </div>
+
+      <div className="chat-sidebar-filters">
+        <input
+          className="chat-sidebar-search"
+          type="search"
+          value={query}
+          placeholder="Search sessions…"
+          aria-label="Search sessions"
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+        <div className="chat-sidebar-selects">
+          <select
+            className="chat-sidebar-select"
+            value={provider}
+            aria-label="Filter by provider"
+            onChange={(event) => setProvider(event.currentTarget.value)}
+          >
+            <option value="all">All providers</option>
+            {props.providers.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="chat-sidebar-select"
+            value={status}
+            aria-label="Filter by status"
+            onChange={(event) =>
+              setStatus(event.currentTarget.value as SessionStatus | "all")
+            }
+          >
+            <option value="all">Any status</option>
+            <option value="running">Running</option>
+            <option value="idle">Idle</option>
+            <option value="error">Error</option>
+            <option value="offline">Offline</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="chat-sidebar-list">
+        {error ? (
+          <div className="chat-sidebar-error">
+            {error}
+            <button className="text-button" type="button" onClick={() => void load()}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {loading && sessions.length === 0 ? (
+          <div className="chat-sidebar-empty">Loading sessions…</div>
+        ) : filtered.length === 0 ? (
+          <div className="chat-sidebar-empty">No sessions match.</div>
+        ) : (
+          groups.map((group) => (
+            <section className="chat-sidebar-group" key={group.label}>
+              <div className="chat-sidebar-group-label">{group.label}</div>
+              <div className="session-list">
+                {group.items.map((session) => (
+                  <button
+                    className={`session-list-item ${
+                      session.unread ? "unread" : ""
+                    } ${session.ref === props.activeRef ? "active" : ""}`}
+                    type="button"
+                    key={session.ref}
+                    aria-current={
+                      session.ref === props.activeRef ? "page" : undefined
+                    }
+                    aria-label={searchResultLabel(session)}
+                    onClick={() => props.onOpen(session.ref)}
+                  >
+                    <span className={`session-status-dot ${session.status}`} />
+                    <span className="session-list-main">
+                      <strong>{session.title}</strong>
+                      <span className="session-list-meta">
+                        {providerLabel(session.providerID)}
+                        {session.project || session.directory ? (
+                          <> · {session.project ?? session.directory}</>
+                        ) : null}
+                      </span>
+                    </span>
+                    <span className="session-list-side">
+                      {session.attention ? (
+                        <span className={`type-badge ${session.attention.type}`}>
+                          {ATTENTION_LABELS[session.attention.type]}
+                        </span>
+                      ) : null}
+                      <span className="mono">
+                        {relativeTime(session.updatedAt)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
+
+      <div className="chat-sidebar-footer">
+        <button className="text-button" type="button" onClick={props.onViewAll}>
+          All sessions
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function sidebarGroupLabel(at: number): string {
+  const now = new Date();
+  const start = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.round((start(now) - start(new Date(at))) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return "Earlier";
 }
 
 function searchResultLabel(session: Session): string {

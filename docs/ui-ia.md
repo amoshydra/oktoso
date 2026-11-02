@@ -250,6 +250,8 @@ The sessions view is the full browsing surface.
 
 The session view is the core reading and reply surface.
 
+On desktop, a 300px session sidebar sits between the rail and the transcript. It carries search, provider and status filters, day groups, session rows, the active row, and an All sessions action. It is hidden at 760px and below, where Sessions remains the home list.
+
 ### Header
 
 - The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle.
