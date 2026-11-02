@@ -141,41 +141,24 @@ gap.
 
 ### 1. Preserve provider message order for same-timestamp turns
 
-**Recommended port. This is a real production bug.**
+**Ported. This was a real production bug.**
 
 The hub returns messages in provider display order. Open WebUI can give a
-prompt and its reply the same second-resolution timestamp. The live spike
-initially sorted merged messages by `createdAt` and then `id`, which put the
-assistant reply before the user prompt. Preserving page order fixed it.
+prompt and its reply the same second-resolution timestamp. The old production
+merge sorted by `createdAt` and then `id`, so the live spike put the assistant
+reply before the user prompt. The fix keeps the hub page order and applies SSE
+updates in place.
 
-Production currently has the same sort in `apps/web/src/app/App.tsx`:
+Implemented in `apps/web/src/app/message-order.ts`:
 
-```ts
-function mergeMessages(current: Message[], incoming: Message[]): Message[] {
-  // ...
-  return [...byID.values()].sort(
-    (left, right) =>
-      left.createdAt - right.createdAt || left.id.localeCompare(right.id),
-  );
-}
-```
+- `mergeLatestPage` keeps loaded older messages before the latest page,
+  preserves the page order for ties, and keeps held newer messages after it;
+- `mergeMessageUpdates` replaces an existing message in place and appends new
+  messages in event order.
 
-`refreshLatest` calls this after a send and after SSE updates, so a real Open
-WebUI prompt/reply pair can be reordered.
-
-Proposed port:
-
-- keep the initial page order from the hub;
-- merge the latest page without re-sorting ties;
-- keep loaded older messages before the latest page;
-- keep held messages that are newer than the page;
-- prepend older pages without sorting;
-- add tests for same-timestamp prompt/reply, latest-page merge, older-page
-  prepend, and held-newer messages.
-
-The spike's implementation is in `apps/web/src/spike/transcript.ts`
-(`mergeLatestMessages`, `mergeOlderMessages`) at commit `3238220`. It is
-dependency-free and can be adapted to `Message` directly.
+`refreshLatest` now calls `mergeLatestPage`; SSE `message.created` and
+`message.updated` events call `mergeMessageUpdates`. Tests live in
+`apps/web/src/app/message-order.test.ts`.
 
 ### 2. Guard the React root against Fast Refresh
 
@@ -247,6 +230,6 @@ adopting now.
 - Add no assistant-stream, cloud, MCP, generative UI, or runtime adapter.
 - Keep the custom chat.
 - Archive the spike.
-- Port the same-timestamp ordering fix and its tests first.
+- The same-timestamp ordering fix and its tests are ported.
 - Evaluate `shiki` only if code-block highlighting becomes a priority; evaluate
   virtualization only after profiling a long live session.
