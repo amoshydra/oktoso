@@ -191,6 +191,51 @@ describe("hub app", () => {
     });
   });
 
+  it("proxies provider attachments with safe headers", async () => {
+    const { app, fake } = await createTestApp();
+    const image = encodeURIComponent(`${fake.url}/api/files/shot.png`);
+    const response = await app.request(
+      `/api/v1/attachments?provider=desktop-opencode&url=${image}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("content-disposition")).toContain("inline");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+
+    const text = encodeURIComponent(`${fake.url}/api/files/note.txt`);
+    const download = await app.request(
+      `/api/v1/attachments?provider=desktop-opencode&url=${text}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(download.status).toBe(200);
+    expect(download.headers.get("content-type")).toBe("text/plain");
+    expect(download.headers.get("content-disposition")).toContain("attachment");
+  });
+
+  it("rejects attachment URLs outside the provider origin", async () => {
+    const { app } = await createTestApp();
+    const url = encodeURIComponent("https://example.com/shot.png");
+    const response = await app.request(
+      `/api/v1/attachments?provider=desktop-opencode&url=${url}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_request" },
+    });
+  });
+
+  it("requires hub auth for attachments", async () => {
+    const { app, fake } = await createTestApp();
+    const url = encodeURIComponent(`${fake.url}/api/files/shot.png`);
+    const response = await app.request(
+      `/api/v1/attachments?provider=desktop-opencode&url=${url}`,
+    );
+    expect(response.status).toBe(401);
+  });
+
   it("issues and redeems a single-use pairing code for a JSON client", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
@@ -991,8 +1036,13 @@ describe("hub app", () => {
     );
     expect(optionsResponse.status).toBe(200);
     expect(await optionsResponse.json()).toMatchObject({
-      agents: [{ id: "build" }],
-      models: [{ id: "commandcode/claude-sonnet" }],
+      agents: [{ id: "build" }, { id: "plan" }],
+      models: [
+        {
+          id: "commandcode/claude-sonnet",
+          variants: [{ id: "max" }, { id: "high" }],
+        },
+      ],
     });
 
     const createResponse = await app.request("/api/v1/sessions", {
@@ -1029,6 +1079,29 @@ describe("hub app", () => {
       data: Array<{ role: string; parts: unknown[] }>;
     };
     expect(messages.data.some((message) => message.role === "assistant")).toBe(true);
+
+    const selectionResponse = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/selection`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          agent: "plan",
+          model: "commandcode/claude-sonnet#high",
+        }),
+      },
+    );
+    expect(selectionResponse.status).toBe(200);
+    expect(await selectionResponse.json()).toMatchObject({
+      agent: "plan",
+      model: "commandcode/claude-sonnet#high",
+    });
+
+    const emptySelection = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/selection`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    expect(emptySelection.status).toBe(400);
 
     const interruptResponse = await app.request(
       `/api/v1/sessions/${encodeURIComponent(created.ref)}/interrupt`,

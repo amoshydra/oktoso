@@ -1,6 +1,6 @@
 # Oktoso UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27 and the chat shell alignment on 2026-11-02. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
@@ -252,42 +252,50 @@ The session view is the core reading and reply surface.
 
 ### Header
 
-- Session title.
-- Provider badge, project, agent, model.
-- Status chip.
-- Actions: details, open in provider, copy ref, interrupt, mark read, more.
+- The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle.
+- The transcript repeats the title once as a 20px document title. There is no second sticky transcript header.
+- Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
+- Project, agent, model, and the status chip stay together in the document header. The provider lives in the topbar subline.
 
 ### Transcript
 
-- Full-width rows with a role label and content.
+- The transcript is its own scroll region inside the chat shell. The composer stays pinned below it; the page itself does not scroll.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
-- The transcript header stays sticky so back, session context, and interrupt remain available after starting at the bottom.
-- User messages use a subtle shaded block. Assistant messages use the page background with a role label.
+- A floating "Jump to latest" control appears when the reader is scrolled away from the bottom. It reads "Input needed" when blocking attention is waiting below.
+- Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
+- User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
 - Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
+- Relative Markdown links and image sources resolve against the provider base URL. Absolute links stay absolute; `mailto:` and `tel:` links stay local; unsupported schemes and unsafe data images are removed.
+- Provider-hosted images and files load through the hub attachment proxy, which uses the provider credentials and enforces same-origin, size, redirect, and content-type rules. The browser receives a blob URL for private resources, so prompts and provider tokens stay out of image URLs.
+- File parts use the same URL resolution. Image attachments render inline with a caption; other files keep their name, MIME type, and Open action.
 - Tool calls render as compact, collapsed rows with a humanized name, status, and hidden input/output.
 - Reasoning renders as a compact collapsed row with a character count; its Markdown is sanitized through the same renderer as message prose.
-- Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps.
-- Permission requests render inline as a blocking card with actions.
-- Question requests render inline as a form card.
-- Errors render as a red-tinted card with retry and open actions.
+- Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps. An opened block stays open while new activity appends to it.
+- Permission and approval requests render inline at the end of the transcript as blocking cards with actions. Question requests render inline as form cards. The card shows the provider form description when it exists, then the fields; if the form has no description, the chat uses the latest assistant question sentence as the detail. Resolving a request removes it and reloads the session attention.
+- Error attention renders as an inline red-tinted card with the provider message and its available actions. The message error block remains as the fallback when there is no attention item.
 - Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
 - Code blocks use a monospace font with horizontal scrolling; syntax highlighting and copy actions are follow-ups.
 
 ### Composer
 
-- Multiline text area with send on `Ctrl/Cmd+Enter`.
+- The composer is pinned below the transcript and above the mobile bottom navigation and safe area.
+- Multiline text area with send on `Ctrl/Cmd+Enter`, an explicit label, and the draft status as its description.
 - Attachment button, disabled when the provider does not support attachments.
-- Agent and model selectors when the provider supports them.
+- Agent, model, and reasoning selectors when the provider exposes options. Reasoning is the provider’s model variant; a model with no variants shows no reasoning selector. Changing a selector updates the session and refreshes the document header and details.
+- The selectors are disabled while the agent is running, and a failed change restores the previous values with an inline error.
 - Slash commands later.
 - Voice button on mobile and glasses. Desktop can use the browser microphone later.
 - Wearable clients can show short reply options from deterministic steering, a configured 4B model, or extracted agent choices.
 - Drafts persist per session on the hub and follow the session across clients and reloads.
 - Drafts autosave shortly after typing and clear after a successful send.
-- While the agent is running, show an interrupt button and allow queueing a follow-up if the provider supports it.
+- While the agent is running, an interrupt button sits beside send in the composer bar. The same action is available in the details panel.
 
 ### Details panel
 
+- Above 1320px, details is a 300px column beside the transcript.
+- Between 761px and 1319px, details opens as a right-side overlay with a scrim.
+- At 760px and below, details opens as a bottom sheet with a pinned footer.
 - Provider, base URL label, project, directory, branch when available.
 - Native session ID and reference.
 - Agent, model, status, created, updated.
@@ -297,6 +305,7 @@ The session view is the core reading and reply surface.
 - Copy reference.
 - Interrupt and mark read.
 - Provider-specific actions.
+- The overlay traps Tab within the panel, closes on Escape or the scrim, and returns focus to the details toggle.
 
 ## 8. New session
 
@@ -506,9 +515,9 @@ Chat on mobile:
 ```
 
 - Bottom nav has four destinations. Providers move under Settings.
-- Chat is a full-screen route with a back button.
-- Details open as a sheet.
-- Composer stays above the safe area and keyboard.
+- Chat is a full-height route with a back button and the session title in the topbar. The bottom navigation remains visible.
+- Details open as a bottom sheet with a pinned footer.
+- The composer is pinned above the bottom navigation, safe area, and keyboard.
 - Filters wrap below 420px so no chip is clipped or hidden.
 - Provider machine names drop below 480px; the provider remains identifiable by name.
 - The external chat action drops below 360px; the details sheet still exposes it.

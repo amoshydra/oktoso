@@ -14,8 +14,9 @@ import type {
   SessionPage,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
-import type { ProviderAdapter } from "../types";
+import type { ProviderAdapter, ProviderResource } from "../types";
 import { ProviderError } from "../errors";
+import { readProviderResource } from "../http/resource";
 
 export interface OpenWebUIAdapterOptions {
   id: string;
@@ -371,6 +372,39 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     return { accepted: true, messageID: assistantID };
   }
 
+  async setSessionOptions(
+    ref: string,
+    input: { model?: string; agent?: string },
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (input.agent) {
+      throw new ProviderError(
+        "unsupported",
+        "Open WebUI does not support changing the session agent",
+      );
+    }
+    if (!input.model) return;
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    await this.request(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      { chat: { ...chat.chat, models: [input.model] } },
+    );
+  }
+
+  async readResource(url: string, signal: AbortSignal): Promise<ProviderResource> {
+    return readProviderResource({
+      url,
+      baseUrl: this.baseUrl,
+      headers: { Authorization: `Bearer ${this.token}` },
+      signal,
+      providerLabel: "Open WebUI",
+    });
+  }
+
   async interrupt(ref: string, signal: AbortSignal): Promise<void> {
     const nativeID = this.nativeID(ref);
     await this.request(
@@ -463,7 +497,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       id: message.id,
       sessionRef: `${this.id}:${sessionID}`,
       role,
-      parts: contentParts(message.content),
+      parts: [...contentParts(message.content), ...fileParts(message.files)],
       createdAt,
       ...(message.done ? { completedAt: createdAt } : {}),
       ...(message.done === false ? { streaming: true } : {}),
@@ -695,6 +729,55 @@ function contentParts(content: unknown): MessagePart[] {
         if (text) parts.push({ type: "text", text });
         continue;
       }
+      if (part && typeof part === "object") {
+        const record = part as Record<string, unknown>;
+        if (record.type === "image_url" || record.type === "input_image") {
+          const image = record.image_url;
+          const url =
+            typeof image === "string"
+              ? image
+              : image && typeof image === "object" && "url" in image
+                ? String((image as { url?: unknown }).url ?? "")
+                : typeof record.url === "string"
+                  ? record.url
+                  : "";
+          if (url) {
+            parts.push({ type: "file", name: "Image", mimeType: "image/*", url });
+            continue;
+          }
+        }
+        if (record.type === "file") {
+          const file =
+            record.file && typeof record.file === "object"
+              ? (record.file as Record<string, unknown>)
+              : record;
+          const url =
+            typeof file.url === "string"
+              ? file.url
+              : typeof file.path === "string"
+                ? file.path
+                : undefined;
+          const name =
+            typeof file.filename === "string"
+              ? file.filename
+              : typeof file.name === "string"
+                ? file.name
+                : "File";
+          const mimeType =
+            typeof file.mime_type === "string"
+              ? file.mime_type
+              : typeof file.mimeType === "string"
+                ? file.mimeType
+                : undefined;
+          parts.push({
+            type: "file",
+            name,
+            ...(mimeType ? { mimeType } : {}),
+            ...(url ? { url } : {}),
+          });
+          continue;
+        }
+      }
       parts.push({ type: "unknown", raw: part });
     }
     return parts;
@@ -702,6 +785,43 @@ function contentParts(content: unknown): MessagePart[] {
   return content === undefined || content === null
     ? []
     : [{ type: "unknown", raw: content }];
+}
+
+function fileParts(files: unknown): MessagePart[] {
+  if (!Array.isArray(files)) return [];
+  const parts: MessagePart[] = [];
+  for (const entry of files) {
+    if (!entry || typeof entry !== "object") continue;
+    const file = entry as Record<string, unknown>;
+    const name =
+      typeof file.name === "string"
+        ? file.name
+        : typeof file.filename === "string"
+          ? file.filename
+          : "File";
+    const url =
+      typeof file.url === "string"
+        ? file.url
+        : typeof file.path === "string"
+          ? file.path
+          : undefined;
+    const mimeType =
+      typeof file.type === "string" && file.type.includes("/")
+        ? file.type
+        : typeof file.mimeType === "string"
+          ? file.mimeType
+          : file.type === "image"
+            ? "image/*"
+            : undefined;
+    if (!url && name === "File") continue;
+    parts.push({
+      type: "file",
+      name,
+      ...(mimeType ? { mimeType } : {}),
+      ...(url ? { url } : {}),
+    });
+  }
+  return parts;
 }
 
 function errorText(error: unknown): string {

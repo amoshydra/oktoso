@@ -11,6 +11,7 @@ import type {
   Session,
   SessionListQuery,
   SessionPage,
+  SessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
 
 export type ProviderEvent =
@@ -33,6 +34,12 @@ export type ProviderEvent =
       data: unknown;
       at: number;
     };
+
+export interface ProviderResource {
+  body: Uint8Array<ArrayBuffer>;
+  contentType?: string;
+  filename?: string;
+}
 
 export interface ProviderAdapter {
   readonly id: string;
@@ -59,7 +66,13 @@ export interface ProviderAdapter {
     signal: AbortSignal,
   ): Promise<void>;
   getOptions?(signal: AbortSignal): Promise<ProviderOptions>;
+  setSessionOptions?(
+    ref: string,
+    input: SessionSelectionInput,
+    signal: AbortSignal,
+  ): Promise<void>;
   markRead?(ref: string, signal: AbortSignal): Promise<void>;
+  readResource?(url: string, signal: AbortSignal): Promise<ProviderResource>;
   subscribe?(
     onEvent: (event: ProviderEvent) => void,
     signal: AbortSignal,

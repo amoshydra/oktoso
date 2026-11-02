@@ -29,6 +29,7 @@ import {
   zMessagePage,
   zMessagePart,
   zModelOption,
+  zModelVariant,
   zPairingCode,
   zPairingExchange,
   zPairingSession,
@@ -48,6 +49,7 @@ import {
   zSendResult,
   zSession,
   zSessionPage,
+  zSessionSelectionInput,
   zAttentionSummary,
 } from "./index";
 
@@ -81,6 +83,7 @@ const ProviderUpdateInputSchema = registry.register(
 );
 const ProviderHealthSchema = registry.register("ProviderHealth", zProviderHealth);
 const AgentOptionSchema = registry.register("AgentOption", zAgentOption);
+const ModelVariantSchema = registry.register("ModelVariant", zModelVariant);
 const ModelOptionSchema = registry.register("ModelOption", zModelOption);
 const ProviderOptionsSchema = registry.register(
   "ProviderOptions",
@@ -91,6 +94,10 @@ const SessionPageSchema = registry.register("SessionPage", zSessionPage);
 const CreateSessionInputSchema = registry.register(
   "CreateSessionInput",
   zCreateSessionInput,
+);
+const SessionSelectionInputSchema = registry.register(
+  "SessionSelectionInput",
+  zSessionSelectionInput,
 );
 const DraftSchema = registry.register("Draft", zDraft);
 const DraftInputSchema = registry.register("DraftInput", zDraftInput);
@@ -390,6 +397,27 @@ registry.registerPath({
   responses: {
     200: { description: "Session", content: json(SessionSchema) },
     404: errorResponse("Session not found"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/selection",
+  tags: ["sessions"],
+  summary: "Change the session model or agent",
+  request: {
+    params,
+    body: {
+      content: json(SessionSelectionInputSchema),
+      required: true,
+    },
+  },
+  responses: {
+    200: { description: "Updated session", content: json(SessionSchema) },
+    400: errorResponse("Invalid selection"),
+    404: errorResponse("Session not found"),
+    501: errorResponse("Provider does not support changing the selection"),
+    502: errorResponse("Provider failure"),
   },
 });
 
