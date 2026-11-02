@@ -233,7 +233,7 @@ The production chat now follows the design-v1 shell instead of the Phase 2 page-
 - Date separators group messages by day. Timestamps show the hour and minute instead of seconds. Role labels read `You` and `Agent`.
 - Provider errors extract the provider message instead of dumping JSON. The message error remains as a fallback when no attention item exists.
 - Developer chrome was removed from the chat and global footer: the phase badge, the design-reference footer, and phase suffixes in the topbar. No phase copy remains in the product surfaces.
-- Mobile send is right-aligned because the composer actions have their own flex group. The hint no longer needs to act as a spacer.
+- Mobile send is a 32px icon button with an expanded 44px hit area, and it sits at the end of the composer bar beside the selection picker. The hint no longer needs to act as a spacer.
 - The activity chevron is now an `aria-hidden` element, so it no longer enters the disclosure's accessible name. The composer has an explicit label. Status and error states keep their text labels.
 - Markdown links and image sources resolve against the provider base URL instead of the hub origin. Absolute URLs stay absolute, `mailto:` and `tel:` links stay local, and unsafe schemes or data images are removed. Safe data images render; unresolvable images become an inline fallback.
 - File parts use the same resolver. Image files render inline with a caption; other files keep an Open action. Open WebUI image/file content parts and `files` arrays are normalized into file parts, and OpenCode form descriptions are preserved as question detail.
@@ -254,9 +254,9 @@ The composer now exposes the provider’s session selection instead of leaving m
 - OpenCode uses its dedicated `/api/session/{id}/agent` and `/api/session/{id}/model` routes. Model variants are sent as `Model.Ref.variant`.
 - Open WebUI updates the chat’s `models` array; it has no agent or variant selector.
 - The picker is disabled while the agent is running. A failed change restores the previous values and shows an inline error.
-- The picker wraps only when needed; the mobile selects use the 12px compact control role, while text entry stays at 16px to avoid browser zoom. At 390px the row fits on one line; at 320px it wraps to two.
+- The picker lives in the composer bar. Field labels are visible at desktop widths and hidden at 1100px and below; the mobile selects use the 12px compact control role with zero horizontal padding, while text entry stays at 16px to avoid browser zoom. Send collapses to a 32px icon button below 760px so Agent, Model, Reasoning, and Send share one row at 390px and 320px without horizontal overflow.
 
-Verified at 1440, 390, and 320px in dark mode. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
+Verified at 1440, 1024, 390, and 320px in dark and light themes. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
 
 Remaining: per-message model overrides are not implemented, the New session form still creates with the provider default variant, and providers that do not expose options get no picker.
 

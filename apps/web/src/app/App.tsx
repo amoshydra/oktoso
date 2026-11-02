@@ -3559,100 +3559,100 @@ function SessionDetail(props: {
                     }
                   }}
                 />
-                {showSelection ? (
-                  <div
-                    className="composer-options"
-                    title={
-                      session.status === "running"
-                        ? "Wait for the current run to finish"
-                        : undefined
-                    }
-                  >
-                    {agentChoices.length > 0 ? (
-                      <label className="composer-option">
-                        <span>Agent</span>
-                        <select
-                          value={agentValue}
-                          disabled={selectionDisabled}
-                          aria-label="Agent"
-                          onChange={(event) => {
-                            const next = event.currentTarget.value;
-                            setAgentValue(next);
-                            void applySelection({ agent: next });
-                          }}
-                        >
-                          {agentChoices.map((agent) => (
-                            <option value={agent.id} key={agent.id}>
-                              {agent.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {modelChoices.length > 0 ? (
-                      <label className="composer-option">
-                        <span>Model</span>
-                        <select
-                          value={modelValue}
-                          disabled={selectionDisabled}
-                          aria-label="Model"
-                          onChange={(event) => {
-                            const next = event.currentTarget.value;
-                            const nextVariants =
-                              models.find((model) => model.id === next)?.variants ?? [];
-                            const nextVariant = nextVariants.some(
-                              (variant) => variant.id === variantValue,
-                            )
-                              ? variantValue
-                              : "";
-                            setModelValue(next);
-                            setVariantValue(nextVariant);
-                            void applySelection({
-                              model: composeModel(next, nextVariant),
-                            });
-                          }}
-                        >
-                          {modelChoices.map((model) => (
-                            <option value={model.id} key={model.id}>
-                              {model.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {variantChoices.length > 0 ? (
-                      <label className="composer-option">
-                        <span>{variantSelectLabel}</span>
-                        <select
-                          value={variantValue}
-                          disabled={selectionDisabled}
-                          aria-label={variantSelectLabel}
-                          onChange={(event) => {
-                            const next = event.currentTarget.value;
-                            setVariantValue(next);
-                            void applySelection({
-                              model: composeModel(modelValue, next),
-                            });
-                          }}
-                        >
-                          <option value="">Default</option>
-                          {variantChoices.map((variant) => (
-                            <option value={variant.id} key={variant.id}>
-                              {variant.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {selectionSaving ? (
-                      <span className="composer-option-status">Saving…</span>
-                    ) : null}
-                    {selectionError ? (
-                      <span className="composer-option-status error">{selectionError}</span>
-                    ) : null}
-                  </div>
-                ) : null}
                 <div className="chat-composer-bar">
+                  {showSelection ? (
+                    <div
+                      className="composer-options"
+                      title={
+                        session.status === "running"
+                          ? "Wait for the current run to finish"
+                          : undefined
+                      }
+                    >
+                      {agentChoices.length > 0 ? (
+                        <label className="composer-option">
+                          <span>Agent</span>
+                          <select
+                            value={agentValue}
+                            disabled={selectionDisabled}
+                            aria-label="Agent"
+                            onChange={(event) => {
+                              const next = event.currentTarget.value;
+                              setAgentValue(next);
+                              void applySelection({ agent: next });
+                            }}
+                          >
+                            {agentChoices.map((agent) => (
+                              <option value={agent.id} key={agent.id}>
+                                {agent.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {modelChoices.length > 0 ? (
+                        <label className="composer-option">
+                          <span>Model</span>
+                          <select
+                            value={modelValue}
+                            disabled={selectionDisabled}
+                            aria-label="Model"
+                            onChange={(event) => {
+                              const next = event.currentTarget.value;
+                              const nextVariants =
+                                models.find((model) => model.id === next)?.variants ?? [];
+                              const nextVariant = nextVariants.some(
+                                (variant) => variant.id === variantValue,
+                              )
+                                ? variantValue
+                                : "";
+                              setModelValue(next);
+                              setVariantValue(nextVariant);
+                              void applySelection({
+                                model: composeModel(next, nextVariant),
+                              });
+                            }}
+                          >
+                            {modelChoices.map((model) => (
+                              <option value={model.id} key={model.id}>
+                                {model.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {variantChoices.length > 0 ? (
+                        <label className="composer-option">
+                          <span>{variantSelectLabel}</span>
+                          <select
+                            value={variantValue}
+                            disabled={selectionDisabled}
+                            aria-label={variantSelectLabel}
+                            onChange={(event) => {
+                              const next = event.currentTarget.value;
+                              setVariantValue(next);
+                              void applySelection({
+                                model: composeModel(modelValue, next),
+                              });
+                            }}
+                          >
+                            <option value="">Default</option>
+                            {variantChoices.map((variant) => (
+                              <option value={variant.id} key={variant.id}>
+                                {variant.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {selectionSaving ? (
+                        <span className="composer-option-status">Saving…</span>
+                      ) : null}
+                      {selectionError ? (
+                        <span className="composer-option-status error">{selectionError}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <span
                     id="chat-composer-hint"
                     className={`composer-hint ${draftStatus === "error" ? "error" : ""}`}
@@ -3671,11 +3671,29 @@ function SessionDetail(props: {
                       </button>
                     ) : null}
                     <button
-                      className="btn primary small"
+                      className="btn primary small composer-send"
                       type="submit"
+                      aria-label={sending ? "Sending message" : "Send message"}
                       disabled={sending || !draft.trim()}
                     >
-                      {sending ? "Sending…" : "Send"}
+                      <span className="composer-send-label">
+                        {sending ? "Sending…" : "Send"}
+                      </span>
+                      <svg
+                        className="composer-send-icon"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path
+                          d="M8 13V3M4 7l4-4 4 4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                     </button>
                   </div>
                 </div>
