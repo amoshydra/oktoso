@@ -1,9 +1,9 @@
 # MCP northbound — OpenCode controls Oktoso
 
 Status: Phase 2a verified. The `oktoso mcp` stdio bridge is implemented and
-tested against the hub API, including a live MCP SDK client run against the
-fake hub. A hub-hosted `/mcp` endpoint with scoped tokens, per-tool audit, and
-allowlists is the next step.
+tested against the hub API, including a live MCP SDK client run and a real
+OpenCode controller session against the fake hub. A hub-hosted `/mcp` endpoint
+with scoped tokens, per-tool audit, and allowlists is the next step.
 
 ## Goal
 
@@ -182,7 +182,7 @@ The first slice is done when:
 ## Verification
 
 Verified on 2026-11-03 against the fake OpenCode/Open WebUI/Hermes dev hub with
-the official MCP SDK stdio client:
+the official MCP SDK stdio client and a real OpenCode v2.1.4 client:
 
 - read-only mode exposes the seven read tools and no write tools;
 - `providers_list` returns all three fake providers;
@@ -190,17 +190,25 @@ the official MCP SDK stdio client:
 - read-write mode exposes all twelve tools;
 - `sessions_send` accepts an idempotency key and sends to a fake session;
 - `_meta["ai.opencode/sessionID"]` rejects writes to the caller's own session;
-- `attention_act` refuses an approval action without `confirm: true`.
+- `attention_act` answers a pending form and the attention item clears;
+- `attention_act` refuses an approval action without `confirm: true`, accepts it
+  with `confirm: true`, and the permission item clears.
+
+OpenCode v2.1.4 with a project-scoped `mcp.servers` entry reports
+`oktoso connected` in `opencode mcp list`. A read-only agent session then called
+`tools.oktoso.providers_list()` and `tools.oktoso.sessions_list()` through Code
+Mode and returned `providers=3` and `sessions=6`. The operator's global config
+was not modified; the test used a scratch project config and its own hub token.
 
 The automated suite also covers the tool schemas, read-only gating, attention
 actions, idempotency forwarding, and self-control rejection. `pnpm typecheck`,
 `pnpm test`, `pnpm build:hub`, `pnpm openapi:check`, and `pnpm brand:check` pass
 on the rebased branch.
 
-Not yet verified: an actual OpenCode client connection through its background
-service. The current OpenCode service uses the operator's global config, so
-this needs a temporary project config or a stopped/private service rather than
-editing the global one.
+Not covered live: `questions_get` returned null for the fake form fixture,
+because question prompts are parsed from the latest session message and that
+fixture only seeds a provider form. Add a fixture with a real question message
+to exercise the parse-and-answer path end to end.
 
 ## Follow-ups
 
