@@ -254,7 +254,7 @@ The composer now exposes the provider’s session selection instead of leaving m
 - OpenCode uses its dedicated `/api/session/{id}/agent` and `/api/session/{id}/model` routes. Model variants are sent as `Model.Ref.variant`.
 - Open WebUI updates the chat’s `models` array; it has no agent or variant selector.
 - The picker is disabled while the agent is running. A failed change restores the previous values and shows an inline error.
-- The picker wraps to two rows at 390px and three at 320px; it does not cause horizontal overflow.
+- The picker wraps only when needed; the mobile selects use the 12px compact control role, while text entry stays at 16px to avoid browser zoom. At 390px the row fits on one line; at 320px it wraps to two.
 
 Verified at 1440, 390, and 320px in dark mode. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
 
