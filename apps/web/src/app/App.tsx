@@ -14,6 +14,7 @@ import type {
   ProviderOptions,
   ProviderUpdateInput,
   Session,
+  SessionSelectionInput,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@amoshydra/oktoso-client";
 import { BrandMark } from "./BrandMark";
 import { renderMarkdown } from "./markdown";
+import { isProviderResource, resolveProviderUrl } from "./urls";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -41,42 +43,42 @@ const VIEW_META: Record<
   foundation: {
     label: "Foundation",
     mark: "F",
-    sub: "Hub runtime · Phase 0",
+    sub: "Hub runtime",
     phase: "0",
     description: "Hub runtime, authentication, state, and the event stream.",
   },
   inbox: {
     label: "Inbox",
     mark: "I",
-    sub: "Attention · Phase 3",
+    sub: "Attention",
     phase: "3",
     description: "The unified approval, question, unread, and error inbox.",
   },
   sessions: {
     label: "Sessions",
     mark: "S",
-    sub: "All providers · Phase 2",
+    sub: "All providers",
     phase: "2",
     description: "The provider-backed session index, transcript, and composer.",
   },
   search: {
     label: "Search",
     mark: "/",
-    sub: "Search · Phase 6",
+    sub: "Sessions and projects",
     phase: "6",
     description: "Session, project, and message search across providers.",
   },
   providers: {
     label: "Providers",
     mark: "P",
-    sub: "Provider health · Phase 0",
+    sub: "Provider health",
     phase: "0",
     description: "Configured endpoints, health, and capability discovery.",
   },
   settings: {
     label: "Settings",
     mark: "G",
-    sub: "Runtime and preferences · Phase 0",
+    sub: "Runtime and preferences",
     phase: "0",
     description: "Theme, client preferences, diagnostics, and hub information.",
   },
@@ -116,13 +118,35 @@ export function App() {
   const signingOut = useRef(false);
   const didRefresh = useRef(false);
   const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
+  const [activeSession, setActiveSession] = useState<Session>();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const contentRef = useRef<HTMLElement | null>(null);
 
+  const chatOpen = view === "sessions" && selectedSessionRef !== undefined;
+
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
   }, [view, selectedSessionRef]);
+
+  useEffect(() => {
+    setActiveSession(undefined);
+    if (!chatOpen) {
+      setDetailsOpen(false);
+      return;
+    }
+    setDetailsOpen(window.matchMedia("(min-width: 1320px)").matches);
+  }, [chatOpen, selectedSessionRef]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1319px)");
+    const onChange = () => {
+      if (query.matches) setDetailsOpen(false);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     if (auth !== "signed-in") return;
@@ -137,7 +161,7 @@ export function App() {
   }, [auth]);
 
   const selectView = (next: View) => {
-    if (next === "sessions") setSelectedSessionRef(undefined);
+    setSelectedSessionRef(undefined);
     setView(next);
   };
 
@@ -345,6 +369,12 @@ export function App() {
   };
 
   const current = VIEW_META[view];
+  const pageTitle = chatOpen ? activeSession?.title ?? "Session" : current.label;
+  const pageSub = chatOpen
+    ? activeSession
+      ? `${providerLabel(activeSession.providerID)} · ${statusLabel(activeSession.status)}`
+      : "Loading session…"
+    : current.sub;
   const badge = attentionCount > 99 ? "99+" : String(attentionCount);
   const attentionAria =
     attentionCount === 1 ? "1 item needs attention" : `${attentionCount} items need attention`;
@@ -475,7 +505,7 @@ export function App() {
   );
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${chatOpen ? "chat-open" : ""}`}>
       <aside className="rail" aria-label="Primary navigation">
         <div className="rail-logo" role="img" aria-label="Oktoso" title="Oktoso">
           <BrandMark size={36} />
@@ -497,7 +527,7 @@ export function App() {
                     : item.label
                 }
               >
-                <span className="rail-mark">
+                <span className="rail-mark" aria-hidden="true">
                   {item.mark}
                   {id === "inbox" && attentionCount > 0 ? (
                     <span className="nav-badge">{badge}</span>
@@ -516,25 +546,45 @@ export function App() {
 
       <div className="main-column">
         <header className="topbar">
+          {chatOpen ? (
+            <button
+              className="icon-btn topbar-back"
+              type="button"
+              onClick={() => setSelectedSessionRef(undefined)}
+              aria-label="Back to sessions"
+            >
+              ←
+            </button>
+          ) : null}
           <div className="topbar-title-block">
-            <h1 className="topbar-title">{current.label}</h1>
-            <span className="topbar-sub">{current.sub}</span>
+            <h1 className="topbar-title">{pageTitle}</h1>
+            <span className="topbar-sub">{pageSub}</span>
           </div>
-          <div className="topbar-spacer" />
-          <span className={`status-chip ${connectionClass(connection)}`}>
+          {chatOpen && activeSession ? (
+            <button
+              className="btn small topbar-details"
+              type="button"
+              aria-expanded={detailsOpen}
+              aria-controls={detailsOpen ? "session-details" : undefined}
+              onClick={() => setDetailsOpen((open) => !open)}
+            >
+              Details
+            </button>
+          ) : null}
+          <span className={`status-chip topbar-live ${connectionClass(connection)}`}>
             <i />
             {connectionLabel(connection)}
           </span>
           <button className="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? "☀" : "☾"}
           </button>
-          <button className="btn small" type="button" onClick={signOut}>
+          <button className="btn small topbar-disconnect" type="button" onClick={signOut}>
             Disconnect
           </button>
         </header>
 
-        <main className="content" ref={contentRef}>
-          <div className="page">
+        <main className={`content ${chatOpen ? "chat-content" : ""}`} ref={contentRef}>
+          <div className={`page ${chatOpen ? "page-chat" : ""}`}>
             {view === "foundation" ? (
               <>
                 <section className="hero">
@@ -584,7 +634,7 @@ export function App() {
                       {providers.length} online
                     </strong>
                     <span className="card-meta">
-                      {checkingProviders ? "Checking health…" : "Dev harness"}
+                      {checkingProviders ? "Checking health…" : "Health checks"}
                     </span>
                   </article>
                   <article className="card">
@@ -637,6 +687,10 @@ export function App() {
                   client={client as HubClient}
                   sessionRef={selectedSessionRef}
                   events={events}
+                  providers={providers}
+                  detailsOpen={detailsOpen}
+                  onDetailsOpenChange={setDetailsOpen}
+                  onSessionChange={setActiveSession}
                   onBack={() => setSelectedSessionRef(undefined)}
                 />
               ) : (
@@ -721,10 +775,6 @@ export function App() {
               <Placeholder view={view} onBack={() => setView("foundation")} />
             )}
 
-            <footer className="page-footer">
-              <span>Design reference: design-v1.1</span>
-              <span>{current.sub}</span>
-            </footer>
           </div>
         </main>
 
@@ -744,7 +794,7 @@ export function App() {
                     : item.label
                 }
               >
-                <span className="bottom-mark">
+                <span className="bottom-mark" aria-hidden="true">
                   {item.mark}
                   {id === "inbox" && attentionCount > 0 ? (
                     <span className="nav-badge">{badge}</span>
@@ -1287,7 +1337,7 @@ function InboxView(props: {
     <>
       <section className="hero">
         <div>
-          <p className="eyebrow">Attention · Phase 3</p>
+          <p className="eyebrow">Attention</p>
           <h2>What needs you now</h2>
           <p>
             Approvals, questions, unread sessions, and failures. Actions are sent
@@ -1340,6 +1390,7 @@ function InboxView(props: {
                   item={item}
                   key={item.id}
                   busy={busyID === item.id}
+                  detail={attentionDetailText(item)}
                   onAction={(action, input) => void act(item, action, input)}
                   onOpen={() => props.onOpen(item.sessionRef)}
                 />
@@ -1351,11 +1402,66 @@ function InboxView(props: {
   );
 }
 
+function attentionDetailText(item: Attention): string | undefined {
+  if (item.type !== "question") return undefined;
+  const payload = item.payload;
+  if (!payload || typeof payload !== "object") return undefined;
+  for (const key of ["description", "message", "question", "text"]) {
+    const value = (payload as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim()) {
+      const detail = value.trim();
+      if (
+        detail !== item.summary.trim() &&
+        detail !== item.title.trim() &&
+        !item.summary.includes(detail)
+      ) {
+        return detail;
+      }
+    }
+  }
+  return undefined;
+}
+
+function latestQuestionText(messages: Message[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "assistant") continue;
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+    if (!text) continue;
+    const paragraphs = text
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+    for (let paragraph = paragraphs.length - 1; paragraph >= 0; paragraph -= 1) {
+      const lines = (paragraphs[paragraph] ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      for (let line = lines.length - 1; line >= 0; line -= 1) {
+        const candidate = (lines[line] ?? "")
+          .replace(/^[-*]\s+/, "")
+          .replace(/^\d+[.)]\s+/, "")
+          .trim();
+        if (candidate.includes("?") && candidate.length <= 500) {
+          return candidate;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 function AttentionCard(props: {
   item: Attention;
   busy: boolean;
+  inline?: boolean;
+  detail?: string;
   onAction: (action: string, input?: Record<string, unknown>) => void;
-  onOpen: () => void;
+  onOpen?: () => void;
 }) {
   const item = props.item;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -1385,6 +1491,7 @@ function AttentionCard(props: {
       </div>
       <div className="attention-title">{item.title}</div>
       <div className="attention-summary">{item.summary}</div>
+      {props.detail ? <div className="attention-detail">{props.detail}</div> : null}
 
       {hasFields ? (
         <div className="attention-fields">
@@ -1428,9 +1535,11 @@ function AttentionCard(props: {
             Complete {missingRequired.map((field) => field.label).join(", ")}
           </span>
         ) : null}
-        <button className="attention-open" type="button" onClick={props.onOpen}>
-          Open session
-        </button>
+        {!props.inline && props.onOpen ? (
+          <button className="attention-open" type="button" onClick={props.onOpen}>
+            Open session
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -1611,7 +1720,7 @@ function SearchView(props: {
     <>
       <section className="hero">
         <div>
-          <p className="eyebrow">Search · Phase 6</p>
+          <p className="eyebrow">Search</p>
           <h2>Search sessions</h2>
           <p>
             Find sessions across every provider by title, project, directory, or
@@ -1836,7 +1945,7 @@ function SessionsView(props: {
     <>
       <section className="hero">
         <div>
-          <p className="eyebrow">Phase 2</p>
+          <p className="eyebrow">Sessions</p>
           <h2>All sessions</h2>
           <p>
             Sessions from every connected provider, with a live transcript and
@@ -1890,7 +1999,7 @@ function SessionsView(props: {
             <h2>All sessions</h2>
             <p>{sessions.length} sessions · newest first</p>
           </div>
-          <span className="mode-badge">Read + write · Phase 2</span>
+          <span className="mode-badge">Read + write</span>
         </div>
         {loading && sessions.length === 0 ? (
           <div className="empty">Loading sessions…</div>
@@ -2564,6 +2673,10 @@ function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
   events: HubEvent[];
+  providers: Provider[];
+  detailsOpen: boolean;
+  onDetailsOpenChange: (open: boolean) => void;
+  onSessionChange: (session: Session | undefined) => void;
   onBack: () => void;
 }) {
   const [session, setSession] = useState<Session>();
@@ -2573,6 +2686,17 @@ function SessionDetail(props: {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const [markingRead, setMarkingRead] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
+  const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
+  const [attentionBusyID, setAttentionBusyID] = useState<string>();
+  const [attentionError, setAttentionError] = useState<string>();
+  const [selectionOptions, setSelectionOptions] = useState<ProviderOptions>();
+  const [selectionSaving, setSelectionSaving] = useState(false);
+  const [selectionError, setSelectionError] = useState<string>();
+  const [agentValue, setAgentValue] = useState("");
+  const [modelValue, setModelValue] = useState("");
+  const [variantValue, setVariantValue] = useState("");
   const { text: draft, status: draftStatus, update: updateDraft, discard: discardDraft } =
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
@@ -2583,14 +2707,34 @@ function SessionDetail(props: {
   const processedSeq = useRef(props.events[0]?.seq ?? 0);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   messagesRef.current = messages;
+  const sessionProvider = session
+    ? props.providers.find((provider) => provider.id === session.providerID)
+    : undefined;
 
-  const getScroller = () =>
-    (transcriptRef.current?.closest(".content") as HTMLElement | null) ?? null;
+  const getScroller = () => transcriptRef.current;
 
   const nearBottom = () => {
     const scroller = getScroller();
     if (!scroller) return true;
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
+  };
+
+  const isAtBottom = () => {
+    const scroller = getScroller();
+    if (!scroller) return true;
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+  };
+
+  const jumpToLatest = () => {
+    const scroller = getScroller();
+    if (!scroller) return;
+    setAtBottom(true);
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
   };
 
   const refreshLatest = useCallback(
@@ -2677,6 +2821,201 @@ function SessionDetail(props: {
     }
   };
 
+  const loadAttention = useCallback(async () => {
+    try {
+      const page = await props.client.attention({ sessionRef: props.sessionRef });
+      setInlineAttention(
+        page.data.filter(
+          (item) =>
+            item.type === "permission" ||
+            item.type === "approval" ||
+            item.type === "question" ||
+            item.type === "error",
+        ),
+      );
+      setAttentionError(undefined);
+    } catch (reason) {
+      setAttentionError(
+        reason instanceof Error ? reason.message : "Unable to load approvals",
+      );
+    }
+  }, [props.client, props.sessionRef]);
+
+  const actOnAttention = async (
+    item: Attention,
+    action: string,
+    input: Record<string, unknown> = {},
+  ) => {
+    setAttentionBusyID(item.id);
+    setAttentionError(undefined);
+    try {
+      await props.client.actOnAttention(item.id, action, input);
+      setInlineAttention((current) => current.filter((candidate) => candidate.id !== item.id));
+      window.setTimeout(() => void loadAttention().catch(() => undefined), 600);
+    } catch (reason) {
+      setAttentionError(
+        reason instanceof Error ? reason.message : "Unable to complete the action",
+      );
+    } finally {
+      setAttentionBusyID(undefined);
+    }
+  };
+
+  const markRead = async () => {
+    if (markingRead) return;
+    setMarkingRead(true);
+    try {
+      await props.client.markRead(props.sessionRef);
+      setSession((current) => (current ? { ...current, unread: false } : current));
+    } catch (reason) {
+      setSendError(reason instanceof Error ? reason.message : "Unable to mark the session read");
+    } finally {
+      setMarkingRead(false);
+    }
+  };
+
+  const applySelection = async (input: SessionSelectionInput) => {
+    if (selectionSaving) return;
+    setSelectionSaving(true);
+    setSelectionError(undefined);
+    try {
+      const updated = await props.client.setSessionSelection(props.sessionRef, input);
+      setSession(updated);
+    } catch (reason) {
+      setSelectionError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to change the model or agent",
+      );
+      if (session) {
+        const parsed = splitModel(session.model);
+        setAgentValue(
+          session.agent ??
+            selectionOptions?.defaults?.agent ??
+            selectionOptions?.agents[0]?.id ??
+            "",
+        );
+        setModelValue(
+          parsed.model ||
+            selectionOptions?.defaults?.model ||
+            selectionOptions?.models[0]?.id ||
+            "",
+        );
+        setVariantValue(parsed.variant ?? "");
+      }
+    } finally {
+      setSelectionSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!session || !sessionProvider?.capabilities.options) {
+      setSelectionOptions(undefined);
+      return;
+    }
+    let cancelled = false;
+    props.client
+      .options(session.providerID)
+      .then((options) => {
+        if (!cancelled) setSelectionOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectionOptions(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, session?.providerID, sessionProvider?.capabilities.options]);
+
+  useEffect(() => {
+    if (!session || !selectionOptions) return;
+    const parsed = splitModel(session.model);
+    setAgentValue(
+      session.agent ??
+        selectionOptions.defaults?.agent ??
+        selectionOptions.agents[0]?.id ??
+        "",
+    );
+    setModelValue(
+      parsed.model ||
+        selectionOptions.defaults?.model ||
+        selectionOptions.models[0]?.id ||
+        "",
+    );
+    setVariantValue(parsed.variant ?? "");
+    setSelectionError(undefined);
+  }, [session?.model, session?.agent, selectionOptions]);
+
+  useEffect(() => {
+    props.onSessionChange(session);
+  }, [session, props.onSessionChange]);
+
+  useEffect(
+    () => () => {
+      props.onSessionChange(undefined);
+    },
+    [props.onSessionChange],
+  );
+
+  const attentionSeq = props.events.reduce(
+    (latest, event) =>
+      event.type === "resync" ||
+      (event.type.startsWith("attention.") && event.sessionRef === props.sessionRef)
+        ? Math.max(latest, event.seq)
+        : latest,
+    0,
+  );
+
+  useEffect(() => {
+    void loadAttention();
+    const timer = setInterval(() => void loadAttention(), 15_000);
+    return () => clearInterval(timer);
+  }, [loadAttention]);
+
+  useEffect(() => {
+    if (!attentionSeq) return;
+    const timer = setTimeout(() => void loadAttention(), 500);
+    return () => clearTimeout(timer);
+  }, [attentionSeq, loadAttention]);
+
+  useEffect(() => {
+    if (!atBottom) return;
+    const scroller = getScroller();
+    if (!scroller) return;
+    const frame = requestAnimationFrame(() => {
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [inlineAttention.length, atBottom]);
+
+  useEffect(() => {
+    const scroller = getScroller();
+    if (!scroller) return;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        setAtBottom(isAtBottom());
+      });
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", onScroll);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    const scroller = getScroller();
+    if (!scroller) return;
+    const observer = new ResizeObserver(() => {
+      if (atBottom) scroller.scrollTop = scroller.scrollHeight;
+    });
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [session, atBottom]);
+
   useEffect(() => {
     let cancelled = false;
     pendingScroll.current = undefined;
@@ -2685,6 +3024,11 @@ function SessionDetail(props: {
     setOlderCursor(null);
     setLoading(true);
     setError(undefined);
+    setSendError(undefined);
+    setInlineAttention([]);
+    setAttentionBusyID(undefined);
+    setAttentionError(undefined);
+    setAtBottom(true);
     refreshLatest(true)
       .then(() => {
         if (!cancelled) {
@@ -2783,156 +3127,359 @@ function SessionDetail(props: {
     };
   }, [session, olderCursor, loadingOlder, loadOlder]);
 
+  const agents = selectionOptions?.agents ?? [];
+  const models = selectionOptions?.models ?? [];
+  const agentChoices =
+    agentValue && !agents.some((agent) => agent.id === agentValue)
+      ? [...agents, { id: agentValue, label: agentValue }]
+      : agents;
+  const modelChoices =
+    modelValue && !models.some((model) => model.id === modelValue)
+      ? [...models, { id: modelValue, label: modelValue }]
+      : models;
+  const selectedModelOption = models.find((model) => model.id === modelValue);
+  const variants = selectedModelOption?.variants ?? [];
+  const variantChoices =
+    variantValue && !variants.some((variant) => variant.id === variantValue)
+      ? [...variants, { id: variantValue, label: variantValue }]
+      : variants;
+  const variantSelectLabel = variantChoices.some((variant) =>
+    /^(max|high|medium|low|minimal|none|default)$/i.test(variant.id),
+  )
+    ? "Reasoning"
+    : "Variant";
+  const showSelection = Boolean(
+    selectionOptions && (agents.length > 0 || models.length > 0),
+  );
+  const selectionDisabled =
+    selectionSaving || sending || session?.status === "running";
+  const errorAttention = inlineAttention.find((item) => item.type === "error");
+  const providerError = [...messages]
+    .reverse()
+    .find((message) => message.metadata?.error)?.metadata?.error;
+  const attentionDetail =
+    errorAttention && providerError ? providerErrorMessage(providerError) : undefined;
+  const hasBlockingAttention = inlineAttention.some((item) => item.priority === "blocking");
+  const latestQuestion = latestQuestionText(messages);
+  const transcriptItems = groupTranscript(messages);
+  const composerHint =
+    draftStatus === "idle" && session?.status === "running"
+      ? "Agent running · Ctrl/⌘ Enter to queue"
+      : draftStatusLabel(draftStatus);
+
   return (
-    <>
-      <div className="chat-view-head">
-        <button className="btn ghost small" type="button" onClick={props.onBack}>
-          ← Sessions
-        </button>
-        <div className="chat-view-title-block">
-          <span className="chat-view-title">{session?.title ?? "Session"}</span>
-          {session ? (
-            <span className="chat-view-sub">
-              {providerLabel(session.providerID)} · {session.status}
-            </span>
-          ) : null}
-        </div>
-        <div className="chat-head-actions">
-          <span className="mode-badge">Writable · Phase 2</span>
-          {session?.status === "running" ? (
-            <button
-              className="btn small"
-              type="button"
-              disabled={interrupting}
-              onClick={() => void interrupt()}
-            >
-              {interrupting ? "Interrupting…" : "Interrupt"}
+    <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
+      <div className="chat-main">
+        {loading && !session ? (
+          <div className="empty chat-loading">Loading session…</div>
+        ) : error && !session ? (
+          <div className="alert" role="alert">
+            {error}
+            <button className="text-button" type="button" onClick={props.onBack}>
+              Back
             </button>
-          ) : null}
-        </div>
-      </div>
-
-      {loading && !session ? (
-        <div className="empty">Loading session…</div>
-      ) : error && !session ? (
-        <div className="alert" role="alert">
-          {error}
-          <button className="text-button" type="button" onClick={props.onBack}>
-            Back
-          </button>
-        </div>
-      ) : session ? (
-        <>
-          <section className="hero chat-hero">
-            <div>
-              <p className="eyebrow">Session</p>
-              <h2>{session.title}</h2>
-              <div className="chat-meta">
-                <span>{providerLabel(session.providerID)}</span>
-                {session.project || session.directory ? (
-                  <>
-                    <span>·</span>
-                    <span>{session.project ?? session.directory}</span>
-                  </>
-                ) : null}
-                {session.agent ? (
-                  <>
-                    <span>·</span>
-                    <span>{session.agent}</span>
-                  </>
-                ) : null}
-                {session.model ? (
-                  <>
-                    <span>·</span>
-                    <span className="mono">{session.model}</span>
-                  </>
-                ) : null}
-                <span className={`status-chip ${session.status}`}>
-                  <i />
-                  {session.status}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {error ? (
-            <div className="alert" role="alert">
-              {error}
-            </div>
-          ) : null}
-
-          {sendError ? (
-            <div className="alert" role="alert">
-              {sendError}
-            </div>
-          ) : null}
-
-          <section className="chat-panel" aria-label="Session transcript" ref={transcriptRef}>
-            {olderCursor ? (
-              <div className="chat-history-control">
-                <button
-                  className="btn small"
-                  type="button"
-                  disabled={loadingOlder}
-                  onClick={() => void loadOlder()}
-                >
-                  {loadingOlder ? "Loading older…" : "Load older messages"}
+          </div>
+        ) : session ? (
+          <>
+            {error ? (
+              <div className="alert" role="alert">
+                {error}
+                <button className="text-button" type="button" onClick={() => setError(undefined)}>
+                  Dismiss
                 </button>
-              </div>
-            ) : messages.length > 0 ? (
-              <div className="chat-history-control">
-                <span className="chat-history-note">Beginning of session</span>
               </div>
             ) : null}
 
-            {messages.length === 0 ? (
-              <div className="empty">No messages returned by the provider.</div>
-            ) : (
-              groupTranscript(messages).map((item) =>
-                item.kind === "message" ? (
-                  <TranscriptMessage message={item.message} key={item.message.id} />
-                ) : (
-                  <AgentActivity messages={item.messages} key={item.key} />
-                ),
-              )
-            )}
-          </section>
+            <section
+              className="chat-panel"
+              aria-label="Session transcript"
+              ref={transcriptRef}
+              tabIndex={0}
+            >
+              <header className="chat-doc-head">
+                <div className="chat-doc-title">{session.title}</div>
+                <div className="chat-meta">
+                  {session.project || session.directory ? (
+                    <span>{session.project ?? session.directory}</span>
+                  ) : null}
+                  {session.agent ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{session.agent}</span>
+                    </>
+                  ) : null}
+                  {session.model ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="mono">{session.model}</span>
+                    </>
+                  ) : null}
+                  <span className={`status-chip ${session.status}`}>
+                    <i />
+                    {statusLabel(session.status)}
+                  </span>
+                </div>
+              </header>
 
-          <form
-            className="chat-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void send();
-            }}
-          >
-            <textarea
-              rows={2}
-              value={draft}
-              placeholder={`Reply to ${session.title}…`}
-              onChange={(event) => updateDraft((event.currentTarget as HTMLTextAreaElement).value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              {olderCursor ? (
+                <div className="chat-history-control">
+                  <button
+                    className="btn small"
+                    type="button"
+                    disabled={loadingOlder}
+                    onClick={() => void loadOlder()}
+                  >
+                    {loadingOlder ? "Loading older…" : "Load older messages"}
+                  </button>
+                </div>
+              ) : null}
+
+              {messages.length === 0 ? (
+                <div className="empty">No messages yet. Send the first prompt below.</div>
+              ) : (
+                transcriptItems.map((item) =>
+                  item.kind === "date" ? (
+                    <DateSeparator at={item.at} key={item.key} />
+                  ) : item.kind === "message" ? (
+                    <TranscriptMessage
+                      message={item.message}
+                      key={item.message.id}
+                      client={props.client}
+                      providerID={session.providerID}
+                      baseUrl={sessionProvider?.baseUrl}
+                      suppressError={Boolean(errorAttention)}
+                    />
+                  ) : (
+                    <AgentActivity
+                      messages={item.messages}
+                      key={item.key}
+                      client={props.client}
+                      providerID={session.providerID}
+                      baseUrl={sessionProvider?.baseUrl}
+                    />
+                  ),
+                )
+              )}
+
+              {inlineAttention.length > 0 ? (
+                <div className="chat-inline-attention" aria-label="Needs your input">
+                  {inlineAttention.map((item) => (
+                    <AttentionCard
+                      item={item}
+                      key={item.id}
+                      busy={attentionBusyID === item.id}
+                      inline
+                      detail={
+                        item.type === "error"
+                          ? attentionDetail
+                          : item.type === "question"
+                            ? attentionDetailText(item) ?? latestQuestion
+                            : undefined
+                      }
+                      onAction={(action, input) => void actOnAttention(item, action, input)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              {attentionError ? (
+                <div className="chat-inline-note" role="alert">
+                  {attentionError}
+                  <button className="text-button" type="button" onClick={() => void loadAttention()}>
+                    Retry
+                  </button>
+                </div>
+              ) : null}
+            </section>
+
+            {sendError ? (
+              <div className="alert" role="alert">
+                {sendError}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setSendError(undefined)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
+            <div className="chat-composer-wrap">
+              {!atBottom ? (
+                <button className="chat-jump" type="button" onClick={jumpToLatest}>
+                  {hasBlockingAttention ? "Input needed" : "Jump to latest"}
+                  <span aria-hidden="true">↓</span>
+                </button>
+              ) : null}
+              <form
+                className="chat-composer"
+                onSubmit={(event) => {
                   event.preventDefault();
                   void send();
-                }
-              }}
-            />
-            <div className="chat-composer-bar">
-              <span className={`composer-hint ${draftStatus === "error" ? "error" : ""}`}>
-                {draftStatusLabel(draftStatus)}
-              </span>
-              <button
-                className="btn primary small"
-                type="submit"
-                disabled={sending || !draft.trim()}
+                }}
               >
-                {sending ? "Sending…" : "Send"}
-              </button>
+                <textarea
+                  rows={2}
+                  value={draft}
+                  aria-label={`Reply to ${session.title}`}
+                  aria-describedby="chat-composer-hint"
+                  placeholder={`Reply to ${session.title}…`}
+                  onChange={(event) =>
+                    updateDraft((event.currentTarget as HTMLTextAreaElement).value)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                      event.preventDefault();
+                      void send();
+                    }
+                  }}
+                />
+                {showSelection ? (
+                  <div
+                    className="composer-options"
+                    title={
+                      session.status === "running"
+                        ? "Wait for the current run to finish"
+                        : undefined
+                    }
+                  >
+                    {agentChoices.length > 0 ? (
+                      <label className="composer-option">
+                        <span>Agent</span>
+                        <select
+                          value={agentValue}
+                          disabled={selectionDisabled}
+                          aria-label="Agent"
+                          onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            setAgentValue(next);
+                            void applySelection({ agent: next });
+                          }}
+                        >
+                          {agentChoices.map((agent) => (
+                            <option value={agent.id} key={agent.id}>
+                              {agent.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {modelChoices.length > 0 ? (
+                      <label className="composer-option">
+                        <span>Model</span>
+                        <select
+                          value={modelValue}
+                          disabled={selectionDisabled}
+                          aria-label="Model"
+                          onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            const nextVariants =
+                              models.find((model) => model.id === next)?.variants ?? [];
+                            const nextVariant = nextVariants.some(
+                              (variant) => variant.id === variantValue,
+                            )
+                              ? variantValue
+                              : "";
+                            setModelValue(next);
+                            setVariantValue(nextVariant);
+                            void applySelection({
+                              model: composeModel(next, nextVariant),
+                            });
+                          }}
+                        >
+                          {modelChoices.map((model) => (
+                            <option value={model.id} key={model.id}>
+                              {model.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {variantChoices.length > 0 ? (
+                      <label className="composer-option">
+                        <span>{variantSelectLabel}</span>
+                        <select
+                          value={variantValue}
+                          disabled={selectionDisabled}
+                          aria-label={variantSelectLabel}
+                          onChange={(event) => {
+                            const next = event.currentTarget.value;
+                            setVariantValue(next);
+                            void applySelection({
+                              model: composeModel(modelValue, next),
+                            });
+                          }}
+                        >
+                          <option value="">Default</option>
+                          {variantChoices.map((variant) => (
+                            <option value={variant.id} key={variant.id}>
+                              {variant.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {selectionSaving ? (
+                      <span className="composer-option-status">Saving…</span>
+                    ) : null}
+                    {selectionError ? (
+                      <span className="composer-option-status error">{selectionError}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="chat-composer-bar">
+                  <span
+                    id="chat-composer-hint"
+                    className={`composer-hint ${draftStatus === "error" ? "error" : ""}`}
+                  >
+                    {composerHint}
+                  </span>
+                  <div className="composer-actions">
+                    {session.status === "running" ? (
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={interrupting}
+                        onClick={() => void interrupt()}
+                      >
+                        {interrupting ? "Interrupting…" : "Interrupt"}
+                      </button>
+                    ) : null}
+                    <button
+                      className="btn primary small"
+                      type="submit"
+                      disabled={sending || !draft.trim()}
+                    >
+                      {sending ? "Sending…" : "Send"}
+                    </button>
+                  </div>
+                </div>
+              </form>
             </div>
-          </form>
+          </>
+        ) : null}
+      </div>
+
+      {session && props.detailsOpen ? (
+        <>
+          <div
+            className="chat-details-scrim"
+            aria-hidden="true"
+            onClick={() => props.onDetailsOpenChange(false)}
+          />
+          <SessionDetails
+            session={session}
+            provider={sessionProvider}
+            markingRead={markingRead}
+            interrupting={interrupting}
+            onClose={() => props.onDetailsOpenChange(false)}
+            onMarkRead={() => void markRead()}
+            onInterrupt={() => void interrupt()}
+          />
         </>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -2948,18 +3495,33 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 
 type TranscriptItem =
   | { kind: "message"; message: Message }
-  | { kind: "activity"; messages: Message[]; key: string };
+  | { kind: "activity"; messages: Message[]; key: string }
+  | { kind: "date"; at: number; key: string };
 
 function groupTranscript(messages: Message[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   let activity: Message[] = [];
+  let lastDay = "";
+  const push = (item: TranscriptItem, at: number) => {
+    const day = new Date(at).toDateString();
+    if (day !== lastDay) {
+      items.push({ kind: "date", at, key: `date:${day}` });
+      lastDay = day;
+    }
+    items.push(item);
+  };
   const flush = () => {
     if (activity.length === 0) return;
-    items.push({
-      kind: "activity",
-      messages: activity,
-      key: `activity:${activity[0]!.id}:${activity[activity.length - 1]!.id}`,
-    });
+    push(
+      {
+        kind: "activity",
+        messages: activity,
+        // Keep the disclosure mounted while new activity appends to the group.
+        // Including the last message ID remounts and collapses it on every update.
+        key: `activity:${activity[0]!.id}`,
+      },
+      activity[0]!.createdAt,
+    );
     activity = [];
   };
   for (const message of messages) {
@@ -2967,7 +3529,7 @@ function groupTranscript(messages: Message[]): TranscriptItem[] {
       activity.push(message);
     } else {
       flush();
-      items.push({ kind: "message", message });
+      push({ kind: "message", message }, message.createdAt);
     }
   }
   flush();
@@ -2985,26 +3547,41 @@ function isActivityMessage(message: Message): boolean {
   );
 }
 
-function TranscriptMessage(props: { message: Message }) {
+function TranscriptMessage(props: {
+  message: Message;
+  client: HubClient;
+  providerID: string;
+  baseUrl?: string;
+  suppressError?: boolean;
+}) {
   const message = props.message;
   return (
     <article className={`chat-message ${message.role}`}>
       <div className="chat-message-role">
-        <span>{message.role}</span>
+        <span>{message.role === "user" ? "You" : "Agent"}</span>
         <time>{formatTime(message.createdAt)}</time>
         {message.streaming ? <span className="streaming-label">streaming</span> : null}
       </div>
       <div className="chat-message-parts">
-        {message.metadata?.error ? (
-          <div className="form-error" role="alert">
-            Provider error: {formatJson(message.metadata.error)}
+        {message.metadata?.error && !props.suppressError ? (
+          <div className="message-error" role="alert">
+            <span className="message-error-label">Provider error</span>
+            <p>{providerErrorMessage(message.metadata.error)}</p>
           </div>
         ) : null}
         {message.parts.length === 0 && !message.metadata?.error ? (
           <div className="message-empty">No content</div>
+        ) : message.parts.length === 0 && props.suppressError ? (
+          <div className="message-empty">Provider error reported below.</div>
         ) : (
           message.parts.map((part, index) => (
-            <MessagePartView part={part} key={index} />
+            <MessagePartView
+              part={part}
+              key={index}
+              client={props.client}
+              providerID={props.providerID}
+              baseUrl={props.baseUrl}
+            />
           ))
         )}
       </div>
@@ -3012,22 +3589,30 @@ function TranscriptMessage(props: { message: Message }) {
   );
 }
 
-function AgentActivity(props: { messages: Message[] }) {
+function AgentActivity(props: {
+  messages: Message[];
+  client: HubClient;
+  providerID: string;
+  baseUrl?: string;
+}) {
   const working = props.messages.some((message) => message.streaming);
   const failed = props.messages.some((message) =>
     message.parts.some((part) => part.type === "tool" && part.status === "error"),
   );
   const events = props.messages.reduce((total, message) => total + message.parts.length, 0);
+  const stepLabel = `${props.messages.length} ${props.messages.length === 1 ? "step" : "steps"}`;
+  const eventLabel = `${events} ${events === 1 ? "event" : "events"}`;
   return (
     <article className="chat-activity">
       <details className="message-aux chat-activity-details">
         <summary>
           <span className="message-aux-label">Agent activity</span>
           <span className="message-aux-meta">
-            {props.messages.length} steps · {events} events
+            {stepLabel} · {eventLabel}
           </span>
           {failed ? <span className="tool-status error">error</span> : null}
           {working ? <span className="streaming-label">working</span> : null}
+          <span className="message-aux-chevron" aria-hidden="true">›</span>
         </summary>
         <div className="chat-activity-body">
           {props.messages.map((message) => (
@@ -3035,7 +3620,13 @@ function AgentActivity(props: { messages: Message[] }) {
               <div className="activity-step-time">{formatTime(message.createdAt)}</div>
               <div className="chat-message-parts">
                 {message.parts.map((part, index) => (
-                  <MessagePartView part={part} key={index} />
+                  <MessagePartView
+                    part={part}
+                    key={index}
+                    client={props.client}
+                    providerID={props.providerID}
+                    baseUrl={props.baseUrl}
+                  />
                 ))}
               </div>
             </div>
@@ -3046,20 +3637,273 @@ function AgentActivity(props: { messages: Message[] }) {
   );
 }
 
-function Markdown(props: { text: string }) {
-  const html = useMemo(() => renderMarkdown(props.text), [props.text]);
+function DateSeparator(props: { at: number }) {
+  return (
+    <div className="chat-date-separator">
+      <span>{dateLabel(props.at)}</span>
+    </div>
+  );
+}
+
+function SessionDetails(props: {
+  session: Session;
+  provider: Provider | undefined;
+  markingRead: boolean;
+  interrupting: boolean;
+  onClose: () => void;
+  onMarkRead: () => void;
+  onInterrupt: () => void;
+}) {
+  const { session, provider } = props;
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const asideRef = useRef<HTMLElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const providerUrl =
+    safeExternalURL(session.nativeUrl) ?? safeExternalURL(provider?.baseUrl);
+  const tokens = session.tokens;
+  const totalTokens =
+    tokens?.total ??
+    (tokens?.input !== undefined || tokens?.output !== undefined
+      ? (tokens.input ?? 0) + (tokens.output ?? 0)
+      : undefined);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    if (window.matchMedia("(max-width: 1319px)").matches) {
+      closeRef.current?.focus();
+    }
+    return () => previous?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") props.onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.onClose]);
+
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 1319px)").matches) return;
+    const aside = asideRef.current;
+    if (!aside) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = aside.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    aside.addEventListener("keydown", onKeyDown);
+    return () => aside.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const copyReference = async () => {
+    setNotice(undefined);
+    try {
+      await navigator.clipboard.writeText(session.ref);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setNotice("Could not copy the session reference.");
+    }
+  };
+
+  return (
+    <aside
+      className="chat-details"
+      id="session-details"
+      aria-labelledby="session-details-title"
+      ref={asideRef}
+    >
+      <div className="chat-details-head">
+        <div className="chat-details-title" id="session-details-title">
+          Session details
+        </div>
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={props.onClose}
+          aria-label="Close details"
+          ref={closeRef}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="chat-details-body">
+        <section className="chat-details-section">
+          <div className="chat-details-label">Connection</div>
+          <Detail label="Provider" value={providerLabel(session.providerID)} mono={false} />
+          {provider?.baseUrl ? <Detail label="Endpoint" value={provider.baseUrl} /> : null}
+          <Detail label="Session reference" value={session.ref} />
+          <Detail label="Native ID" value={session.nativeID} />
+        </section>
+
+        <section className="chat-details-section">
+          <div className="chat-details-label">Working context</div>
+          {session.project ? <Detail label="Project" value={session.project} mono={false} /> : null}
+          {session.directory ? <Detail label="Directory" value={session.directory} /> : null}
+          {session.agent ? <Detail label="Agent" value={session.agent} mono={false} /> : null}
+          {session.model ? <Detail label="Model" value={session.model} /> : null}
+          {session.parentRef ? <Detail label="Parent session" value={session.parentRef} /> : null}
+        </section>
+
+        <section className="chat-details-section">
+          <div className="chat-details-label">State</div>
+          <div className="detail">
+            <span>Status</span>
+            <span className={`status-chip detail-chip ${session.status}`}>
+              <i />
+              {statusLabel(session.status)}
+            </span>
+          </div>
+          <Detail label="Created" value={formatDateTime(session.createdAt)} />
+          <Detail label="Updated" value={formatDateTime(session.updatedAt)} />
+        </section>
+
+        {session.cost !== undefined || tokens ? (
+          <section className="chat-details-section">
+            <div className="chat-details-label">Usage</div>
+            {session.cost !== undefined ? (
+              <Detail label="Cost" value={`$${session.cost.toFixed(2)}`} />
+            ) : null}
+            {totalTokens !== undefined ? (
+              <Detail label="Tokens" value={formatTokenSummary(tokens, totalTokens)} />
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+
+      <div className="chat-details-actions">
+        {providerUrl ? (
+          <a className="btn small" href={providerUrl} target="_blank" rel="noreferrer">
+            Open in provider
+          </a>
+        ) : null}
+        <button className="btn small" type="button" onClick={() => void copyReference()}>
+          {copied ? "Copied" : "Copy reference"}
+        </button>
+        <button
+          className="btn small"
+          type="button"
+          disabled={props.markingRead}
+          onClick={props.onMarkRead}
+        >
+          {props.markingRead ? "Marking…" : "Mark read"}
+        </button>
+        {session.status === "running" ? (
+          <button
+            className="btn small danger"
+            type="button"
+            disabled={props.interrupting}
+            onClick={props.onInterrupt}
+          >
+            {props.interrupting ? "Interrupting…" : "Interrupt"}
+          </button>
+        ) : null}
+        <span className="chat-details-notice" aria-live="polite">
+          {notice ?? ""}
+        </span>
+      </div>
+    </aside>
+  );
+}
+
+function Markdown(props: {
+  text: string;
+  client: HubClient;
+  providerID: string;
+  baseUrl?: string;
+}) {
+  const html = useMemo(
+    () => renderMarkdown(props.text, props.baseUrl),
+    [props.text, props.baseUrl],
+  );
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let cancelled = false;
+    const created: string[] = [];
+    const images = Array.from(
+      container.querySelectorAll<HTMLImageElement>("img[data-attachment-url]"),
+    );
+
+    for (const image of images) {
+      const target = image.dataset.attachmentUrl;
+      if (!target) continue;
+      void props.client
+        .attachment(props.providerID, target)
+        .then((blob) => {
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          created.push(url);
+          image.addEventListener(
+            "error",
+            () => {
+              if (cancelled) return;
+              const fallback = document.createElement("span");
+              fallback.className = "message-image-missing";
+              fallback.textContent = image.alt?.trim() || "Image unavailable";
+              image.replaceWith(fallback);
+            },
+            { once: true },
+          );
+          image.src = url;
+          image.removeAttribute("data-attachment-url");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          const fallback = document.createElement("span");
+          fallback.className = "message-image-missing";
+          fallback.textContent = image.alt?.trim() || "Image unavailable";
+          image.replaceWith(fallback);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+      for (const url of created) URL.revokeObjectURL(url);
+    };
+  }, [html, props.client, props.providerID]);
+
   return (
     <div
       className="message-markdown"
+      ref={containerRef}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
 
-function MessagePartView(props: { part: MessagePart }) {
+function MessagePartView(props: {
+  part: MessagePart;
+  client: HubClient;
+  providerID: string;
+  baseUrl?: string;
+}) {
   const part = props.part;
   if (part.type === "text") {
-    return <Markdown text={part.text} />;
+    return (
+      <Markdown
+        text={part.text}
+        client={props.client}
+        providerID={props.providerID}
+        baseUrl={props.baseUrl}
+      />
+    );
   }
   if (part.type === "reasoning") {
     return (
@@ -3067,9 +3911,15 @@ function MessagePartView(props: { part: MessagePart }) {
         <summary>
           <span className="message-aux-label">Reasoning</span>
           <span className="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
+          <span className="message-aux-chevron" aria-hidden="true">›</span>
         </summary>
         <div className="message-aux-body">
-          <Markdown text={part.text} />
+          <Markdown
+            text={part.text}
+            client={props.client}
+            providerID={props.providerID}
+            baseUrl={props.baseUrl}
+          />
         </div>
       </details>
     );
@@ -3080,6 +3930,7 @@ function MessagePartView(props: { part: MessagePart }) {
         <summary>
           <span className="message-aux-label">{toolLabel(part.name)}</span>
           <span className={`tool-status ${part.status}`}>{part.status}</span>
+          <span className="message-aux-chevron" aria-hidden="true">›</span>
         </summary>
         <div className="message-aux-body">
           {part.input !== undefined ? (
@@ -3099,16 +3950,50 @@ function MessagePartView(props: { part: MessagePart }) {
     );
   }
   if (part.type === "file") {
-    const href = safeExternalURL(part.url);
+    const imageURL = resolveProviderUrl(part.url, props.baseUrl, "image");
+    const isImage =
+      Boolean(part.mimeType?.startsWith("image/")) ||
+      (!part.mimeType &&
+        /\.(?:png|jpe?g|gif|webp|avif)(?:[?#]|$)/i.test(part.url ?? ""));
+
+    if (isImage && imageURL) {
+      return (
+        <figure className="message-attachment">
+          <AttachmentImage
+            client={props.client}
+            providerID={props.providerID}
+            url={imageURL}
+            baseUrl={props.baseUrl}
+            name={part.name}
+          />
+          <figcaption>
+            <span className="message-file-name">{part.name}</span>
+            {part.mimeType ? (
+              <span className="message-file-meta">{part.mimeType}</span>
+            ) : null}
+            <AttachmentButton
+              client={props.client}
+              providerID={props.providerID}
+              url={part.url}
+              baseUrl={props.baseUrl}
+              name={part.name}
+            />
+          </figcaption>
+        </figure>
+      );
+    }
+
     return (
       <div className="message-file">
         <span className="message-file-name">{part.name}</span>
         {part.mimeType ? <span className="message-file-meta">{part.mimeType}</span> : null}
-        {href ? (
-          <a href={href} target="_blank" rel="noreferrer">
-            Open
-          </a>
-        ) : null}
+        <AttachmentButton
+          client={props.client}
+          providerID={props.providerID}
+          url={part.url}
+          baseUrl={props.baseUrl}
+          name={part.name}
+        />
       </div>
     );
   }
@@ -3116,11 +4001,126 @@ function MessagePartView(props: { part: MessagePart }) {
     <details className="message-aux message-unknown">
       <summary>
         <span className="message-aux-label">Unsupported content</span>
+        <span className="message-aux-chevron" aria-hidden="true">›</span>
       </summary>
       <div className="message-aux-body">
         <pre>{formatJson(part.raw)}</pre>
       </div>
     </details>
+  );
+}
+
+function AttachmentImage(props: {
+  client: HubClient;
+  providerID: string;
+  url: string;
+  baseUrl?: string;
+  name: string;
+}) {
+  const providerHosted = isProviderResource(props.url, props.baseUrl);
+  const [source, setSource] = useState<string | undefined>(
+    providerHosted ? undefined : props.url,
+  );
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!isProviderResource(props.url, props.baseUrl)) {
+      setSource(props.url);
+      setFailed(false);
+      return;
+    }
+
+    let cancelled = false;
+    let objectURL: string | undefined;
+    setSource(undefined);
+    setFailed(false);
+
+    void props.client
+      .attachment(props.providerID, props.url)
+      .then((blob) => {
+        if (cancelled) return;
+        objectURL = URL.createObjectURL(blob);
+        setSource(objectURL);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    };
+  }, [props.client, props.providerID, props.url, props.baseUrl]);
+
+  if (failed) {
+    return <span className="message-image-missing">{props.name}</span>;
+  }
+  if (!source) {
+    return <span className="message-image-loading">Loading image…</span>;
+  }
+  return (
+    <img
+      src={source}
+      alt={props.name}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function AttachmentButton(props: {
+  client: HubClient;
+  providerID: string;
+  url?: string;
+  baseUrl?: string;
+  name: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const resolved = resolveProviderUrl(props.url, props.baseUrl);
+
+  if (!resolved) return null;
+
+  const open = async () => {
+    if (!isProviderResource(resolved, props.baseUrl)) {
+      window.open(resolved, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setBusy(true);
+    setError(undefined);
+    try {
+      const blob = await props.client.attachment(props.providerID, resolved);
+      const objectURL = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectURL;
+      anchor.download = props.name || "attachment";
+      anchor.rel = "noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to open the attachment");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className="message-file-action">
+      <button
+        className="message-file-open"
+        type="button"
+        disabled={busy}
+        aria-label={`Open ${props.name}`}
+        onClick={() => void open()}
+      >
+        {busy ? "Opening…" : "Open"}
+      </button>
+      {error ? <span className="message-file-error">{error}</span> : null}
+    </span>
   );
 }
 
@@ -3177,9 +4177,9 @@ function Placeholder(props: { view: View; onBack: () => void }) {
   return (
     <section className="hero placeholder">
       <div>
-        <p className="eyebrow">Phase {item.phase}</p>
+        <p className="eyebrow">Coming next</p>
         <h2>{item.label} is next</h2>
-        <p>{item.description} The Foundation shell is live; this screen will be wired to the hub in its phase.</p>
+        <p>{item.description} This screen is not wired to the hub yet.</p>
       </div>
       <button className="btn small" type="button" onClick={props.onBack}>
         Back to Foundation
@@ -3188,13 +4188,29 @@ function Placeholder(props: { view: View; onBack: () => void }) {
   );
 }
 
-function Detail(props: { label: string; value: string }) {
+function Detail(props: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="detail">
       <span>{props.label}</span>
-      <strong className="mono">{props.value}</strong>
+      <strong className={props.mono === false ? undefined : "mono"}>{props.value}</strong>
     </div>
   );
+}
+
+function splitModel(value: string | undefined): { model: string; variant?: string } {
+  if (!value) return { model: "" };
+  const separator = value.indexOf("#");
+  if (separator === -1) return { model: value };
+  return {
+    model: value.slice(0, separator),
+    ...(value.slice(separator + 1)
+      ? { variant: value.slice(separator + 1) }
+      : {}),
+  };
+}
+
+function composeModel(model: string, variant: string): string {
+  return variant ? `${model}#${variant}` : model;
 }
 
 function providerLabel(providerID: string): string {
@@ -3247,6 +4263,49 @@ function formatTime(at: number): string {
   return new Date(at).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
+}
+
+function formatDateTime(at: number): string {
+  return new Date(at).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function dateLabel(at: number): string {
+  const date = new Date(at);
+  const now = new Date();
+  const startOfDay = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function formatTokenSummary(
+  tokens: Session["tokens"],
+  total: number,
+): string {
+  if (!tokens) return total.toLocaleString();
+  const parts = [
+    tokens.input !== undefined ? `${tokens.input.toLocaleString()} in` : undefined,
+    tokens.output !== undefined ? `${tokens.output.toLocaleString()} out` : undefined,
+    `${total.toLocaleString()} total`,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function providerErrorMessage(value: unknown): string {
+  if (value && typeof value === "object" && "message" in value) {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  if (typeof value === "string" && value.trim()) return value;
+  return "The provider reported an error.";
 }

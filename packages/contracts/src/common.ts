@@ -116,10 +116,16 @@ export const zAgentOption = z.object({
   label: z.string(),
 });
 
+export const zModelVariant = z.object({
+  id: z.string(),
+  label: z.string(),
+});
+
 export const zModelOption = z.object({
   id: z.string(),
   label: z.string(),
   provider: z.string().optional(),
+  variants: z.array(zModelVariant).optional(),
 });
 
 export const zProviderOptions = z.object({
@@ -145,5 +151,6 @@ export type ProviderCapabilities = z.infer<typeof zProviderCapabilities>;
 export type Provider = z.infer<typeof zProvider>;
 export type ProviderHealth = z.infer<typeof zProviderHealth>;
 export type ProviderOptions = z.infer<typeof zProviderOptions>;
+export type ModelVariant = z.infer<typeof zModelVariant>;
 export type Cursor = z.infer<typeof zCursor>;
 export type ErrorResponse = z.infer<typeof zError>;

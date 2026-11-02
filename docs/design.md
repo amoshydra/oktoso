@@ -261,6 +261,10 @@ Endpoints:
 | Messages | `GET /api/session/{sessionID}/message?limit=&order=&cursor=&type=` |
 | Prompt | `POST /api/session/{sessionID}/prompt` with `{ "text": "..." }` |
 | Create | `POST /api/session` with `{ "title", "location": { "directory" } }` |
+| Switch agent | `POST /api/session/{sessionID}/agent` with `{ "agent": "..." }` |
+| Switch model | `POST /api/session/{sessionID}/model` with `{ "model": { "id", "providerID", "variant?" } }` |
+| List agents | `GET /api/agent` |
+| List models | `GET /api/model` |
 | Interrupt | `POST /api/session/{sessionID}/interrupt` |
 | Events | `GET /api/event` (SSE) |
 | Pending permissions | `GET /api/permission/request` |
@@ -278,6 +282,7 @@ Mapping notes:
 - `time.updated`, `time.idle`, and `idle_outcome` drive status and unread state.
 - Permission requests block the agent. They are blocking attention items.
 - Forms can be simple option lists or complex multi-field forms. The hub exposes the field schema so clients can render what they can and defer complex forms to the web client.
+- Model refs carry an optional `variant`. The hub exposes model variants as reasoning choices; switching the model or agent updates the provider session through the dedicated endpoints.
 
 ### 8.2 Open WebUI
 
@@ -377,15 +382,23 @@ GET    /api/v1/sessions/:ref/messages?cursor=&limit=&order=
 GET    /api/v1/sessions/:ref/question
 POST   /api/v1/sessions/:ref/messages
 POST   /api/v1/sessions
+POST   /api/v1/sessions/:ref/selection
 POST   /api/v1/sessions/:ref/interrupt
 GET    /api/v1/sessions/:ref/draft
 PUT    /api/v1/sessions/:ref/draft
 DELETE /api/v1/sessions/:ref/draft
 GET    /api/v1/attention
 POST   /api/v1/attention/:id/actions/:action
+GET    /api/v1/attachments?provider=&url=
 GET    /api/v1/events?after=
 GET    /api/v1/search?q=            (later)
 ```
+
+`GET /api/v1/attachments` is a binary, authenticated proxy for provider-hosted
+images and files. It is not part of the JSON OpenAPI contract: it requires a
+provider ID and an absolute URL on that provider's origin, uses the provider
+credentials, follows only same-origin redirects, caps the response at 20 MB, and
+serves raster images inline while forcing other content to download.
 
 ### Session list
 

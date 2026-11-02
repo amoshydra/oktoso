@@ -50,6 +50,8 @@ Deliverables:
   - `/api/v1/sessions/:ref`
   - `/api/v1/sessions/:ref/messages`
   - `/api/v1/sessions/:ref/messages` POST
+  - `/api/v1/sessions/:ref/selection` POST
+  - `/api/v1/attachments?provider=&url=`
   - `/api/v1/sessions` POST
   - `/api/v1/events`
   - `/api/v1/auth/pair`

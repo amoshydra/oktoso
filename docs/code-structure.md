@@ -601,6 +601,7 @@ Cache options for a few minutes. Fall back to configured defaults when a provide
 - In TUI mode, structured logs go to the platform log directory (`$XDG_STATE_HOME/oktoso/logs` on Linux/Termux, `~/Library/Logs/Oktoso` on macOS, `%LOCALAPPDATA%\Oktoso\Logs` on Windows). Keep `hub.log` and `hub.log.prev`; rotate at 25 MiB. Plain mode uses stderr; JSON mode uses stdout; non-TTY services do not create a file unless `--log-file` is explicit.
 - Cookie-authenticated mutations require a same-origin `Origin` header, falling back to `Sec-Fetch-Site`. Credentialed CORS uses an explicit origin list, never `*`.
 - Body size limits, URL limits, request timeouts, and provider timeouts are mandatory.
+- The attachment proxy is authenticated. It accepts only absolute HTTP(S) URLs on the selected provider's configured origin, rejects URL credentials, follows at most three same-origin redirects, caps the body at 20 MB, allowlists raster image types for inline rendering, and forces every other response to download with `nosniff` and a sandbox CSP.
 - CORS defaults to same-origin; development origin is explicit.
 - Serve CSP, frame-ancestors, nosniff, and referrer-policy headers.
 - Hub never accepts provider credentials from a client.
@@ -653,11 +654,14 @@ Keep the existing `/api/v1` contract and add:
 | `PUT` | `/api/v1/providers/{id}` | Update a provider, preserve omitted secrets, hot-load adapter |
 | `GET` | `/api/v1/providers/{id}/options` | Agents, models, directories, defaults |
 | `POST` | `/api/v1/sessions/{ref}/read` | Mark a session read and sync the marker |
+| `POST` | `/api/v1/sessions/{ref}/selection` | Change the session model, model variant, or agent |
+| `GET` | `/api/v1/attachments?provider=&url=` | Authenticated binary proxy for provider-hosted images and files |
 | `GET` | `/api/v1/diagnostics` | Authenticated operational state |
 
 Contract changes:
 
-- Add `ProviderOptions`, `AgentOption`, `ModelOption`, and `DirectoryOption`.
+- Add `ProviderOptions`, `AgentOption`, `ModelOption`, `ModelVariant`, and `DirectoryOption`. `ModelOption.variants` carries the reasoning variants a provider exposes.
+- Add `SessionSelectionInput` and `POST /api/v1/sessions/{ref}/selection` so the client can change the session model, model variant, or agent without a provider-specific payload.
 - Add `AuthKind`, `PairingCode`, `PairingSession`, `PairingExchange`, and `SessionRefresh` schemas.
 - Add `options` and `markRead` to provider capabilities.
 - Add an optional `fields` array and `openInProviderUrl` to attention items.

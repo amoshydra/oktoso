@@ -103,7 +103,25 @@ describe("OpenWebUIAdapter", () => {
   it("lists models as options", async () => {
     const { adapter } = await createAdapter();
     const options = await adapter.getOptions(AbortSignal.timeout(5_000));
-    expect(options.models).toEqual([{ id: "fake-model", label: "Fake Model" }]);
+    expect(options.models).toEqual([
+      { id: "fake-model", label: "Fake Model" },
+      { id: "fake-model-2", label: "Fake Model 2" },
+    ]);
     expect(options.agents).toEqual([]);
+  });
+
+  it("switches the chat model", async () => {
+    const { adapter } = await createAdapter();
+    await adapter.setSessionOptions(
+      "openwebui:chat_fake_openwebui",
+      { model: "fake-model-2" },
+      AbortSignal.timeout(5_000),
+    );
+
+    const session = await adapter.getSession(
+      "openwebui:chat_fake_openwebui",
+      AbortSignal.timeout(5_000),
+    );
+    expect(session.model).toBe("fake-model-2");
   });
 });

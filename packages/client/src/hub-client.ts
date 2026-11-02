@@ -29,6 +29,7 @@ import type {
   Session,
   SessionListQuery,
   SessionPage,
+  SessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -144,6 +145,46 @@ export class HubClient {
     return this.request<Session>(`/api/v1/sessions/${encodeURIComponent(ref)}`);
   }
 
+  async attachment(providerID: string, url: string): Promise<Blob> {
+    const params = new URLSearchParams({ provider: providerID, url });
+    const headers: Record<string, string> = { Accept: "*/*" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/api/v1/attachments?${params.toString()}`,
+        { headers, credentials: this.credentials },
+      );
+    } catch (error) {
+      throw new HubError("network_error", "Unable to reach the hub", {
+        retryable: true,
+        cause: error,
+      });
+    }
+
+    if (!response.ok) {
+      let payload: ErrorResponse | undefined;
+      try {
+        payload = (await response.json()) as ErrorResponse;
+      } catch {
+        payload = undefined;
+      }
+      throw new HubError(
+        payload?.error.code ?? "http_error",
+        payload?.error.message ?? `Hub returned HTTP ${response.status}`,
+        {
+          status: response.status,
+          retryable: payload?.error.retryable ?? response.status >= 500,
+          requestId: payload?.error.requestId,
+          details: payload?.error.details,
+        },
+      );
+    }
+
+    return response.blob();
+  }
+
   async messages(ref: string, query: MessagesQuery = {}): Promise<MessagePage> {
     const params = new URLSearchParams();
     if (query.cursor) params.set("cursor", query.cursor);
@@ -212,6 +253,16 @@ export class HubClient {
           ? { headers: { "Idempotency-Key": options.idempotencyKey } }
           : {}),
       },
+    );
+  }
+
+  async setSessionSelection(
+    ref: string,
+    input: SessionSelectionInput,
+  ): Promise<Session> {
+    return this.request<Session>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/selection`,
+      { method: "POST", body: input },
     );
   }
 
