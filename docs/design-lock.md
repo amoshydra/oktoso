@@ -1,14 +1,15 @@
-# Design Lock — v1.2
+# Design Lock — v1.3
 
 Status: **frozen**.
 
-- Version: `design-v1.2`
-- Parent: `design-v1.1`
+- Version: `design-v1.3`
+- Parent: `design-v1.2`
 - Date: 2026-11-02
-- Git tag: `design-v1.2`
+- Git tag: `design-v1.3`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
-- v1.2 scope: the transcript copy action and hub-backed composer dictation only.
+- v1.2 scope: the transcript copy action and hub-backed composer dictation.
+- v1.3 scope: composer attachments, Open WebUI in-chat branch switching and retry, and OpenCode session forks.
 
 ## What is frozen
 
@@ -53,6 +54,34 @@ color token was added.
 - The Settings copy now states the web-composer use, the secure-context
   requirement, and the privacy boundary.
 
+## v1.3 attachment and branching additions
+
+The composer and transcript gained capability-gated attachment and branch
+controls. No routes, navigation, hierarchy, type role, spacing step, radius, or
+color token was added.
+
+- **Attachments:** when the provider exposes `attach`, the composer shows one
+  quiet `Attach` action. Staged files appear as wrapping chips above the
+  textarea with name, size, and a remove control. Send is enabled when there is
+  text or at least one attachment. The chips use the existing 8px control
+  radius and 11px metadata. The remove target is 44px on mobile.
+- **In-chat branches:** when the provider exposes `branches`, an assistant
+  message with siblings shows one quiet branch picker under the message, beside
+  Copy. It reads `‹ n / N ›` with 28px desktop controls and 44px mobile
+  controls. Switching replaces the visible path; the picker does not open a
+  menu or add a toolbar. When the provider exposes `retry`, one quiet `Retry`
+  action creates a new assistant sibling without overwriting the old answer.
+- **Session forks:** when the provider exposes `fork`, the details panel adds
+  `Fork session`. A forked session shows `Open parent` in details and keeps the
+  parent reference visible. The session list keeps its existing rows; there is
+  no new tree screen.
+- **Capability gating:** a provider without `attach` shows no composer upload
+  control. A provider without `branches` shows no picker. A provider without
+  `fork` shows no fork action. Unsupported API calls return a capability error.
+- Attachment files are staged on the hub, expire after one hour, and are
+  removed after a successful send. The client receives only attachment IDs and
+  metadata, never provider credentials or another client's file bytes.
+
 ## Chat shell alignment (2026-11-02)
 
 The production chat now follows the design-v1 prototype shell. The fixed topbar owns the session title as the page `h1`, the provider/status subline, back, and details. A 300px session sidebar sits between the rail and the transcript on desktop. The transcript is an internal scroll region with a pinned composer; the duplicated sticky transcript header and hero card were removed. Details is a column above 1320px, a right overlay below it, and a bottom sheet on mobile. Permission, approval, question, and error attention render inline.
@@ -85,4 +114,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint.
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).

@@ -12,6 +12,87 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
+describe("OpenCode attachments and forks", () => {
+  it("sends file attachments and normalizes them into file parts", async () => {
+    const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
+    servers.push(fake);
+    const adapter = new OpenCodeAdapter({
+      id: "fake-opencode",
+      baseUrl: fake.url,
+      password: "secret",
+    });
+    const signal = AbortSignal.timeout(5_000);
+
+    const result = await adapter.sendMessage(
+      "fake-opencode:ses_auth",
+      {
+        text: "Read the attached notes.",
+        files: [
+          {
+            name: "notes.txt",
+            mimeType: "text/plain",
+            data: new TextEncoder().encode("the secret word is ORANGE"),
+          },
+        ],
+      },
+      signal,
+    );
+    expect(result.accepted).toBe(true);
+
+    const page = await adapter.getMessages(
+      "fake-opencode:ses_auth",
+      { limit: 20, order: "asc" },
+      signal,
+    );
+    const user = page.data
+      .filter((message) => message.role === "user")
+      .at(-1);
+    expect(user?.parts).toEqual(
+      expect.arrayContaining([
+        {
+          type: "file",
+          name: "notes.txt",
+          mimeType: "text/plain",
+          url: expect.stringMatching(/^data:text\/plain;base64,/),
+        },
+      ]),
+    );
+    expect(user?.parts).toContainEqual({
+      type: "text",
+      text: "Read the attached notes.",
+    });
+  });
+
+  it("forks a session before a message", async () => {
+    const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
+    servers.push(fake);
+    const adapter = new OpenCodeAdapter({
+      id: "fake-opencode",
+      baseUrl: fake.url,
+      password: "secret",
+    });
+    const signal = AbortSignal.timeout(5_000);
+
+    const child = await adapter.forkSession(
+      "fake-opencode:ses_auth",
+      { before: "msg_auth_answer" },
+      signal,
+    );
+    expect(child.parentRef).toBe("fake-opencode:ses_auth");
+    expect(child.title).toBe("Fix auth race in gateway (fork)");
+
+    const page = await adapter.getMessages(
+      child.ref,
+      { limit: 20, order: "asc" },
+      signal,
+    );
+    expect(page.data.map((message) => message.id)).toEqual([
+      "msg_auth_user",
+      "msg_auth_reasoning",
+    ]);
+  });
+});
+
 describe("OpenCode live events", () => {
   it("normalizes message and part events into message snapshots", async () => {
     const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });

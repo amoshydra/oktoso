@@ -1,10 +1,13 @@
 import type {
   AssistantInput,
   AssistantView,
+  Attachment,
   AttentionActionInput,
   AttentionPage,
   AttentionType,
   AuthCheck,
+  BranchPoint,
+  ForkInput,
   ProviderHealth,
   Diagnostics,
   ErrorResponse,
@@ -328,47 +331,65 @@ export class HubClient {
     );
     if (options.language) form.set("language", options.language);
     if (options.prompt) form.set("prompt", options.prompt);
-
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (this.token) headers.Authorization = `Bearer ${this.token}`;
-
-    let response: Response;
-    try {
-      response = await this.fetchImpl(`${this.baseUrl}/api/v1/transcribe`, {
-        method: "POST",
-        headers,
-        credentials: this.credentials,
-        body: form,
-        signal: options.signal,
-      });
-    } catch (error) {
-      throw new HubError("network_error", "Unable to reach the hub", {
-        retryable: true,
-        cause: error,
-      });
-    }
-
-    if (!response.ok) {
-      let payload: ErrorResponse | undefined;
-      try {
-        payload = (await response.json()) as ErrorResponse;
-      } catch {
-        payload = undefined;
-      }
-      throw new HubError(
-        payload?.error.code ?? "http_error",
-        payload?.error.message ?? `Hub returned HTTP ${response.status}`,
-        {
-          status: response.status,
-          retryable: payload?.error.retryable ?? response.status >= 500,
-          requestId: payload?.error.requestId,
-          details: payload?.error.details,
-        },
-      );
-    }
-
-    const payload = (await response.json()) as { data: TranscriptionResult };
+    const payload = await this.requestForm<{ data: TranscriptionResult }>(
+      "/api/v1/transcribe",
+      form,
+      options.signal,
+    );
     return payload.data;
+  }
+
+  async uploadAttachment(
+    file: File,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<Attachment> {
+    const form = new FormData();
+    form.set("file", file, file.name);
+    const payload = await this.requestForm<{ data: Attachment }>(
+      "/api/v1/attachments",
+      form,
+      options.signal,
+    );
+    return payload.data;
+  }
+
+  async deleteAttachment(id: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/attachments/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async branches(ref: string): Promise<BranchPoint[]> {
+    const response = await this.request<{ data: BranchPoint[] }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/branches`,
+    );
+    return response.data;
+  }
+
+  async switchBranch(ref: string, siblingId: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/branches`,
+      { method: "POST", body: { siblingId } },
+    );
+  }
+
+  async retryMessage(ref: string, messageId: string): Promise<SendResult> {
+    return this.request<SendResult>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/retry`,
+      { method: "POST", body: { messageId } },
+    );
+  }
+
+  async forkSession(
+    ref: string,
+    input: ForkInput = {},
+  ): Promise<Session> {
+    const response = await this.request<{ data: Session }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/fork`,
+      { method: "POST", body: input },
+    );
+    return response.data;
   }
 
   async replyOptions(ref: string, mode: ReplyMode = "reply"): Promise<ReplyOptions> {
@@ -412,6 +433,53 @@ export class HubClient {
       onStatus: options.onStatus,
       fetchImpl: this.fetchImpl,
     });
+  }
+
+  private async requestForm<T>(
+    path: string,
+    form: FormData,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        credentials: this.credentials,
+        body: form,
+        signal,
+      });
+    } catch (error) {
+      throw new HubError("network_error", "Unable to reach the hub", {
+        retryable: true,
+        cause: error,
+      });
+    }
+
+    if (!response.ok) {
+      let payload: ErrorResponse | undefined;
+      try {
+        payload = (await response.json()) as ErrorResponse;
+      } catch {
+        payload = undefined;
+      }
+      throw new HubError(
+        payload?.error.code ?? "http_error",
+        payload?.error.message ?? `Hub returned HTTP ${response.status}`,
+        {
+          status: response.status,
+          retryable: payload?.error.retryable ?? response.status >= 500,
+          requestId: payload?.error.requestId,
+          details: payload?.error.details,
+        },
+      );
+    }
+
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
   }
 
   private async request<T>(

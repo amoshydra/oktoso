@@ -275,6 +275,8 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Reasoning renders as a compact collapsed row with a character count; its Markdown is sanitized through the same renderer as message prose.
 - Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps. An opened block stays open while new activity appends to it.
 - A completed assistant message with text exposes one quiet `Copy` action after the message. It copies the raw text parts, including Markdown fences, and never includes reasoning or tool payloads. Success reads `Copied` for two seconds; failure reads `Copy failed`. Both are announced to screen readers.
+- When the provider exposes in-chat branches, an assistant message with siblings shows one quiet branch picker beside Copy. It reads `‹ n / N ›`, uses 28px controls on desktop and 44px on mobile, and switches the visible path in place. The picker is absent for providers without branch support.
+- When the provider exposes `retry`, a completed assistant reply shows one quiet `Retry` action beside Copy. Retry creates a new assistant sibling under the same user message and leaves the old answer reachable through the branch picker. The action is absent when the provider does not support retry, and it reads `Retrying…` while the new response runs.
 - Permission and approval requests render inline at the end of the transcript as blocking cards with actions. Question requests render inline as form cards. The card shows the provider form description when it exists, then the fields; if the form has no description, the chat uses the latest assistant question sentence as the detail. Resolving a request removes it and reloads the session attention.
 - Error attention renders as an inline red-tinted card with the provider message and its available actions. The message error block remains as the fallback when there is no attention item.
 - Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
@@ -284,7 +286,8 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 
 - The composer is pinned below the transcript and above the mobile bottom navigation and safe area.
 - Multiline text area with send on `Ctrl/Cmd+Enter`, an explicit label, and the draft status as its description.
-- Attachment button, disabled when the provider does not support attachments.
+- Attachments are staged on the hub. When the provider exposes `attach`, one quiet `Attach` action opens a file picker. Staged files appear as wrapping chips above the textarea with name, size, and a remove control. Send is enabled when there is text or at least one attachment. The accept list is PNG/JPEG/GIF/WebP/AVIF, PDF, JSON, plain text, Markdown, and CSV; the limit is 20 MB per file and five files per message. Providers without `attach` show no upload action, while their existing file parts still render.
+- The hub stores staged files under its data directory, expires them after one hour, and deletes them after a successful send. The web client receives only attachment IDs and metadata, never provider credentials.
 - Agent, model, and reasoning selectors when the provider exposes options. Reasoning is the provider’s model variant; a model with no variants shows no reasoning selector. Changing a selector updates the session and refreshes the document header and details.
 - The selectors are disabled while the agent is running, and a failed change restores the previous values with an inline error.
 - On mobile, the picker sits in the composer bar beside Send: the field labels are hidden, the selects stay at 12px, and Send becomes a 32px icon button. Text entry fields remain 16px to avoid browser zoom.
@@ -304,6 +307,8 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - At 760px and below, details opens as a bottom sheet with a pinned footer.
 - Provider, base URL label, project, directory, branch when available.
 - Native session ID and reference.
+- Parent session reference and an `Open parent` action when the session is a fork.
+- `Fork session` when the provider exposes session forks. The action opens the new child session and keeps the parent reference visible.
 - Agent, model, status, created, updated.
 - Cost and tokens when available.
 - Parent session when the session is a subagent.

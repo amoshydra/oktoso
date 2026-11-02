@@ -13,6 +13,7 @@ import type { SessionService } from "./services/session-service";
 import type { AttentionService } from "./services/attention-service";
 import type { DraftService } from "./services/draft-service";
 import type { AssistantSettingsService } from "./services/assistant-settings";
+import type { AttachmentStore } from "./services/attachment-store";
 import type { ReplyService } from "./services/reply-service";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
@@ -50,6 +51,7 @@ export interface AppDependencies {
   sessions: SessionService;
   attention: AttentionService;
   drafts: DraftService;
+  attachments: AttachmentStore;
   settings: AssistantSettingsService;
   replies: ReplyService;
   transcription: TranscriptionService;
@@ -97,7 +99,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerAuthRoutes(app, { auth, version: VERSION });
   registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry, deps.providerAdmin);
-  registerAttachmentRoutes(app, deps.registry);
+  registerAttachmentRoutes(app, deps.registry, deps.attachments);
   registerSessionRoutes(
     app,
     deps.sessions,

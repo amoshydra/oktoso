@@ -47,6 +47,7 @@ import { SessionService } from "./services/session-service";
 import { ProviderEventService } from "./services/provider-events";
 import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
+import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
 import { TranscriptionService } from "./services/transcription-service";
@@ -491,7 +492,12 @@ async function main(): Promise<void> {
     const eventBus = new EventBus(store, logger);
     await eventBus.init();
     registry = new ProviderRegistry(config.providers, logger);
-    sessions = new SessionService(registry, logger, { store });
+    const drafts = new DraftService(store);
+    const attachments = new AttachmentStore({
+      root: join(resolve(config.dataDir), "attachments"),
+    });
+    await attachments.init();
+    sessions = new SessionService(registry, logger, { store, attachments });
     attention = new AttentionService(
       registry,
       sessions,
@@ -499,7 +505,6 @@ async function main(): Promise<void> {
       eventBus,
       logger,
     );
-    const drafts = new DraftService(store);
     const assistantSettings = new AssistantSettingsService(store);
     const replies = new ReplyService(assistantSettings, sessions, logger);
     const transcription = new TranscriptionService(assistantSettings, logger);
@@ -547,6 +552,7 @@ async function main(): Promise<void> {
       sessions,
       attention,
       drafts,
+      attachments,
       settings: assistantSettings,
       replies,
       transcription,

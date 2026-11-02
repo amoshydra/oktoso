@@ -13,6 +13,7 @@ import { ProviderAdminService } from "./services/provider-admin";
 import { SessionService } from "./services/session-service";
 import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
+import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
 import { TranscriptionService } from "./services/transcription-service";
@@ -46,6 +47,12 @@ function formAudio(bytes: Uint8Array, type: string): FormData {
   return form;
 }
 
+function formFile(name: string, body: string, type: string): FormData {
+  const form = new FormData();
+  form.set("file", new File([body], name, { type }));
+  return form;
+}
+
 async function createTestApp(options: {
   store?: StateStore;
   cors?: string[];
@@ -53,9 +60,14 @@ async function createTestApp(options: {
   auth?: AuthService;
   providerConfigPath?: string;
   transcriptionFetch?: typeof fetch;
+  openwebui?: boolean;
 } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
+  const openwebui = options.openwebui
+    ? await createFakeProviderServer({ kind: "openwebui", port: 0 })
+    : undefined;
+  if (openwebui) servers.push(openwebui);
   // The loader refuses a config that other accounts can read, and git cannot
   // store 0600, so copy the tracked fixture into an owner-only temp file.
   const configPath = join(await tempRoot(), "hub.config.json");
@@ -69,12 +81,29 @@ async function createTestApp(options: {
     OPENCODE_PASSWORD: "secret",
   });
   config.providers[0]!.baseUrl = fake.url;
+  if (openwebui) {
+    config.providers.push({
+      id: "fake-openwebui",
+      type: "openwebui",
+      name: "fake-openwebui",
+      baseUrl: openwebui.url,
+      auth: { kind: "bearer", token: "fake-token" },
+      enabled: true,
+    });
+  }
   if (options.cors) config.cors = options.cors;
   const store = options.store ?? new MemoryStateStore();
   const eventBus = new EventBus(store, logger, { heartbeatMs: 10 });
   await eventBus.init();
   const registry = new ProviderRegistry(config.providers, logger);
-  const sessions = new SessionService(registry, logger, { store });
+  const attachments = new AttachmentStore({
+    root: join(await tempRoot(), "attachments"),
+  });
+  await attachments.init();
+  const sessions = new SessionService(registry, logger, {
+    store,
+    attachments,
+  });
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
   const settings = new AssistantSettingsService(store);
@@ -104,6 +133,7 @@ async function createTestApp(options: {
     sessions,
     attention,
     drafts,
+    attachments,
     settings,
     replies,
     transcription,
@@ -121,11 +151,13 @@ async function createTestApp(options: {
     sessions,
     attention,
     drafts,
+    attachments,
     settings,
     replies,
     transcription,
     questions,
     fake,
+    openwebui,
   };
 }
 
@@ -1465,4 +1497,222 @@ describe("hub app", () => {
     expect(await response.json()).toMatchObject({ accepted: true });
   });
 
+});
+
+describe("chat attachments and branches", () => {
+  it("uploads an attachment, sends it, and removes the staged copy", async () => {
+    const { app, attachments } = await createTestApp();
+    const auth = { Authorization: `Bearer ${token}` };
+
+    const uploaded = await app.request("/api/v1/attachments", {
+      method: "POST",
+      headers: auth,
+      body: formFile("notes.txt", "the secret word is ORANGE", "text/plain"),
+    });
+    expect(uploaded.status).toBe(201);
+    const attachment = (await uploaded.json()) as {
+      data: { id: string; name: string; mimeType: string; size: number };
+    };
+    expect(attachment.data).toMatchObject({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      size: "the secret word is ORANGE".length,
+    });
+
+    const sent = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages",
+      {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: "Read the attached notes.",
+          attachments: [attachment.data.id],
+        }),
+      },
+    );
+    expect(sent.status).toBe(202);
+
+    const page = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages?order=asc&limit=20",
+      { headers: auth },
+    );
+    const payload = (await page.json()) as {
+      data: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const user = payload.data
+      .filter((message) => message.role === "user")
+      .at(-1);
+    expect(user?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: "Read the attached notes." }),
+        expect.objectContaining({
+          type: "file",
+          name: "notes.txt",
+          mimeType: "text/plain",
+          url: expect.stringMatching(/^data:text\/plain;base64,/),
+        }),
+      ]),
+    );
+
+    await expect(attachments.read(attachment.data.id)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("rejects unsupported attachments and providers without attach support", async () => {
+    const { app, sessions } = await createTestApp({ openwebui: true });
+    await sessions.refresh();
+    const auth = { Authorization: `Bearer ${token}` };
+
+    const unsupported = await app.request("/api/v1/attachments", {
+      method: "POST",
+      headers: auth,
+      body: formFile("tool.bin", "nope", "application/x-msdownload"),
+    });
+    expect(unsupported.status).toBe(400);
+
+    const uploaded = await app.request("/api/v1/attachments", {
+      method: "POST",
+      headers: auth,
+      body: formFile("notes.txt", "hello", "text/plain"),
+    });
+    const attachment = (await uploaded.json()) as { data: { id: string } };
+
+    const sent = await app.request(
+      "/api/v1/sessions/fake-openwebui%3Achat_fake_openwebui/messages",
+      {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: "Try an attachment",
+          attachments: [attachment.data.id],
+        }),
+      },
+    );
+    expect(sent.status).toBe(501);
+  });
+
+  it("lists and switches Open WebUI in-chat branches", async () => {
+    const { app, sessions } = await createTestApp({ openwebui: true });
+    await sessions.refresh();
+    const headers = { Authorization: `Bearer ${token}` };
+    const ref = "fake-openwebui:chat_fake_branches";
+    const path = `/api/v1/sessions/${encodeURIComponent(ref)}`;
+
+    const initial = await app.request(`${path}/branches`, { headers });
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({
+      data: [
+        {
+          messageId: "branch-assistant-2",
+          role: "assistant",
+          siblingIds: ["branch-assistant-1", "branch-assistant-2"],
+          index: 1,
+          count: 2,
+        },
+      ],
+    });
+
+    const switched = await app.request(`${path}/branches`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ siblingId: "branch-assistant-1" }),
+    });
+    expect(switched.status).toBe(200);
+
+    const messages = await app.request(`${path}/messages?order=asc`, { headers });
+    const payload = (await messages.json()) as {
+      data: Array<{ id: string }>;
+    };
+    const ids = payload.data.map((message) => message.id);
+    expect(ids).toContain("branch-answer-1");
+    expect(ids).not.toContain("branch-answer-2");
+
+    const after = await app.request(`${path}/branches`, { headers });
+    expect(await after.json()).toMatchObject({
+      data: [
+        {
+          messageId: "branch-assistant-1",
+          index: 0,
+          count: 2,
+        },
+      ],
+    });
+  });
+
+  it("retries an Open WebUI assistant as a new sibling", async () => {
+    const { app, sessions } = await createTestApp({ openwebui: true });
+    await sessions.refresh();
+    const headers = { Authorization: `Bearer ${token}` };
+    const path =
+      "/api/v1/sessions/fake-openwebui%3Achat_fake_branches";
+
+    const retried = await app.request(`${path}/retry`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: "branch-assistant-2" }),
+    });
+    expect(retried.status).toBe(202);
+    expect(await retried.json()).toMatchObject({ accepted: true });
+
+    const branches = await app.request(`${path}/branches`, { headers });
+    expect(await branches.json()).toMatchObject({
+      data: [{ index: 2, count: 3 }],
+    });
+  });
+
+  it("forks an OpenCode session before a message", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const forked = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/fork",
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ before: "msg_auth_answer" }),
+      },
+    );
+    expect(forked.status).toBe(200);
+    const payload = (await forked.json()) as {
+      data: { ref: string; parentRef?: string; title: string };
+    };
+    expect(payload.data).toMatchObject({
+      parentRef: "desktop-opencode:ses_auth",
+      title: "Fix auth race in gateway (fork)",
+    });
+
+    const page = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(payload.data.ref)}/messages?order=asc`,
+      { headers },
+    );
+    const messages = (await page.json()) as { data: Array<{ id: string }> };
+    expect(messages.data.map((message) => message.id)).toEqual([
+      "msg_auth_user",
+      "msg_auth_reasoning",
+    ]);
+
+    const noBranches = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/branches",
+      { headers },
+    );
+    expect(await noBranches.json()).toEqual({ data: [] });
+  });
+
+  it("rejects forking for a provider without fork support", async () => {
+    const { app, sessions } = await createTestApp({ openwebui: true });
+    await sessions.refresh();
+    const response = await app.request(
+      "/api/v1/sessions/fake-openwebui%3Achat_fake_openwebui/fork",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(response.status).toBe(501);
+  });
 });

@@ -1,5 +1,7 @@
 import type {
+  BranchPoint,
   CreateSessionInput,
+  ForkInput,
   MessagePage,
   MessagesQuery,
   ProviderOptions,
@@ -14,12 +16,14 @@ import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
+import type { AttachmentStore } from "./attachment-store";
 import type { ProviderRegistry } from "./provider-registry";
 
 export interface SessionServiceOptions {
   ttlMs?: number;
   now?: () => number;
   store?: StateStore;
+  attachments?: AttachmentStore;
 }
 
 interface CursorValue {
@@ -35,6 +39,7 @@ export class SessionService {
   private readonly ttlMs: number;
   private readonly now: () => number;
   private readonly store?: StateStore;
+  private readonly attachments?: AttachmentStore;
   private lastSyncAt = 0;
   private refreshing?: Promise<void>;
 
@@ -46,6 +51,7 @@ export class SessionService {
     this.ttlMs = options.ttlMs ?? 30_000;
     this.now = options.now ?? Date.now;
     this.store = options.store;
+    this.attachments = options.attachments;
   }
 
   get sessionCount(): number {
@@ -177,14 +183,91 @@ export class SessionService {
     if (!adapter?.capabilities.send) {
       throw notImplemented("This provider does not support sending messages");
     }
+    const attachmentIDs = input.attachments ?? [];
+    if (input.text.trim().length === 0 && attachmentIDs.length === 0) {
+      throw badRequest("A message needs text or an attachment");
+    }
+    if (attachmentIDs.length > 0 && !adapter.capabilities.attach) {
+      throw notImplemented("This provider does not accept attachments");
+    }
+
+    const files = [];
+    if (attachmentIDs.length > 0) {
+      if (!this.attachments) {
+        throw notImplemented("Attachment staging is not configured");
+      }
+      for (const id of attachmentIDs) {
+        const staged = await this.attachments.read(id);
+        files.push({
+          name: staged.attachment.name,
+          mimeType: staged.attachment.mimeType,
+          data: staged.data,
+        });
+      }
+    }
+
     const result = await adapter.sendMessage(
       ref,
-      input,
+      { ...input, ...(files.length > 0 ? { files } : {}) },
+      AbortSignal.timeout(180_000),
+    );
+
+    for (const id of attachmentIDs) {
+      await this.attachments?.remove(id).catch(() => undefined);
+    }
+
+    const session = this.sessions.get(ref);
+    if (session) this.sessions.set(ref, { ...session, status: "running" });
+    return result;
+  }
+
+  async listBranches(ref: string): Promise<BranchPoint[]> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.branches || !adapter.listBranches) {
+      return [];
+    }
+    return adapter.listBranches(ref, AbortSignal.timeout(15_000));
+  }
+
+  async retryMessage(ref: string, messageId: string): Promise<SendResult> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.retry || !adapter.retryMessage) {
+      throw notImplemented("This provider does not support retrying messages");
+    }
+    const result = await adapter.retryMessage(
+      ref,
+      messageId,
       AbortSignal.timeout(180_000),
     );
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });
     return result;
+  }
+
+  async switchBranch(ref: string, siblingId: string): Promise<void> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.branches || !adapter.switchBranch) {
+      throw notImplemented("This provider does not support switching branches");
+    }
+    await adapter.switchBranch(ref, siblingId, AbortSignal.timeout(15_000));
+  }
+
+  async fork(ref: string, input: ForkInput): Promise<Session> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.fork || !adapter.forkSession) {
+      throw notImplemented("This provider does not support forking sessions");
+    }
+    const session = await adapter.forkSession(
+      ref,
+      input,
+      AbortSignal.timeout(30_000),
+    );
+    this.sessions.set(session.ref, session);
+    return session;
   }
 
   async setSessionOptions(
