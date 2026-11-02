@@ -35,6 +35,7 @@ async function fixture(): Promise<{ path: string; config: ProviderConfig }> {
     baseUrl: "https://openwebui.example",
     auth: { kind: "bearer", token: "secret-token" },
     enabled: true,
+    timeoutMs: 20_000,
   };
   return { path, config };
 }
@@ -131,6 +132,7 @@ describe("ProviderAdminService", () => {
         baseUrl: "https://openwebui.example",
         auth: { kind: "bearer", token: "secret-token" },
         enabled: true,
+        timeoutMs: 20_000,
       },
     ]);
   });

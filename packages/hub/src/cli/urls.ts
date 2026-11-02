@@ -10,9 +10,19 @@ export function formatHost(host: string): string {
   return host;
 }
 
-export function hubBaseUrls(
-  config: Pick<HubConfig, "host" | "port">,
-): string[] {
+export type UrlConfig = Pick<HubConfig, "host" | "port"> & {
+  publicUrl?: string;
+};
+
+function externalUrl(config: UrlConfig): string | undefined {
+  const value = config.publicUrl?.trim();
+  return value ? value.replace(/\/+$/, "") : undefined;
+}
+
+export function hubBaseUrls(config: UrlConfig): string[] {
+  const external = externalUrl(config);
+  if (external) return [external];
+
   const hosts: string[] = [];
 
   if (isWildcardHost(config.host)) {
@@ -37,16 +47,18 @@ export function hubBaseUrls(
   return [...new Set(hosts)].map((host) => `http://${host}:${config.port}`);
 }
 
-export function pairingRequestUrl(
-  config: Pick<HubConfig, "host" | "port">,
-): string {
+export function pairingRequestUrl(config: UrlConfig): string {
+  const external = externalUrl(config);
+  if (external) return external;
   if (!isWildcardHost(config.host)) {
     return `http://${formatHost(config.host)}:${config.port}`;
   }
   return `http://127.0.0.1:${config.port}`;
 }
 
-export function webUrl(config: Pick<HubConfig, "host" | "port">): string {
+export function webUrl(config: UrlConfig): string {
+  const external = externalUrl(config);
+  if (external) return external;
   const host = isWildcardHost(config.host)
     ? "127.0.0.1"
     : formatHost(config.host);

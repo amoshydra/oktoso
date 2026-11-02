@@ -92,7 +92,7 @@ export class AttentionService {
               adapterID: adapter.id,
               items: await adapter.listAttention(
                 directories,
-                AbortSignal.timeout(15_000),
+                AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
               ),
             };
           } catch (error) {

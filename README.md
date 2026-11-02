@@ -22,7 +22,7 @@ The hub is a small Node/TypeScript HTTP service. Clients are thin and replaceabl
 
 ## Status
 
-Implementation phase. `v0.1.11` ships the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix that preserves message order on refresh. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. The approved UI reference is frozen as `design-v1.3`. Since `v0.1.11`, the MCP northbound slice is implemented: the `oktoso mcp` stdio bridge and a hub-hosted `/mcp` with scoped tokens, allowlists, audit, rate limits, and attention/session resource subscriptions. Remaining gaps include real Hermes, G2 voice and hardware acceptance, MCP OAuth, and remote/multi-host deployment.
+Implementation phase. `v0.1.11` ships the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix that preserves message order on refresh. OpenCode and Open WebUI are live, the web hub has search, drafts, attention, the newest-first transcript, and incremental message streaming, and the Even G2 client has pairing, inbox, chat, questions, batches, discovery, failure states, and a glyph legend. The approved UI reference is frozen as `design-v1.3`. Since `v0.1.11`, the MCP northbound slice is implemented: the `oktoso mcp` stdio bridge and a hub-hosted `/mcp` with scoped tokens, allowlists, audit, rate limits, and attention/session resource subscriptions. Remaining gaps include real Hermes, G2 voice and hardware acceptance, MCP OAuth, and remote/multi-host hardening and the Termux/cross-host acceptance run.
 
 ## Documents
 
@@ -37,6 +37,7 @@ Implementation phase. `v0.1.11` ships the chat interaction slice: message copy, 
 - [`docs/brand/README.md`](docs/brand/README.md) - brand mark, app icons, and banner assets
 - [`AGENTS.md`](AGENTS.md) - UI/design contract and repository instructions for agents
 - [`docs/openapi.yaml`](docs/openapi.yaml) - generated API contract
+- [`docs/deployment.md`](docs/deployment.md) - remote providers, Termux, Docker, systemd, TLS, and VPN deployment
 - [`SECURITY.md`](SECURITY.md) - credential handling and vulnerability reporting
 - [`docs/publishing.md`](docs/publishing.md) - npm trusted publishing and release workflow
 - [`docs/prototypes/index.html`](docs/prototypes/index.html) - interactive UI prototype with mock data

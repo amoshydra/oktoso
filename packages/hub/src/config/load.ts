@@ -94,6 +94,7 @@ export async function loadPairingConfig(
     host: raw.host,
     port: raw.port,
     token: raw.token,
+    publicUrl: raw.publicUrl,
   };
   const interpolated = interpolate(picked, env) as Record<string, unknown>;
 

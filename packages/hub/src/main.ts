@@ -510,7 +510,16 @@ async function main(): Promise<void> {
     const store = await JsonStateStore.open({ filePath: stateFile });
     const eventBus = new EventBus(store, logger);
     await eventBus.init();
-    registry = new ProviderRegistry(config.providers, logger);
+    registry = new ProviderRegistry(config.providers, logger, (provider) => {
+      void eventBus
+        .publish("provider.status", { provider })
+        .catch((error) => {
+          logger.warn("provider status publish failed", {
+            providerID: provider.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    });
     const drafts = new DraftService(store);
     const attachments = new AttachmentStore({
       root: join(resolve(config.dataDir), "attachments"),
@@ -651,6 +660,7 @@ async function main(): Promise<void> {
 
     let server: ReturnType<typeof serve> | undefined;
     let attentionRefreshTimer: ReturnType<typeof setInterval> | undefined;
+    let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
     let shuttingDown = false;
 
     const shutdown = async (signal: string): Promise<void> => {
@@ -659,6 +669,7 @@ async function main(): Promise<void> {
       ui?.stop();
       logger.info("shutting down", { signal });
       if (attentionRefreshTimer) clearInterval(attentionRefreshTimer);
+      if (healthCheckTimer) clearInterval(healthCheckTimer);
       providerEvents.stop();
       unsubscribeUi();
       server?.close();
@@ -831,6 +842,16 @@ async function main(): Promise<void> {
         });
       });
     }, 15_000);
+
+    if (config.healthCheckIntervalMs > 0) {
+      healthCheckTimer = setInterval(() => {
+        void registry!.checkDue().catch((error) => {
+          logger.warn("background provider health check failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }, config.healthCheckIntervalMs);
+    }
 
     process.on("SIGINT", () => {
       stopPairingInput?.();

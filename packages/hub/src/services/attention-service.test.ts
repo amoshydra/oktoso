@@ -89,6 +89,7 @@ describe("AttentionService subagent policy", () => {
           listAttention: async () => providerItems,
         },
       ],
+      timeoutMs: () => 15_000,
     } as unknown as ProviderRegistry;
     const sessionService = {
       list: async () => ({

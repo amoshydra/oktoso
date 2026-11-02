@@ -171,6 +171,12 @@ Acceptance:
 
 ## Milestone 5: Remote and multi-host
 
+Status: in progress. Remote provider URLs and credentials, per-provider
+`timeoutMs`, background health checks with exponential backoff, offline
+isolation, and `publicUrl` are implemented. Deployment examples are documented
+in [`deployment.md`](deployment.md). The real Termux/cross-host acceptance run
+and end-to-end TLS/VPN validation remain.
+
 Goal: run the hub anywhere and connect providers on other machines.
 
 Deliverables:

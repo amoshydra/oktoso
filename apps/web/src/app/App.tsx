@@ -349,6 +349,16 @@ export function App() {
                 .catch(() => undefined);
             }, 250);
           }
+          if (event.type === "provider.status") {
+            const provider = (event.data as { provider?: Provider }).provider;
+            if (provider) {
+              setProviders((current) =>
+                current.map((item) =>
+                  item.id === provider.id ? provider : item,
+                ),
+              );
+            }
+          }
         },
       })
       .catch((reason: unknown) => {

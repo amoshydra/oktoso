@@ -25,6 +25,8 @@ export const zProviderConfig = z.object({
   baseUrl: z.string().url(),
   auth: zProviderAuth.optional(),
   enabled: z.boolean().default(true),
+  /** Deadline for health checks and read-side session/attention sync. */
+  timeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
 });
 
 export const zMcpRateLimit = z.object({
@@ -104,6 +106,19 @@ export const zHubConfig = z.object({
   cors: z.array(z.string()).default([]),
   webRoot: z.string().optional(),
   appsRoot: z.string().optional(),
+  /** External base URL when the hub sits behind a TLS proxy or tunnel. */
+  publicUrl: z
+    .string()
+    .url()
+    .refine((value) => /^https?:\/\//i.test(value), "publicUrl must be http or https")
+    .optional(),
+  /** Background provider health interval. 0 disables the loop. */
+  healthCheckIntervalMs: z
+    .number()
+    .int()
+    .min(0)
+    .max(3_600_000)
+    .default(30_000),
   providers: z.array(zProviderConfig).default([]),
   mcp: zMcpConfig.default({
     enabled: false,
@@ -122,6 +137,7 @@ export const zHubTarget = z.object({
 
 export const zHubPairingConfig = zHubTarget.extend({
   token: z.string().min(16),
+  publicUrl: z.string().url().optional(),
 });
 
 export type ProviderAuth = z.infer<typeof zProviderAuth>;

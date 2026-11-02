@@ -76,6 +76,7 @@ describe("loadConfig", () => {
       port: 8787,
       token: "${HUB_TOKEN}",
       dataDir: "${HUB_DATA_DIR}",
+      publicUrl: "https://oktoso.example.com",
       providers: [
         {
           id: "desktop",
@@ -94,6 +95,7 @@ describe("loadConfig", () => {
         host: "0.0.0.0",
         port: 8787,
         token: "this-is-a-long-dev-token",
+        publicUrl: "https://oktoso.example.com",
       });
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -130,6 +132,48 @@ describe("loadConfig", () => {
       expect(config.mcp.enabled).toBe(false);
       expect(config.mcp.tokens).toEqual([]);
       expect(config.mcp.audit.enabled).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults provider timeouts and the health interval", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      providers: [
+        {
+          id: "remote",
+          type: "opencode",
+          baseUrl: "http://192.0.2.10:4096",
+        },
+      ],
+    });
+    try {
+      const config = await loadConfig(filePath, {});
+      expect(config.healthCheckIntervalMs).toBe(30_000);
+      expect(config.providers[0]?.timeoutMs).toBe(20_000);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts a custom health interval and provider timeout", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      healthCheckIntervalMs: 0,
+      providers: [
+        {
+          id: "remote",
+          type: "openwebui",
+          baseUrl: "https://openwebui.example",
+          timeoutMs: 45_000,
+        },
+      ],
+    });
+    try {
+      const config = await loadConfig(filePath, {});
+      expect(config.healthCheckIntervalMs).toBe(0);
+      expect(config.providers[0]?.timeoutMs).toBe(45_000);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

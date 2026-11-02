@@ -72,7 +72,7 @@ export class SessionService {
           adapter,
           page: await adapter.listSessions(
             { limit: MAX_LIMIT },
-            AbortSignal.timeout(15_000),
+            AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
           ),
         })),
       );

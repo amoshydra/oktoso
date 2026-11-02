@@ -4,6 +4,7 @@
   "token": "${HUB_TOKEN}",
   "dataDir": ".data",
   "cors": [],
+  "healthCheckIntervalMs": 30000,
   "appsRoot": "dist/apps",
   "providers": [
     {
