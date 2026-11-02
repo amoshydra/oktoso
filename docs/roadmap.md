@@ -1,6 +1,6 @@
 # Oktoso — naming and roadmap
 
-Status: Phase 0 and Phase 1 complete; `v0.1.11` is published. Phase 2 (MCP northbound) is in progress. Updated 2026-11-03.
+Status: Phase 0, Phase 1, and Phase 2 complete; `v0.1.11` is published. MCP northbound is implemented and awaiting release. Updated 2026-11-03.
 
 ## Name
 
@@ -106,39 +106,41 @@ npx @amoshydra/oktoso pair
 Starts without native modules, prints the dashboard, and serves the web/G2 apps
 from the package.
 
-### Phase 2 — MCP northbound: agents control Oktoso (in progress)
+### Phase 2 — MCP northbound: agents control Oktoso (complete)
 
-Status: an experimental stdio bridge exists on `feat/mcp-northbound`. It is
-read-only by default, adds write tools only with `--allow-write`, rejects writes
-to the caller's own session, requires `confirm: true` for approvals, and accepts
-idempotency keys for sends. It is not shipped. A hub-hosted `/mcp` endpoint,
-scoped tokens, allowlists, per-tool audit, rate limits, and event subscription
-remain.
+Status: complete. The `oktoso mcp` stdio bridge and the hub-hosted `/mcp`
+Streamable HTTP endpoint are implemented. Read-only is the default; `--allow-write`
+and hosted token scopes gate writes. Hosted tokens also carry provider and tool
+allowlists, per-client rate limits, and call timeouts. Every hosted tool call is
+audited without logging prompts or message text. `oktoso://attention` and
+`oktoso://sessions` resources support subscriptions, so clients can react to
+attention and session events instead of polling. OAuth remains a follow-up.
 
 Expose Oktoso as an MCP server so external LLM agents can use it.
 
 Tools/resources:
 
-- `providers.list`, `providers.check`
-- `sessions.list`, `sessions.get`, `sessions.messages`
-- `sessions.send`, `sessions.create`, `sessions.interrupt`
-- `attention.list`, `attention.act`
-- `questions.get`
-- `events.follow` or an MCP resource/subscription for session and attention events
+- `providers_list`, `providers_check`
+- `sessions_list`, `sessions_get`, `sessions_messages`
+- `sessions_send`, `sessions_create`, `sessions_interrupt`, `sessions_mark_read`
+- `attention_list`, `attention_act`
+- `questions_get`
+- `oktoso://attention` and `oktoso://sessions` resources with subscriptions
 
 Security:
 
 - Scoped MCP tokens, not the owner token.
 - Per-tool and per-provider allowlists.
 - Human approval for destructive actions.
-- Audit every tool call with request ID, agent identity, and result.
+- Audit every tool call with client identity and result.
 - Rate limits and timeouts.
 
 Acceptance:
 
-An external agent connects over MCP, lists sessions, reads a transcript, answers
-a pending question, and observes an attention event. Destructive actions are
-blocked or require approval.
+An external agent connects over stdio or hosted `/mcp`, lists sessions, reads a
+transcript, and acts on an attention item; writes to its own session are
+rejected, destructive actions require approval, and resource subscribers see
+attention updates.
 
 ### Phase 3 — MCP southbound: providers and tools as patch points (planned)
 

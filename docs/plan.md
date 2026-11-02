@@ -295,6 +295,7 @@ Acceptance:
 |---|---|
 | Contracts | OpenAPI draft, error schema, event schema, capability matrix |
 | Hub core | Config, provider registry, auth, CORS, logging, health, event bus |
+| MCP | Stdio bridge, hosted `/mcp`, scoped tokens, allowlists, audit, rate limits, resources |
 | OpenCode | Auth, sessions, messages, prompt, create, events, permissions, forms, viewed |
 | Open WebUI | Auth, chats, branches, messages, completion, create, models |
 | Hermes | API server, sessions, messages, runs, approvals, TUI gateway |
