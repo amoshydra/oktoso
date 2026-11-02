@@ -115,11 +115,6 @@ idempotency keys for sends. It is not shipped. A hub-hosted `/mcp` endpoint,
 scoped tokens, allowlists, per-tool audit, rate limits, and event subscription
 remain.
 
-Status: experiment in progress. The `oktoso mcp` stdio bridge exposes the
-read-only tool surface and an opt-in write surface for OpenCode. A hub-hosted
-`/mcp` endpoint with scoped tokens is the next step. See
-[`mcp-northbound.md`](mcp-northbound.md).
-
 Expose Oktoso as an MCP server so external LLM agents can use it.
 
 Tools/resources:

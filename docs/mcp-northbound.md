@@ -1,8 +1,9 @@
 # MCP northbound — OpenCode controls Oktoso
 
-Status: experiment. The `oktoso mcp` stdio bridge is implemented and tested
-against the hub API. A hub-hosted `/mcp` endpoint with scoped tokens is the
-next step.
+Status: Phase 2a verified. The `oktoso mcp` stdio bridge is implemented and
+tested against the hub API, including a live MCP SDK client run against the
+fake hub. A hub-hosted `/mcp` endpoint with scoped tokens, per-tool audit, and
+allowlists is the next step.
 
 ## Goal
 
@@ -178,6 +179,29 @@ The first slice is done when:
 7. `attention_act` refuses an approval without `confirm: true`.
 8. Read-only mode exposes no write tools.
 
+## Verification
+
+Verified on 2026-11-03 against the fake OpenCode/Open WebUI/Hermes dev hub with
+the official MCP SDK stdio client:
+
+- read-only mode exposes the seven read tools and no write tools;
+- `providers_list` returns all three fake providers;
+- `sessions_list` returns a paginated session page;
+- read-write mode exposes all twelve tools;
+- `sessions_send` accepts an idempotency key and sends to a fake session;
+- `_meta["ai.opencode/sessionID"]` rejects writes to the caller's own session;
+- `attention_act` refuses an approval action without `confirm: true`.
+
+The automated suite also covers the tool schemas, read-only gating, attention
+actions, idempotency forwarding, and self-control rejection. `pnpm typecheck`,
+`pnpm test`, `pnpm build:hub`, `pnpm openapi:check`, and `pnpm brand:check` pass
+on the rebased branch.
+
+Not yet verified: an actual OpenCode client connection through its background
+service. The current OpenCode service uses the operator's global config, so
+this needs a temporary project config or a stopped/private service rather than
+editing the global one.
+
 ## Follow-ups
 
 - Hub-hosted `/mcp` over Streamable HTTP.
@@ -186,3 +210,4 @@ The first slice is done when:
 - Rate limits and timeouts.
 - Event subscription instead of polling `attention_list`.
 - A controller agent template in the repository.
+- A temporary OpenCode project config for the live client acceptance run.
