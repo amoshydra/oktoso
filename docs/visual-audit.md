@@ -269,6 +269,8 @@ Private provider images and files now render through the hub instead of the brow
 - The hub serves only known raster image types inline. Other known types are downloaded; unknown types are forced to `application/octet-stream`. Every response sets `X-Content-Type-Options: nosniff`, a sandbox CSP, and a private cache policy.
 - The web client fetches provider resources with its normal hub auth, then renders a blob URL. This works for both paired cookie auth and the pasted owner-token fallback; a plain `<img src="/api/v1/...">` would drop the bearer header.
 - Markdown images, image file parts, and file Open actions all use the same path. Third-party public images still load directly.
+- OpenCode writes project-relative file references (`docs/spec.md`, `docs/concepts/plot.png`). Those are resolved through the provider’s `/api/fs/read/...` endpoint with the session directory, not against the provider origin root. Markdown links use the authenticated proxy; clicking one fetches the provider file with the session credentials.
+- Verified against live session `desktop-opencode:ses_e697a2765ffeQU4TBjcJe7WmnZ`: 10 storyboard images rendered at 1400×940 or 1440×900 from blob URLs, and clicking `docs/vr-interaction-spec.md` fetched the file through the proxy with HTTP 200. One reasoning block references `concepts/storyboards/01-browse.png` while the file is under `docs/concepts/...`; that path falls back because it does not exist relative to the session directory.
 - Verified with provider resource tests for same-origin fetches, same-origin redirects, cross-origin rejection, 20 MB limits, auth errors, and missing files; hub tests for inline/download headers, cross-origin rejection, and auth; and a browser run with the owner-token fallback where markdown images and image file parts rendered from blob URLs.
 - The desktop session sidebar and branch/model controls remain broader follow-ups.
 
@@ -277,9 +279,9 @@ Files changed: `packages/providers/src/http/resource.ts`, `packages/providers/sr
 ## Files changed
 
 - `apps/web/src/app/App.tsx`: chat shell, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
-- `apps/web/src/app/markdown.ts`: provider-relative link and image resolution, provider-image marking, safe image rendering, image fallbacks.
-- `apps/web/src/app/urls.ts`: link, image, and attachment URL resolver with safe-scheme and same-origin rules.
-- `apps/web/src/app/urls.test.ts`: resolver and same-origin coverage.
+- `apps/web/src/app/markdown.ts`: provider-relative link and image resolution, OpenCode filesystem links, provider-image marking, safe image rendering, image fallbacks.
+- `apps/web/src/app/urls.ts`: link, image, session-resource, and attachment URL resolver with OpenCode filesystem reads, safe-scheme, and same-origin rules.
+- `apps/web/src/app/urls.test.ts`: resolver, OpenCode filesystem, and same-origin coverage.
 - `apps/web/src/styles.css`: chat layout, pinned composer, details column/overlay/sheet, inline attention, date separators, mobile composer actions, image attachments, selection picker.
 - `packages/providers/src/http/resource.ts`: provider resource fetch, same-origin validation, redirect limits, size cap.
 - `packages/providers/src/http/resource.test.ts`: resource proxy coverage.

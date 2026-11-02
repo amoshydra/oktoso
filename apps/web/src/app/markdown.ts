@@ -1,6 +1,10 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { isProviderResource, resolveProviderUrl } from "./urls";
+import {
+  attachmentProxyPath,
+  resolveSessionResource,
+  type ResourceContext,
+} from "./urls";
 
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -10,7 +14,7 @@ marked.setOptions({
   breaks: true,
 });
 
-export function renderMarkdown(text: string, baseUrl?: string): string {
+export function renderMarkdown(text: string, context?: ResourceContext): string {
   const html = marked.parse(text, { async: false }) as string;
   const sanitized = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
@@ -23,15 +27,32 @@ export function renderMarkdown(text: string, baseUrl?: string): string {
   template.innerHTML = sanitized;
 
   for (const anchor of template.content.querySelectorAll("a")) {
-    const href = resolveProviderUrl(anchor.getAttribute("href") ?? undefined, baseUrl);
-    if (!href) {
+    const resolved = resolveSessionResource(
+      anchor.getAttribute("href") ?? undefined,
+      context ?? {},
+      "link",
+    );
+    if (!resolved.url) {
       anchor.removeAttribute("href");
       anchor.removeAttribute("target");
       anchor.removeAttribute("rel");
       continue;
     }
-    anchor.setAttribute("href", href);
-    if (href.startsWith("http:") || href.startsWith("https:")) {
+
+    if (resolved.attachment && context?.providerID) {
+      anchor.setAttribute("href", attachmentProxyPath(context.providerID, resolved.url));
+      anchor.setAttribute("data-attachment-url", resolved.url);
+      anchor.setAttribute(
+        "data-attachment-name",
+        anchor.textContent?.trim() || "attachment",
+      );
+      anchor.removeAttribute("target");
+      anchor.removeAttribute("rel");
+      continue;
+    }
+
+    anchor.setAttribute("href", resolved.url);
+    if (resolved.url.startsWith("http:") || resolved.url.startsWith("https:")) {
       anchor.setAttribute("target", "_blank");
       anchor.setAttribute("rel", "noopener noreferrer");
     } else {
@@ -41,23 +62,23 @@ export function renderMarkdown(text: string, baseUrl?: string): string {
   }
 
   for (const image of template.content.querySelectorAll("img")) {
-    const src = resolveProviderUrl(
+    const resolved = resolveSessionResource(
       image.getAttribute("src") ?? undefined,
-      baseUrl,
+      context ?? {},
       "image",
     );
-    if (!src) {
+    if (!resolved.url) {
       const fallback = document.createElement("span");
       fallback.className = "message-image-missing";
       fallback.textContent = image.getAttribute("alt")?.trim() || "Image unavailable";
       image.replaceWith(fallback);
       continue;
     }
-    if (isProviderResource(src, baseUrl)) {
-      image.setAttribute("data-attachment-url", src);
+    if (resolved.attachment) {
+      image.setAttribute("data-attachment-url", resolved.url);
       image.setAttribute("src", TRANSPARENT_PIXEL);
     } else {
-      image.setAttribute("src", src);
+      image.setAttribute("src", resolved.url);
     }
     image.setAttribute("loading", "lazy");
     image.setAttribute("decoding", "async");
