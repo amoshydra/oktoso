@@ -27,7 +27,10 @@ import {
 } from "@amoshydra/oktoso-client";
 import { BrandMark } from "./BrandMark";
 import { renderMarkdown } from "./markdown";
-import { isProviderResource, resolveProviderUrl } from "./urls";
+import {
+  resolveSessionResource,
+  type ResourceContext,
+} from "./urls";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -3166,6 +3169,12 @@ function SessionDetail(props: {
     draftStatus === "idle" && session?.status === "running"
       ? "Agent running · Ctrl/⌘ Enter to queue"
       : draftStatusLabel(draftStatus);
+  const resource: ResourceContext = {
+    baseUrl: sessionProvider?.baseUrl,
+    providerID: session?.providerID,
+    providerType: sessionProvider?.type,
+    directory: session?.directory,
+  };
 
   return (
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
@@ -3245,8 +3254,7 @@ function SessionDetail(props: {
                       message={item.message}
                       key={item.message.id}
                       client={props.client}
-                      providerID={session.providerID}
-                      baseUrl={sessionProvider?.baseUrl}
+                      resource={resource}
                       suppressError={Boolean(errorAttention)}
                     />
                   ) : (
@@ -3254,8 +3262,7 @@ function SessionDetail(props: {
                       messages={item.messages}
                       key={item.key}
                       client={props.client}
-                      providerID={session.providerID}
-                      baseUrl={sessionProvider?.baseUrl}
+                      resource={resource}
                     />
                   ),
                 )
@@ -3550,8 +3557,7 @@ function isActivityMessage(message: Message): boolean {
 function TranscriptMessage(props: {
   message: Message;
   client: HubClient;
-  providerID: string;
-  baseUrl?: string;
+  resource: ResourceContext;
   suppressError?: boolean;
 }) {
   const message = props.message;
@@ -3579,8 +3585,7 @@ function TranscriptMessage(props: {
               part={part}
               key={index}
               client={props.client}
-              providerID={props.providerID}
-              baseUrl={props.baseUrl}
+              resource={props.resource}
             />
           ))
         )}
@@ -3592,8 +3597,7 @@ function TranscriptMessage(props: {
 function AgentActivity(props: {
   messages: Message[];
   client: HubClient;
-  providerID: string;
-  baseUrl?: string;
+  resource: ResourceContext;
 }) {
   const working = props.messages.some((message) => message.streaming);
   const failed = props.messages.some((message) =>
@@ -3624,8 +3628,7 @@ function AgentActivity(props: {
                     part={part}
                     key={index}
                     client={props.client}
-                    providerID={props.providerID}
-                    baseUrl={props.baseUrl}
+                    resource={props.resource}
                   />
                 ))}
               </div>
@@ -3823,18 +3826,25 @@ function SessionDetails(props: {
 function Markdown(props: {
   text: string;
   client: HubClient;
-  providerID: string;
-  baseUrl?: string;
+  resource: ResourceContext;
 }) {
   const html = useMemo(
-    () => renderMarkdown(props.text, props.baseUrl),
-    [props.text, props.baseUrl],
+    () =>
+      renderMarkdown(props.text, props.resource),
+    [
+      props.text,
+      props.resource.baseUrl,
+      props.resource.providerID,
+      props.resource.providerType,
+      props.resource.directory,
+    ],
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const providerID = props.resource.providerID;
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !providerID) return;
     let cancelled = false;
     const created: string[] = [];
     const images = Array.from(
@@ -3845,7 +3855,7 @@ function Markdown(props: {
       const target = image.dataset.attachmentUrl;
       if (!target) continue;
       void props.client
-        .attachment(props.providerID, target)
+        .attachment(providerID, target)
         .then((blob) => {
           if (cancelled) return;
           const url = URL.createObjectURL(blob);
@@ -3877,12 +3887,30 @@ function Markdown(props: {
       cancelled = true;
       for (const url of created) URL.revokeObjectURL(url);
     };
-  }, [html, props.client, props.providerID]);
+  }, [html, props.client, providerID]);
 
   return (
     <div
       className="message-markdown"
       ref={containerRef}
+      onClick={(event) => {
+        const anchor = (event.target as HTMLElement).closest(
+          "a[data-attachment-url]",
+        );
+        if (!(anchor instanceof HTMLAnchorElement)) return;
+        const target = anchor.dataset.attachmentUrl;
+        if (!target || !providerID) return;
+        event.preventDefault();
+        void downloadAttachment(
+          props.client,
+          providerID,
+          target,
+          anchor.dataset.attachmentName ?? "attachment",
+        ).catch(() => {
+          const href = anchor.getAttribute("href");
+          if (href) window.open(href, "_blank", "noopener,noreferrer");
+        });
+      }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -3891,8 +3919,7 @@ function Markdown(props: {
 function MessagePartView(props: {
   part: MessagePart;
   client: HubClient;
-  providerID: string;
-  baseUrl?: string;
+  resource: ResourceContext;
 }) {
   const part = props.part;
   if (part.type === "text") {
@@ -3900,8 +3927,7 @@ function MessagePartView(props: {
       <Markdown
         text={part.text}
         client={props.client}
-        providerID={props.providerID}
-        baseUrl={props.baseUrl}
+        resource={props.resource}
       />
     );
   }
@@ -3917,8 +3943,7 @@ function MessagePartView(props: {
           <Markdown
             text={part.text}
             client={props.client}
-            providerID={props.providerID}
-            baseUrl={props.baseUrl}
+            resource={props.resource}
           />
         </div>
       </details>
@@ -3950,20 +3975,21 @@ function MessagePartView(props: {
     );
   }
   if (part.type === "file") {
-    const imageURL = resolveProviderUrl(part.url, props.baseUrl, "image");
+    const image = resolveSessionResource(part.url, props.resource, "image");
+    const link = resolveSessionResource(part.url, props.resource, "link");
     const isImage =
       Boolean(part.mimeType?.startsWith("image/")) ||
       (!part.mimeType &&
         /\.(?:png|jpe?g|gif|webp|avif)(?:[?#]|$)/i.test(part.url ?? ""));
 
-    if (isImage && imageURL) {
+    if (isImage && image.url) {
       return (
         <figure className="message-attachment">
           <AttachmentImage
             client={props.client}
-            providerID={props.providerID}
-            url={imageURL}
-            baseUrl={props.baseUrl}
+            providerID={props.resource.providerID}
+            url={image.url}
+            viaProxy={image.attachment}
             name={part.name}
           />
           <figcaption>
@@ -3973,9 +3999,9 @@ function MessagePartView(props: {
             ) : null}
             <AttachmentButton
               client={props.client}
-              providerID={props.providerID}
-              url={part.url}
-              baseUrl={props.baseUrl}
+              providerID={props.resource.providerID}
+              url={link.url ?? image.url}
+              viaProxy={link.attachment || image.attachment}
               name={part.name}
             />
           </figcaption>
@@ -3989,9 +4015,9 @@ function MessagePartView(props: {
         {part.mimeType ? <span className="message-file-meta">{part.mimeType}</span> : null}
         <AttachmentButton
           client={props.client}
-          providerID={props.providerID}
-          url={part.url}
-          baseUrl={props.baseUrl}
+          providerID={props.resource.providerID}
+          url={link.url}
+          viaProxy={link.attachment}
           name={part.name}
         />
       </div>
@@ -4010,23 +4036,44 @@ function MessagePartView(props: {
   );
 }
 
+async function downloadAttachment(
+  client: HubClient,
+  providerID: string,
+  url: string,
+  name: string,
+): Promise<void> {
+  const blob = await client.attachment(providerID, url);
+  const objectURL = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectURL;
+  anchor.download = (name || "attachment").replace(/[\\/]/g, "_");
+  anchor.rel = "noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+}
+
 function AttachmentImage(props: {
   client: HubClient;
-  providerID: string;
+  providerID?: string;
   url: string;
-  baseUrl?: string;
+  viaProxy: boolean;
   name: string;
 }) {
-  const providerHosted = isProviderResource(props.url, props.baseUrl);
   const [source, setSource] = useState<string | undefined>(
-    providerHosted ? undefined : props.url,
+    props.viaProxy ? undefined : props.url,
   );
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!isProviderResource(props.url, props.baseUrl)) {
+    if (!props.viaProxy) {
       setSource(props.url);
       setFailed(false);
+      return;
+    }
+    if (!props.providerID) {
+      setFailed(true);
       return;
     }
 
@@ -4050,7 +4097,7 @@ function AttachmentImage(props: {
       cancelled = true;
       if (objectURL) URL.revokeObjectURL(objectURL);
     };
-  }, [props.client, props.providerID, props.url, props.baseUrl]);
+  }, [props.client, props.providerID, props.url, props.viaProxy]);
 
   if (failed) {
     return <span className="message-image-missing">{props.name}</span>;
@@ -4071,36 +4118,32 @@ function AttachmentImage(props: {
 
 function AttachmentButton(props: {
   client: HubClient;
-  providerID: string;
+  providerID?: string;
   url?: string;
-  baseUrl?: string;
+  viaProxy: boolean;
   name: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const resolved = resolveProviderUrl(props.url, props.baseUrl);
+  const url = props.url;
+  const providerID = props.providerID;
 
-  if (!resolved) return null;
+  if (!url) return null;
 
   const open = async () => {
-    if (!isProviderResource(resolved, props.baseUrl)) {
-      window.open(resolved, "_blank", "noopener,noreferrer");
+    if (!props.viaProxy) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!providerID) {
+      setError("This provider cannot open the attachment");
       return;
     }
 
     setBusy(true);
     setError(undefined);
     try {
-      const blob = await props.client.attachment(props.providerID, resolved);
-      const objectURL = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectURL;
-      anchor.download = props.name || "attachment";
-      anchor.rel = "noreferrer";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+      await downloadAttachment(props.client, providerID, url, props.name);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to open the attachment");
     } finally {
