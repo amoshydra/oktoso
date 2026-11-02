@@ -89,6 +89,7 @@ async function createTestApp(options: {
       baseUrl: openwebui.url,
       auth: { kind: "bearer", token: "fake-token" },
       enabled: true,
+      timeoutMs: 20_000,
     });
   }
   if (options.cors) config.cors = options.cors;

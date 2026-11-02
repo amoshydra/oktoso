@@ -31,6 +31,7 @@ describe("SessionService read markers", () => {  it("keeps a session read across
     const registry = {
       adapters: () => [adapter],
       adapter: (id: string) => (id === "test" ? adapter : undefined),
+      timeoutMs: () => 15_000,
     } as unknown as ProviderRegistry;
     const store = new MemoryStateStore();
     const sessions = new SessionService(registry, logger, {
@@ -84,6 +85,7 @@ describe("SessionService read markers", () => {  it("keeps a session read across
     const registry = {
       adapters: () => [adapter],
       adapter: (id: string) => (id === "test" ? adapter : undefined),
+      timeoutMs: () => 15_000,
     } as unknown as ProviderRegistry;
     const sessions = new SessionService(registry, logger);
 

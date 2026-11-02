@@ -20,6 +20,16 @@ interface ProviderRuntimeState {
   version?: string;
   lastCheckedAt?: number;
   lastError?: string;
+  consecutiveFailures: number;
+  nextCheckAt: number;
+}
+
+const HEALTH_BACKOFF_BASE_MS = 5_000;
+const HEALTH_BACKOFF_MAX_MS = 300_000;
+
+function healthBackoffMs(failures: number): number {
+  const exponent = Math.min(Math.max(failures - 1, 0), 6);
+  return Math.min(HEALTH_BACKOFF_MAX_MS, HEALTH_BACKOFF_BASE_MS * 2 ** exponent);
 }
 
 const HEALTH_PATHS: Record<string, string> = {
@@ -30,10 +40,12 @@ const HEALTH_PATHS: Record<string, string> = {
 
 export class ProviderRegistry {
   private readonly runtimes = new Map<string, ProviderRuntimeState>();
+  private readonly inflight = new Map<string, Promise<ProviderHealth>>();
 
   constructor(
     providers: ProviderConfig[],
     private readonly logger: Logger,
+    private readonly onStatusChange?: (provider: Provider) => void,
   ) {
     for (const config of providers) {
       this.runtimes.set(config.id, this.createRuntime(config));
@@ -62,6 +74,8 @@ export class ProviderRegistry {
     return {
       config,
       status: "unknown",
+      consecutiveFailures: 0,
+      nextCheckAt: 0,
       ...(config.type === "opencode"
         ? {
             adapter: new OpenCodeAdapter({
@@ -118,21 +132,67 @@ export class ProviderRegistry {
     }));
   }
 
-  async check(id: string): Promise<ProviderHealth> {
+  check(id: string): Promise<ProviderHealth> {
     const runtime = this.runtimes.get(id);
-    if (!runtime) throw new Error(`Unknown provider ${id}`);
+    if (!runtime) {
+      return Promise.reject(new Error(`Unknown provider ${id}`));
+    }
+    const existing = this.inflight.get(id);
+    if (existing) return existing;
+
+    const run = this.runCheck(id, runtime).finally(() => {
+      this.inflight.delete(id);
+    });
+    this.inflight.set(id, run);
+    return run;
+  }
+
+  /**
+   * Check providers whose backoff window has elapsed. The background loop uses
+   * this so a down host is not retried on every tick.
+   */
+  async checkDue(): Promise<ProviderHealth[]> {
+    const now = Date.now();
+    const due = [...this.runtimes.entries()]
+      .filter(([, runtime]) => runtime.nextCheckAt <= now)
+      .map(([id]) => id);
+    return Promise.all(due.map((id) => this.check(id)));
+  }
+
+  async checkAll(): Promise<ProviderHealth[]> {
+    return Promise.all([...this.runtimes.keys()].map((id) => this.check(id)));
+  }
+
+  timeoutMs(id: string): number {
+    return this.runtimes.get(id)?.config.timeoutMs ?? 20_000;
+  }
+
+  private async runCheck(
+    id: string,
+    runtime: ProviderRuntimeState,
+  ): Promise<ProviderHealth> {
     const { config } = runtime;
     const started = Date.now();
+    const signal = AbortSignal.timeout(config.timeoutMs);
+
     if (runtime.adapter) {
-      const health = await runtime.adapter.health(AbortSignal.timeout(5_000));
-      const latencyMs = Date.now() - started;
-      return this.update(
-        runtime,
-        health.status,
-        latencyMs,
-        health.message,
-        health.version,
-      );
+      try {
+        const health = await runtime.adapter.health(signal);
+        return this.update(
+          runtime,
+          health.status,
+          Date.now() - started,
+          health.message,
+          health.version,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.debug("Provider health check failed", {
+          providerID: id,
+          error: message,
+        });
+        return this.update(runtime, "offline", Date.now() - started, message);
+      }
     }
 
     const url = buildProviderEndpoint(
@@ -143,7 +203,7 @@ export class ProviderRegistry {
     try {
       const response = await fetch(url, {
         headers: this.authHeaders(config),
-        signal: AbortSignal.timeout(5_000),
+        signal,
       });
       const latencyMs = Date.now() - started;
 
@@ -181,10 +241,6 @@ export class ProviderRegistry {
     }
   }
 
-  async checkAll(): Promise<ProviderHealth[]> {
-    return Promise.all([...this.runtimes.keys()].map((id) => this.check(id)));
-  }
-
   private update(
     runtime: ProviderRuntimeState,
     status: ProviderStatus,
@@ -192,10 +248,30 @@ export class ProviderRegistry {
     message?: string,
     version?: string,
   ): ProviderHealth {
+    const now = Date.now();
+    const previous = runtime.status;
     runtime.status = status;
-    runtime.lastCheckedAt = Date.now();
+    runtime.lastCheckedAt = now;
     runtime.lastError = status === "online" ? undefined : message;
     if (version) runtime.version = version;
+    if (status === "online") {
+      runtime.consecutiveFailures = 0;
+      runtime.nextCheckAt = 0;
+    } else {
+      runtime.consecutiveFailures += 1;
+      runtime.nextCheckAt =
+        now + healthBackoffMs(runtime.consecutiveFailures);
+    }
+    if (previous !== status) {
+      try {
+        this.onStatusChange?.(this.toProvider(runtime));
+      } catch (error) {
+        this.logger.warn("Provider status listener failed", {
+          providerID: runtime.config.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     return { status, latencyMs, message, version };
   }
 
