@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. The chat interaction contract is documented in [`interaction-contract.md`](interaction-contract.md); message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, and OpenCode session forks are implemented. Open WebUI attachment sending, message editing, and the session-family tree remain later slices.
+Status: in progress. Phase 0 foundation, the hub core, and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. `v0.1.11` shipped the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix for refreshed transcripts. The contract is [`interaction-contract.md`](interaction-contract.md); the assistant-ui decision is [`package-evaluation.md`](package-evaluation.md). Remaining Milestone 1 items: Open WebUI attachment sending, message editing, and the session-family tree.
 
 Goal: prove the hub with one provider and one client.
 
@@ -120,7 +120,7 @@ Acceptance:
 
 ## Milestone 3: Open WebUI
 
-Status: in progress. The adapter lists chats, resolves the current branch, maps messages, creates chats, sends prompts, waits for the asynchronous completion task, and lists models. Live validation is against Open WebUI 0.11.1. Provider-native mark-read, token-level streaming, and full failure discovery for old chats remain.
+Status: in progress. The adapter lists chats, resolves the current branch, maps messages, creates chats, sends prompts, waits for the asynchronous completion task, lists models, switches branches in chat, and retries an answer as a sibling. Attachment sending is not implemented. Live validation is against Open WebUI 0.11.1. Provider-native mark-read, token-level streaming, and full failure discovery for old chats remain.
 
 Goal: add the second provider and validate the normalized chat model.
 
@@ -218,7 +218,7 @@ Acceptance:
 
 ## Milestone 7: Glasses client
 
-Status: in progress. The Even G2 client scaffold, phone pairing (QR, link, code, token), inbox, attention detail, chat, reply options, numbered-choice flow, question reply, multiple-question batches, question discovery, and phone keyboard fallback are implemented. Voice capture/STT and real-hardware acceptance remain; the checklist and preflight script are ready.
+Status: in progress. The Even G2 client scaffold, phone pairing (QR, link, code, token), inbox, attention detail, chat, reply options, numbered-choice flow, question reply, multiple-question batches, question discovery, phone keyboard fallback, glyph legend, and classified failure/reconnect states are implemented. Voice capture/STT and real-hardware acceptance remain; the checklist and preflight script are ready.
 
 Goal: a glanceable inbox and reply surface on Even G2.
 
