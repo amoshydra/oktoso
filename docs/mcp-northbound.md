@@ -1,9 +1,10 @@
 # MCP northbound — OpenCode controls Oktoso
 
-Status: Phase 2a verified. The `oktoso mcp` stdio bridge is implemented and
-tested against the hub API, including a live MCP SDK client run and a real
-OpenCode controller session against the fake hub. A hub-hosted `/mcp` endpoint
-with scoped tokens, per-tool audit, and allowlists is the next step.
+Status: Phase 2a and 2b verified. The `oktoso mcp` stdio bridge and the
+hub-hosted `/mcp` Streamable HTTP endpoint are implemented and tested against
+the fake hub with the official MCP SDK and real OpenCode clients. Hosted
+tokens carry write, provider, tool, rate, and timeout scopes, and tool calls
+are audited. OAuth and event subscription remain follow-ups.
 
 ## Goal
 
@@ -103,6 +104,93 @@ Check the connection:
 opencode mcp list
 ```
 
+## Hosted `/mcp`
+
+The hub can host the same tool surface over MCP Streamable HTTP. Enable it in
+the hub config and add at least one client token:
+
+```jsonc
+{
+  "mcp": {
+    "enabled": true,
+    "tokens": [
+      {
+        "id": "controller",
+        "token": "${MCP_TOKEN}",
+        "allowWrite": true,
+        "providers": ["desktop-opencode", "openwebui"],
+        "tools": [
+          "providers_list",
+          "sessions_list",
+          "sessions_messages",
+          "attention_list",
+          "sessions_send",
+          "attention_act"
+        ],
+        "rateLimit": { "windowMs": 60000, "max": 120 },
+        "timeoutMs": 60000
+      }
+    ],
+    "audit": { "enabled": true }
+  }
+}
+```
+
+The endpoint is `http://<host>:<port>/mcp`. Every request needs
+`Authorization: Bearer <token>`. Sessions are stateful: the initialize
+response carries `Mcp-Session-Id`, and later requests must repeat it. A session
+is bound to the token that created it.
+
+Token rules:
+
+- `allowWrite` defaults to false. Write tools are hidden without it.
+- `providers` limits both listings and refs. Omitting it allows every provider.
+- `tools` limits the registered tool names. Omitting it allows every tool in
+  the token's write scope.
+- `rateLimit` is a per-client fixed window; `timeoutMs` bounds one tool call.
+- Tokens are compared by SHA-256 digest in constant time and are never logged.
+
+The server rejects browser origins that are neither same-origin nor listed in
+`cors`, caps request bodies at 1 MiB, and allows five concurrent sessions per
+client. Idle sessions expire after `sessionTtlMs` (default 30 minutes), and at
+most `maxSessions` are kept (default 50).
+
+### Audit
+
+Hosted tool calls append JSONL to `mcp.audit.file`, default
+`<dataDir>/mcp-audit.jsonl`:
+
+```json
+{"time":"2026-11-03T02:35:50.937Z","clientId":"controller","tool":"sessions_send","ok":true,"durationMs":4,"target":"desktop-opencode:ses_auth"}
+```
+
+Failed calls include the caller's OpenCode session ID when present and a short
+error. The log records tool names and targets, never prompts, message text, or
+tokens. Set `audit.enabled` to false to turn the file off.
+
+### OpenCode remote config
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "oktoso-hosted": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8787/mcp",
+        "oauth": false,
+        "headers": {
+          "Authorization": "Bearer {env:MCP_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+OpenCode substitutes `{env:MCP_TOKEN}` from the environment of its background
+service, not from the shell that runs `opencode mcp list`. Restart the service
+with the variable present, or use a literal token in a scratch config.
+
 ## Tools
 
 Read-only:
@@ -163,8 +251,10 @@ Report what you changed and what you escalated.
 - **Idempotency.** `sessions_send` accepts an idempotency key and passes it to
   the hub's existing idempotency layer.
 - **No secrets.** The bridge never sends provider credentials to the agent.
-- **Audit.** Hub request logs record the API calls. Per-tool audit with the
-  calling agent identity is part of the `/mcp` follow-up.
+- **Audit.** Hub request logs record the REST calls. Hosted `/mcp` also appends
+  one JSONL entry per tool call with the client ID, tool, target, caller session
+  ID, status, duration, and a short error. Prompts and message text are not
+  logged.
 
 ## Acceptance
 
@@ -178,6 +268,10 @@ The first slice is done when:
 6. `sessions_send` to the caller's own session is rejected.
 7. `attention_act` refuses an approval without `confirm: true`.
 8. Read-only mode exposes no write tools.
+
+The live fixture exercises the provider-form path for items 3–5. The
+parsed-message question path is covered by the existing unit tests but needs a
+fixture with a real question message for a live run.
 
 ## Verification
 
@@ -200,10 +294,25 @@ OpenCode v2.1.4 with a project-scoped `mcp.servers` entry reports
 Mode and returned `providers=3` and `sessions=6`. The operator's global config
 was not modified; the test used a scratch project config and its own hub token.
 
-The automated suite also covers the tool schemas, read-only gating, attention
-actions, idempotency forwarding, and self-control rejection. `pnpm typecheck`,
-`pnpm test`, `pnpm build:hub`, `pnpm openapi:check`, and `pnpm brand:check` pass
-on the rebased branch.
+Hosted `/mcp` was verified with the official `StreamableHTTPClientTransport`
+and a real OpenCode v2.1.4 remote client:
+
+- initialize returns `Mcp-Session-Id`; missing auth returns 401, a disallowed
+  origin 403, an unknown session 404, and an exceeded rate limit 429;
+- the read token exposes seven tools; the write token exposes twelve;
+- a provider allowlist filtered the three fake providers to two and hid
+  `rpi-hermes`;
+- `sessions_send`, self-control rejection, the approval confirmation gate, and
+  a confirmed attention action all passed;
+- the audit file wrote one JSONL entry per call with client ID, tool, target,
+  caller session ID, status, and duration;
+- OpenCode called `tools["oktoso-hosted"].providers_list()` and returned
+  `providers=3`.
+
+The automated suite covers the hosted config, provider/tool policy, rate limit,
+audit format, session lifecycle, auth/origin rejection, and tool calls in
+addition to the stdio tests. `pnpm typecheck`, `pnpm test`,
+`pnpm build:hub`, `pnpm openapi:check`, and `pnpm brand:check` pass.
 
 Not covered live: `questions_get` returned null for the fake form fixture,
 because question prompts are parsed from the latest session message and that
@@ -212,10 +321,11 @@ to exercise the parse-and-answer path end to end.
 
 ## Follow-ups
 
-- Hub-hosted `/mcp` over Streamable HTTP.
-- Scoped MCP tokens, per-tool and per-provider allowlists.
-- Per-tool audit with the OpenCode session ID.
-- Rate limits and timeouts.
-- Event subscription instead of polling `attention_list`.
+- OAuth 2.1 with dynamic client registration and token rotation, so remote
+  clients do not need a static bearer header.
+- Event subscription and MCP resources instead of polling `attention_list`.
+- Persistent or distributed session state and rate limiting for multi-hub
+  deployments.
+- Audit rotation and retention, plus a token management CLI.
+- A fixture with a real question message to exercise `questions_get` live.
 - A controller agent template in the repository.
-- A temporary OpenCode project config for the live client acceptance run.

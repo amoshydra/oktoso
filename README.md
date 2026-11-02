@@ -173,7 +173,20 @@ oktoso mcp --allow-write
 
 The bridge speaks MCP over stdio, reads the hub config, and calls the hub REST API with the config token. Read-only is the default. Write tools cover sending, creating, interrupting, marking read, and acting on attention. The server refuses writes to the OpenCode session that invoked it and requires `confirm: true` before approving an attention item.
 
-See [`docs/mcp-northbound.md`](docs/mcp-northbound.md) for the OpenCode config, tool list, controller prompt, and safety rules.
+The hub can also host the same tools at `/mcp` over Streamable HTTP. Enable `mcp` in the hub config and add a bearer token with optional write, provider, and tool scopes:
+
+```jsonc
+{
+  "mcp": {
+    "enabled": true,
+    "tokens": [
+      { "id": "controller", "token": "${MCP_TOKEN}", "allowWrite": true }
+    ]
+  }
+}
+```
+
+Hosted calls are rate-limited, time-limited, session-bound to their token, and appended to `<dataDir>/mcp-audit.jsonl`. See [`docs/mcp-northbound.md`](docs/mcp-northbound.md) for the full config, OpenCode remote setup, tool list, controller prompt, and safety rules.
 
 ## Terminal UI
 

@@ -2,7 +2,7 @@ import { HubClient } from "@amoshydra/oktoso-client";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadPairingConfig } from "../config/load";
 import { VERSION } from "../version";
-import { createOktosoMcpServer } from "./mcp";
+import { createOktosoMcpServer } from "../mcp/server";
 import { pairingRequestUrl } from "./urls";
 
 export interface McpCommandOptions {

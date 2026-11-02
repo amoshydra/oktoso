@@ -40,5 +40,12 @@
       },
       "enabled": true
     }
-  ]
+  ],
+  "mcp": {
+    "enabled": false,
+    "tokens": [],
+    "audit": {
+      "enabled": true
+    }
+  }
 }

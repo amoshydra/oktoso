@@ -14,7 +14,7 @@ import type {
 import {
   createOktosoMcpServer,
   type McpHubApi,
-} from "./mcp";
+} from "./server";
 
 const provider: Provider = {
   id: "opencode",
