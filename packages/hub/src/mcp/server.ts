@@ -1,11 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+  type CallToolResult,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type {
   AttentionActionInput,
   AttentionPage,
   AttentionType,
   CreateSessionInput,
+  HubEvent,
   MessagePage,
   MessagesQuery,
   Provider,
@@ -63,6 +68,10 @@ export interface OktosoMcpOptions {
   /** Per tool-call timeout. Defaults to no timeout. */
   timeoutMs?: number;
   onCall?: (record: McpCallRecord) => void;
+  /** Host event stream used to notify resource subscribers. */
+  events?: {
+    subscribe(listener: (event: HubEvent) => void): () => void;
+  };
 }
 
 interface ToolExtra {
@@ -99,6 +108,9 @@ export const MCP_TOOL_NAMES = [
   ...MCP_READ_TOOL_NAMES,
   ...MCP_WRITE_TOOL_NAMES,
 ] as const;
+
+export const MCP_ATTENTION_RESOURCE = "oktoso://attention";
+export const MCP_SESSIONS_RESOURCE = "oktoso://sessions";
 
 const INSTRUCTIONS = `Oktoso is a control plane for sessions across AI providers.
 
@@ -175,16 +187,109 @@ async function withTimeout<T>(
 
 export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
   const { api } = options;
-  const server = new McpServer(
-    { name: "oktoso", version: options.version },
-    { instructions: INSTRUCTIONS },
-  );
   const allowed = new Set(options.tools ?? []);
   const restricted = options.tools !== undefined;
+  const canReadAttention = !restricted || allowed.has("attention_list");
+  const canReadSessions = !restricted || allowed.has("sessions_list");
+  const server = new McpServer(
+    { name: "oktoso", version: options.version },
+    {
+      instructions: INSTRUCTIONS,
+      capabilities: { resources: { subscribe: true } },
+    },
+  );
+  const subscribed = new Set<string>();
 
   function enabled(tool: string): boolean {
     if (WRITE_TOOLS.has(tool) && options.allowWrite !== true) return false;
     return !restricted || allowed.has(tool);
+  }
+
+  if (canReadAttention) {
+    server.registerResource(
+      "attention",
+      MCP_ATTENTION_RESOURCE,
+      {
+        title: "Attention inbox",
+        description:
+          "Permissions, approvals, questions, unread sessions, and errors that need action.",
+        mimeType: "application/json",
+      },
+      async (uri) => {
+        const page = await api.attention();
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify(page),
+            },
+          ],
+        };
+      },
+    );
+  }
+
+  if (canReadSessions) {
+    server.registerResource(
+      "sessions",
+      MCP_SESSIONS_RESOURCE,
+      {
+        title: "Sessions",
+        description: "The newest 50 sessions across providers.",
+        mimeType: "application/json",
+      },
+      async (uri) => {
+        const page = await api.sessions({ limit: 50 });
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify(page),
+            },
+          ],
+        };
+      },
+    );
+  }
+
+  server.server.setRequestHandler(
+    SubscribeRequestSchema,
+    async ({ params }) => {
+      if (
+        (params.uri === MCP_ATTENTION_RESOURCE && canReadAttention) ||
+        (params.uri === MCP_SESSIONS_RESOURCE && canReadSessions)
+      ) {
+        subscribed.add(params.uri);
+        return {};
+      }
+      throw new Error(`Resource is not available: ${params.uri}`);
+    },
+  );
+  server.server.setRequestHandler(
+    UnsubscribeRequestSchema,
+    async ({ params }) => {
+      subscribed.delete(params.uri);
+      return {};
+    },
+  );
+
+  if (options.events) {
+    const unsubscribe = options.events.subscribe((event) => {
+      const uri = event.type.startsWith("attention.")
+        ? MCP_ATTENTION_RESOURCE
+        : event.type.startsWith("session.")
+          ? MCP_SESSIONS_RESOURCE
+          : undefined;
+      if (!uri || !subscribed.has(uri)) return;
+      void server.server.sendResourceUpdated({ uri }).catch(() => undefined);
+    });
+    const previous = server.server.onclose;
+    server.server.onclose = () => {
+      unsubscribe();
+      previous?.();
+    };
   }
 
   async function respond(

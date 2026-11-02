@@ -3,8 +3,9 @@
 Status: Phase 2a and 2b verified. The `oktoso mcp` stdio bridge and the
 hub-hosted `/mcp` Streamable HTTP endpoint are implemented and tested against
 the fake hub with the official MCP SDK and real OpenCode clients. Hosted
-tokens carry write, provider, tool, rate, and timeout scopes, and tool calls
-are audited. OAuth and event subscription remain follow-ups.
+tokens carry write, provider, tool, rate, and timeout scopes, tool calls are
+audited, and attention/session resources support subscriptions. OAuth remains
+a follow-up.
 
 ## Goal
 
@@ -168,6 +169,23 @@ Failed calls include the caller's OpenCode session ID when present and a short
 error. The log records tool names and targets, never prompts, message text, or
 tokens. Set `audit.enabled` to false to turn the file off.
 
+### Resources
+
+Hosted sessions expose two read-only JSON resources:
+
+| URI | Contents |
+|---|---|
+| `oktoso://attention` | The same filtered attention page as `attention_list` |
+| `oktoso://sessions` | The newest 50 sessions across allowed providers |
+
+A client can call `resources/subscribe` on either URI. The hub sends
+`notifications/resources/updated` when an `attention.*` or `session.*` event
+arrives, so clients do not have to poll. Resources follow the token's provider
+allowlist and are hidden when the token's tool allowlist excludes
+`attention_list` or `sessions_list`. OpenCode reads them with its built-in
+`list_mcp_resources` and `read_mcp_resource` tools; subscription handling
+depends on the client.
+
 ### OpenCode remote config
 
 ```jsonc
@@ -306,6 +324,9 @@ and a real OpenCode v2.1.4 remote client:
   a confirmed attention action all passed;
 - the audit file wrote one JSONL entry per call with client ID, tool, target,
   caller session ID, status, and duration;
+- `oktoso://attention` and `oktoso://sessions` listed and read over hosted HTTP,
+  and an `attention.updated` event produced a resource-updated notification for
+  a subscriber;
 - OpenCode called `tools["oktoso-hosted"].providers_list()` and returned
   `providers=3`.
 
@@ -323,7 +344,7 @@ to exercise the parse-and-answer path end to end.
 
 - OAuth 2.1 with dynamic client registration and token rotation, so remote
   clients do not need a static bearer header.
-- Event subscription and MCP resources instead of polling `attention_list`.
+- Resource pagination and richer event payloads for large inboxes.
 - Persistent or distributed session state and rate limiting for multi-hub
   deployments.
 - Audit rotation and retention, plus a token management CLI.
