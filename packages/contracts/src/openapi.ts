@@ -1,6 +1,7 @@
 import {
   OpenAPIRegistry,
   OpenApiGeneratorV31,
+  extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
 import {
@@ -51,7 +52,10 @@ import {
   zSessionPage,
   zSessionSelectionInput,
   zAttentionSummary,
+  zTranscriptionResult,
 } from "./index";
+
+extendZodWithOpenApi(z);
 
 const registry = new OpenAPIRegistry();
 
@@ -104,6 +108,10 @@ const DraftInputSchema = registry.register("DraftInput", zDraftInput);
 const DraftResponseSchema = registry.register("DraftResponse", zDraftResponse);
 const AssistantViewSchema = registry.register("AssistantView", zAssistantView);
 const AssistantInputSchema = registry.register("AssistantInput", zAssistantInput);
+const TranscriptionResultSchema = registry.register(
+  "TranscriptionResult",
+  zTranscriptionResult,
+);
 const AssistantModelsSchema = registry.register(
   "AssistantModels",
   z.object({
@@ -559,6 +567,42 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "post",
+  path: "/api/v1/transcribe",
+  tags: ["transcription"],
+  summary: "Transcribe recorded audio",
+  description:
+    "Accepts multipart audio and forwards it to the configured OpenAI-compatible transcription endpoint. Audio is not persisted by the hub.",
+  request: {
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: z.object({
+            audio: z
+              .string()
+              .openapi({ format: "binary", description: "Recorded audio file" }),
+            language: z.string().max(16).optional(),
+            prompt: z.string().max(2_000).optional(),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Transcription result",
+      content: json(z.object({ data: TranscriptionResultSchema })),
+    },
+    400: errorResponse("Invalid or unsupported audio"),
+    409: errorResponse("Transcription is disabled or unconfigured"),
+    413: errorResponse("Audio is too large"),
+    502: errorResponse("Transcription endpoint failed"),
+    504: errorResponse("Transcription timed out"),
+  },
+});
+
+registry.registerPath({
   method: "get",
   path: "/api/v1/sessions/{ref}/reply-options",
   tags: ["replies"],
@@ -712,6 +756,7 @@ export function buildOpenApiDocument() {
       { name: "attention" },
       { name: "replies" },
       { name: "settings" },
+      { name: "transcription" },
       { name: "events" },
       { name: "search" },
       { name: "diagnostics" },

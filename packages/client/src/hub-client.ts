@@ -30,6 +30,7 @@ import type {
   SessionListQuery,
   SessionPage,
   SessionSelectionInput,
+  TranscriptionResult,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -310,6 +311,66 @@ export class HubClient {
     return response.data;
   }
 
+  async transcribe(
+    audio: Blob,
+    options: {
+      filename?: string;
+      language?: string;
+      prompt?: string;
+      signal?: AbortSignal;
+    } = {},
+  ): Promise<TranscriptionResult> {
+    const form = new FormData();
+    form.set(
+      "audio",
+      audio,
+      options.filename ?? `audio.${audioExtension(audio.type)}`,
+    );
+    if (options.language) form.set("language", options.language);
+    if (options.prompt) form.set("prompt", options.prompt);
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/api/v1/transcribe`, {
+        method: "POST",
+        headers,
+        credentials: this.credentials,
+        body: form,
+        signal: options.signal,
+      });
+    } catch (error) {
+      throw new HubError("network_error", "Unable to reach the hub", {
+        retryable: true,
+        cause: error,
+      });
+    }
+
+    if (!response.ok) {
+      let payload: ErrorResponse | undefined;
+      try {
+        payload = (await response.json()) as ErrorResponse;
+      } catch {
+        payload = undefined;
+      }
+      throw new HubError(
+        payload?.error.code ?? "http_error",
+        payload?.error.message ?? `Hub returned HTTP ${response.status}`,
+        {
+          status: response.status,
+          retryable: payload?.error.retryable ?? response.status >= 500,
+          requestId: payload?.error.requestId,
+          details: payload?.error.details,
+        },
+      );
+    }
+
+    const payload = (await response.json()) as { data: TranscriptionResult };
+    return payload.data;
+  }
+
   async replyOptions(ref: string, mode: ReplyMode = "reply"): Promise<ReplyOptions> {
     return this.request<ReplyOptions>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/reply-options?mode=${mode}`,
@@ -410,5 +471,15 @@ export class HubClient {
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
+}
+
+function audioExtension(type: string): string {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("ogg")) return "ogg";
+  if (normalized.includes("wav")) return "wav";
+  if (normalized.includes("m4a") || normalized.includes("mp4")) return "m4a";
+  if (normalized.includes("mpeg") || normalized.includes("mp3")) return "mp3";
+  if (normalized.includes("flac")) return "flac";
+  return "webm";
 }
 

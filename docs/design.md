@@ -831,3 +831,4 @@ Estimate: a 2k to 4k line TypeScript hub becomes a 3k to 6k line Rust hub. The w
 | ADR-009 | No local ACP or agent processes | The hub aggregates HTTP APIs; agents stay on their hosts |
 | ADR-010 | Web client is the reference client | Proves the API is medium-agnostic before glasses/VR work |
 | ADR-011 | Owner token plus stateless paired sessions | Five-minute pairing links avoid copying the owner token; HMAC sessions add no server state; rotating the owner token revokes all |
+| ADR-012 | Chat interactions are hub contracts, not client features | Branching, attachments, dictation, and action capabilities need provider-neutral contracts; see [`interaction-contract.md`](interaction-contract.md) |

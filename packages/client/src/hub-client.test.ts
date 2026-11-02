@@ -132,6 +132,74 @@ describe("HubClient.attachment", () => {
   });
 });
 
+describe("HubClient.transcribe", () => {
+  it("posts multipart audio and returns the transcript", async () => {
+    let captured: { url: string; init: RequestInit | undefined } | undefined;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      captured = { url: String(input), init };
+      return new Response(
+        JSON.stringify({
+          data: { text: "hello from the hub", model: "whisper-1" },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+    const hub = new HubClient({
+      baseUrl: "http://hub",
+      token: "owner-token",
+      fetchImpl,
+    });
+
+    const result = await hub.transcribe(
+      new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" }),
+      { language: "en" },
+    );
+
+    expect(result).toEqual({
+      text: "hello from the hub",
+      model: "whisper-1",
+    });
+    expect(captured?.url).toBe("http://hub/api/v1/transcribe");
+    const headers = new Headers(captured?.init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer owner-token");
+    expect(headers.get("accept")).toBe("application/json");
+    expect(captured?.init?.credentials).toBe("same-origin");
+    const form = captured?.init?.body as FormData;
+    expect(form.get("language")).toBe("en");
+    const file = form.get("audio") as File;
+    expect(file.name).toBe("audio.webm");
+    expect(file.type).toBe("audio/webm");
+    expect(file.size).toBe(3);
+  });
+
+  it("surfaces transcription capability errors", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "transcription_disabled",
+            message: "Voice transcription is disabled in the hub settings",
+            retryable: false,
+          },
+        }),
+        {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        },
+      )) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "", fetchImpl });
+    await expect(
+      hub.transcribe(new Blob([new Uint8Array([1])], { type: "audio/webm" })),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "transcription_disabled",
+    });
+  });
+});
+
 describe("HubClient.setSessionSelection", () => {
   it("posts the model and agent and returns the updated session", async () => {
     let captured: { url: string; init: RequestInit | undefined } | undefined;

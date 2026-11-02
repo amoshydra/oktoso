@@ -14,6 +14,7 @@ import type { AttentionService } from "./services/attention-service";
 import type { DraftService } from "./services/draft-service";
 import type { AssistantSettingsService } from "./services/assistant-settings";
 import type { ReplyService } from "./services/reply-service";
+import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -35,6 +36,7 @@ import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerQuestionRoutes } from "./http/routes/questions";
 import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerSettingsRoutes } from "./http/routes/settings";
+import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
@@ -50,6 +52,7 @@ export interface AppDependencies {
   drafts: DraftService;
   settings: AssistantSettingsService;
   replies: ReplyService;
+  transcription: TranscriptionService;
   questions: QuestionService;
   logger: Logger;
   startedAt?: number;
@@ -105,6 +108,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);
   registerSettingsRoutes(app, deps.settings);
+  registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);
   registerEventRoutes(app, deps.eventBus);
   registerDiagnosticsRoute(app, {

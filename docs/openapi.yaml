@@ -16,6 +16,7 @@ tags:
   - name: attention
   - name: replies
   - name: settings
+  - name: transcription
   - name: events
   - name: search
   - name: diagnostics
@@ -944,6 +945,16 @@ components:
               type: integer
               minimum: 1000
               maximum: 120000
+    TranscriptionResult:
+      type: object
+      properties:
+        text:
+          type: string
+        model:
+          type: string
+      required:
+        - text
+        - model
     AssistantModels:
       type: object
       properties:
@@ -2634,6 +2645,73 @@ paths:
                 $ref: "#/components/schemas/AssistantModels"
         "400":
           description: Endpoint unavailable or invalid target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/transcribe:
+    post:
+      tags:
+        - transcription
+      summary: Transcribe recorded audio
+      description: Accepts multipart audio and forwards it to the configured OpenAI-compatible transcription endpoint. Audio is not persisted by the hub.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: Recorded audio file
+                language:
+                  type: string
+                  maxLength: 16
+                prompt:
+                  type: string
+                  maxLength: 2000
+              required:
+                - audio
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TranscriptionResult"
+                required:
+                  - data
+        "400":
+          description: Invalid or unsupported audio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Transcription is disabled or unconfigured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Audio is too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Transcription endpoint failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "504":
+          description: Transcription timed out
           content:
             application/json:
               schema:

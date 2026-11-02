@@ -67,6 +67,13 @@ export const zAssistantInput = z.object({
   transcription: zAssistantTranscriptionInput.optional(),
 });
 
+export const zTranscriptionResult = z.object({
+  text: z.string(),
+  model: z.string(),
+});
+
+export type TranscriptionResult = z.infer<typeof zTranscriptionResult>;
+
 export const zReplyOptionSource = z.enum(["canned", "model", "agent"]);
 export const zReplyOptionAction = z.enum([
   "send",

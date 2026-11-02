@@ -274,10 +274,11 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Tool calls render as compact, collapsed rows with a humanized name, status, and hidden input/output.
 - Reasoning renders as a compact collapsed row with a character count; its Markdown is sanitized through the same renderer as message prose.
 - Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block. Opening it exposes the individual steps. An opened block stays open while new activity appends to it.
+- A completed assistant message with text exposes one quiet `Copy` action after the message. It copies the raw text parts, including Markdown fences, and never includes reasoning or tool payloads. Success reads `Copied` for two seconds; failure reads `Copy failed`. Both are announced to screen readers.
 - Permission and approval requests render inline at the end of the transcript as blocking cards with actions. Question requests render inline as form cards. The card shows the provider form description when it exists, then the fields; if the form has no description, the chat uses the latest assistant question sentence as the detail. Resolving a request removes it and reloads the session attention.
 - Error attention renders as an inline red-tinted card with the provider message and its available actions. The message error block remains as the fallback when there is no attention item.
 - Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
-- Code blocks use a monospace font with horizontal scrolling; syntax highlighting and copy actions are follow-ups.
+- Code blocks use a monospace font with horizontal scrolling; syntax highlighting and per-code-block copy remain follow-ups. Message-level Copy includes the fences.
 
 ### Composer
 
@@ -288,7 +289,9 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - The selectors are disabled while the agent is running, and a failed change restores the previous values with an inline error.
 - On mobile, the picker sits in the composer bar beside Send: the field labels are hidden, the selects stay at 12px, and Send becomes a 32px icon button. Text entry fields remain 16px to avoid browser zoom.
 - Slash commands later.
-- Voice button on mobile and glasses. Desktop can use the browser microphone later.
+- Dictation is a quiet composer action when Voice transcription is enabled in the hub and the browser supports microphone capture in a secure context. The browser records audio, posts it to the hub, and the hub forwards it to the configured OpenAI-compatible STT endpoint. The transcript is appended to the draft and is never sent automatically.
+- While recording, the composer shows a status row with a pulsing dot and an elapsed timer, changes the dictation action to `Stop`, and disables Send. Stopping shows `Transcribing…` until the text arrives. Errors appear inline with `Dismiss`.
+- Dictation needs HTTPS or localhost. The hub does not terminate TLS; an operator serving the web client over plain HTTP on a LAN cannot use microphone capture. The Settings panel states this and notes that the hub does not store audio and never sends the endpoint key to the browser.
 - Wearable clients can show short reply options from deterministic steering, a configured 4B model, or extracted agent choices.
 - Drafts persist per session on the hub and follow the session across clients and reloads.
 - Drafts autosave shortly after typing and clear after a successful send.
@@ -377,6 +380,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Notifications: attention badge, desktop notifications, sound.
 - Shortcuts: command palette, new session, search, send.
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
+- Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.
 - About: hub version, provider versions, build info.
 
 ## 12. States

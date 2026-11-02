@@ -242,7 +242,7 @@ The production chat now follows the design-v1 shell instead of the Phase 2 page-
 
 Verification: dark and light themes at 1440, 1024, 390, and 320px. No horizontal page overflow; code blocks and tables scroll inside their containers. The browser console is clean. Lighthouse accessibility is 100. Keyboard Escape and focus return were checked for the details overlay.
 
-Remaining: the desktop session sidebar from the prototype, retry actions for provider errors, copy and syntax highlighting for code blocks, and a final message-measure pass once the sidebar narrows the chat column. The chat still has no model, agent, or reasoning-effort selector; those values are set at session creation and can be changed in the provider UI. Open WebUI branch switching also stays in the provider UI because the normalized transcript carries only the active branch. Attachment upload is not implemented.
+Remaining: the desktop session sidebar from the prototype, retry actions for provider errors, per-code-block copy and syntax highlighting, and a final message-measure pass once the sidebar narrows the chat column. The chat still has no model, agent, or reasoning-effort selector; those values are set at session creation and can be changed in the provider UI. Open WebUI branch switching also stays in the provider UI because the normalized transcript carries only the active branch. Attachment upload is not implemented.
 
 ## Session selection picker (2026-11-02)
 
@@ -289,6 +289,70 @@ Private provider images and files now render through the hub instead of the brow
 
 Files changed: `packages/providers/src/http/resource.ts`, `packages/providers/src/types.ts`, both provider adapters, `packages/hub/src/http/routes/attachments.ts`, `packages/hub/src/app.ts`, `packages/client/src/hub-client.ts`, `apps/web/src/app/markdown.ts`, `apps/web/src/app/App.tsx`, `packages/testing/src/fake-providers.ts`, and the new provider/hub/web tests.
 
+## Chat interaction additions (design-v1.2)
+
+The copy action and hub-backed dictation are additive. They reuse the existing
+type scale, spacing, radii, surfaces, borders, and focus grammar.
+
+### Copy
+
+- One quiet action after a completed assistant message with text. It is 11px,
+  `--faint` on the page background, with a transparent border that becomes a
+  `--surface-2` hover. The control radius is the existing 8px.
+- The action is right-aligned under the message. It never appears for
+  activity-only messages, while streaming, or for user messages.
+- Success changes the label to `Copied` in `--success` for two seconds and
+  announces "Copied to clipboard" through a `role="status"` node. Failure
+  reads `Copy failed` in place. The label is not color-only.
+- The action copies the raw text parts, including Markdown fences. Reasoning
+  and tool payloads are excluded. A temporary textarea fallback covers
+  non-secure origins where the async Clipboard API is unavailable.
+- Mobile target: 44px. Desktop target: 28px; the control is still a full text
+  button, not an icon-only affordance.
+
+### Dictation
+
+- One quiet `Dictate` action beside Send when the hub reports Voice
+  transcription enabled, the page is a secure context, and the browser exposes
+  `getUserMedia` and `MediaRecorder`. Otherwise the action is hidden; the
+  Settings panel explains the requirement.
+- While recording, a status row above the composer bar shows a 6px pulsing dot,
+  `Recording`, and an elapsed `m:ss` timer. The action changes to `Stop` in
+  `--accent`, and Send is disabled. The textarea remains editable.
+- Stop changes the status to `Transcribing…`; the transcript is appended to the
+  current draft with a separating space. Nothing is sent automatically.
+- Errors use the existing inline alert above the composer with a `Dismiss`
+  action. Microphone permission, missing device, device-in-use, network,
+  disabled, unconfigured, and upstream errors have distinct human copy.
+- The status row stays visible at 760px and below, where the composer hint is
+  hidden. The action and Copy use 44px targets on mobile; the composer textarea
+  remains 16px to avoid browser zoom.
+- Privacy: audio goes from the browser to the hub and then to the configured
+  OpenAI-compatible STT endpoint. The hub does not persist the audio and the
+  endpoint key never reaches the browser.
+- The `Permissions-Policy` response now allows `microphone=(self)` for the web
+  client. The browser still asks the user for permission; third-party frames
+  remain blocked.
+- Limits: 25 MiB audio, 120-second client recording cap, WebM/Opus, Ogg/Opus,
+  WAV, MP4/M4A, MPEG, and FLAC.
+
+### Verification
+
+- Copy, copied feedback, failure copy, and the screen-reader announcement were
+  checked in the live chat.
+- Dictation was exercised end to end with a synthetic microphone stream and a
+  fake OpenAI-compatible STT endpoint: start, recording timer, Stop,
+  transcribing, draft append, send gating, and Dismiss.
+- Permission denial and an unreachable STT endpoint produced the expected
+  inline errors.
+- The Dictate action is absent when transcription is disabled.
+- Dark and light themes were reviewed at 1440, 1024, 390, and 320px. No
+  horizontal overflow. Copy and Dictate are 44px on mobile.
+- The browser console has no runtime errors. Two advisory issues remain: the
+  production Markdown renderer's lazy images without dimensions, and form
+  fields without `id`/`name` (the composer textarea was given both; provider
+  selects remain the existing pattern).
+
 ## Files changed
 
 - `apps/web/src/app/App.tsx`: chat shell, desktop session sidebar, topbar context, inline attention, details panel, date separators, error copy, focus handling, provider URL resolution, image attachments, stable activity keys, attachment proxy client, composer selection picker.
@@ -319,3 +383,26 @@ Files changed: `packages/providers/src/http/resource.ts`, `packages/providers/sr
 - `docs/visual-audit.md`: this audit and the before/after measurements.
 - `docs/brand/`, `apps/web/public/`, `docs/screenshots/`: brand mark, favicons, app icons, banner, and README imagery.
 - `README.md`: link to the audit and the brand banner/screenshot.
+
+### design-v1.2 interaction slice
+
+- `apps/web/src/app/chat-actions.ts`: message copy text, transcript append, timer formatting, and audio MIME selection.
+- `apps/web/src/app/chat-actions.test.ts`: copy, append, and timer coverage.
+- `apps/web/src/app/App.tsx`: copy action, hub-backed dictation, microphone error copy, recording timer, send gating, and settings copy.
+- `apps/web/src/styles.css`: copy action, dictation status, voice action, screen-reader utility, and mobile targets.
+- `packages/contracts/src/settings.ts`: transcription result schema.
+- `packages/contracts/src/openapi.ts`: multipart transcription route and result schema.
+- `packages/client/src/hub-client.ts`: multipart transcription client.
+- `packages/client/src/hub-client.test.ts`: transcription request and capability-error coverage.
+- `packages/hub/src/services/transcription-service.ts`: configured upstream transcription, limits, logging, and errors.
+- `packages/hub/src/http/routes/transcribe.ts`: multipart audio validation and route.
+- `packages/hub/src/http/limits.ts`: JSON and audio body limits and accepted audio types.
+- `packages/hub/src/http/middleware/security.ts`: audio route limit and `microphone=(self)`.
+- `packages/hub/src/app.ts`, `packages/hub/src/main.ts`: transcription service and route wiring.
+- `packages/hub/src/app.test.ts`: success, disabled, unconfigured, oversized-exemption, failure, timeout, and microphone-policy coverage.
+- `docs/openapi.yaml`: regenerated transcription route and schema.
+- `docs/interaction-contract.md`: chat interaction contract.
+- `docs/design.md`: ADR-012.
+- `docs/design-lock.md`: design-v1.2.
+- `docs/ui-ia.md`: copy and dictation rules.
+- `docs/visual-audit.md`: this section.
