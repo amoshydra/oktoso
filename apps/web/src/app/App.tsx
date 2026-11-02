@@ -39,6 +39,7 @@ import {
   pickAudioMimeType,
 } from "./chat-actions";
 import { renderMarkdown } from "./markdown";
+import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
   resolveSessionResource,
   type ResourceContext,
@@ -3211,7 +3212,9 @@ function SessionDetail(props: {
       const latest = [...page.data].reverse();
       const stick = forceBottom || nearBottom();
       setSession(nextSession);
-      setMessages((current) => (replace ? latest : mergeMessages(current, latest)));
+      setMessages((current) =>
+        replace ? latest : mergeLatestPage(current, latest),
+      );
       setOlderCursor((current) => (replace ? page.cursor.next : current ?? page.cursor.next));
       if (stick) pendingScroll.current = { mode: "bottom" };
     },
@@ -3648,7 +3651,7 @@ function SessionDetail(props: {
     }
 
     if (upserts.length > 0) {
-      setMessages((current) => mergeMessages(current, upserts));
+      setMessages((current) => mergeMessageUpdates(current, upserts));
     }
     if (needsRefresh) {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -4253,16 +4256,6 @@ function SessionDetail(props: {
         </>
       ) : null}
     </div>
-  );
-}
-
-function mergeMessages(current: Message[], incoming: Message[]): Message[] {
-  if (incoming.length === 0) return current;
-  const byID = new Map(current.map((message) => [message.id, message]));
-  for (const message of incoming) byID.set(message.id, message);
-  return [...byID.values()].sort(
-    (left, right) =>
-      left.createdAt - right.createdAt || left.id.localeCompare(right.id),
   );
 }
 
