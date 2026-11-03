@@ -15,7 +15,12 @@ import type {
   SessionPage,
   SessionStatus,
 } from "@amoshydra/oktoso-contracts";
-import type { ProviderAdapter, ProviderResource } from "../types";
+import type {
+  ProviderAdapter,
+  ProviderAttachment,
+  ProviderResource,
+  ProviderSendInput,
+} from "../types";
 import { ProviderError } from "../errors";
 import { readProviderResource } from "../http/resource";
 
@@ -33,6 +38,17 @@ interface OpenWebUIChatSummary {
   last_read_at?: number | null;
   snippet?: string | null;
   active?: boolean;
+  folder_id?: string | null;
+}
+
+interface OpenWebUIFolder {
+  id: string;
+  name: string;
+  parent_id?: string | null;
+}
+
+interface OpenWebUIFile {
+  id: string;
 }
 
 interface OpenWebUIMessage {
@@ -89,7 +105,7 @@ const openWebUICapabilities: ProviderCapabilities = {
   permissions: false,
   forms: false,
   attachments: true,
-  attach: false,
+  attach: true,
   branches: true,
   fork: false,
   retry: true,
@@ -105,6 +121,9 @@ export class OpenWebUIAdapter implements ProviderAdapter {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly summaries = new Map<string, OpenWebUIChatSummary>();
+  private folderCache:
+    | { at: number; folders: Map<string, OpenWebUIFolder> }
+    | undefined;
 
   constructor(options: OpenWebUIAdapterOptions) {
     this.id = options.id;
@@ -167,9 +186,10 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     for (const row of rows) {
       if (row?.id) unique.set(row.id, row);
     }
+    const folders = await this.folders(signal).catch(() => new Map());
     const sessions = [...unique.values()]
       .slice(0, limit)
-      .map((row) => this.toSession(row, signal));
+      .map((row) => this.toSession(row, folders));
     // The summary endpoint does not expose failures. Check unread/active chats
     // so attention can surface a failed current branch without fetching every
     // chat on every sync.
@@ -184,7 +204,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     const settled = await Promise.allSettled(
       candidates.map(async ({ session, index }) => {
         const chat = await this.fetchChat(session.nativeID, signal);
-        return { index, session: this.toSessionFromDetail(chat) };
+        return { index, session: this.toSessionFromDetail(chat, folders) };
       }),
     );
     for (const result of settled) {
@@ -207,8 +227,9 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     const nativeID = this.nativeID(ref);
     const chat = await this.fetchChat(nativeID, signal);
     const summary = this.summaries.get(nativeID);
+    const folders = await this.folders(signal).catch(() => new Map());
     return {
-      ...this.toSessionFromDetail(chat),
+      ...this.toSessionFromDetail(chat, folders),
       unread: summary ? this.isUnread(summary) : false,
     };
   }
@@ -257,7 +278,8 @@ export class OpenWebUIAdapter implements ProviderAdapter {
         },
       },
     );
-    const session = this.toSessionFromDetail(response);
+    const folders = await this.folders(signal).catch(() => new Map());
+    const session = this.toSessionFromDetail(response, folders);
     const now = Math.floor(Date.now() / 1000);
     this.summaries.set(response.id, {
       id: response.id,
@@ -272,7 +294,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
 
   async sendMessage(
     ref: string,
-    input: SendInput,
+    input: ProviderSendInput,
     signal: AbortSignal,
   ): Promise<SendResult> {
     const nativeID = this.nativeID(ref);
@@ -297,6 +319,21 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     const userID = crypto.randomUUID();
     const assistantID = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
+    const uploads = await Promise.all(
+      (input.files ?? []).map(async (file) => ({
+        file,
+        uploaded: await this.uploadFile(file, signal),
+      })),
+    );
+    await Promise.all(
+      uploads.map(({ uploaded }) => this.waitForFile(uploaded.id, signal)),
+    );
+    const fileRefs = uploads.map(({ file, uploaded }) => ({
+      type: "file",
+      id: uploaded.id,
+      name: file.name,
+      mime_type: file.mimeType,
+    }));
     const userMessage: OpenWebUIMessage = {
       id: userID,
       role: "user",
@@ -305,7 +342,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       childrenIds: [assistantID],
       timestamp: now,
       models: [model],
-      files: [],
+      files: fileRefs,
     };
     const assistantMessage: OpenWebUIMessage = {
       id: assistantID,
@@ -368,6 +405,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
           image_generation: false,
           memory: false,
         },
+        ...(fileRefs.length > 0 ? { files: fileRefs } : {}),
       },
       signal,
     );
@@ -468,6 +506,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       );
     }
 
+    const retryFiles = Array.isArray(user.files) ? user.files : [];
     const model =
       chat.chat.models?.[0] ??
       target.model ??
@@ -541,6 +580,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
           image_generation: false,
           memory: false,
         },
+        ...(retryFiles.length > 0 ? { files: retryFiles } : {}),
       },
       signal,
     );
@@ -613,10 +653,11 @@ export class OpenWebUIAdapter implements ProviderAdapter {
 
   private toSession(
     row: OpenWebUIChatSummary,
-    _signal: AbortSignal,
+    folders: Map<string, OpenWebUIFolder>,
   ): Session {
     const updatedAt = row.updated_at * 1_000;
     const createdAt = row.created_at * 1_000;
+    const project = this.folderPath(row.folder_id, folders);
     return {
       ref: `${this.id}:${row.id}`,
       providerID: this.id,
@@ -627,15 +668,20 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       updatedAt,
       createdAt,
       nativeUrl: `${this.baseUrl}/c/${row.id}`,
+      ...(project ? { project } : {}),
     };
   }
 
-  private toSessionFromDetail(chat: OpenWebUIChat): Session {
+  private toSessionFromDetail(
+    chat: OpenWebUIChat,
+    folders: Map<string, OpenWebUIFolder>,
+  ): Session {
     const branch = this.currentBranch(chat);
     const last = branch.at(-1);
     const model =
       chat.chat.models?.[0] ??
       [...branch].reverse().find((message) => message.model)?.model;
+    const project = this.folderPath(chat.folder_id, folders);
     return {
       ref: `${this.id}:${chat.id}`,
       providerID: this.id,
@@ -646,6 +692,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       updatedAt: chat.updated_at * 1_000,
       createdAt: chat.created_at * 1_000,
       ...(model ? { model } : {}),
+      ...(project ? { project } : {}),
       nativeUrl: `${this.baseUrl}/c/${chat.id}`,
     };
   }
@@ -711,6 +758,120 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       );
     }
     return [];
+  }
+
+  private async waitForFile(
+    fileID: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      try {
+        const status = await this.request<{
+          status?: string;
+          error?: unknown;
+        }>(
+          `/api/v1/files/${encodeURIComponent(fileID)}/process/status`,
+          {},
+          signal,
+        );
+        if (status.status === "completed") return;
+        if (status.status === "failed") {
+          throw new ProviderError(
+            "internal",
+            `Open WebUI could not process the attachment: ${errorText(status.error)}`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof ProviderError && error.code === "not_found") return;
+        throw error;
+      }
+      await delay(500, signal);
+    }
+  }
+
+  private async folders(
+    signal: AbortSignal,
+  ): Promise<Map<string, OpenWebUIFolder>> {
+    const cached = this.folderCache;
+    if (cached && Date.now() - cached.at < 60_000) return cached.folders;
+    const response = await this.request<
+      OpenWebUIFolder[] | { data?: OpenWebUIFolder[] }
+    >("/api/v1/folders/", {}, signal);
+    const rows = Array.isArray(response)
+      ? response
+      : Array.isArray(response.data)
+        ? response.data
+        : [];
+    const folders = new Map(
+      rows
+        .filter((folder): folder is OpenWebUIFolder => Boolean(folder?.id))
+        .map((folder) => [folder.id, folder]),
+    );
+    this.folderCache = { at: Date.now(), folders };
+    return folders;
+  }
+
+  private folderPath(
+    folderID: string | null | undefined,
+    folders: Map<string, OpenWebUIFolder>,
+  ): string | undefined {
+    if (!folderID) return undefined;
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let current: string | null | undefined = folderID;
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const folder = folders.get(current);
+      if (!folder) break;
+      if (folder.name) names.unshift(folder.name);
+      current = folder.parent_id;
+    }
+    return names.length > 0 ? names.join(" / ") : undefined;
+  }
+
+  private async uploadFile(
+    file: ProviderAttachment,
+    signal: AbortSignal,
+  ): Promise<OpenWebUIFile> {
+    const form = new FormData();
+    form.set(
+      "file",
+      new Blob([new Uint8Array(file.data)], { type: file.mimeType }),
+      file.name,
+    );
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1/files/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: "application/json",
+        },
+        body: form,
+        signal,
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new ProviderError(
+        "provider_offline",
+        `Unable to reach Open WebUI at ${this.baseUrl}`,
+        { cause: error },
+      );
+    }
+    if (!response.ok) {
+      throw this.httpError(response.status, await response.text().catch(() => ""));
+    }
+    const payload = (await response.json().catch(() => undefined)) as
+      | { id?: unknown }
+      | undefined;
+    if (!payload || typeof payload.id !== "string" || !payload.id) {
+      throw new ProviderError(
+        "internal",
+        "Open WebUI did not return a file id",
+      );
+    }
+    return { id: payload.id };
   }
 
   private isUnread(row: OpenWebUIChatSummary): boolean {
@@ -984,13 +1145,15 @@ function fileParts(files: unknown): MessagePart[] {
           ? file.path
           : undefined;
     const mimeType =
-      typeof file.type === "string" && file.type.includes("/")
-        ? file.type
-        : typeof file.mimeType === "string"
-          ? file.mimeType
-          : file.type === "image"
-            ? "image/*"
-            : undefined;
+      typeof file.mime_type === "string"
+        ? file.mime_type
+        : typeof file.type === "string" && file.type.includes("/")
+          ? file.type
+          : typeof file.mimeType === "string"
+            ? file.mimeType
+            : file.type === "image"
+              ? "image/*"
+              : undefined;
     if (!url && name === "File") continue;
     parts.push({
       type: "file",

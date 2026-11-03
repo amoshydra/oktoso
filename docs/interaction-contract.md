@@ -7,10 +7,10 @@ transcript model.
 - Date: 2026-11-02
 - Design version: `design-v1.3`
 - Implemented: copy, dictation, optimistic send with failed-send retry, OpenCode
-  attachments, Open WebUI in-chat branch switching and retry-as-a-sibling,
-  OpenCode session forks, and OpenCode edit-and-fork.
-- Deferred: Open WebUI attachment sending, true in-chat editing for Open WebUI,
-  and a full session-family tree UI.
+  and Open WebUI attachments, Open WebUI in-chat branch switching and
+  retry-as-a-sibling, OpenCode session forks, and OpenCode edit-and-fork.
+- Deferred: true in-chat editing for Open WebUI and a full session-family tree
+  UI.
 - Related: [`design.md`](design.md), [`ui-ia.md`](ui-ia.md),
   [`visual-audit.md`](visual-audit.md)
 - Spike evidence: the isolated `spike/assistant-ui` branch (not merged)
@@ -31,11 +31,11 @@ This contract separates three things that are easy to conflate:
    does not reach into a provider API or invent provider-specific behavior.
 
 The implementation is split into capability-gated slices. The transcript copy
-action and hub-backed dictation shipped first. OpenCode attachments, Open WebUI
-in-chat branch switching, OpenCode session forks, optimistic send, failed-send
-retry, and OpenCode edit-and-fork follow the same contract. Open WebUI
-attachment sending and Open WebUI in-chat editing remain gated off until their
-provider paths exist.
+action and hub-backed dictation shipped first. OpenCode and Open WebUI
+attachments, Open WebUI in-chat branch switching, OpenCode session forks,
+optimistic send, failed-send retry, and OpenCode edit-and-fork follow the same
+contract. Open WebUI true in-chat editing remains gated off until its provider
+path exists.
 
 ## 2. Non-goals
 
@@ -94,6 +94,12 @@ selected -> uploading -> ready -> sending -> sent
 - The provider capability `attach` decides whether the composer exposes the
   upload control. The `attachments` capability still renders files that already
   exist in the transcript when sending is unavailable.
+- OpenCode receives the file bytes inline. Open WebUI uploads each file to
+  `POST /api/v1/files/`, then references `{ type: "file", id }` on the user
+  message and the completion request. The hub still owns the original bytes.
+- Open WebUI folders map to the session `project` label. Nested folders render
+  as `Parent / Child`, so the session list, search, details, and chat header
+  show the folder path without a new API field.
 
 ### Action
 
@@ -103,7 +109,7 @@ An action belongs to a message and is capability-gated:
 |---|---|---|
 | Copy | Any assistant message with text | Yes |
 | Retry | Assistant reply with a regenerate path | No; needs provider support |
-| Edit | User message with an edit path | No; needs a branch tree |
+| Edit | User message with a fork path | No; OpenCode uses edit-and-fork, Open WebUI deferred |
 | Feedback | Assistant reply | Provider-specific; opt-in |
 
 Unavailable actions are hidden or disabled with a reason that is available to
@@ -274,8 +280,7 @@ discovery surface.
 
 ### Later slices
 
-- Open WebUI attachment upload and send mapping (`attach` remains false).
-- Message editing as a tree operation.
+- True in-chat editing for Open WebUI as a user-sibling operation.
 - A session-family tree UI beyond the parent link.
 - Attachment forwarding for provider-native file stores that require a
   pre-upload step.
@@ -304,8 +309,8 @@ discovery surface.
    transcript rendering.
 3. **Done:** Open WebUI in-chat siblings and OpenCode session forks.
 4. **Done:** optimistic send, failed-send retry, and OpenCode edit-and-fork.
-5. **Deferred:** Open WebUI attachment sending, true in-chat editing for Open
-   WebUI, and the full session-family tree.
+5. **Deferred:** true in-chat editing for Open WebUI and the full
+   session-family tree.
 6. **Production migration:** only after grouping and the frozen design hold
    against live provider data.
 
@@ -413,7 +418,8 @@ discovery surface.
   messages only for the first slice.
 - Should Open WebUI uploads use `/api/v1/files/` and pre-process the file before
   attaching, or should the hub wait for a provider-native send path? Current
-  decision: keep `attach` false and show the read-only attachment surface.
+  decision: upload to `/api/v1/files/` and reference the returned ids; this is
+  implemented.
 - Which child should an Open WebUI branch select when the target has several
   continuations? Current decision: the most recently timestamped descendant.
 - Should the session family tree become a sidebar view or stay a parent link in

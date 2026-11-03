@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation, the hub core, and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. `v0.1.11` shipped the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix for refreshed transcripts. The latest chat slice adds optimistic send, failed-send retry, and OpenCode edit-and-fork. The contract is [`interaction-contract.md`](interaction-contract.md); the assistant-ui decision is [`package-evaluation.md`](package-evaluation.md). Remaining Milestone 1 items: Open WebUI attachment sending, true in-chat editing for Open WebUI, and the session-family tree.
+Status: in progress. Phase 0 foundation, the hub core, and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. `v0.1.11` shipped the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix for refreshed transcripts. The latest chat slice adds optimistic send, failed-send retry, and OpenCode edit-and-fork. The contract is [`interaction-contract.md`](interaction-contract.md); the assistant-ui decision is [`package-evaluation.md`](package-evaluation.md). Remaining Milestone 1 items: true in-chat editing for Open WebUI and the session-family tree.
 
 Goal: prove the hub with one provider and one client.
 
@@ -120,7 +120,7 @@ Acceptance:
 
 ## Milestone 3: Open WebUI
 
-Status: in progress. The adapter lists chats, resolves the current branch, maps messages, creates chats, sends prompts, waits for the asynchronous completion task, lists models, switches branches in chat, and retries an answer as a sibling. Attachment sending is not implemented. Live validation is against Open WebUI 0.11.1. Provider-native mark-read, token-level streaming, and full failure discovery for old chats remain.
+Status: in progress. The adapter lists chats, resolves the current branch, maps messages, creates chats, sends prompts, uploads attachments to `/api/v1/files/`, waits for the asynchronous completion task, lists models, switches branches in chat, retries an answer as a sibling, and maps Open WebUI folders to the session project label. Live validation is against Open WebUI 0.11.1. Provider-native mark-read, token-level streaming, and full failure discovery for old chats remain.
 
 Goal: add the second provider and validate the normalized chat model.
 

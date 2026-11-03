@@ -1560,8 +1560,8 @@ describe("chat attachments and branches", () => {
     });
   });
 
-  it("rejects unsupported attachments and providers without attach support", async () => {
-    const { app, sessions } = await createTestApp({ openwebui: true });
+  it("rejects unsupported attachment types and sends supported ones", async () => {
+    const { app, sessions, attachments } = await createTestApp({ openwebui: true });
     await sessions.refresh();
     const auth = { Authorization: `Bearer ${token}` };
 
@@ -1590,7 +1590,30 @@ describe("chat attachments and branches", () => {
         }),
       },
     );
-    expect(sent.status).toBe(501);
+    expect(sent.status).toBe(202);
+
+    const page = await app.request(
+      "/api/v1/sessions/fake-openwebui%3Achat_fake_openwebui/messages?order=asc&limit=100",
+      { headers: auth },
+    );
+    const payload = (await page.json()) as {
+      data: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const user = payload.data.filter((message) => message.role === "user").at(-1);
+    expect(user?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: "Try an attachment" }),
+        expect.objectContaining({
+          type: "file",
+          name: "notes.txt",
+          mimeType: "text/plain",
+        }),
+      ]),
+    );
+
+    await expect(attachments.read(attachment.data.id)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it("lists and switches Open WebUI in-chat branches", async () => {

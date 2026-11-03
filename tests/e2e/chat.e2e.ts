@@ -216,6 +216,31 @@ describe("chat sending", () => {
     ).toBe(1);
   });
 
+  it("shows Open WebUI folders and sends an attachment", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.getByRole("button", { name: "Sessions" }).click();
+    const row = page.getByRole("button", { name: /Fake Open WebUI chat/ });
+    await row.waitFor({ timeout: 5_000 });
+    expect(await row.textContent()).toContain("Research");
+    await row.click();
+    await page.locator(".chat-composer textarea").waitFor();
+
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("E2E attachment"),
+    });
+    await page.getByText("notes.txt").first().waitFor({ timeout: 5_000 });
+    await page.locator(".chat-composer textarea").fill("Attachment E2E");
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    const message = page.locator(".chat-message.user", {
+      hasText: "Attachment E2E",
+    });
+    await message.waitFor({ timeout: 5_000 });
+    expect(await message.textContent()).toContain("notes.txt");
+  });
+
   it("edits a user message by forking and prefilling the new draft", async () => {
     await openSession("Fix auth race in gateway");
     const original = page!.locator(".chat-message.user", {
