@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Attention, Session } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import type { ProviderRegistry } from "./provider-registry";
@@ -144,5 +144,73 @@ describe("AttentionService subagent policy", () => {
           item.type === "error" && item.sessionRef === childErrorRef,
       ),
     ).toBe(false);
+  });
+
+  it("scopes attention directories to the owning provider", async () => {
+    const desktopDir = "/home/hamster/repos/oktoso";
+    const remoteDir = "/Users/user/repos/work/research";
+    const sessions = [
+      session({
+        ref: "desktop-opencode:ses_desktop",
+        providerID: "desktop-opencode",
+        nativeID: "ses_desktop",
+        status: "running",
+        directory: desktopDir,
+      }),
+      session({
+        ref: "fishbowl:ses_remote",
+        providerID: "fishbowl",
+        nativeID: "ses_remote",
+        status: "running",
+        directory: remoteDir,
+      }),
+    ];
+    const calls = new Map<string, string[]>();
+    const adapters = [
+      {
+        id: "desktop-opencode",
+        listAttention: vi.fn(async (directories: string[]) => {
+          calls.set("desktop-opencode", directories);
+          return [];
+        }),
+      },
+      {
+        id: "fishbowl",
+        listAttention: vi.fn(async (directories: string[]) => {
+          calls.set("fishbowl", directories);
+          return [];
+        }),
+      },
+    ];
+
+    const registry = {
+      adapters: () => adapters,
+      timeoutMs: () => 15_000,
+    } as unknown as ProviderRegistry;
+    const sessionService = {
+      list: async () => ({
+        data: sessions,
+        cursor: { previous: null, next: null },
+      }),
+      markRead: async () => undefined,
+      invalidate: () => undefined,
+    } as unknown as SessionService;
+    const store = new MemoryStateStore();
+    const eventBus = {
+      publish: async () => ({}),
+    } as unknown as EventBus;
+    const service = new AttentionService(
+      registry,
+      sessionService,
+      store,
+      eventBus,
+      logger,
+      { now: () => now },
+    );
+
+    await service.refresh();
+
+    expect(calls.get("desktop-opencode")).toEqual([desktopDir]);
+    expect(calls.get("fishbowl")).toEqual([remoteDir]);
   });
 });

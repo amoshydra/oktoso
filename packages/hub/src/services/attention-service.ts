@@ -69,21 +69,40 @@ export class AttentionService {
       const sessionByRef = new Map(
         sessionPage.data.map((session) => [session.ref, session]),
       );
-      const directorySet = new Set(
-        sessionPage.data
-          .filter((session) => session.status === "running" && session.directory)
-          .map((session) => session.directory!),
-      );
+      const directoriesByProvider = new Map<string, Set<string>>();
+      const addDirectory = (providerID: string, directory: string) => {
+        let directories = directoriesByProvider.get(providerID);
+        if (!directories) {
+          directories = new Set();
+          directoriesByProvider.set(providerID, directories);
+        }
+        directories.add(directory);
+      };
+
+      for (const session of sessionPage.data) {
+        if (session.status === "running" && session.directory) {
+          addDirectory(session.providerID, session.directory);
+        }
+      }
       // Keep polling a directory while one of its provider attention items is
       // still pending, even if the session's status briefly changed.
       for (const item of previous.values()) {
         if (item.type !== "permission" && item.type !== "approval" && item.type !== "question") {
           continue;
         }
-        const directory = sessionByRef.get(item.sessionRef)?.directory;
-        if (directory) directorySet.add(directory);
+        const session = sessionByRef.get(item.sessionRef);
+        const directory = session?.directory;
+        if (directory) {
+          const separator = item.sessionRef.indexOf(":");
+          addDirectory(
+            session?.providerID ??
+              (separator > 0
+                ? item.sessionRef.slice(0, separator)
+                : item.sessionRef),
+            directory,
+          );
+        }
       }
-      const directories = [...directorySet];
       const results = await Promise.all(
         adapters.map(async (adapter) => {
           if (!adapter.listAttention) return { adapterID: adapter.id, items: [] };
@@ -91,7 +110,7 @@ export class AttentionService {
             return {
               adapterID: adapter.id,
               items: await adapter.listAttention(
-                directories,
+                [...(directoriesByProvider.get(adapter.id) ?? [])],
                 AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
               ),
             };
