@@ -1,4 +1,5 @@
 import type { Message } from "@amoshydra/oktoso-contracts";
+import { reconcileOptimistic } from "./optimistic";
 
 /**
  * Merge the latest hub page into a loaded transcript.
@@ -14,7 +15,8 @@ export function mergeLatestPage(
   latest: readonly Message[],
 ): Message[] {
   if (latest.length === 0) return [...current];
-  if (current.length === 0) return [...latest];
+  const reconciled = reconcileOptimistic(current, latest);
+  if (reconciled.length === 0) return [...latest];
 
   const latestIds = new Set(latest.map((message) => message.id));
   const oldestLatest = Math.min(
@@ -23,7 +25,7 @@ export function mergeLatestPage(
   const older: Message[] = [];
   const newer: Message[] = [];
 
-  for (const message of current) {
+  for (const message of reconciled) {
     if (latestIds.has(message.id)) continue;
     if (message.createdAt <= oldestLatest) older.push(message);
     else newer.push(message);
@@ -44,9 +46,10 @@ export function mergeMessageUpdates(
   updates: readonly Message[],
 ): Message[] {
   if (updates.length === 0) return [...current];
+  const reconciled = reconcileOptimistic(current, updates);
 
-  const byId = new Map(current.map((message) => [message.id, message]));
-  const order = current.map((message) => message.id);
+  const byId = new Map(reconciled.map((message) => [message.id, message]));
+  const order = reconciled.map((message) => message.id);
 
   for (const update of updates) {
     if (!byId.has(update.id)) order.push(update.id);

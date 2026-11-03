@@ -97,9 +97,12 @@ Open `http://127.0.0.1:4174` in a browser. Resize the window to see the mobile l
 ```sh
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm openapi:check
 pnpm build
 ```
+
+`pnpm test:e2e` builds the single-port bundle and runs the Playwright browser suite against a temporary hub and fake providers.
 
 Starting without a config bootstraps an empty local workspace:
 

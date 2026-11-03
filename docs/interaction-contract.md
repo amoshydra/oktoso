@@ -1,15 +1,16 @@
 # Chat interaction contract
 
-Status: accepted and implemented through the attachments and branching slice.
+Status: accepted and implemented through sending states and edit-and-fork.
 This is the contract for chat actions that are not part of the provider
 transcript model.
 
 - Date: 2026-11-02
 - Design version: `design-v1.3`
-- Implemented: copy, dictation, OpenCode attachments, Open WebUI in-chat branch
-  switching and retry-as-a-sibling, and OpenCode session forks.
-- Deferred: Open WebUI attachment sending, message editing, and a full
-  session-family tree UI.
+- Implemented: copy, dictation, optimistic send with failed-send retry, OpenCode
+  attachments, Open WebUI in-chat branch switching and retry-as-a-sibling,
+  OpenCode session forks, and OpenCode edit-and-fork.
+- Deferred: Open WebUI attachment sending, true in-chat editing for Open WebUI,
+  and a full session-family tree UI.
 - Related: [`design.md`](design.md), [`ui-ia.md`](ui-ia.md),
   [`visual-audit.md`](visual-audit.md)
 - Spike evidence: the isolated `spike/assistant-ui` branch (not merged)
@@ -31,8 +32,9 @@ This contract separates three things that are easy to conflate:
 
 The implementation is split into capability-gated slices. The transcript copy
 action and hub-backed dictation shipped first. OpenCode attachments, Open WebUI
-in-chat branch switching, and OpenCode session forks follow the same contract.
-Open WebUI attachment sending and retry/edit remain gated off until their
+in-chat branch switching, OpenCode session forks, optimistic send, failed-send
+retry, and OpenCode edit-and-fork follow the same contract. Open WebUI
+attachment sending and Open WebUI in-chat editing remain gated off until their
 provider paths exist.
 
 ## 2. Non-goals
@@ -301,9 +303,10 @@ discovery surface.
 2. **Done:** hub upload route, limits, OpenCode send mapping, composer chips,
    transcript rendering.
 3. **Done:** Open WebUI in-chat siblings and OpenCode session forks.
-4. **Deferred:** Open WebUI attachment sending, retry/edit, and the full
-   session-family tree.
-5. **Production migration:** only after grouping and the frozen design hold
+4. **Done:** optimistic send, failed-send retry, and OpenCode edit-and-fork.
+5. **Deferred:** Open WebUI attachment sending, true in-chat editing for Open
+   WebUI, and the full session-family tree.
+6. **Production migration:** only after grouping and the frozen design hold
    against live provider data.
 
 ## 10. Acceptance criteria
@@ -343,12 +346,61 @@ discovery surface.
   back to the parent.
 - A provider without branch/fork/retry support hides or rejects the action.
 
+**Sending states and editing**
+
+- The optimistic user message appears before the POST settles.
+- A failed send shows Retry and Discard; Retry uses the same idempotency key.
+- A successful send shows one user message after reconciliation.
+- Edit & fork opens the new session with the edited text in the draft and does
+  not present the fork as an in-chat branch.
+
 **Design**
 
 - Dark/light, 1440/1024/390/320, and the existing screens still pass.
 - No horizontal overflow at 390 or 320.
 
-## 11. Open questions
+## 11. Sending states and message editing
+
+### Optimistic send
+
+- A send creates a local user message immediately with a `local:` id and
+  metadata containing the send status, text, attachment ids, and idempotency
+  key.
+- The composer clears, the transcript scrolls to the bottom, and the local
+  message renders with `Sending…`.
+- The hub send uses a stable idempotency key. Retry reuses the same key, so an
+  ambiguous failure cannot double-send.
+- On success the local state becomes `sent`; on failure it becomes `failed`
+  with inline **Retry** and **Discard**. Discard removes the local message and
+  deletes its staged attachments.
+- Real provider user messages reconcile by role, text, file names, and a
+  five-minute timestamp window. The optimistic copy is removed, never shown
+  twice.
+- A failed local message is not persisted. Navigating away loses the inline
+  retry; the draft and attachments are not queued for later.
+
+### Edit and fork
+
+- Editing is offered for user messages only when the provider exposes session
+  forks (OpenCode today).
+- The editor is inline and prefilled with the message text. Attachments are not
+  carried into the new fork.
+- **Save & fork** forks the session before the target message, saves the edited
+  text as the new session draft, and opens the fork. The user reviews and sends
+  from the draft.
+- This is a session fork, not an in-chat sibling. The UI labels it
+  **Edit & fork** and never presents it as a branch.
+- True in-chat editing for Open WebUI is deferred until the provider path can
+  create a user sibling safely.
+
+### Acceptance
+
+- The optimistic message appears before the send POST settles.
+- A failed send shows Retry; Retry reuses the same idempotency key.
+- A successful send leaves exactly one user message after reconciliation.
+- Edit & fork opens the new session with the edited text in the draft.
+
+## 12. Open questions
 
 - Should the hub persist a short transcript history for audit, or is the
   provider transcript the only record? Current decision: no audio retention and
@@ -366,3 +418,5 @@ discovery surface.
   continuations? Current decision: the most recently timestamped descendant.
 - Should the session family tree become a sidebar view or stay a parent link in
   details? Current decision: parent link first.
+- Should Open WebUI editing create a user sibling in the current chat, and if so
+  how should the branch picker represent user branches? Deferred.

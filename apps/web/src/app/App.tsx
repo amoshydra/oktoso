@@ -41,6 +41,11 @@ import {
 import { renderMarkdown } from "./markdown";
 import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
+  createOptimisticMessage,
+  optimisticSend,
+  updateOptimisticStatus,
+} from "./optimistic";
+import {
   resolveSessionResource,
   type ResourceContext,
 } from "./urls";
@@ -2970,6 +2975,10 @@ function SessionDetail(props: {
   const [branchBusy, setBranchBusy] = useState<string>();
   const [retryBusy, setRetryBusy] = useState<string>();
   const [branchError, setBranchError] = useState<string>();
+  const [editingMessageID, setEditingMessageID] = useState<string>();
+  const [editText, setEditText] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string>();
   const [dictation, setDictation] = useState<DictationState>({ phase: "idle" });
   const [dictationElapsedMs, setDictationElapsedMs] = useState(0);
   const [dictationEnabled, setDictationEnabled] = useState(false);
@@ -3003,6 +3012,7 @@ function SessionDetail(props: {
     dictation.phase === "transcribing";
   const attachSupported = Boolean(sessionProvider?.capabilities.attach);
   const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
+  const canEdit = Boolean(sessionProvider?.capabilities.fork);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const getScroller = () => transcriptRef.current;
@@ -3332,24 +3342,136 @@ function SessionDetail(props: {
     ) {
       return;
     }
+    const idempotencyKey = crypto.randomUUID();
+    const optimistic = createOptimisticMessage({
+      sessionRef: props.sessionRef,
+      text,
+      attachments,
+      idempotencyKey,
+    });
     setSending(true);
     setSendError(undefined);
+    setMessages((current) => [...current, optimistic]);
+    setAttachments([]);
+    pendingScroll.current = { mode: "bottom" };
     try {
-      await props.client.sendMessage(props.sessionRef, {
-        text,
-        ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}),
-      });
-      setAttachments([]);
       await discardDraft();
+      await props.client.sendMessage(
+        props.sessionRef,
+        { text, ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}) },
+        { idempotencyKey },
+      );
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === optimistic.id
+            ? updateOptimisticStatus(message, "sent")
+            : message,
+        ),
+      );
       setSession((current) => (current ? { ...current, status: "running" } : current));
       window.setTimeout(() => {
         void refreshLatest(true).catch(() => undefined);
         void refreshBranches();
       }, 500);
     } catch (reason) {
-      setSendError(reason instanceof Error ? reason.message : "Unable to send the prompt");
+      const message = reason instanceof Error ? reason.message : "Unable to send the prompt";
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === optimistic.id
+            ? updateOptimisticStatus(item, "failed", message)
+            : item,
+        ),
+      );
     } finally {
       setSending(false);
+    }
+  };
+
+  const retryOptimistic = async (message: Message) => {
+    const payload = optimisticSend(message);
+    if (!payload) return;
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === message.id ? updateOptimisticStatus(item, "sending") : item,
+      ),
+    );
+    try {
+      await props.client.sendMessage(
+        props.sessionRef,
+        {
+          text: payload.text,
+          ...(payload.attachmentIDs.length > 0
+            ? { attachments: payload.attachmentIDs }
+            : {}),
+        },
+        { idempotencyKey: payload.idempotencyKey },
+      );
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === message.id ? updateOptimisticStatus(item, "sent") : item,
+        ),
+      );
+      setSession((current) => (current ? { ...current, status: "running" } : current));
+      window.setTimeout(() => {
+        void refreshLatest(true).catch(() => undefined);
+        void refreshBranches();
+      }, 500);
+    } catch (reason) {
+      const error = reason instanceof Error ? reason.message : "Unable to send the prompt";
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === message.id
+            ? updateOptimisticStatus(item, "failed", error)
+            : item,
+        ),
+      );
+    }
+  };
+
+  const discardOptimistic = (message: Message) => {
+    const payload = optimisticSend(message);
+    setMessages((current) => current.filter((item) => item.id !== message.id));
+    for (const id of payload?.attachmentIDs ?? []) {
+      void props.client.deleteAttachment(id).catch(() => undefined);
+    }
+  };
+
+  const beginEdit = (message: Message) => {
+    if (!canEdit || message.role !== "user" || optimisticSend(message)) return;
+    const text = messageCopyText(message);
+    if (!text) return;
+    setEditingMessageID(message.id);
+    setEditText(text);
+    setEditError(undefined);
+  };
+
+  const cancelEdit = () => {
+    if (editBusy) return;
+    setEditingMessageID(undefined);
+    setEditText("");
+    setEditError(undefined);
+  };
+
+  const saveEdit = async () => {
+    if (!editingMessageID || editBusy || !editText.trim()) return;
+    setEditBusy(true);
+    setEditError(undefined);
+    try {
+      const forked = await props.client.forkSession(props.sessionRef, {
+        before: editingMessageID,
+      });
+      await props.client.saveDraft(forked.ref, editText.trim());
+      setEditingMessageID(undefined);
+      setEditText("");
+      props.onOpenSession(forked.ref);
+    } catch (reason) {
+      setEditError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to edit this message.",
+      );
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -3858,6 +3980,17 @@ function SessionDetail(props: {
                       canRetry={Boolean(sessionProvider?.capabilities.retry)}
                       retryBusy={retryBusy === item.message.id}
                       onRetry={(messageId) => void retryMessage(messageId)}
+                      onRetryOptimistic={(message) => void retryOptimistic(message)}
+                      onDiscardOptimistic={discardOptimistic}
+                      canEdit={canEdit}
+                      onEdit={(message) => beginEdit(message)}
+                      editing={editingMessageID === item.message.id}
+                      editText={editText}
+                      editBusy={editBusy}
+                      editError={editError}
+                      onEditTextChange={setEditText}
+                      onSaveEdit={() => void saveEdit()}
+                      onCancelEdit={cancelEdit}
                       suppressError={Boolean(errorAttention)}
                     />
                   ) : (
@@ -4425,13 +4558,27 @@ function TranscriptMessage(props: {
   canRetry?: boolean;
   retryBusy?: boolean;
   onRetry?: (messageId: string) => void;
+  onRetryOptimistic?: (message: Message) => void;
+  onDiscardOptimistic?: (message: Message) => void;
+  canEdit?: boolean;
+  onEdit?: (message: Message) => void;
+  editing?: boolean;
+  editText?: string;
+  editBusy?: boolean;
+  editError?: string;
+  onEditTextChange?: (value: string) => void;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
   suppressError?: boolean;
 }) {
   const message = props.message;
+  const send = optimisticSend(message);
   const copyText =
     message.role === "assistant" && !message.streaming
       ? messageCopyText(message)
       : "";
+  const editCopy = message.role === "user" ? messageCopyText(message) : "";
+  const showEdit = Boolean(props.canEdit && editCopy && !send && !props.editing);
   return (
     <article className={`chat-message ${message.role}`}>
       <div className="chat-message-role">
@@ -4440,28 +4587,95 @@ function TranscriptMessage(props: {
         {message.streaming ? <span className="streaming-label">streaming</span> : null}
       </div>
       <div className="chat-message-parts">
-        {message.metadata?.error && !props.suppressError ? (
-          <div className="message-error" role="alert">
-            <span className="message-error-label">Provider error</span>
-            <p>{providerErrorMessage(message.metadata.error)}</p>
-          </div>
-        ) : null}
-        {message.parts.length === 0 && !message.metadata?.error ? (
-          <div className="message-empty">No content</div>
-        ) : message.parts.length === 0 && props.suppressError ? (
-          <div className="message-empty">Provider error reported below.</div>
-        ) : (
-          message.parts.map((part, index) => (
-            <MessagePartView
-              part={part}
-              key={index}
-              client={props.client}
-              resource={props.resource}
+        {props.editing ? (
+          <div className="message-edit">
+            <textarea
+              aria-label="Edit message"
+              value={props.editText ?? ""}
+              onChange={(event) => props.onEditTextChange?.(event.currentTarget.value)}
+              rows={4}
+              autoFocus
+              disabled={props.editBusy}
             />
-          ))
+            <p className="message-edit-note">
+              Saves to a new forked session. Attachments are not carried over.
+            </p>
+            {props.editError ? (
+              <div className="form-error" role="alert">
+                {props.editError}
+              </div>
+            ) : null}
+            <div className="message-edit-actions">
+              <button
+                className="btn small"
+                type="button"
+                disabled={props.editBusy}
+                onClick={props.onCancelEdit}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn primary small"
+                type="button"
+                disabled={props.editBusy || !props.editText?.trim()}
+                onClick={props.onSaveEdit}
+              >
+                {props.editBusy ? "Forking…" : "Save & fork"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {message.metadata?.error && !props.suppressError ? (
+              <div className="message-error" role="alert">
+                <span className="message-error-label">Provider error</span>
+                <p>{providerErrorMessage(message.metadata.error)}</p>
+              </div>
+            ) : null}
+            {message.parts.length === 0 && !message.metadata?.error ? (
+              <div className="message-empty">No content</div>
+            ) : message.parts.length === 0 && props.suppressError ? (
+              <div className="message-empty">Provider error reported below.</div>
+            ) : (
+              message.parts.map((part, index) => (
+                <MessagePartView
+                  part={part}
+                  key={index}
+                  client={props.client}
+                  resource={props.resource}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
-      {copyText || props.branchPoint || props.canRetry ? (
+      {send?.status === "sending" ? (
+        <div className="message-send-state" role="status">
+          <span>Sending…</span>
+        </div>
+      ) : null}
+      {send?.status === "failed" ? (
+        <div className="message-send-state error" role="alert">
+          <span>Not sent. {send.error}</span>
+          <div className="message-send-actions">
+            <button
+              className="message-action"
+              type="button"
+              onClick={() => props.onRetryOptimistic?.(message)}
+            >
+              Retry
+            </button>
+            <button
+              className="message-action"
+              type="button"
+              onClick={() => props.onDiscardOptimistic?.(message)}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {!props.editing && (copyText || props.branchPoint || props.canRetry || showEdit) ? (
         <div className="chat-message-actions">
           <div className="chat-message-actions-left">
             {props.branchPoint && props.onSwitchBranch ? (
@@ -4475,6 +4689,16 @@ function TranscriptMessage(props: {
             ) : null}
           </div>
           <div className="chat-message-actions-right">
+            {showEdit ? (
+              <button
+                className="message-action"
+                type="button"
+                aria-label="Edit message and fork the session"
+                onClick={() => props.onEdit?.(message)}
+              >
+                Edit & fork
+              </button>
+            ) : null}
             {props.canRetry && copyText ? (
               <button
                 className="message-action"
