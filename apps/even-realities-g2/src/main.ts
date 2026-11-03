@@ -1,6 +1,7 @@
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import {
+  AudioInputSource,
   CreateStartUpPageContainer,
   EvenAppBridge,
   RebuildPageContainer,
@@ -54,6 +55,11 @@ import { glassInput } from "./input";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
 import {
+  pcmChunksToWav,
+  transcriptionConfigured,
+  withVoiceOption,
+} from "./voice";
+import {
   attentionHeader,
   attentionRowLabel,
   sessionHeader,
@@ -82,6 +88,7 @@ type Screen =
   | "answer-stale"
   | "reply"
   | "choices"
+  | "voice"
   | "failure"
   | "legend";
 
@@ -175,6 +182,14 @@ const state: AppState = {
   failureReturnScreen: "home",
   streamStatus: "connecting",
 };
+
+const MAX_VOICE_BYTES = 4_000_000;
+const MAX_VOICE_MS = 60_000;
+let voiceActive = false;
+let voiceBusy = false;
+let voiceChunks: Uint8Array[] = [];
+let voiceBytes = 0;
+let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
 let bridge: EvenAppBridge | undefined;
 let client: HubClient | undefined;
@@ -2169,8 +2184,14 @@ async function openReply(): Promise<void> {
     state.screen === "answer-more" ? "answer-more" : "chat";
   state.replyPage = 0;
   try {
-    const options = await client.replyOptions(state.sessionRef, "reply");
-    state.replyOptions = options.data;
+    const [options, settings] = await Promise.all([
+      client.replyOptions(state.sessionRef, "reply"),
+      client.assistantSettings().catch(() => undefined),
+    ]);
+    state.replyOptions = withVoiceOption(
+      options.data,
+      transcriptionConfigured(settings),
+    );
     state.screen = "reply";
     clearFailure();
     markRequestSuccess();
@@ -2232,6 +2253,109 @@ async function performReply(index: number): Promise<void> {
   await executeReply(option);
 }
 
+async function startVoice(): Promise<void> {
+  if (!client || !bridge || voiceActive || voiceBusy) return;
+  const settings = await client.assistantSettings().catch(() => undefined);
+  if (!transcriptionConfigured(settings)) {
+    state.screen = "chat";
+    setPhoneStatus("Voice transcription is not configured.", true);
+    render();
+    return;
+  }
+  try {
+    const opened = await bridge.audioControl(true, AudioInputSource.Glasses);
+    if (!opened) throw new Error("The glasses microphone is not available.");
+    voiceBusy = true;
+    voiceActive = true;
+    voiceChunks = [];
+    voiceBytes = 0;
+    state.screen = "voice";
+    setPhoneStatus("Listening… tap the glasses to stop.");
+    render();
+    voiceTimer = setTimeout(() => void stopVoice(), MAX_VOICE_MS);
+  } catch (error) {
+    voiceActive = false;
+    voiceBusy = false;
+    state.screen = "chat";
+    setPhoneStatus(failureMessage(error), true);
+    render();
+    log(`Voice start failed: ${failureMessage(error)}`);
+  }
+}
+
+async function stopVoice(): Promise<void> {
+  if (!voiceActive) return;
+  voiceActive = false;
+  if (voiceTimer) {
+    clearTimeout(voiceTimer);
+    voiceTimer = undefined;
+  }
+  const chunks = voiceChunks;
+  const bytes = voiceBytes;
+  voiceChunks = [];
+  voiceBytes = 0;
+  try {
+    await bridge?.audioControl(false);
+  } catch {
+    // The microphone may already be closed.
+  }
+
+  state.screen = "chat";
+  if (bytes === 0 || chunks.length === 0) {
+    voiceBusy = false;
+    setPhoneStatus("No audio captured. Try again.", true);
+    render();
+    return;
+  }
+
+  setPhoneStatus("Transcribing…");
+  render();
+  try {
+    const wav = pcmChunksToWav(chunks);
+    const result = await client!.transcribe(
+      new Blob([wav], { type: "audio/wav" }),
+      { signal: AbortSignal.timeout(30_000) },
+    );
+    const text = result.text.trim();
+    if (!text) {
+      voiceBusy = false;
+      setPhoneStatus("No speech detected. Try again.", true);
+      render();
+      return;
+    }
+    phoneText.value = text;
+    phoneText.focus();
+    syncPhoneSession();
+    setPhoneStatus("Transcript ready. Edit or send.");
+  } catch (error) {
+    setPhoneStatus(failureMessage(error), true);
+    log(`Voice transcription failed: ${failureMessage(error)}`);
+  } finally {
+    voiceBusy = false;
+  }
+  render();
+}
+
+async function cancelVoice(): Promise<void> {
+  if (!voiceActive) return;
+  voiceActive = false;
+  voiceBusy = false;
+  if (voiceTimer) {
+    clearTimeout(voiceTimer);
+    voiceTimer = undefined;
+  }
+  voiceChunks = [];
+  voiceBytes = 0;
+  try {
+    await bridge?.audioControl(false);
+  } catch {
+    // The microphone may already be closed.
+  }
+  state.screen = "chat";
+  setPhoneStatus("Voice cancelled.");
+  render();
+}
+
 async function executeReply(option: ReplyOption): Promise<void> {
   if (!client || !state.sessionRef) return;
   try {
@@ -2263,10 +2387,7 @@ async function executeReply(option: ReplyOption): Promise<void> {
       return;
     }
     if (option.action === "voice") {
-      phoneText.focus();
-      setPhoneStatus("Voice is not enabled yet; type on the phone.");
-      state.screen = "chat";
-      render();
+      await startVoice();
       return;
     }
     if (option.text) {
@@ -2346,6 +2467,10 @@ async function performChoice(index: number): Promise<void> {
 
 function back(): void {
   hidePhoneForm();
+  if (state.screen === "voice") {
+    void cancelVoice();
+    return;
+  }
   if (state.screen === "failure") {
     const target = state.failureReturnScreen;
     state.failure = undefined;
@@ -2560,6 +2685,10 @@ function handleListClick(index: number): void {
 }
 
 function handleTextClick(): void {
+  if (state.screen === "voice") {
+    void stopVoice();
+    return;
+  }
   if (state.screen === "failure") {
     performFailureAction(0);
     return;
@@ -2587,6 +2716,14 @@ function handleTextClick(): void {
 }
 
 function onEvenEvent(event: any): void {
+  const pcm = event?.audioEvent?.audioPcm;
+  if (voiceActive && pcm instanceof Uint8Array) {
+    if (voiceBytes + pcm.byteLength <= MAX_VOICE_BYTES) {
+      voiceChunks.push(pcm);
+      voiceBytes += pcm.byteLength;
+    }
+    return;
+  }
   eventQueue.push(event);
   void processEvents();
 }
@@ -2598,6 +2735,14 @@ async function processEvents(): Promise<void> {
   const event = eventQueue.shift();
   try {
     const input = glassInput(event);
+    if (state.screen === "voice") {
+      if (input?.type === "text-click") {
+        void stopVoice();
+      } else if (input?.type === "back") {
+        void cancelVoice();
+      }
+      return;
+    }
     if (input?.type === "back") {
       back();
     } else if (input?.type === "scroll") {
@@ -2652,6 +2797,13 @@ function render(): void {
         : "Tap choose · Back ×2";
     if (setPreview(failure.header, body, footer, items)) {
       void showPage(listPage(failure.header, items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "voice") {
+    const body = "Listening…\n\nTap the glasses to stop.\nBack cancels.";
+    if (setPreview("VOICE", body, "Tap to stop")) {
+      void showPage(textPage(body, "Voice reply"));
     }
     return;
   }
@@ -3178,6 +3330,8 @@ async function init(): Promise<void> {
 
 window.addEventListener("beforeunload", () => {
   if (pollTimer) clearInterval(pollTimer);
+  if (voiceTimer) clearTimeout(voiceTimer);
+  if (voiceActive) void bridge?.audioControl(false);
 });
 
 void init();
