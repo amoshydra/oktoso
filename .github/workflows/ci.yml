@@ -22,5 +22,8 @@ jobs:
       - run: pnpm brand:check
       - run: pnpm openapi:check
       - run: pnpm build:single-port
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:run
       - run: pnpm hardware:check
       - run: npm pack --dry-run

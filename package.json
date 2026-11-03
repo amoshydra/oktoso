@@ -2,7 +2,7 @@
   "name": "@amoshydra/oktoso",
   "version": "0.1.14",
   "private": false,
-  "description": "Oktoso — hub and control plane for AI agents across providers and wearable clients.",
+  "description": "Oktoso \u2014 hub and control plane for AI agents across providers and wearable clients.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -34,6 +34,8 @@
     "pair:dev": "tsx scripts/pair-dev.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:e2e": "pnpm build:single-port && vitest run --config vitest.e2e.config.ts",
+    "test:e2e:run": "vitest run --config vitest.e2e.config.ts",
     "test:watch": "vitest",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "openapi:check": "tsx scripts/generate-openapi.ts --check",
@@ -44,6 +46,7 @@
     "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check"
   },
   "devDependencies": {
+    "@amoshydra/oktoso-testing": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@types/node": "^24.19.2",
     "playwright": "^1.64.1",

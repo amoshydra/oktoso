@@ -25,7 +25,7 @@ Acceptance:
 
 ## Milestone 1: Hub core and OpenCode
 
-Status: in progress. Phase 0 foundation, the hub core, and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. `v0.1.11` shipped the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix for refreshed transcripts. The contract is [`interaction-contract.md`](interaction-contract.md); the assistant-ui decision is [`package-evaluation.md`](package-evaluation.md). Remaining Milestone 1 items: Open WebUI attachment sending, message editing, and the session-family tree.
+Status: in progress. Phase 0 foundation, the hub core, and the OpenCode read/write slice are in place: contracts, config, owner/session auth, state, event bus, fake providers, authenticated shell, real session index, transcript, composer, prompt sending, new-session options/creation, interrupt, and provider event forwarding. `v0.1.11` shipped the chat interaction slice: message copy, hub-backed dictation, OpenCode attachments, Open WebUI in-chat branch switching and retry, OpenCode session forks, and a provider-order fix for refreshed transcripts. The latest chat slice adds optimistic send, failed-send retry, and OpenCode edit-and-fork. The contract is [`interaction-contract.md`](interaction-contract.md); the assistant-ui decision is [`package-evaluation.md`](package-evaluation.md). Remaining Milestone 1 items: Open WebUI attachment sending, true in-chat editing for Open WebUI, and the session-family tree.
 
 Goal: prove the hub with one provider and one client.
 
@@ -316,6 +316,7 @@ Acceptance:
 ## Testing strategy
 
 - **Unit tests** for normalization, pagination, attention priority, and config parsing.
+- **Browser E2E tests** with Playwright against a built hub and fake providers; run with `pnpm test:e2e`.
 - **Contract tests** for each provider adapter against recorded fixtures.
 - **Live smoke tests** against a real OpenCode, Open WebUI, and Hermes instance.
 - **API tests** that run against the TypeScript hub and, later, the Rust hub.
