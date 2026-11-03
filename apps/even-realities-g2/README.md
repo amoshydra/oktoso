@@ -30,8 +30,8 @@ Screenshot capture and framing are documented in
   sessions. Child sessions do not add unread noise.
 - **Chat** — six-line viewport, line/message position, agent activity, SSE updates,
   read markers, and incremental message streaming.
-- **Replies** — canned and model-assisted reply options, numbered choices, and a
-  phone keyboard for longer text.
+- **Replies** — canned and model-assisted reply options, numbered choices, voice,
+  and a phone keyboard for longer text.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries.
 - **Batch answers** — every question in a multi-question turn is shown on the
@@ -43,8 +43,11 @@ Screenshot capture and framing are documented in
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
 
-Voice capture/STT is not implemented. The phone remains the keyboard for long or
-free-form answers.
+Voice replies use the glasses microphone (16 kHz, signed 16-bit little-endian,
+mono) and the hub's configured transcription endpoint. The voice action is
+hidden when transcription is disabled or missing a base URL or model. The phone
+remains the keyboard for long or free-form answers. Real-hardware voice
+acceptance is still pending.
 
 ## Screen map
 
@@ -64,6 +67,7 @@ Chat
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
 ├─ Reply            canned, model-assisted, and numbered choices
+├─ Voice            glasses microphone, hidden without hub STT
 └─ Phone keyboard   longer text fallback
 
 Failure

@@ -45,6 +45,10 @@ const network = manifest.permissions?.find(
   (permission) => permission.name === "network",
 );
 check(Boolean(network), "app.json is missing the network permission.");
+const microphone = manifest.permissions?.find(
+  (permission) => permission.name === "g2-microphone",
+);
+check(Boolean(microphone), "app.json is missing the g2-microphone permission.");
 const whitelist = network?.whitelist ?? [];
 check(whitelist.length > 0, "app.json network whitelist is empty.");
 for (const origin of whitelist) {

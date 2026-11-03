@@ -140,7 +140,8 @@ This is deliberately not browser Web Speech:
 - Web Speech sends audio to the browser vendor and is unavailable in some
   browsers.
 - The operator already configures a self-hosted or private STT endpoint.
-- The G2/voice path needs the same hub transcription contract.
+- The G2 voice path uses the same hub transcription contract with 16 kHz,
+  signed 16-bit little-endian mono PCM wrapped as WAV.
 - Provider keys stay on the hub.
 
 ### Flow
@@ -353,7 +354,7 @@ discovery surface.
   provider transcript the only record? Current decision: no audio retention and
   no separate transcript storage.
 - Should the web client expose a language override? Current decision: no; the
-  STT endpoint auto-detects. Add it with the G2 voice slice.
+  STT endpoint auto-detects. The G2 voice slice also relies on auto-detection.
 - Should dictation auto-stop on silence? Current decision: no; the user stops
   explicitly or the 120-second cap fires.
 - Should copy be offered on user messages too? Current decision: assistant
