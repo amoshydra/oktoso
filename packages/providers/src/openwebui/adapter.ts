@@ -124,6 +124,9 @@ export class OpenWebUIAdapter implements ProviderAdapter {
   private folderCache:
     | { at: number; folders: Map<string, OpenWebUIFolder> }
     | undefined;
+  private folderChatCache:
+    | { at: number; byChat: Map<string, string> }
+    | undefined;
 
   constructor(options: OpenWebUIAdapterOptions) {
     this.id = options.id;
@@ -187,9 +190,18 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       if (row?.id) unique.set(row.id, row);
     }
     const folders = await this.folders(signal).catch(() => new Map());
+    const folderChats = await this.folderChats(folders, signal).catch(
+      () => new Map(),
+    );
     const sessions = [...unique.values()]
       .slice(0, limit)
-      .map((row) => this.toSession(row, folders));
+      .map((row) =>
+        this.toSession(
+          row,
+          folders,
+          row.folder_id ?? folderChats.get(row.id),
+        ),
+      );
     // The summary endpoint does not expose failures. Check unread/active chats
     // so attention can surface a failed current branch without fetching every
     // chat on every sync.
@@ -204,7 +216,14 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     const settled = await Promise.allSettled(
       candidates.map(async ({ session, index }) => {
         const chat = await this.fetchChat(session.nativeID, signal);
-        return { index, session: this.toSessionFromDetail(chat, folders) };
+        return {
+          index,
+          session: this.toSessionFromDetail(
+            chat,
+            folders,
+            folderChats.get(chat.id),
+          ),
+        };
       }),
     );
     for (const result of settled) {
@@ -654,10 +673,11 @@ export class OpenWebUIAdapter implements ProviderAdapter {
   private toSession(
     row: OpenWebUIChatSummary,
     folders: Map<string, OpenWebUIFolder>,
+    folderID?: string | null,
   ): Session {
     const updatedAt = row.updated_at * 1_000;
     const createdAt = row.created_at * 1_000;
-    const project = this.folderPath(row.folder_id, folders);
+    const project = this.folderPath(folderID ?? row.folder_id, folders);
     return {
       ref: `${this.id}:${row.id}`,
       providerID: this.id,
@@ -675,13 +695,14 @@ export class OpenWebUIAdapter implements ProviderAdapter {
   private toSessionFromDetail(
     chat: OpenWebUIChat,
     folders: Map<string, OpenWebUIFolder>,
+    folderID?: string | null,
   ): Session {
     const branch = this.currentBranch(chat);
     const last = branch.at(-1);
     const model =
       chat.chat.models?.[0] ??
       [...branch].reverse().find((message) => message.model)?.model;
-    const project = this.folderPath(chat.folder_id, folders);
+    const project = this.folderPath(folderID ?? chat.folder_id, folders);
     return {
       ref: `${this.id}:${chat.id}`,
       providerID: this.id,
@@ -810,6 +831,40 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     );
     this.folderCache = { at: Date.now(), folders };
     return folders;
+  }
+
+  private async folderChats(
+    folders: Map<string, OpenWebUIFolder>,
+    signal: AbortSignal,
+  ): Promise<Map<string, string>> {
+    const cached = this.folderChatCache;
+    if (cached && Date.now() - cached.at < 300_000) return cached.byChat;
+    if (folders.size === 0) {
+      const empty = new Map<string, string>();
+      this.folderChatCache = { at: Date.now(), byChat: empty };
+      return empty;
+    }
+    const entries = await Promise.all(
+      [...folders.keys()].map(async (folderID) => {
+        try {
+          const rows = await this.request<OpenWebUIChatSummary[]>(
+            `/api/v1/chats/folder/${encodeURIComponent(folderID)}/list`,
+            { page: 1 },
+            signal,
+          );
+          return Array.isArray(rows)
+            ? rows
+                .filter((row): row is OpenWebUIChatSummary => Boolean(row?.id))
+                .map((row) => [row.id, folderID] as const)
+            : [];
+        } catch {
+          return [];
+        }
+      }),
+    );
+    const byChat = new Map(entries.flat());
+    this.folderChatCache = { at: Date.now(), byChat };
+    return byChat;
   }
 
   private folderPath(

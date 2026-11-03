@@ -446,7 +446,6 @@ function owuiSummary(chat: FakeOwuiChat): Record<string, unknown> {
     last_read_at: chat.last_read_at,
     snippet: null,
     active: chat.active,
-    folder_id: chat.folder_id ?? null,
   };
 }
 
@@ -907,6 +906,17 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   }
   if (path === "/api/config") {
     sendJson(response, 200, { name: "Open WebUI", version: "0.0.0-fake-openwebui" });
+    return;
+  }
+  const folderChatsMatch = path.match(
+    /^\/api\/v1\/chats\/folder\/([^/]+)\/list$/,
+  );
+  if (folderChatsMatch && request.method === "GET") {
+    const folderID = folderChatsMatch[1] ?? "";
+    const rows = sortedOwuiChats()
+      .filter((chat) => chat.folder_id === folderID)
+      .map(owuiSummary);
+    sendJson(response, 200, rows);
     return;
   }
   if (path === "/api/v1/chats/list" && request.method === "GET") {
