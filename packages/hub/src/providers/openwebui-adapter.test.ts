@@ -48,6 +48,64 @@ describe("OpenWebUIAdapter", () => {
     });
   });
 
+  it("maps Open WebUI folders to project names", async () => {
+    const { adapter } = await createAdapter();
+    const page = await adapter.listSessions(
+      { limit: 200 },
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(
+      page.data.find((session) => session.nativeID === "chat_fake_openwebui")
+        ?.project,
+    ).toBe("Research");
+    expect(
+      page.data.find((session) => session.nativeID === "chat_fake_branches")
+        ?.project,
+    ).toBe("Research / Deep Research");
+  });
+
+  it("uploads attachments and sends file references", async () => {
+    const { fake, adapter } = await createAdapter();
+    expect(adapter.capabilities.attach).toBe(true);
+    const created = await adapter.createSession(
+      { providerID: "openwebui", title: "Attachment smoke" },
+      AbortSignal.timeout(5_000),
+    );
+
+    const result = await adapter.sendMessage(
+      created.ref,
+      {
+        text: "Read the attachment.",
+        files: [
+          {
+            name: "notes.txt",
+            mimeType: "text/plain",
+            data: new Uint8Array([104, 105]),
+          },
+        ],
+      },
+      AbortSignal.timeout(10_000),
+    );
+    expect(result.accepted).toBe(true);
+
+    const messages = await adapter.getMessages(
+      created.ref,
+      { limit: 100, order: "asc" },
+      AbortSignal.timeout(5_000),
+    );
+    const user = messages.data.find((message) => message.role === "user");
+    expect(user?.parts).toEqual(
+      expect.arrayContaining([
+        { type: "file", name: "notes.txt", mimeType: "text/plain" },
+      ]),
+    );
+
+    await fetch(`${fake.url}/api/v1/chats/${encodeURIComponent(created.nativeID)}`, {
+      method: "DELETE",
+    });
+  });
+
   it("creates a chat and completes a prompt", async () => {
     const { fake, adapter } = await createAdapter();
     const created = await adapter.createSession(

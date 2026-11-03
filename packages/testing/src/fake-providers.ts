@@ -253,6 +253,7 @@ interface FakeOwuiChat {
   updated_at: number;
   last_read_at: number;
   active: boolean;
+  folder_id?: string | null;
   chat: {
     title: string;
     models: string[];
@@ -268,6 +269,7 @@ function makeFakeOwuiChat(options: {
   title: string;
   assistantContent: string;
   error?: unknown;
+  folder_id?: string;
 }): FakeOwuiChat {
   const now = Math.floor(Date.now() / 1000);
   const userID = `${options.id}-user`;
@@ -279,6 +281,7 @@ function makeFakeOwuiChat(options: {
     updated_at: now,
     last_read_at: 0,
     active: false,
+    folder_id: options.folder_id ?? null,
     chat: {
       title: options.title,
       models: ["fake-model"],
@@ -326,6 +329,7 @@ function makeFakeOwuiBranchChat(): FakeOwuiChat {
     updated_at: now,
     last_read_at: 0,
     active: false,
+    folder_id: "folder_deep",
     chat: {
       title: "Fake Open WebUI branches",
       models: ["fake-model"],
@@ -406,6 +410,11 @@ function makeFakeOwuiBranchChat(): FakeOwuiChat {
   };
 }
 
+const OWUI_FOLDERS = [
+  { id: "folder_research", name: "Research", parent_id: null },
+  { id: "folder_deep", name: "Deep Research", parent_id: "folder_research" },
+];
+
 const OWUI_CHATS = new Map<string, FakeOwuiChat>([
   ["chat_fake_branches", makeFakeOwuiBranchChat()],
   [
@@ -414,6 +423,7 @@ const OWUI_CHATS = new Map<string, FakeOwuiChat>([
       id: "chat_fake_openwebui",
       title: "Fake Open WebUI chat",
       assistantContent: "Fake Open WebUI reply.",
+      folder_id: "folder_research",
     }),
   ],
   [
@@ -436,6 +446,7 @@ function owuiSummary(chat: FakeOwuiChat): Record<string, unknown> {
     last_read_at: chat.last_read_at,
     snippet: null,
     active: chat.active,
+    folder_id: chat.folder_id ?? null,
   };
 }
 
@@ -862,6 +873,27 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   if (viewMatch && request.method === "POST") {
     response.writeHead(204);
     response.end();
+    return;
+  }
+  if (path === "/api/v1/folders/" && request.method === "GET") {
+    sendJson(response, 200, OWUI_FOLDERS);
+    return;
+  }
+  if (path === "/api/v1/files/" && request.method === "POST") {
+    for await (const _chunk of request) {
+      // Drain the multipart body; the fake only needs to issue an id.
+    }
+    sendJson(response, 200, {
+      id: `file_fake_${Date.now().toString(36)}`,
+      filename: "upload",
+    });
+    return;
+  }
+  if (
+    path.match(/^\/api\/v1\/files\/[^/]+\/process\/status$/) &&
+    request.method === "GET"
+  ) {
+    sendJson(response, 200, { status: "completed" });
     return;
   }
   if (path === "/api/v1/models") {
