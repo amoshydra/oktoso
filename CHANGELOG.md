@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.15](https://github.com/amoshydra/oktoso/compare/v0.1.14...v0.1.15) (2026-11-04)
+
+
+### Features
+
+* **chat:** add optimistic sends, retry, and edit-and-fork ([1802c5a](https://github.com/amoshydra/oktoso/commit/1802c5a60462ac5fd3d270a42a7825efd7ab01c2))
+* **g2:** add gated voice replies through hub transcription ([6e552ee](https://github.com/amoshydra/oktoso/commit/6e552ee621e1e5dc37ed18ba2bab523ec19aab38))
+* **openwebui:** send attachments and map folders ([3474454](https://github.com/amoshydra/oktoso/commit/3474454dfc23d70ff1ebaff959c67080627df922))
+* **search:** query provider history for sessions ([d48de20](https://github.com/amoshydra/oktoso/commit/d48de20858798050bf9bff255c3c03cf3f20bf09))
+* **web:** add URL routing and history navigation ([0a444bb](https://github.com/amoshydra/oktoso/commit/0a444bbc173ff676dc629e898aec37f27b6ab772))
+
+
+### Bug Fixes
+
+* **openwebui:** resolve folders from folder chat lists ([732e5f9](https://github.com/amoshydra/oktoso/commit/732e5f98a07ca3b7e01f075790ef8e9ba16f4cd9))
+
 ## [0.1.14](https://github.com/amoshydra/oktoso/compare/v0.1.13...v0.1.14) (2026-11-03)
 
 
