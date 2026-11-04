@@ -35,7 +35,10 @@ async function waitForHealth(): Promise<void> {
 async function openSession(title: string): Promise<void> {
   if (!page) throw new Error("The E2E page is not ready");
   await page.getByRole("button", { name: "Sessions" }).click();
-  await page.getByRole("button", { name: new RegExp(title) }).click({ timeout: 5_000 });
+  await page
+    .getByRole("button", { name: new RegExp(title) })
+    .first()
+    .click({ timeout: 5_000 });
   await page.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
 }
 
@@ -279,4 +282,140 @@ describe("session search", () => {
     await result.waitFor({ timeout: 5_000 });
     expect(await result.textContent()).toContain("Quarterly archive review");
   });
+});
+
+describe("navigation history", () => {
+  function currentPath(): string {
+    if (!page) throw new Error("The E2E page is not ready");
+    const url = new URL(page.url());
+    return `${url.pathname}${url.search}`;
+  }
+
+  it("moves between the sessions list and a chat with browser back and forward", async () => {
+    await openSession("Fix auth race in gateway");
+    const chatPath = currentPath();
+    expect(chatPath).toMatch(/^\/sessions\//);
+
+    await page!.goBack();
+    await page!.getByRole("button", { name: "New session" }).waitFor();
+    expect(currentPath()).toBe("/sessions");
+
+    await page!.goForward();
+    await page!.locator(".chat-composer textarea").waitFor();
+    expect(currentPath()).toBe(chatPath);
+  });
+
+  it("closes and reopens the mobile details sheet with history", async () => {
+    await page!.setViewportSize({ width: 390, height: 844 });
+    await openSession("Fix auth race in gateway");
+
+    await page!.getByRole("button", { name: "Details" }).click();
+    await page!.locator("#session-details").waitFor();
+    expect(currentPath()).toContain("details=1");
+
+    await page!.goBack();
+    await page!.locator("#session-details").waitFor({ state: "hidden" });
+    await page!.locator(".chat-composer textarea").waitFor();
+    expect(currentPath()).not.toContain("details=1");
+
+    await page!.goForward();
+    await page!.locator("#session-details").waitFor();
+    expect(currentPath()).toContain("details=1");
+  });
+
+  it("opens and closes the new-session panel with history", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.getByRole("button", { name: "Sessions" }).click();
+    await page.getByRole("button", { name: "New session" }).click();
+    await page.getByRole("heading", { name: "New session" }).waitFor();
+    expect(currentPath()).toBe("/sessions?new=1");
+
+    await page.goBack();
+    await page.getByRole("heading", { name: "New session" }).waitFor({
+      state: "hidden",
+    });
+    expect(currentPath()).toBe("/sessions");
+
+    await page.goForward();
+    await page.getByRole("heading", { name: "New session" }).waitFor();
+  });
+
+  it("updates the search URL without adding a history step per keystroke", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.getByRole("button", { name: "Sessions" }).click();
+    await page.getByRole("button", { name: "Search" }).click();
+    const input = page.locator("#session-search");
+    await input.waitFor();
+    await input.fill("auth");
+
+    await page.waitForFunction(() => window.location.search.includes("q=auth"));
+    expect(currentPath()).toContain("/search?q=auth");
+
+    await page.goBack();
+    await page.getByRole("button", { name: "New session" }).waitFor();
+    expect(currentPath()).toBe("/sessions");
+
+    await page.goForward();
+    await input.waitFor();
+    expect(await input.inputValue()).toBe("auth");
+  });
+
+  it("restores a deep link and canonicalizes unknown routes", async () => {
+    await openSession("Fix auth race in gateway");
+    const chatUrl = page!.url();
+
+    await page!.goto(chatUrl);
+    await page!.locator(".chat-composer textarea").waitFor();
+    expect(currentPath()).toMatch(/^\/sessions\//);
+
+    await page!.goto(`${BASE_URL}/not-a-route`);
+    await page!.getByRole("button", { name: "Sessions" }).waitFor();
+    expect(new URL(page!.url()).pathname).toBe("/foundation");
+  });
+});
+
+describe("responsive history surfaces", () => {
+  it("has no horizontal overflow or console errors across widths", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    for (const width of [1440, 1024, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      await page.goto(`${BASE_URL}/inbox`);
+      await page.locator(".inbox-tabs").waitFor();
+      await expectNoHorizontalOverflow(width, "inbox");
+
+      await page.goto(`${BASE_URL}/sessions`);
+      await page.locator(".session-list-item").first().waitFor();
+      await expectNoHorizontalOverflow(width, "sessions");
+
+      await page.locator(".session-list-item").first().click();
+      await page.locator(".chat-composer textarea").waitFor();
+      await expectNoHorizontalOverflow(width, "chat");
+    }
+
+    expect(errors).toEqual([]);
+  }, 120_000);
+
+  async function expectNoHorizontalOverflow(
+    width: number,
+    surface: string,
+  ): Promise<void> {
+    if (!page) throw new Error("The E2E page is not ready");
+    const overflow = await page.evaluate(() => ({
+      document:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+      body: document.body.scrollWidth > document.body.clientWidth,
+    }));
+    expect(overflow, `${surface} at ${width}px`).toEqual({
+      document: false,
+      body: false,
+    });
+  }
 });
