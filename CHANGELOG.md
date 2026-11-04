@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/amoshydra/oktoso/compare/v0.1.15...v0.1.16) (2026-11-04)
+
+
+### Bug Fixes
+
+* **opencode:** detect running sessions from time.busy ([c30b0bc](https://github.com/amoshydra/oktoso/commit/c30b0bce3b58fdbaf4f09b89f3353d955932c7cf))
+
 ## [0.1.15](https://github.com/amoshydra/oktoso/compare/v0.1.14...v0.1.15) (2026-11-04)
 
 
