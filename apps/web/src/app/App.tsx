@@ -1788,7 +1788,7 @@ function SearchView(props: {
           <h2>Search sessions</h2>
           <p>
             Find sessions across every provider by title, project, directory, or
-            agent. Message content is not searched yet.
+            agent. Providers may also match message content.
           </p>
         </div>
       </section>
@@ -1879,8 +1879,8 @@ function SearchView(props: {
 
       {!trimmed && !hasFilters ? (
         <div className="empty">
-          Type a query or choose a provider or status filter to search the hub
-          session cache.
+          Type a query or choose a provider or status filter to search sessions
+          across providers.
         </div>
       ) : loading && results.length === 0 ? (
         <div className="empty">Searching sessions…</div>
