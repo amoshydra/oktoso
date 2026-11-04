@@ -7,10 +7,20 @@ import "@amoshydra/oktoso-ui/tokens.css";
 import "@amoshydra/oktoso-ui/base.css";
 import "./styles.css";
 import { App } from "./app/App";
+import {
+  bootstrapBrowserHistory,
+  HistoryProvider,
+} from "./app/history";
 
 const savedTheme = localStorage.getItem("oktoso-theme");
 document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
 
+bootstrapBrowserHistory();
+
 const root = document.getElementById("app");
 if (!root) throw new Error("Missing #app root");
-createRoot(root).render(<App />);
+createRoot(root).render(
+  <HistoryProvider>
+    <App />
+  </HistoryProvider>,
+);

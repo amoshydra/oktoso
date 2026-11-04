@@ -675,21 +675,42 @@ Generate `docs/openapi.yaml` from `packages/contracts` and run a CI drift check.
 
 ### Routes
 
+- `/` and `/foundation`
 - `/login`
-- `/` → inbox
+- `/inbox`
 - `/sessions`
 - `/sessions/:ref`
 - `/providers`
 - `/settings`
 - `/search`
 
-Session refs are opaque. URL-encode them; never parse the provider ID from the URL in the client.
+Query parameters carry state that should survive reload, back, and forward:
+
+| Route | Parameters |
+|---|---|
+| `/inbox` | `filter=all\|approval\|question\|unread\|error` |
+| `/sessions` | `new=1` opens the new-session panel |
+| `/sessions/:ref` | `details=1` opens the details panel or sheet |
+| `/providers` | `add=1`, `edit=<providerID>` |
+| `/search` | `q`, `provider`, `status` |
+| `/login` | `next=/internal/path` |
+
+Session refs are opaque. URL-encode them as one path segment; never parse the provider ID from the URL in the client.
+
+Navigation uses the History API, not the hash:
+
+- Global destinations, sessions, overlays, and filter chips push a new entry.
+- Search text updates use a debounced `replaceState` so typing does not add one history entry per keystroke.
+- Back and forward restore the route, data selection, details state, and inner scroll offsets.
+- In-app back uses `history.back()` when the previous entry belongs to the app; a direct deep link falls back to an explicit route with `replaceState`.
+- Signed-out deep links replace the URL with `/login?next=…`; only same-origin app paths are accepted as `next`.
+- The server's existing SPA fallback serves `index.html` for every non-asset route.
 
 ### Data flow
 
 - `HubClient` from `packages/client` owns HTTP, auth, errors, and SSE parsing.
 - TanStack Query is planned to own server state: sessions, messages, attention, providers, options, search.
-- React state owns selection, filters, modals, and sheet state.
+- The URL owns the view, selected session, overlay flags, and shareable filters. React state owns transient loading, draft text, and in-place pickers.
 - `event-sync.ts` maps hub events into query updates:
   - `message.created/updated` upserts a normalized message snapshot into the active page;
   - `message.delta` falls back to a page refresh when only deltas are available;

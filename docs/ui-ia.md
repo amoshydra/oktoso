@@ -77,6 +77,17 @@ Oktoso
 
 The global navigation has five destinations: Inbox, Sessions, Search, Providers, Settings. A session is a contextual route opened from Inbox or Sessions, not a global destination.
 
+### History behavior
+
+Every screen, session, overlay, and filter change that represents navigation is addressable by URL and participates in browser history.
+
+- Rail and bottom-nav changes, session opens, session switches, new-session, provider add/edit, details on overlay widths, inbox filters, and search filter chips push a history entry.
+- Search text is reflected in the URL with a short debounce and `replaceState`, so one search does not create one entry per keystroke.
+- Back and forward restore the visible route, selected session, details state, shareable filters, and inner scroll positions for the content column and transcript.
+- Back from a chat returns to where it was opened, including Inbox or Search. The topbar back action uses the same history behavior and falls back to Sessions when the chat was opened directly.
+- Closing an overlay opened from the app steps back to the state that opened it. Closing an overlay opened from a deep link replaces the URL instead of leaving a trapped history entry.
+- Direct deep links restore the same screen after authentication. Signed-out links redirect through `/login?next=…`, and only same-origin app paths are accepted. Session refs stay opaque and URL-encoded.
+
 ## 3. Navigation model
 
 ### Desktop

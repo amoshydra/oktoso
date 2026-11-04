@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_BYTES,
@@ -41,6 +48,22 @@ import {
 import { renderMarkdown } from "./markdown";
 import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
+  useBackTo,
+  useHistoryLocation,
+  useNavigate,
+  useNavigationType,
+  type NavigateOptions,
+} from "./history";
+import {
+  currentHref,
+  DEFAULT_ROUTE,
+  isInternalNext,
+  parseRouteHref,
+  type Route,
+} from "./router";
+import { readRouteCache, writeRouteCache } from "./route-cache";
+import { hasSavedScroll, useScrollRestoration } from "./scroll";
+import {
   createOptimisticMessage,
   optimisticSend,
   updateOptimisticStatus,
@@ -56,6 +79,7 @@ const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type AuthState = "checking" | "signed-out" | "signed-in";
 type View = "foundation" | "inbox" | "sessions" | "search" | "providers" | "settings";
+type SearchState = Omit<Extract<Route, { name: "search" }>, "name">;
 
 const VIEW_META: Record<
   View,
@@ -115,20 +139,63 @@ const RAIL_VIEWS: View[] = [
 ];
 const BOTTOM_VIEWS: View[] = ["foundation", "inbox", "sessions", "search", "settings"];
 
+function viewForRoute(route: Route): View {
+  switch (route.name) {
+    case "foundation":
+      return "foundation";
+    case "inbox":
+      return "inbox";
+    case "sessions":
+    case "chat":
+      return "sessions";
+    case "search":
+      return "search";
+    case "providers":
+      return "providers";
+    case "settings":
+      return "settings";
+    case "login":
+      return "foundation";
+  }
+}
+
+function routeForView(view: View): Route {
+  switch (view) {
+    case "foundation":
+      return DEFAULT_ROUTE;
+    case "inbox":
+      return { name: "inbox", filter: "all" };
+    case "sessions":
+      return { name: "sessions", newSession: false };
+    case "search":
+      return { name: "search", query: "", provider: "all", status: "all" };
+    case "providers":
+      return { name: "providers" };
+    case "settings":
+      return { name: "settings" };
+  }
+}
+
 export function App() {
+  const { route, key: routeKey } = useHistoryLocation();
+  const navigationType = useNavigationType();
+  const navigate = useNavigate();
+  const backTo = useBackTo();
+
+  const view = viewForRoute(route);
+  const selectedSessionRef = route.name === "chat" ? route.ref : undefined;
+  const chatOpen = route.name === "chat";
+  const detailsOpen = route.name === "chat" ? route.details : false;
+
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme === "light" ? "light" : "dark",
   );
-  const [view, setView] = useState<View>("foundation");
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [auth, setAuth] = useState<AuthState>("checking");
   const [client, setClient] = useState<HubClient | null>(null);
   const [health, setHealth] = useState<Health>();
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [providerEditor, setProviderEditor] = useState<
-    { mode: "add" | "edit"; provider?: Provider } | undefined
-  >();
   const [attentionCount, setAttentionCount] = useState(0);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
   const [events, setEvents] = useState<HubEvent[]>([]);
@@ -138,39 +205,69 @@ export function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const signingOut = useRef(false);
   const didRefresh = useRef(false);
-  const [selectedSessionRef, setSelectedSessionRef] = useState<string>();
   const [activeSession, setActiveSession] = useState<Session>();
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     window.matchMedia("(min-width: 761px)").matches,
   );
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const contentRef = useRef<HTMLElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const autoDetailsKey = useRef<string | undefined>(undefined);
+  const detailsPushed = useRef(false);
 
-  const chatOpen = view === "sessions" && selectedSessionRef !== undefined;
+  const providerEditorRoute =
+    route.name === "providers" ? route.editor : undefined;
+  const providerEditor: { mode: "add" | "edit"; provider?: Provider } | undefined =
+    providerEditorRoute?.mode === "add"
+      ? { mode: "add" }
+      : providerEditorRoute?.mode === "edit"
+        ? (() => {
+            const provider = providers.find(
+              (item) => item.id === providerEditorRoute.id,
+            );
+            return provider ? { mode: "edit", provider } : undefined;
+          })()
+        : undefined;
 
-  useEffect(() => {
-    contentRef.current?.scrollTo({ top: 0 });
-  }, [view, selectedSessionRef]);
+  useScrollRestoration(contentRef, "content");
 
   useEffect(() => {
     setActiveSession(undefined);
-    if (!chatOpen) {
-      setDetailsOpen(false);
+  }, [selectedSessionRef]);
+
+  useEffect(() => {
+    if (route.name !== "chat") {
+      autoDetailsKey.current = undefined;
+      detailsPushed.current = false;
       return;
     }
-    setDetailsOpen(window.matchMedia("(min-width: 1320px)").matches);
-  }, [chatOpen, selectedSessionRef]);
+    if (route.details) {
+      autoDetailsKey.current = routeKey;
+      return;
+    }
+    if (autoDetailsKey.current === routeKey) return;
+    autoDetailsKey.current = routeKey;
+    detailsPushed.current = false;
+    if (navigationType === "pop") return;
+    if (!window.matchMedia("(min-width: 1320px)").matches) return;
+    navigate({ ...route, details: true }, { replace: true });
+  }, [route, routeKey, navigationType, navigate]);
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1319px)");
     const onChange = () => {
-      if (query.matches) setDetailsOpen(false);
+      if (!query.matches) return;
+      const current = routeRef.current;
+      if (current.name !== "chat" || !current.details) return;
+      detailsPushed.current = false;
+      navigate({ ...current, details: false }, { replace: true });
     };
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 761px)");
@@ -179,27 +276,117 @@ export function App() {
     return () => query.removeEventListener("change", onChange);
   }, []);
 
+  useLayoutEffect(() => {
+    if (navigationType === "push") {
+      contentRef.current?.scrollTo({ top: 0 });
+    }
+  }, [routeKey, navigationType]);
+
+  useEffect(() => {
+    const label = chatOpen
+      ? activeSession?.title ?? "Session"
+      : VIEW_META[view].label;
+    document.title = `${label} · Oktoso`;
+  }, [chatOpen, activeSession?.title, view]);
+
+  useEffect(() => {
+    if (navigationType !== "push") return;
+    const current = routeRef.current;
+    if (current.name === "search") return;
+    if (
+      current.name === "chat" &&
+      current.details &&
+      window.matchMedia("(max-width: 1319px)").matches
+    ) {
+      return;
+    }
+    headingRef.current?.focus({ preventScroll: true });
+  }, [routeKey, navigationType]);
+
   useEffect(() => {
     if (auth !== "signed-in") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setView("search");
+        if (routeRef.current.name === "search") return;
+        navigate({ name: "search", query: "", provider: "all", status: "all" });
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [auth]);
+  }, [auth, navigate]);
 
-  const selectView = (next: View) => {
-    setSelectedSessionRef(undefined);
-    setView(next);
-  };
+  useEffect(() => {
+    if (auth === "signed-out" && route.name !== "login") {
+      const next = currentHref();
+      navigate(
+        {
+          name: "login",
+          ...(isInternalNext(next) ? { next } : {}),
+        },
+        { replace: true },
+      );
+      return;
+    }
+    if (auth === "signed-in" && route.name === "login") {
+      const target =
+        route.next && isInternalNext(route.next)
+          ? parseRouteHref(route.next)
+          : undefined;
+      navigate(target ?? DEFAULT_ROUTE, { replace: true });
+    }
+  }, [auth, route, navigate]);
 
-  const openSession = (ref: string) => {
-    setSelectedSessionRef(ref);
-    setView("sessions");
-  };
+  useEffect(() => {
+    const editor = route.name === "providers" ? route.editor : undefined;
+    if (editor?.mode !== "edit") return;
+    if (providers.length === 0) return;
+    if (providers.some((provider) => provider.id === editor.id)) return;
+    navigate({ name: "providers" }, { replace: true });
+  }, [navigate, providers, route]);
+
+  const selectView = useCallback(
+    (next: View) => {
+      if (route.name === next) return;
+      navigate(routeForView(next));
+    },
+    [navigate, route.name],
+  );
+
+  const openSession = useCallback(
+    (ref: string, options?: NavigateOptions) => {
+      navigate({ name: "chat", ref, details: false }, options);
+    },
+    [navigate],
+  );
+
+  const navigateSearch = useCallback(
+    (next: SearchState, options?: NavigateOptions) => {
+      navigate({ name: "search", ...next }, options);
+    },
+    [navigate],
+  );
+
+  const setDetailsOpen = useCallback(
+    (open: boolean) => {
+      const current = routeRef.current;
+      if (current.name !== "chat") return;
+      const wide = window.matchMedia("(min-width: 1320px)").matches;
+      const next = { ...current, details: open };
+      if (open) {
+        detailsPushed.current = !wide;
+        navigate(next, { replace: wide });
+        return;
+      }
+      if (detailsPushed.current) {
+        detailsPushed.current = false;
+        backTo({ name: "chat", ref: current.ref, details: false });
+        return;
+      }
+      navigate(next, { replace: true });
+    },
+    [backTo, navigate],
+  );
 
   const signOut = useCallback(() => {
     signingOut.current = true;
@@ -212,7 +399,6 @@ export function App() {
     setHealth(undefined);
     setDiagnostics(undefined);
     setProviders([]);
-    setProviderEditor(undefined);
     setAttentionCount(0);
     setEvents([]);
     setError(undefined);
@@ -447,6 +633,21 @@ export function App() {
     );
   }
 
+  if (route.name === "login") {
+    return (
+      <div className="login-page">
+        <div className="login-card boot-card">
+          <div className="brand-mark">
+            <BrandMark size={40} />
+          </div>
+          <h1>Oktoso</h1>
+          <p>Opening Oktoso…</p>
+          <div className="loading-line" />
+        </div>
+      </div>
+    );
+  }
+
   const providerPanel = (
     <article className="panel">
       <div className="panel-head">
@@ -461,7 +662,9 @@ export function App() {
           <button
             className="btn small"
             type="button"
-            onClick={() => setProviderEditor({ mode: "add" })}
+            onClick={() =>
+              navigate({ name: "providers", editor: { mode: "add" } })
+            }
           >
             + Add
           </button>
@@ -499,7 +702,12 @@ export function App() {
               <button
                 className="btn ghost small"
                 type="button"
-                onClick={() => setProviderEditor({ mode: "edit", provider })}
+                onClick={() =>
+                  navigate({
+                    name: "providers",
+                    editor: { mode: "edit", id: provider.id },
+                  })
+                }
               >
                 Edit
               </button>
@@ -512,14 +720,14 @@ export function App() {
           key={`${providerEditor.mode}:${providerEditor.provider?.id ?? "new"}`}
           client={client}
           provider={providerEditor.provider}
-          onClose={() => setProviderEditor(undefined)}
+          onClose={() => backTo({ name: "providers" })}
           onSaved={(saved) => {
             setProviders((current) => {
               const index = current.findIndex((item) => item.id === saved.id);
               if (index < 0) return [...current, saved];
               return current.map((item) => (item.id === saved.id ? saved : item));
             });
-            setProviderEditor(undefined);
+            backTo({ name: "providers" });
           }}
         />
       ) : null}
@@ -591,14 +799,16 @@ export function App() {
             <button
               className="icon-btn topbar-back"
               type="button"
-              onClick={() => setSelectedSessionRef(undefined)}
-              aria-label="Back to sessions"
+              onClick={() => backTo({ name: "sessions" })}
+              aria-label="Back"
             >
               ←
             </button>
           ) : null}
           <div className="topbar-title-block">
-            <h1 className="topbar-title">{pageTitle}</h1>
+            <h1 className="topbar-title" ref={headingRef} tabIndex={-1}>
+              {pageTitle}
+            </h1>
             <span className="topbar-sub">{pageSub}</span>
           </div>
           {chatOpen && activeSession ? (
@@ -607,7 +817,7 @@ export function App() {
               type="button"
               aria-expanded={detailsOpen}
               aria-controls={detailsOpen ? "session-details" : undefined}
-              onClick={() => setDetailsOpen((open) => !open)}
+              onClick={() => setDetailsOpen(!detailsOpen)}
             >
               Details
             </button>
@@ -719,6 +929,10 @@ export function App() {
               <InboxView
                 client={client as HubClient}
                 events={events}
+                filter={route.name === "inbox" ? route.filter : "all"}
+                onFilterChange={(filter) =>
+                  navigate({ name: "inbox", filter })
+                }
                 onOpen={openSession}
               />
             ) : view === "sessions" ? (
@@ -732,7 +946,7 @@ export function App() {
                       activeRef={selectedSessionRef}
                       activeSession={activeSession}
                       onOpen={openSession}
-                      onViewAll={() => setSelectedSessionRef(undefined)}
+                      onViewAll={() => navigate({ name: "sessions" })}
                     />
                   ) : null}
                   <SessionDetail
@@ -745,7 +959,7 @@ export function App() {
                     onDetailsOpenChange={setDetailsOpen}
                     onSessionChange={setActiveSession}
                     onOpenSession={openSession}
-                    onBack={() => setSelectedSessionRef(undefined)}
+                    onBack={() => backTo({ name: "sessions" })}
                   />
                 </div>
               ) : (
@@ -753,6 +967,12 @@ export function App() {
                   client={client as HubClient}
                   events={events}
                   providers={providers}
+                  showNew={route.name === "sessions" && route.newSession === true}
+                  onShowNew={() =>
+                    navigate({ name: "sessions", newSession: true })
+                  }
+                  onCloseNew={() => backTo({ name: "sessions" })}
+                  onCreated={(ref) => openSession(ref, { replace: true })}
                   onOpen={openSession}
                 />
               )
@@ -760,6 +980,10 @@ export function App() {
               <SearchView
                 client={client as HubClient}
                 providers={providers}
+                query={route.name === "search" ? route.query : ""}
+                provider={route.name === "search" ? route.provider : "all"}
+                status={route.name === "search" ? route.status : "all"}
+                onNavigate={navigateSearch}
                 onOpen={openSession}
               />
             ) : view === "providers" ? (
@@ -827,7 +1051,7 @@ export function App() {
                 {diagnosticsPanel}
               </>
             ) : (
-              <Placeholder view={view} onBack={() => setView("foundation")} />
+              <Placeholder view={view} onBack={() => navigate(DEFAULT_ROUTE)} />
             )}
 
           </div>
@@ -1318,10 +1542,17 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
 function InboxView(props: {
   client: HubClient;
   events: HubEvent[];
+  filter: string;
+  onFilterChange: (filter: string) => void;
   onOpen: (ref: string) => void;
 }) {
-  const [items, setItems] = useState<Attention[]>([]);
-  const [filter, setFilter] = useState("all");
+  const { key } = useHistoryLocation();
+  const [items, setItems] = useState<Attention[]>(
+    () => readRouteCache<Attention[]>(key, "inbox-items") ?? [],
+  );
+  const filter = ATTENTION_FILTERS.some(([value]) => value === props.filter)
+    ? props.filter
+    : "all";
   const [loading, setLoading] = useState(true);
   const [busyID, setBusyID] = useState<string>();
   const [error, setError] = useState<string>();
@@ -1338,6 +1569,10 @@ function InboxView(props: {
       if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    writeRouteCache(key, "inbox-items", items);
+  }, [items, key]);
 
   useEffect(() => {
     void load();
@@ -1428,7 +1663,7 @@ function InboxView(props: {
             className={`chip ${filter === value ? "active" : ""}`}
             type="button"
             key={value}
-            onClick={() => setFilter(value)}
+            onClick={() => props.onFilterChange(value)}
           >
             {label} {count(value)}
           </button>
@@ -1707,20 +1942,56 @@ function AttentionFieldInput(props: {
 function SearchView(props: {
   client: HubClient;
   providers: Provider[];
+  query: string;
+  provider: string;
+  status: SessionStatus | "all";
+  onNavigate: (next: SearchState, options?: NavigateOptions) => void;
   onOpen: (ref: string) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [provider, setProvider] = useState("all");
-  const [status, setStatus] = useState<SessionStatus | "all">("all");
-  const [results, setResults] = useState<Session[]>([]);
+  const { key } = useHistoryLocation();
+  const [draft, setDraft] = useState(props.query);
+  const [results, setResults] = useState<Session[]>(
+    () => readRouteCache<Session[]>(key, "search-results") ?? [],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef(0);
+  const sentQuery = useRef(props.query);
+  const { provider, status } = props;
 
-  const trimmed = query.trim();
+  const trimmed = draft.trim();
   const hasFilters = provider !== "all" || status !== "all";
+
+  useEffect(() => {
+    writeRouteCache(key, "search-results", results);
+  }, [key, results]);
+
+  useEffect(() => {
+    if (props.query === sentQuery.current) return;
+    sentQuery.current = props.query;
+    setDraft(props.query);
+  }, [props.query]);
+
+  useEffect(() => {
+    if (draft === sentQuery.current) return;
+    const timer = window.setTimeout(() => {
+      sentQuery.current = draft;
+      props.onNavigate({ query: draft, provider, status }, { replace: true });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [draft, provider, status, props.onNavigate]);
+
+  const selectProvider = (value: string) => {
+    sentQuery.current = draft;
+    props.onNavigate({ query: draft, provider: value, status });
+  };
+
+  const selectStatus = (value: SessionStatus | "all") => {
+    sentQuery.current = draft;
+    props.onNavigate({ query: draft, provider, status: value });
+  };
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -1802,17 +2073,15 @@ function SearchView(props: {
           ref={inputRef}
           className="search-input"
           type="search"
-          value={query}
+          value={draft}
           placeholder="Search sessions…"
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) =>
-            setQuery((event.currentTarget as HTMLInputElement).value)
-          }
+          onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
-              setQuery("");
+              setDraft("");
             }
           }}
         />
@@ -1823,7 +2092,7 @@ function SearchView(props: {
             className={`chip ${provider === "all" ? "active" : ""}`}
             type="button"
             aria-pressed={provider === "all"}
-            onClick={() => setProvider("all")}
+            onClick={() => selectProvider("all")}
           >
             All
           </button>
@@ -1833,7 +2102,7 @@ function SearchView(props: {
               type="button"
               key={item.id}
               aria-pressed={provider === item.id}
-              onClick={() => setProvider(item.id)}
+              onClick={() => selectProvider(item.id)}
             >
               {item.name}
             </button>
@@ -1846,7 +2115,7 @@ function SearchView(props: {
             className={`chip ${status === "all" ? "active" : ""}`}
             type="button"
             aria-pressed={status === "all"}
-            onClick={() => setStatus("all")}
+            onClick={() => selectStatus("all")}
           >
             Any
           </button>
@@ -1856,7 +2125,7 @@ function SearchView(props: {
               type="button"
               key={value}
               aria-pressed={status === value}
-              onClick={() => setStatus(value)}
+              onClick={() => selectStatus(value)}
             >
               {statusLabel(value)}
             </button>
@@ -2155,12 +2424,26 @@ function SessionsView(props: {
   client: HubClient;
   events: HubEvent[];
   providers: Provider[];
+  showNew: boolean;
+  onShowNew: () => void;
+  onCloseNew: () => void;
+  onCreated: (ref: string) => void;
   onOpen: (ref: string) => void;
 }) {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [showNew, setShowNew] = useState(false);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { key } = useHistoryLocation();
+  const cached = useRef(
+    readRouteCache<{ sessions: Session[]; cursor: string | null }>(
+      key,
+      "sessions-list",
+    ),
+  );
+  const [sessions, setSessions] = useState<Session[]>(
+    () => cached.current?.sessions ?? [],
+  );
+  const [cursor, setCursor] = useState<string | null>(
+    () => cached.current?.cursor ?? null,
+  );
+  const [loading, setLoading] = useState(!cached.current);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -2185,19 +2468,27 @@ function SessionsView(props: {
   };
 
   useEffect(() => {
+    if (readRouteCache(key, "sessions-list")) return;
     void load();
-  }, [props.client]);
+  }, [props.client, key]);
 
   const liveSeq =
     props.events.find(
       (event) =>
         event.type.startsWith("session.") || event.type === "resync",
     )?.seq ?? 0;
+  const seenLiveSeq = useRef(liveSeq);
   useEffect(() => {
-    if (!liveSeq) return;
+    if (liveSeq <= seenLiveSeq.current) return;
+    seenLiveSeq.current = liveSeq;
     const timer = setTimeout(() => void load(), 500);
     return () => clearTimeout(timer);
   }, [liveSeq]);
+
+  useEffect(() => {
+    if (loading || error) return;
+    writeRouteCache(key, "sessions-list", { sessions, cursor });
+  }, [cursor, error, key, loading, sessions]);
 
   return (
     <>
@@ -2223,22 +2514,19 @@ function SessionsView(props: {
             className="btn primary small"
             type="button"
             disabled={props.providers.every((provider) => !provider.capabilities.create)}
-            onClick={() => setShowNew(true)}
+            onClick={props.onShowNew}
           >
             New session
           </button>
         </div>
       </section>
 
-      {showNew ? (
+      {props.showNew ? (
         <NewSessionForm
           client={props.client}
           providers={props.providers}
-          onClose={() => setShowNew(false)}
-          onCreated={(ref) => {
-            setShowNew(false);
-            props.onOpen(ref);
-          }}
+          onClose={props.onCloseNew}
+          onCreated={props.onCreated}
         />
       ) : null}
 
@@ -2954,7 +3242,8 @@ function SessionDetail(props: {
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
-  const [atBottom, setAtBottom] = useState(true);
+  const restoreScroll = useRef(hasSavedScroll("transcript"));
+  const [atBottom, setAtBottom] = useState(() => !restoreScroll.current);
   const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
   const [attentionBusyID, setAttentionBusyID] = useState<string>();
   const [attentionError, setAttentionError] = useState<string>();
@@ -2992,6 +3281,7 @@ function SessionDetail(props: {
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const transcriptRef = useRef<HTMLElement | null>(null);
+  useScrollRestoration(transcriptRef, "transcript", !loading);
   const pendingScroll = useRef<PendingScroll | undefined>(undefined);
   const messagesRef = useRef<Message[]>([]);
   const processedSeq = useRef(props.events[0]?.seq ?? 0);
@@ -3230,7 +3520,7 @@ function SessionDetail(props: {
         }),
       ]);
       const latest = [...page.data].reverse();
-      const stick = forceBottom || nearBottom();
+      const stick = (forceBottom || nearBottom()) && !restoreScroll.current;
       setSession(nextSession);
       setMessages((current) =>
         replace ? latest : mergeLatestPage(current, latest),
@@ -3727,6 +4017,7 @@ function SessionDetail(props: {
   useEffect(() => {
     let cancelled = false;
     pendingScroll.current = undefined;
+    restoreScroll.current = hasSavedScroll("transcript");
     setSession(undefined);
     setMessages([]);
     setOlderCursor(null);
@@ -3736,7 +4027,7 @@ function SessionDetail(props: {
     setInlineAttention([]);
     setAttentionBusyID(undefined);
     setAttentionError(undefined);
-    setAtBottom(true);
+    setAtBottom(!restoreScroll.current);
     refreshLatest(true)
       .then(() => {
         if (!cancelled) {
@@ -3749,7 +4040,10 @@ function SessionDetail(props: {
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          restoreScroll.current = false;
+        }
       });
     return () => {
       cancelled = true;
