@@ -274,6 +274,16 @@ constraint, not a product toggle. The Settings screen explains the requirement.
   history before the message and returns a `Session` with `parentRef`.
 - The web details panel exposes `Fork session` and `Open parent`.
 
+`GET /api/v1/sessions?q=`
+
+- With `q`, the hub queries enabled providers in parallel, merges provider
+  matches with recent-cache matches, applies the `provider`, `status`, and
+  `root` filters, and returns one page.
+- Without `q`, the endpoint serves the recent-session cache.
+- Provider cursors are opaque and are not merged, so cross-provider search does
+  not paginate yet.
+- Message-content search remains provider-specific and is not guaranteed.
+
 The existing `GET/PUT /api/v1/settings/assistant` remains the configuration
 surface. `GET /api/v1/settings/assistant/transcription/models` remains the model
 discovery surface.

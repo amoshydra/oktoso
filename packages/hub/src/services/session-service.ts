@@ -118,38 +118,107 @@ export class SessionService {
   }
 
   async list(query: SessionListQuery): Promise<SessionPage> {
+    const search = query.q?.trim();
+    if (search) return this.searchSessions(query, search);
+
     await this.ensureFresh();
+    return this.paginate(
+      this.filterSessions([...this.sessions.values()], query),
+      query,
+    );
+  }
 
-    const offset = decodeCursor(query.cursor);
-    const limit = clampLimit(query.limit);
-    const search = query.q?.trim().toLowerCase();
-
-    let data = [...this.sessions.values()];
-    if (query.scope === "root") data = data.filter((session) => !session.parentRef);
-    if (query.provider) data = data.filter((session) => session.providerID === query.provider);
-    if (query.status) data = data.filter((session) => session.status === query.status);
-    if (search) {
-      data = data.filter((session) =>
-        [session.title, session.project, session.directory, session.agent]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(search),
+  private filterSessions(
+    data: Session[],
+    query: SessionListQuery,
+  ): Session[] {
+    let filtered = data;
+    if (query.scope === "root") {
+      filtered = filtered.filter((session) => !session.parentRef);
+    }
+    if (query.provider) {
+      filtered = filtered.filter(
+        (session) => session.providerID === query.provider,
       );
     }
-
-    data.sort(
+    if (query.status) {
+      filtered = filtered.filter(
+        (session) => session.status === query.status,
+      );
+    }
+    filtered.sort(
       (left, right) =>
         right.updatedAt - left.updatedAt || left.ref.localeCompare(right.ref),
     );
+    return filtered;
+  }
 
+  private paginate(
+    data: Session[],
+    query: SessionListQuery,
+  ): SessionPage {
+    const offset = decodeCursor(query.cursor);
+    const limit = clampLimit(query.limit);
     const page = data.slice(offset, offset + limit);
-    const next = offset + limit < data.length ? encodeCursor(offset + limit) : null;
-    const previous = offset > 0 ? encodeCursor(Math.max(0, offset - limit)) : null;
+    const next =
+      offset + limit < data.length ? encodeCursor(offset + limit) : null;
+    const previous =
+      offset > 0 ? encodeCursor(Math.max(0, offset - limit)) : null;
 
     return {
       data: page,
       cursor: { next, previous },
+    };
+  }
+
+  private async searchSessions(
+    query: SessionListQuery,
+    search: string,
+  ): Promise<SessionPage> {
+    const limit = clampLimit(query.limit);
+    const needle = search.toLowerCase();
+    const merged = new Map<string, Session>();
+
+    // Start with recent cache matches, then let provider results replace them.
+    for (const session of this.sessions.values()) {
+      if (matchesSearch(session, needle)) {
+        merged.set(session.ref, session);
+      }
+    }
+
+    const adapters = this.registry
+      .adapters()
+      .filter((adapter) => !query.provider || adapter.id === query.provider);
+
+    const results = await Promise.all(
+      adapters.map(async (adapter) => {
+        try {
+          const page = await adapter.listSessions(
+            { q: search, limit },
+            AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
+          );
+          return { page };
+        } catch (error) {
+          this.logger.warn("Session search failed", {
+            provider: adapter.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return { page: undefined };
+        }
+      }),
+    );
+
+    for (const result of results) {
+      if (!result.page) continue;
+      for (const session of result.page.data) {
+        merged.set(session.ref, this.applyReadMarker(session));
+      }
+    }
+
+    // Provider cursors are opaque, so cross-provider search stays single-page.
+    return {
+      data: this.filterSessions([...merged.values()], query).slice(0, limit),
+      cursor: { next: null, previous: null },
     };
   }
 
@@ -408,6 +477,14 @@ function clampLimit(limit: number | undefined): number {
     throw badRequest("limit must be between 1 and 200");
   }
   return limit;
+}
+
+function matchesSearch(session: Session, needle: string): boolean {
+  return [session.title, session.project, session.directory, session.agent]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(needle);
 }
 
 function encodeCursor(offset: number): string {

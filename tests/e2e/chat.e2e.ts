@@ -264,3 +264,19 @@ describe("chat sending", () => {
     expect(await page!.locator(".chat-doc-title").textContent()).toContain("fork");
   });
 });
+
+describe("session search", () => {
+  it("finds a provider archive session that is not in the recent list", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.getByRole("button", { name: "Search" }).click();
+    const input = page.locator("#session-search");
+    await input.waitFor({ timeout: 5_000 });
+    await input.fill("Quarterly archive");
+
+    const result = page.getByRole("button", {
+      name: /Quarterly archive review/,
+    });
+    await result.waitFor({ timeout: 5_000 });
+    expect(await result.textContent()).toContain("Quarterly archive review");
+  });
+});

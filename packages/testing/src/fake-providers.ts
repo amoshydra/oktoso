@@ -69,6 +69,17 @@ const OPENCODE_SESSIONS: FakeOpenCodeSession[] = [
   },
 ];
 
+const OPENCODE_ARCHIVED_SESSIONS: FakeOpenCodeSession[] = [
+  {
+    ...OPENCODE_SESSIONS[0]!,
+    id: "ses_archive",
+    projectID: "project-archive",
+    title: "Quarterly archive review",
+    time: { created: 1_700_000_000_000, updated: 1_700_000_100_000 },
+    location: { directory: "/home/me/archive" },
+  },
+];
+
 const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
   ses_auth: [
     {
@@ -669,7 +680,24 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     return;
   }
   if (path === "/api/session") {
-    sendJson(response, 200, page(OPENCODE_SESSIONS, url));
+    const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+    const source = search
+      ? [...OPENCODE_SESSIONS, ...OPENCODE_ARCHIVED_SESSIONS]
+      : OPENCODE_SESSIONS;
+    const rows = search
+      ? source.filter((session) =>
+          [
+            session.title,
+            session.projectID,
+            session.agent,
+            session.location.directory,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(search),
+        )
+      : source;
+    sendJson(response, 200, page(rows, url));
     return;
   }
   const forkMatch = path.match(/^\/api\/session\/([^/]+)\/fork$/);
