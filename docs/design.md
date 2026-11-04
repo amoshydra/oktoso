@@ -279,7 +279,7 @@ Mapping notes:
 
 - OpenCode message records include `type` values beyond chat, such as `idle` and `system`. The adapter returns `user` and `assistant` records and drops lifecycle records.
 - Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`.
-- `time.updated`, `time.idle`, and `idle_outcome` drive status and unread state.
+- `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running when `busy` is newer than `idle` (or `idle` is absent); `outcome` drives error state, and `viewed` drives unread state.
 - Permission requests block the agent. They are blocking attention items.
 - Forms can be simple option lists or complex multi-field forms. The hub exposes the field schema so clients can render what they can and defer complex forms to the web client.
 - Model refs carry an optional `variant`. The hub exposes model variants as reasoning choices; switching the model or agent updates the provider session through the dedicated endpoints.

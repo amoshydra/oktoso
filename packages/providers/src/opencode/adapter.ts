@@ -32,7 +32,7 @@ export interface OpenCodeAdapterOptions {
   password: string;
 }
 
-interface OpenCodeSessionRaw {
+export interface OpenCodeSessionRaw {
   id: string;
   projectID?: string;
   parentID?: string;
@@ -48,6 +48,7 @@ interface OpenCodeSessionRaw {
   time: {
     created: number;
     updated: number;
+    busy?: number;
     idle?: number;
     viewed?: number;
   };
@@ -874,7 +875,7 @@ export class OpenCodeAdapter implements ProviderAdapter {
       ...(raw.parentID ? { parentRef: `${this.id}:${raw.parentID}` } : {}),
       ...(raw.agent ? { agent: raw.agent } : {}),
       ...(raw.model ? { model: modelRef(raw.model) } : {}),
-      status: sessionStatus(raw),
+      status: openCodeSessionStatus(raw),
       unread: sessionUnread(raw),
       updatedAt: raw.time.updated,
       createdAt: raw.time.created,
@@ -1037,10 +1038,25 @@ function parseModel(
   };
 }
 
-function sessionStatus(raw: OpenCodeSessionRaw): SessionStatus {
+/**
+ * OpenCode keeps the previous execution's `idle` timestamp while a new run is
+ * active and marks the new run with `busy`. Presence of `idle` alone therefore
+ * does not mean the session is idle.
+ */
+export function openCodeSessionStatus(raw: OpenCodeSessionRaw): SessionStatus {
+  const { busy, idle } = raw.time;
+  if (busy !== undefined) {
+    if (idle === undefined || busy > idle) return "running";
+  } else if (
+    idle === undefined &&
+    raw.outcome === undefined &&
+    raw.time.updated > raw.time.created
+  ) {
+    // Older providers do not expose `busy`; only a first run is detectable.
+    return "running";
+  }
   if (raw.outcome === "failed") return "error";
-  if (raw.time.idle !== undefined || raw.outcome === "interrupted") return "idle";
-  return "running";
+  return "idle";
 }
 
 function sessionUnread(raw: OpenCodeSessionRaw): boolean {
