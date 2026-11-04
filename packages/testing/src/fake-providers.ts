@@ -25,7 +25,13 @@ interface FakeOpenCodeSession {
   cost: number;
   tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } };
   outcome?: string;
-  time: { created: number; updated: number; idle?: number; viewed?: number };
+  time: {
+    created: number;
+    updated: number;
+    busy?: number;
+    idle?: number;
+    viewed?: number;
+  };
   title: string;
   location: { directory: string };
 }
@@ -824,9 +830,8 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     });
     const session = OPENCODE_SESSIONS.find((item) => item.id === sessionID);
     if (session) {
-      session.time.updated = now + 2;
-      session.time.idle = now + 2;
-      session.outcome = "succeeded";
+      session.time.busy = now;
+      session.time.updated = now;
     }
     const replyPartID = `part_${replyID}_text`;
     broadcastEvent("message.updated", {
@@ -886,6 +891,12 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       });
     }, 75);
     setTimeout(() => {
+      if (session) {
+        session.time.updated = now + 2;
+        session.time.idle = now + 2;
+        session.time.busy = undefined;
+        session.outcome = "succeeded";
+      }
       broadcastEvent("session.updated", { sessionID });
     }, 100);
     sendJson(response, 200, { data: { id: userID } });
