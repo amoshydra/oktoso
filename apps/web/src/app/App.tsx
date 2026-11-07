@@ -39,6 +39,7 @@ import {
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
 import { BrandMark } from "./BrandMark";
+import { Icon, type IconName } from "./Icon";
 import {
   appendTranscript,
   formatDictationDuration,
@@ -84,46 +85,46 @@ type SearchState = Omit<Extract<Route, { name: "search" }>, "name">;
 
 const VIEW_META: Record<
   View,
-  { label: string; mark: string; sub: string; phase: string; description: string }
+  { label: string; icon: IconName; sub: string; phase: string; description: string }
 > = {
   foundation: {
     label: "Foundation",
-    mark: "F",
+    icon: "activity",
     sub: "Hub runtime",
     phase: "0",
     description: "Hub runtime, authentication, state, and the event stream.",
   },
   inbox: {
     label: "Inbox",
-    mark: "I",
+    icon: "inbox",
     sub: "Attention",
     phase: "3",
     description: "The unified approval, question, unread, and error inbox.",
   },
   sessions: {
     label: "Sessions",
-    mark: "S",
+    icon: "message",
     sub: "All providers",
     phase: "2",
     description: "The provider-backed session index, transcript, and composer.",
   },
   search: {
     label: "Search",
-    mark: "/",
+    icon: "search",
     sub: "Sessions and projects",
     phase: "6",
     description: "Session, project, and message search across providers.",
   },
   providers: {
     label: "Providers",
-    mark: "P",
+    icon: "server",
     sub: "Provider health",
     phase: "0",
     description: "Configured endpoints, health, and capability discovery.",
   },
   settings: {
     label: "Settings",
-    mark: "G",
+    icon: "sliders",
     sub: "Runtime and preferences",
     phase: "0",
     description: "Theme, client preferences, diagnostics, and hub information.",
@@ -778,7 +779,7 @@ export function App() {
                 }
               >
                 <span className="rail-mark" aria-hidden="true">
-                  {item.mark}
+                  <Icon name={item.icon} size={18} />
                   {id === "inbox" && attentionCount > 0 ? (
                     <span className="nav-badge">{badge}</span>
                   ) : null}
@@ -803,7 +804,7 @@ export function App() {
               onClick={() => backTo({ name: "sessions" })}
               aria-label="Back"
             >
-              ←
+              <Icon name="arrow-left" size={18} />
             </button>
           ) : null}
           <div className="topbar-title-block">
@@ -828,7 +829,7 @@ export function App() {
             {connectionLabel(connection)}
           </span>
           <button className="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? "☀" : "☾"}
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
           </button>
           <button className="btn small topbar-disconnect" type="button" onClick={signOut}>
             Disconnect
@@ -989,16 +990,6 @@ export function App() {
               />
             ) : view === "providers" ? (
               <>
-                <section className="hero">
-                  <div>
-                    <p className="eyebrow">Providers</p>
-                    <h2>Provider health</h2>
-                    <p>
-                      Configured provider endpoints, health, versions, and normalized
-                      capabilities. Provider credentials remain on the hub.
-                    </p>
-                  </div>
-                </section>
                 {providerPanel}
                 {diagnosticsPanel}
               </>
@@ -1075,7 +1066,7 @@ export function App() {
                 }
               >
                 <span className="bottom-mark" aria-hidden="true">
-                  {item.mark}
+                  <Icon name={item.icon} size={18} />
                   {id === "inbox" && attentionCount > 0 ? (
                     <span className="nav-badge">{badge}</span>
                   ) : null}
@@ -1133,7 +1124,7 @@ function Login(props: {
   return (
     <div className="login-page">
       <button className="icon-btn login-theme" type="button" onClick={props.onToggleTheme} aria-label="Toggle theme">
-        {props.theme === "dark" ? "☀" : "☾"}
+        <Icon name={props.theme === "dark" ? "sun" : "moon"} size={16} />
       </button>
       <div className="login-card">
         <div className="brand-mark">
@@ -1635,20 +1626,6 @@ function InboxView(props: {
 
   return (
     <>
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Attention</p>
-          <h2>What needs you now</h2>
-          <p>
-            Approvals, questions, unread sessions, and failures. Actions are sent
-            through the provider and never auto-approved.
-          </p>
-        </div>
-        <button className="btn small" type="button" disabled={loading} onClick={() => void load()}>
-          {loading ? "Loading…" : "Refresh"}
-        </button>
-      </section>
-
       {error ? (
         <div className="alert" role="alert">
           {error}
@@ -1658,17 +1635,27 @@ function InboxView(props: {
         </div>
       ) : null}
 
-      <div className="inbox-tabs">
-        {ATTENTION_FILTERS.map(([value, label]) => (
-          <button
-            className={`chip ${filter === value ? "active" : ""}`}
-            type="button"
-            key={value}
-            onClick={() => props.onFilterChange(value)}
-          >
-            {label} {count(value)}
-          </button>
-        ))}
+      <div className="page-toolbar inbox-toolbar">
+        <div className="inbox-tabs">
+          {ATTENTION_FILTERS.map(([value, label]) => (
+            <button
+              className={`chip ${filter === value ? "active" : ""}`}
+              type="button"
+              key={value}
+              onClick={() => props.onFilterChange(value)}
+            >
+              {label} {count(value)}
+            </button>
+          ))}
+        </div>
+        <button
+          className="btn small"
+          type="button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          {loading ? "Loading…" : "Refresh"}
+        </button>
       </div>
 
       {loading && items.length === 0 ? (
@@ -2054,17 +2041,6 @@ function SearchView(props: {
 
   return (
     <>
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Search</p>
-          <h2>Search sessions</h2>
-          <p>
-            Find sessions across every provider by title, project, directory, or
-            agent. Providers may also match message content.
-          </p>
-        </div>
-      </section>
-
       <section className="panel search-panel">
         <label className="sr-only" htmlFor="session-search">
           Search sessions
@@ -2493,16 +2469,12 @@ function SessionsView(props: {
 
   return (
     <>
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Sessions</p>
-          <h2>All sessions</h2>
-          <p>
-            Sessions from every connected provider, with a live transcript and
-            follow-up composer. The separate inbox handles unread work and failures.
-          </p>
-        </div>
-        <div className="hero-actions">
+      <div className="page-toolbar">
+        <p className="page-lead">
+          Sessions from every connected provider. Open one to read the transcript
+          or reply; the separate inbox handles unread work and failures.
+        </p>
+        <div className="page-toolbar-actions">
           <button
             className="btn small"
             type="button"
@@ -2520,7 +2492,7 @@ function SessionsView(props: {
             New session
           </button>
         </div>
-      </section>
+      </div>
 
       {props.showNew ? (
         <NewSessionForm
@@ -4451,7 +4423,7 @@ function SessionDetail(props: {
                           aria-label={`Remove ${attachment.name}`}
                           onClick={() => void removeAttachment(attachment.id)}
                         >
-                          ×
+                          <Icon name="x" size={14} />
                         </button>
                       </div>
                     ))}
@@ -4844,7 +4816,7 @@ function BranchPicker(props: {
           if (sibling) props.onSwitch(sibling);
         }}
       >
-        ‹
+        <Icon name="chevron-left" size={16} />
       </button>
       <span className="message-branch-count" aria-hidden="true">
         {point.index + 1} / {point.count}
@@ -4862,7 +4834,7 @@ function BranchPicker(props: {
           if (sibling) props.onSwitch(sibling);
         }}
       >
-        ›
+        <Icon name="chevron-right" size={16} />
       </button>
     </div>
   );
@@ -5059,7 +5031,9 @@ function AgentActivity(props: {
           </span>
           {failed ? <span className="tool-status error">error</span> : null}
           {working ? <span className="streaming-label">working</span> : null}
-          <span className="message-aux-chevron" aria-hidden="true">›</span>
+          <span className="message-aux-chevron" aria-hidden="true">
+            <Icon name="chevron-right" size={14} />
+          </span>
         </summary>
         <div className="chat-activity-body">
           {props.messages.map((message) => (
@@ -5203,7 +5177,7 @@ function SessionDetails(props: {
           aria-label="Close details"
           ref={closeRef}
         >
-          ×
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -5421,7 +5395,9 @@ function MessagePartView(props: {
         <summary>
           <span className="message-aux-label">Reasoning</span>
           <span className="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
-          <span className="message-aux-chevron" aria-hidden="true">›</span>
+          <span className="message-aux-chevron" aria-hidden="true">
+            <Icon name="chevron-right" size={14} />
+          </span>
         </summary>
         <div className="message-aux-body">
           <Markdown
@@ -5439,7 +5415,9 @@ function MessagePartView(props: {
         <summary>
           <span className="message-aux-label">{toolLabel(part.name)}</span>
           <span className={`tool-status ${part.status}`}>{part.status}</span>
-          <span className="message-aux-chevron" aria-hidden="true">›</span>
+          <span className="message-aux-chevron" aria-hidden="true">
+            <Icon name="chevron-right" size={14} />
+          </span>
         </summary>
         <div className="message-aux-body">
           {part.input !== undefined ? (
@@ -5520,7 +5498,9 @@ function MessagePartView(props: {
     <details className="message-aux message-unknown">
       <summary>
         <span className="message-aux-label">Unsupported content</span>
-        <span className="message-aux-chevron" aria-hidden="true">›</span>
+        <span className="message-aux-chevron" aria-hidden="true">
+          <Icon name="chevron-right" size={14} />
+        </span>
       </summary>
       <div className="message-aux-body">
         <pre>{formatJson(part.raw)}</pre>

@@ -88,6 +88,17 @@ The production chat now follows the design-v1 prototype shell. The fixed topbar 
 
 This aligns implementation with the existing prototype and does not add tokens, routes, or navigation. The v1.1 transcript reading model is unchanged.
 
+## Page chrome alignment (2026-11-07)
+
+The production Inbox, Sessions, Search, and Providers screens no longer repeat the
+page title in a hero card. The topbar `h1`, a shared 24px desktop / 16px mobile
+gutter, and a compact toolbar own the page header. The rail and bottom navigation
+use the existing 18px line-icon rule; desktop controls use the 32px spacing step;
+the Settings card footers and the wide composer no longer wrap.
+
+This aligns implementation with `design-v1` and adds no routes, tokens, type
+roles, radii, or semantic color rules.
+
 ## Change policy
 
 Allowed without a new design version:
