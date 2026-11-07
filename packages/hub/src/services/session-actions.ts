@@ -111,12 +111,15 @@ export class SessionActions {
     }
 
     // `answer` is hub-only metadata; providers receive the plain message.
-    const result = await this.sessions.sendMessage(ref, {
-      text: input.text,
-      ...(input.attachments ? { attachments: input.attachments } : {}),
-    });
+    const send = () =>
+      this.sessions.sendMessage(ref, {
+        text: input.text,
+        ...(input.attachments ? { attachments: input.attachments } : {}),
+      });
+    const result = cacheKey
+      ? await this.idempotency.run(cacheKey, hash, send)
+      : await send();
     this.questions.invalidate(ref);
-    if (cacheKey) await this.idempotency.set(cacheKey, result, hash);
     return result;
   }
 }

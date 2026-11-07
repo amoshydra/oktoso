@@ -1538,11 +1538,12 @@ prompt may not propagate to the parent UI and can stall the parent turn.
 The hub cannot rely on providers to dedupe. It persists `Idempotency-Key`
 results in its state file for 30 days. Each entry also stores a hash of the
 request payload, so a reused key with different text, attachments, or answer
-metadata is treated as a new send instead of returning a stale result. If the
-hub state is lost between the send and the retry, a duplicate is possible; this
-is rare and acceptable for chat. The key is scoped to the session and the draft,
-not to the text alone; intentionally sending the same text twice still works
-when each send uses a fresh key.
+metadata is treated as a new send instead of returning a stale result. Concurrent
+retries with the same key wait for the first attempt instead of reaching the
+provider twice. If the hub state is lost between the send and the retry, a
+duplicate is possible; this is rare and acceptable for chat. The key is scoped
+to the session and the draft, not to the text alone; intentionally sending the
+same text twice still works when each send uses a fresh key.
 
 Reply options, numbered choices, and phone messages use the same idempotency
 layer with their own key. Every send call has a 30-second client timeout, so a
