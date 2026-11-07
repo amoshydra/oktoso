@@ -244,6 +244,28 @@ describe("chat sending", () => {
       .waitFor({ timeout: 5_000 });
   });
 
+  it("surfaces a failure that happens before the optimistic message", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.evaluate(() => {
+      Object.defineProperty(Crypto.prototype, "randomUUID", {
+        configurable: true,
+        value: () => {
+          throw new Error("forced id failure");
+        },
+      });
+    });
+
+    await sendPrompt("Forced preflight failure");
+    await page!
+      .locator(".alert", { hasText: "forced id failure" })
+      .waitFor({ state: "visible", timeout: 2_000 });
+    expect(
+      await page!
+        .locator(".chat-message.user", { hasText: "Forced preflight failure" })
+        .count(),
+    ).toBe(0);
+  });
+
   it("shows Open WebUI folders and sends an attachment", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();

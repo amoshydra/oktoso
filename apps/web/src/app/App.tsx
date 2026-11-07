@@ -3224,6 +3224,10 @@ function draftStatusLabel(status: DraftStatus): string {
   return "Ctrl/⌘ Enter to send";
 }
 
+function promptFailure(reason: unknown): string {
+  return reason instanceof Error ? reason.message : "Unable to send the prompt";
+}
+
 function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
@@ -3633,19 +3637,21 @@ function SessionDetail(props: {
     ) {
       return;
     }
-    const idempotencyKey = createID();
-    const optimistic = createOptimisticMessage({
-      sessionRef: props.sessionRef,
-      text,
-      attachments,
-      idempotencyKey,
-    });
     setSending(true);
     setSendError(undefined);
-    setMessages((current) => [...current, optimistic]);
-    setAttachments([]);
-    pendingScroll.current = { mode: "bottom" };
+    let optimistic: Message | undefined;
     try {
+      const idempotencyKey = createID();
+      const created = createOptimisticMessage({
+        sessionRef: props.sessionRef,
+        text,
+        attachments,
+        idempotencyKey,
+      });
+      optimistic = created;
+      setMessages((current) => [...current, created]);
+      setAttachments([]);
+      pendingScroll.current = { mode: "bottom" };
       await discardDraft();
       await props.client.sendMessage(
         props.sessionRef,
@@ -3654,7 +3660,7 @@ function SessionDetail(props: {
       );
       setMessages((current) =>
         current.map((message) =>
-          message.id === optimistic.id
+          message.id === created.id
             ? updateOptimisticStatus(message, "sent")
             : message,
         ),
@@ -3665,14 +3671,21 @@ function SessionDetail(props: {
         void refreshBranches();
       }, 500);
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "Unable to send the prompt";
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === optimistic.id
-            ? updateOptimisticStatus(item, "failed", message)
-            : item,
-        ),
-      );
+      const message = promptFailure(reason);
+      if (optimistic) {
+        const failedID = optimistic.id;
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === failedID
+              ? updateOptimisticStatus(item, "failed", message)
+              : item,
+          ),
+        );
+      } else {
+        // The failure happened before the optimistic message existed, so there
+        // is nothing in the transcript to carry the error. Surface it directly.
+        setSendError(message);
+      }
     } finally {
       setSending(false);
     }
@@ -3708,7 +3721,7 @@ function SessionDetail(props: {
         void refreshBranches();
       }, 500);
     } catch (reason) {
-      const error = reason instanceof Error ? reason.message : "Unable to send the prompt";
+      const error = promptFailure(reason);
       setMessages((current) =>
         current.map((item) =>
           item.id === message.id
