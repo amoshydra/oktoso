@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HubEvent, Message } from "@amoshydra/oktoso-contracts";
 import { OpenCodeAdapter, type ProviderAdapter, type ProviderEvent } from "@amoshydra/oktoso-providers";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
@@ -35,6 +35,7 @@ describe("ProviderEventService", () => {
     } as unknown as ProviderAdapter;
     const registry = {
       adapters: () => [adapter],
+      get: (id: string) => ({ id, enabled: true, status: "online" }),
     } as unknown as ProviderRegistry;
     const sessions = {
       invalidate: () => undefined,
@@ -102,6 +103,66 @@ describe("ProviderEventService", () => {
     service.stop();
   });
 
+  it("coalesces cache invalidation instead of invalidating on every event", async () => {
+    const store = new MemoryStateStore();
+    const bus = new EventBus(store, logger);
+    await bus.init();
+
+    let emit: ((event: ProviderEvent) => void) | undefined;
+    const adapter = {
+      id: "fake",
+      subscribe: async (onEvent: (event: ProviderEvent) => void) => {
+        emit = onEvent;
+        return () => undefined;
+      },
+    } as unknown as ProviderAdapter;
+    const registry = {
+      adapters: () => [adapter],
+      get: (id: string) => ({ id, enabled: true, status: "online" }),
+    } as unknown as ProviderRegistry;
+    const sessions = {
+      invalidate: vi.fn(),
+    } as unknown as SessionService;
+    const attention = {
+      invalidate: vi.fn(),
+    } as unknown as import("./attention-service").AttentionService;
+
+    const service = new ProviderEventService(
+      registry,
+      bus,
+      sessions,
+      logger,
+      attention,
+      10,
+      15,
+      25,
+    );
+    await service.start();
+
+    emit!({
+      type: "session.updated",
+      sessionRef: "fake:ses_1",
+      data: { eventType: "session.idle" },
+      at: 1,
+    });
+    emit!({
+      type: "session.updated",
+      sessionRef: "fake:ses_2",
+      data: { eventType: "session.idle" },
+      at: 2,
+    });
+
+    expect(sessions.invalidate).not.toHaveBeenCalled();
+    expect(attention.invalidate).not.toHaveBeenCalled();
+
+    await wait(50);
+
+    expect(sessions.invalidate).toHaveBeenCalledTimes(1);
+    expect(attention.invalidate).toHaveBeenCalledTimes(1);
+
+    service.stop();
+  });
+
   it("forwards a live OpenCode message snapshot end to end", async () => {
     const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
     servers.push(fake);
@@ -116,6 +177,7 @@ describe("ProviderEventService", () => {
     });
     const registry = {
       adapters: () => [adapter],
+      get: (id: string) => ({ id, enabled: true, status: "online" }),
     } as unknown as ProviderRegistry;
     const sessions = {
       invalidate: () => undefined,

@@ -192,6 +192,7 @@ describe("AttentionService subagent policy", () => {
         data: sessions,
         cursor: { previous: null, next: null },
       }),
+      cached: () => sessions,
       markRead: async () => undefined,
       invalidate: () => undefined,
     } as unknown as SessionService;
@@ -212,5 +213,58 @@ describe("AttentionService subagent policy", () => {
 
     expect(calls.get("desktop-opencode")).toEqual([desktopDir]);
     expect(calls.get("fishbowl")).toEqual([remoteDir]);
+  });
+
+  it("keeps cached blocking items and stops calling an offline provider", async () => {
+    let status: "online" | "offline" = "online";
+    let calls = 0;
+    const item = attention(
+      "desktop-opencode:permission:ses_main:per_1",
+      "desktop-opencode:ses_main",
+      "permission",
+    );
+    const adapter = {
+      id: "desktop-opencode",
+      listAttention: async () => {
+        calls += 1;
+        return [item];
+      },
+    };
+    const registry = {
+      adapters: () => [adapter],
+      get: (id: string) => ({ id, enabled: true, status }),
+      timeoutMs: () => 1_000,
+    } as unknown as ProviderRegistry;
+    const sessionService = {
+      list: async () => ({
+        data: [session()],
+        cursor: { previous: null, next: null },
+      }),
+      markRead: async () => undefined,
+      invalidate: () => undefined,
+    } as unknown as SessionService;
+    const service = new AttentionService(
+      registry,
+      sessionService,
+      new MemoryStateStore(),
+      { publish: async () => ({}) } as unknown as EventBus,
+      logger,
+      { now: () => now, ttlMs: 60_000 },
+    );
+
+    await service.refresh();
+    expect(calls).toBe(1);
+    expect((await service.list()).data.map((entry) => entry.id)).toContain(
+      item.id,
+    );
+
+    status = "offline";
+    service.invalidate();
+    await service.refresh();
+
+    expect(calls).toBe(1);
+    expect((await service.list()).data.map((entry) => entry.id)).toContain(
+      item.id,
+    );
   });
 });

@@ -338,6 +338,7 @@ async function main(): Promise<void> {
   let registry: ProviderRegistry | undefined;
   let sessions: SessionService | undefined;
   let attention: AttentionService | undefined;
+  let providerEvents: ProviderEventService | undefined;
   let refreshAll: () => void = () => undefined;
   let snapshot: () => UiSnapshot = () => ({
     version: VERSION,
@@ -519,6 +520,7 @@ async function main(): Promise<void> {
             error: error instanceof Error ? error.message : String(error),
           });
         });
+      void providerEvents?.syncSubscriptions();
     });
     const drafts = new DraftService(store);
     const attachments = new AttachmentStore({
@@ -537,7 +539,7 @@ async function main(): Promise<void> {
     const replies = new ReplyService(assistantSettings, sessions, logger);
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
-    const providerEvents = new ProviderEventService(
+    providerEvents = new ProviderEventService(
       registry,
       eventBus,
       sessions,
@@ -670,7 +672,7 @@ async function main(): Promise<void> {
       logger.info("shutting down", { signal });
       if (attentionRefreshTimer) clearInterval(attentionRefreshTimer);
       if (healthCheckTimer) clearInterval(healthCheckTimer);
-      providerEvents.stop();
+      providerEvents?.stop();
       unsubscribeUi();
       server?.close();
       await store.close();

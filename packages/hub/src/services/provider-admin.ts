@@ -50,8 +50,7 @@ export class ProviderAdminService {
       });
       this.registry.add(config);
       this.invalidate();
-      const adapter = this.registry.adapter(config.id);
-      if (adapter) void this.providerEvents?.subscribe(adapter);
+      void this.providerEvents?.syncSubscriptions();
       const saved = await this.check(config.id);
       this.logger.info("provider added", {
         providerID: config.id,
@@ -87,8 +86,7 @@ export class ProviderAdminService {
       await this.write({ ...raw, providers: next });
       this.registry.replace(config);
       this.invalidate();
-      const adapter = this.registry.adapter(config.id);
-      if (adapter) void this.providerEvents?.subscribe(adapter);
+      void this.providerEvents?.syncSubscriptions();
       const saved = await this.check(config.id);
       this.logger.info("provider updated", {
         providerID: config.id,

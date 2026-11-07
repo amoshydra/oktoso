@@ -89,4 +89,25 @@ describe("ProviderRegistry health checks", () => {
     expect(registry.timeoutMs(config.id)).toBe(20_000);
     expect(registry.timeoutMs("missing")).toBe(20_000);
   });
+
+  it("only lists enabled adapters for sync and event subscriptions", () => {
+    const base = {
+      type: "opencode" as const,
+      baseUrl: "http://127.0.0.1:4096",
+      auth: { kind: "basic" as const, username: "opencode", password: "secret" },
+      timeoutMs: 20_000,
+    };
+    const registry = new ProviderRegistry(
+      [
+        { ...base, id: "enabled", enabled: true },
+        { ...base, id: "disabled", enabled: false },
+      ],
+      logger,
+    );
+
+    expect(registry.adapters().map((adapter) => adapter.id)).toEqual([
+      "enabled",
+    ]);
+    expect(registry.adapter("disabled")?.id).toBe("disabled");
+  });
 });
