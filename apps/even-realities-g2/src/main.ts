@@ -54,6 +54,7 @@ import {
 import { glassInput } from "./input";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
+import { selectSendKey } from "./send-key";
 import {
   pcmChunksToWav,
   transcriptionConfigured,
@@ -131,6 +132,9 @@ interface AppState {
   answerStale?: "changed" | "resolved";
   answerKey?: string;
   answerKeyText?: string;
+  messageKey?: string;
+  messageKeyText?: string;
+  messageBusy: boolean;
   pendingAnswerChoice?: AnswerChoice;
   notice?: string;
   failure?: FailureInfo;
@@ -178,6 +182,9 @@ const state: AppState = {
   answerStale: undefined,
   answerKey: undefined,
   answerKeyText: undefined,
+  messageKey: undefined,
+  messageKeyText: undefined,
+  messageBusy: false,
   pendingAnswerChoice: undefined,
   failureReturnScreen: "home",
   streamStatus: "connecting",
@@ -185,6 +192,7 @@ const state: AppState = {
 
 const MAX_VOICE_BYTES = 4_000_000;
 const MAX_VOICE_MS = 60_000;
+const SEND_TIMEOUT_MS = 30_000;
 let voiceActive = false;
 let voiceBusy = false;
 let voiceChunks: Uint8Array[] = [];
@@ -618,7 +626,7 @@ function syncPhoneSession(): void {
     : "No session open";
   phoneSend.textContent = state.answerMode ? "Send answer" : "Send to session";
   phoneSend.disabled =
-    !hasSession || !phoneText.value.trim() || state.answerBusy;
+    !hasSession || !phoneText.value.trim() || state.answerBusy || state.messageBusy;
 }
 
 function updatePhoneState(): void {
@@ -760,20 +768,28 @@ function answerMetadata(choice?: AnswerChoice): SendAnswer | undefined {
     : undefined;
 }
 
-function newAnswerKey(): string {
-  const generated = globalThis.crypto?.randomUUID?.();
-  return (
-    generated ??
-    `answer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+function answerKeyFor(text: string): string {
+  const next = selectSendKey(
+    { key: state.answerKey, text: state.answerKeyText },
+    text,
   );
+  state.answerKey = next.key;
+  state.answerKeyText = next.text;
+  return next.key;
 }
 
-function answerKeyFor(text: string): string {
-  if (!state.answerKey || state.answerKeyText !== text) {
-    state.answerKey = newAnswerKey();
-    state.answerKeyText = text;
-  }
-  return state.answerKey;
+function messageKeyFor(text: string): string {
+  const next = selectSendKey(
+    { key: state.messageKey, text: state.messageKeyText },
+    text,
+  );
+  state.messageKey = next.key;
+  state.messageKeyText = next.text;
+  return next.key;
+}
+
+function sendSignal(): AbortSignal {
+  return AbortSignal.timeout(SEND_TIMEOUT_MS);
 }
 
 const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
@@ -1417,6 +1433,9 @@ async function openChat(
   state.answerStale = undefined;
   state.answerKey = undefined;
   state.answerKeyText = undefined;
+  state.messageKey = undefined;
+  state.messageKeyText = undefined;
+  state.messageBusy = false;
   state.pendingAnswerChoice = undefined;
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
@@ -1485,21 +1504,22 @@ async function sendAnswer(
   if (!client || !state.sessionRef || state.answerBusy) return;
   const ref = state.sessionRef;
   const answer = answerMetadata(choice);
-  const idempotencyKey = answer ? answerKeyFor(text) : undefined;
   state.answerBusy = true;
   state.answerText = text;
   state.answerError = undefined;
   updatePhoneQuestion();
   if (source === "phone") setPhoneStatus("Sending answer…");
+  render();
 
   try {
+    const idempotencyKey = answerKeyFor(text);
     await client.sendMessage(
       ref,
       { text, ...(answer ? { answer } : {}) },
-      idempotencyKey ? { idempotencyKey } : {},
+      { idempotencyKey, signal: sendSignal() },
     );
-    if (state.sessionRef !== ref) return;
     state.answerBusy = false;
+    if (state.sessionRef !== ref) return;
     state.question = undefined;
     state.answerMode = false;
     state.answerStale = undefined;
@@ -1883,7 +1903,6 @@ async function sendBatchAnswers(): Promise<void> {
 
   const text = composeBatchAnswer(drafts);
   const answers = buildBatchAnswerMetadata(prompt, drafts);
-  const idempotencyKey = answerKeyFor(text);
   state.answerBusy = true;
   state.answerText = text;
   state.answerError = undefined;
@@ -1891,11 +1910,17 @@ async function sendBatchAnswers(): Promise<void> {
   phoneQuestionStatus.className = "status";
   updateBatchButtonStates();
   updatePhoneBatchSendState();
+  render();
 
   try {
-    await client.sendMessage(ref, { text, answers }, { idempotencyKey });
-    if (state.sessionRef !== ref) return;
+    const idempotencyKey = answerKeyFor(text);
+    await client.sendMessage(
+      ref,
+      { text, answers },
+      { idempotencyKey, signal: sendSignal() },
+    );
     state.answerBusy = false;
+    if (state.sessionRef !== ref) return;
     state.question = undefined;
     resetBatchAnswers();
     state.answerStale = undefined;
@@ -2098,7 +2123,11 @@ function chatView(): { header: string; body: string; footer: string } {
           : "Swipe";
   const footer = clampLine(
     [
-      state.question ? "? Answer" : "",
+      state.answerBusy || state.messageBusy
+        ? "Sending…"
+        : state.question
+          ? "? Answer"
+          : "",
       `${first}-${last}/${total}`,
       messageLabel,
       state.chatActivity,
@@ -2358,6 +2387,7 @@ async function cancelVoice(): Promise<void> {
 
 async function executeReply(option: ReplyOption): Promise<void> {
   if (!client || !state.sessionRef) return;
+  if (state.messageBusy) return;
   try {
     if (option.action === "interrupt") {
       await client.interrupt(state.sessionRef);
@@ -2391,13 +2421,33 @@ async function executeReply(option: ReplyOption): Promise<void> {
       return;
     }
     if (option.text) {
-      await client.sendMessage(state.sessionRef, { text: option.text });
-      state.question = undefined;
-      rememberQuestionSummary(state.sessionRef, null);
-      updatePhoneQuestion();
-      state.screen = "chat";
-      state.notice = "Reply sent.";
-      await loadChat(false);
+      const text = option.text;
+      state.messageBusy = true;
+      render();
+      try {
+        const idempotencyKey = messageKeyFor(text);
+        await client.sendMessage(
+          state.sessionRef,
+          { text },
+          { idempotencyKey, signal: sendSignal() },
+        );
+        state.question = undefined;
+        rememberQuestionSummary(state.sessionRef, null);
+        updatePhoneQuestion();
+        state.screen = "chat";
+        state.notice = "Reply sent.";
+        await loadChat(false);
+        state.messageKey = undefined;
+        state.messageKeyText = undefined;
+      } catch (error) {
+        showFailure(error, {
+          returnScreen: state.replyReturnScreen,
+          retry: () => executeReply(option),
+        });
+        log(`Reply failed: ${failureMessage(error)}`);
+      } finally {
+        state.messageBusy = false;
+      }
     }
   } catch (error) {
     showFailure(error, {
@@ -2447,21 +2497,33 @@ async function performChoice(index: number): Promise<void> {
     return;
   }
   const option = view.options[optionIndex];
-  if (!option || !client || !state.sessionRef) return;
+  if (!option || !client || !state.sessionRef || state.messageBusy) return;
+  const text = option.text;
+  state.messageBusy = true;
+  render();
   try {
-    await client.sendMessage(state.sessionRef, { text: option.text });
+    const idempotencyKey = messageKeyFor(text);
+    await client.sendMessage(
+      state.sessionRef,
+      { text },
+      { idempotencyKey, signal: sendSignal() },
+    );
     state.question = undefined;
     rememberQuestionSummary(state.sessionRef, null);
     updatePhoneQuestion();
     state.screen = "chat";
     state.notice = "Choice sent.";
     await loadChat(false);
+    state.messageKey = undefined;
+    state.messageKeyText = undefined;
   } catch (error) {
     showFailure(error, {
       returnScreen: "choices",
       retry: () => performChoice(index),
     });
     log(`Choice send failed: ${failureMessage(error)}`);
+  } finally {
+    state.messageBusy = false;
   }
 }
 
@@ -2994,11 +3056,13 @@ function render(): void {
     const rows = answerRows();
     const items = rows.map((row) => row.label);
     const hasChoices = rows.some((row) => row.kind === "choice");
-    const footer = state.answerError
-      ? clampLine(`Couldn't send: ${state.answerError}`, 60)
-      : hasChoices
-        ? "Swipe choose · Tap send · Back ×2"
-        : "Tap choose · Back ×2";
+    const footer = state.answerBusy
+      ? "Sending…"
+      : state.answerError
+        ? clampLine(`Couldn't send: ${state.answerError}`, 60)
+        : hasChoices
+          ? "Swipe choose · Tap send · Back ×2"
+          : "Tap choose · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));
     }
@@ -3059,11 +3123,12 @@ function render(): void {
   if (state.screen === "reply") {
     const view = replyView();
     const items = view.items.map((item) => clampLine(item, 54));
+    const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
     if (
       setPreview(
         `REPLY ${view.page + 1}/${view.pages}`,
         items.join("\n"),
-        "Tap select   Back ×2",
+        footer,
         items,
       )
     ) {
@@ -3071,7 +3136,7 @@ function render(): void {
         listPage(
           `REPLY ${view.page + 1}/${view.pages}`,
           items,
-          "Tap select   Back ×2",
+          footer,
           state.notice,
         ),
       );
@@ -3081,11 +3146,12 @@ function render(): void {
   if (state.screen === "choices") {
     const view = choiceView();
     const items = view.items.map((item) => clampLine(item, 54));
+    const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
     if (
       setPreview(
         `CHOOSE ${view.items.length}`,
         items.join("\n"),
-        "Tap select   Back ×2",
+        footer,
         items,
       )
     ) {
@@ -3093,7 +3159,7 @@ function render(): void {
         listPage(
           `CHOOSE ${view.items.length}`,
           items,
-          "Tap select   Back ×2",
+          footer,
         ),
       );
     }
@@ -3228,7 +3294,7 @@ function setupPhone(): void {
 
 async function sendPhone(): Promise<void> {
   const text = phoneText.value.trim();
-  if (!text || !client || !state.sessionRef) return;
+  if (!text || !client || !state.sessionRef || state.messageBusy) return;
   phoneSend.disabled = true;
 
   if (state.answerMode && state.question) {
@@ -3237,15 +3303,23 @@ async function sendPhone(): Promise<void> {
     return;
   }
 
+  state.messageBusy = true;
   setPhoneStatus("Sending…");
   try {
-    await client.sendMessage(state.sessionRef, { text });
-    phoneText.value = "";
+    const idempotencyKey = messageKeyFor(text);
+    await client.sendMessage(
+      state.sessionRef,
+      { text },
+      { idempotencyKey, signal: sendSignal() },
+    );
     markRequestSuccess();
     setPhoneStatus("Sent.");
     state.screen = "chat";
     await loadChat(false);
     await loadQuestion(state.sessionRef);
+    phoneText.value = "";
+    state.messageKey = undefined;
+    state.messageKeyText = undefined;
   } catch (error) {
     if (isAuthFailure(error)) {
       showFailure(error, {
@@ -3256,6 +3330,7 @@ async function sendPhone(): Promise<void> {
     }
     setPhoneStatus(failureMessage(error), true);
   } finally {
+    state.messageBusy = false;
     syncPhoneSession();
   }
 }

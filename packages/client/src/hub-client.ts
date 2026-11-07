@@ -246,13 +246,14 @@ export class HubClient {
   async sendMessage(
     ref: string,
     input: SendInput,
-    options: { idempotencyKey?: string } = {},
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
   ): Promise<SendResult> {
     return this.request<SendResult>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/messages`,
       {
         method: "POST",
         body: input,
+        signal: options.signal,
         ...(options.idempotencyKey
           ? { headers: { "Idempotency-Key": options.idempotencyKey } }
           : {}),
@@ -490,6 +491,7 @@ export class HubClient {
       body?: unknown;
       keepalive?: boolean;
       headers?: Record<string, string>;
+      signal?: AbortSignal;
     } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -508,9 +510,20 @@ export class HubClient {
         credentials: this.credentials,
         keepalive: options.keepalive,
         method: options.method ?? "GET",
+        signal: options.signal,
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       });
     } catch (error) {
+      const reason = options.signal?.reason as { name?: string } | undefined;
+      if (
+        (error as { name?: string } | undefined)?.name === "TimeoutError" ||
+        reason?.name === "TimeoutError"
+      ) {
+        throw new HubError("timeout", "The request timed out", {
+          retryable: true,
+          cause: error,
+        });
+      }
       throw new HubError("network_error", "Unable to reach the hub", {
         retryable: true,
         cause: error,

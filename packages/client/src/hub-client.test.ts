@@ -78,6 +78,48 @@ describe("HubClient.sendMessage", () => {
     });
   });
 
+  it("passes the abort signal to fetch", async () => {
+    let captured: RequestInit | undefined;
+    const fetchImpl = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      captured = init;
+      return new Response(JSON.stringify({ accepted: true }), {
+        status: 202,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "http://hub", fetchImpl });
+    const controller = new AbortController();
+
+    await hub.sendMessage(
+      "desktop-opencode:ses_auth",
+      { text: "hello" },
+      { signal: controller.signal },
+    );
+
+    expect(captured?.signal).toBe(controller.signal);
+  });
+
+  it("maps a timeout abort to a retryable timeout error", async () => {
+    const fetchImpl = (async () => {
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    }) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "http://hub", fetchImpl });
+
+    await expect(
+      hub.sendMessage(
+        "desktop-opencode:ses_auth",
+        { text: "hello" },
+        { signal: AbortSignal.timeout(1_000) },
+      ),
+    ).rejects.toMatchObject({
+      code: "timeout",
+      retryable: true,
+    });
+  });
+
   it("requests question summaries with repeated refs", async () => {
     let url = "";
     const fetchImpl = (async (input: RequestInfo | URL) => {
