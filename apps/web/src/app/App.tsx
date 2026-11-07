@@ -3672,6 +3672,12 @@ function SessionDetail(props: {
       }, 500);
     } catch (reason) {
       const message = promptFailure(reason);
+      if (text && !draftRef.current.trim()) {
+        // The draft was deleted before the request. Restore it so a reload
+        // does not lose the failed message, unless the user already typed a
+        // new draft.
+        void props.client.saveDraft(props.sessionRef, text).catch(() => undefined);
+      }
       if (optimistic) {
         const failedID = optimistic.id;
         setMessages((current) =>
@@ -3716,6 +3722,9 @@ function SessionDetail(props: {
         ),
       );
       setSession((current) => (current ? { ...current, status: "running" } : current));
+      if (!draftRef.current.trim()) {
+        void props.client.deleteDraft(props.sessionRef).catch(() => undefined);
+      }
       window.setTimeout(() => {
         void refreshLatest(true).catch(() => undefined);
         void refreshBranches();
@@ -3737,6 +3746,9 @@ function SessionDetail(props: {
     setMessages((current) => current.filter((item) => item.id !== message.id));
     for (const id of payload?.attachmentIDs ?? []) {
       void props.client.deleteAttachment(id).catch(() => undefined);
+    }
+    if (!draftRef.current.trim()) {
+      void props.client.deleteDraft(props.sessionRef).catch(() => undefined);
     }
   };
 

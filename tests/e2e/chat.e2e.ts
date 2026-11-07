@@ -266,6 +266,53 @@ describe("chat sending", () => {
     ).toBe(0);
   });
 
+  it("restores the draft when a send fails", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.route("**/api/v1/sessions/*/messages", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "internal",
+            message: "E2E forced send failure",
+            retryable: true,
+          },
+        }),
+      });
+    });
+
+    const text = `Draft ${Date.now()}`;
+    const saved = page!.waitForResponse(
+      (response) =>
+        response.url().includes("/draft") &&
+        response.request().method() === "PUT",
+      { timeout: 5_000 },
+    );
+    await sendPrompt(text);
+    await page!
+      .locator(".message-send-state.error", { hasText: "Not sent." })
+      .waitFor({ state: "visible", timeout: 3_000 });
+    await saved;
+
+    await page!.reload();
+    await page!.locator(".chat-composer textarea").waitFor();
+    await page!.waitForFunction(
+      (expected) =>
+        (
+          document.querySelector(
+            ".chat-composer textarea",
+          ) as HTMLTextAreaElement | null
+        )?.value === expected,
+      text,
+      { timeout: 5_000 },
+    );
+  });
+
   it("shows Open WebUI folders and sends an attachment", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();
