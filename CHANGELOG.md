@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.20](https://github.com/amoshydra/oktoso/compare/v0.1.19...v0.1.20) (2026-11-07)
+
+
+### Bug Fixes
+
+* **g2:** make every send visible, bounded, and idempotent ([53dc480](https://github.com/amoshydra/oktoso/commit/53dc4801cef96eacb0980fad85612d0ce8b726bd))
+
 ## [0.1.19](https://github.com/amoshydra/oktoso/compare/v0.1.18...v0.1.19) (2026-11-07)
 
 
