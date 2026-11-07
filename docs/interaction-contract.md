@@ -393,7 +393,8 @@ discovery surface.
   five-minute timestamp window. The optimistic copy is removed, never shown
   twice.
 - A failed local message is not persisted. Navigating away loses the inline
-  retry; the draft and attachments are not queued for later.
+  retry. The message text is re-saved as the session draft so a reload can
+  recover it; attachments are not re-queued.
 
 ### Edit and fork
 
