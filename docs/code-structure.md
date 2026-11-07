@@ -432,6 +432,15 @@ Responsibilities:
 
 Session and message caches are in memory, bounded, and TTL-based. They are not a replacement for provider history. On restart, the hub re-fetches the provider state and emits a resync boundary.
 
+Provider reads use stale-while-revalidate rather than a synchronous full sync:
+
+- A `/sessions` or `/attention` read returns the cached snapshot immediately when it has synced before. A stale snapshot starts a background refresh and does not block the response.
+- A cold read waits at most 1.2s for sessions and 2s for attention, then returns the rows from providers that have answered. The refresh continues in the background.
+- Provider list and attention calls use an independent 3s sync deadline. The longer mutation timeout is only for sends, edits, and other user actions.
+- Providers that are disabled, `offline`, or `auth-error` are skipped by the normal sync. Their cached sessions and blocking attention items remain visible. Health checks keep running with backoff and restore the provider when it recovers.
+- Direct reads or actions against an unavailable provider fail fast with `provider_offline` instead of waiting for the network timeout. A cached session detail is returned when it exists.
+- Provider events coalesce cache invalidation to one pass every 2s, so message and reasoning deltas do not trigger a session refresh per event.
+
 ### 5.4 Session and message services
 
 - `SessionService` owns the merged session index across providers.
@@ -569,7 +578,7 @@ Cache options for a few minutes. Fall back to configured defaults when a provide
 
 | Failure | Behavior |
 |---|---|
-| Provider offline | Cached data remains visible with stale/offline state; mutations fail with `provider_offline`; backoff health checks |
+| Provider offline | Cached data remains visible with stale/offline state; sync skips the provider so it cannot block healthy providers; mutations fail fast with `provider_offline`; backoff health checks |
 | Provider auth error | Provider is marked `auth-error`; no retry storm; configuration must be fixed |
 | Provider rate limit | Keep cached data; back off and surface `rate_limited`; do not create fake attention |
 | SSE gap or restart | Emit `resync`; clients refetch sessions, attention, and open messages |

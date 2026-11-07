@@ -99,6 +99,7 @@ export class ProviderRegistry {
 
   adapters(): ProviderAdapter[] {
     return [...this.runtimes.values()]
+      .filter((runtime) => runtime.config.enabled)
       .map((runtime) => runtime.adapter)
       .filter((adapter): adapter is ProviderAdapter => Boolean(adapter));
   }

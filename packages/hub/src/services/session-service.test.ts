@@ -58,7 +58,7 @@ describe("SessionService read markers", () => {  it("keeps a session read across
     const store = new MemoryStateStore();
     const sessions = new SessionService(registry, logger, {
       store,
-      ttlMs: 0,
+      ttlMs: 60_000,
     });
 
     await sessions.refresh();
@@ -114,6 +114,162 @@ describe("SessionService read markers", () => {  it("keeps a session read across
     expect((await sessions.list({})).data).toHaveLength(2);
     expect((await sessions.list({ scope: "root" })).data).toEqual([
       expect.objectContaining({ ref: root.ref }),
+    ]);
+  });
+});
+
+describe("SessionService resilience", () => {
+  it("returns cached sessions immediately while a stale refresh is slow", async () => {
+    const cached = makeSession({
+      ref: "test:cached",
+      title: "Cached session",
+    });
+    let slow = false;
+    let release: (() => void) | undefined;
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const adapter = {
+      id: "test",
+      listSessions: async () => {
+        if (slow) {
+          markStarted?.();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        return {
+          data: [cached],
+          cursor: { next: null, previous: null },
+        };
+      },
+    } as unknown as ProviderAdapter;
+    const sessions = new SessionService(makeRegistry([adapter]), logger, {
+      ttlMs: 60_000,
+      coldStartWaitMs: 50,
+    });
+
+    await sessions.refresh();
+    slow = true;
+    sessions.invalidate();
+
+    const before = Date.now();
+    const page = await sessions.list({});
+    const elapsed = Date.now() - before;
+
+    expect(page.data).toEqual([expect.objectContaining({ ref: cached.ref })]);
+    expect(elapsed).toBeLessThan(200);
+
+    await started;
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  it("skips an offline provider and keeps its cached sessions", async () => {
+    let badStatus: "online" | "offline" = "online";
+    let badCalls = 0;
+    const goodSession = makeSession({
+      ref: "good:ses_good",
+      providerID: "good",
+      title: "Good session",
+    });
+    const badSession = makeSession({
+      ref: "bad:ses_bad",
+      providerID: "bad",
+      title: "Cached bad session",
+    });
+    const adapters = [
+      {
+        id: "bad",
+        listSessions: async () => {
+          badCalls += 1;
+          return {
+            data: [badSession],
+            cursor: { next: null, previous: null },
+          };
+        },
+      },
+      {
+        id: "good",
+        listSessions: async () => ({
+          data: [goodSession],
+          cursor: { next: null, previous: null },
+        }),
+      },
+    ] as unknown as ProviderAdapter[];
+    const registry = {
+      adapters: () => adapters,
+      adapter: (id: string) => adapters.find((adapter) => adapter.id === id),
+      get: (id: string) => ({
+        id,
+        enabled: true,
+        status: id === "bad" ? badStatus : "online",
+      }),
+      timeoutMs: () => 1_000,
+    } as unknown as ProviderRegistry;
+    const sessions = new SessionService(registry, logger, { ttlMs: 60_000 });
+
+    await sessions.refresh();
+    expect(badCalls).toBe(1);
+
+    badStatus = "offline";
+    sessions.invalidate();
+    await sessions.refresh();
+
+    expect(badCalls).toBe(1);
+    const page = await sessions.list({});
+    expect(page.data.map((session) => session.ref)).toEqual(
+      expect.arrayContaining([goodSession.ref, badSession.ref]),
+    );
+  });
+
+  it("returns a partial page when a cold-start provider is slow", async () => {
+    const goodSession = makeSession({
+      ref: "good:ses_good",
+      providerID: "good",
+      title: "Good session",
+    });
+    const adapters = [
+      {
+        id: "good",
+        listSessions: async () => ({
+          data: [goodSession],
+          cursor: { next: null, previous: null },
+        }),
+      },
+      {
+        id: "slow",
+        listSessions: async (
+          _query: SessionListQuery,
+          signal: AbortSignal,
+        ) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => reject(new Error("sync deadline")),
+              { once: true },
+            );
+          }),
+      },
+    ] as unknown as ProviderAdapter[];
+    const sessions = new SessionService(makeRegistry(adapters), logger, {
+      coldStartWaitMs: 40,
+      syncTimeoutMs: 120,
+      ttlMs: 60_000,
+    });
+
+    const before = Date.now();
+    const page = await sessions.list({});
+    const elapsed = Date.now() - before;
+
+    expect(page.data.map((session) => session.ref)).toEqual([goodSession.ref]);
+    expect(elapsed).toBeGreaterThanOrEqual(30);
+    expect(elapsed).toBeLessThan(500);
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect((await sessions.list({})).data.map((session) => session.ref)).toEqual([
+      goodSession.ref,
     ]);
   });
 });

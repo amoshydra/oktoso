@@ -18,12 +18,22 @@ import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AttachmentStore } from "./attachment-store";
 import type { ProviderRegistry } from "./provider-registry";
+import {
+  DEFAULT_SESSION_COLD_START_MS,
+  DEFAULT_SYNC_TIMEOUT_MS,
+  providerOfflineError,
+  providerUnavailableReason,
+  syncSignal,
+  waitAtMost,
+} from "./provider-sync";
 
 export interface SessionServiceOptions {
   ttlMs?: number;
   now?: () => number;
   store?: StateStore;
   attachments?: AttachmentStore;
+  syncTimeoutMs?: number;
+  coldStartWaitMs?: number;
 }
 
 interface CursorValue {
@@ -40,7 +50,10 @@ export class SessionService {
   private readonly now: () => number;
   private readonly store?: StateStore;
   private readonly attachments?: AttachmentStore;
+  private readonly syncTimeoutMs: number;
+  private readonly coldStartWaitMs: number;
   private lastSyncAt = 0;
+  private synced = false;
   private refreshing?: Promise<void>;
 
   constructor(
@@ -52,6 +65,9 @@ export class SessionService {
     this.now = options.now ?? Date.now;
     this.store = options.store;
     this.attachments = options.attachments;
+    this.syncTimeoutMs = options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS;
+    this.coldStartWaitMs =
+      options.coldStartWaitMs ?? DEFAULT_SESSION_COLD_START_MS;
   }
 
   get sessionCount(): number {
@@ -62,51 +78,52 @@ export class SessionService {
     return this.lastSyncAt;
   }
 
+  cached(): Session[] {
+    return [...this.sessions.values()];
+  }
+
   async refresh(): Promise<void> {
     if (this.refreshing) return this.refreshing;
 
     const run = (async () => {
-      const adapters = this.registry.adapters();
-      const results = await Promise.allSettled(
-        adapters.map(async (adapter) => ({
-          adapter,
-          page: await adapter.listSessions(
-            { limit: MAX_LIMIT },
-            AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
-          ),
-        })),
+      const adapters = this.registry
+        .adapters()
+        .filter(
+          (adapter) =>
+            !providerUnavailableReason(this.registry, adapter.id),
+        );
+      await Promise.allSettled(
+        adapters.map(async (adapter) => {
+          try {
+            const page = await adapter.listSessions(
+              { limit: MAX_LIMIT },
+              syncSignal(this.registry, adapter.id, this.syncTimeoutMs),
+            );
+            const refs = new Set<string>();
+            for (const session of page.data) {
+              refs.add(session.ref);
+              this.sessions.set(session.ref, this.applyReadMarker(session));
+            }
+            // The provider is authoritative for its own sessions. Drop cached
+            // rows it no longer reports, but never drop rows for a provider
+            // that failed or was skipped.
+            for (const [ref, session] of this.sessions) {
+              if (session.providerID === adapter.id && !refs.has(ref)) {
+                this.sessions.delete(ref);
+              }
+            }
+            this.synced = true;
+          } catch (error) {
+            this.logger.warn("Session sync failed", {
+              providerID: adapter.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }),
       );
 
-      const successfulProviders = new Map<string, Set<string>>();
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          const refs = new Set<string>();
-          for (const session of result.value.page.data) {
-            refs.add(session.ref);
-            this.sessions.set(session.ref, this.applyReadMarker(session));
-          }
-          successfulProviders.set(result.value.adapter.id, refs);
-        } else {
-          this.logger.warn("Session sync failed", {
-            error:
-              result.reason instanceof Error
-                ? result.reason.message
-                : String(result.reason),
-          });
-        }
-      }
-
-      // Providers are authoritative: drop cached sessions they no longer
-      // report, but only for providers whose sync succeeded.
-      for (const [providerID, refs] of successfulProviders) {
-        for (const [ref, session] of this.sessions) {
-          if (session.providerID === providerID && !refs.has(ref)) {
-            this.sessions.delete(ref);
-          }
-        }
-      }
-
       this.lastSyncAt = this.now();
+      this.synced = true;
     })();
 
     this.refreshing = run;
@@ -117,11 +134,28 @@ export class SessionService {
     }
   }
 
+  private startRefresh(): Promise<void> {
+    return this.refresh().catch((error) => {
+      this.logger.warn("Session refresh failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   async list(query: SessionListQuery): Promise<SessionPage> {
     const search = query.q?.trim();
     if (search) return this.searchSessions(query, search);
 
-    await this.ensureFresh();
+    if (!this.synced || this.now() - this.lastSyncAt >= this.ttlMs) {
+      const refresh = this.startRefresh();
+      if (!this.synced) {
+        await waitAtMost(refresh, this.coldStartWaitMs);
+      } else {
+        void refresh;
+      }
+      // Warm cache: return immediately while the refresh continues in the
+      // background. Slow or offline providers must not hold up the response.
+    }
     return this.paginate(
       this.filterSessions([...this.sessions.values()], query),
       query,
@@ -188,14 +222,18 @@ export class SessionService {
 
     const adapters = this.registry
       .adapters()
-      .filter((adapter) => !query.provider || adapter.id === query.provider);
+      .filter(
+        (adapter) =>
+          (!query.provider || adapter.id === query.provider) &&
+          !providerUnavailableReason(this.registry, adapter.id),
+      );
 
     const results = await Promise.all(
       adapters.map(async (adapter) => {
         try {
           const page = await adapter.listSessions(
             { q: search, limit },
-            AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
+            syncSignal(this.registry, adapter.id, this.syncTimeoutMs),
           );
           return { page };
         } catch (error) {
@@ -224,17 +262,33 @@ export class SessionService {
 
   async get(ref: string): Promise<Session> {
     const adapter = this.adapterForRef(ref);
-    if (adapter) {
+    if (!adapter) {
+      const cached = this.sessions.get(ref);
+      if (!cached) throw notFound("Session not found");
+      return cached;
+    }
+
+    const unavailable = providerUnavailableReason(this.registry, adapter.id);
+    if (unavailable) {
+      const cached = this.sessions.get(ref);
+      if (cached) return cached;
+      throw providerOfflineError(adapter.id, unavailable);
+    }
+
+    try {
       const session = this.applyReadMarker(
-        await adapter.getSession(ref, AbortSignal.timeout(15_000)),
+        await adapter.getSession(
+          ref,
+          syncSignal(this.registry, adapter.id, this.syncTimeoutMs),
+        ),
       );
       this.sessions.set(session.ref, session);
       return session;
+    } catch (error) {
+      const cached = this.sessions.get(ref);
+      if (cached) return cached;
+      throw error;
     }
-
-    const session = this.sessions.get(ref);
-    if (!session) throw notFound("Session not found");
-    return session;
   }
 
   async messages(ref: string, query: MessagesQuery): Promise<MessagePage> {
@@ -244,7 +298,14 @@ export class SessionService {
       if (!session) throw notFound("Session not found");
       return { data: [], cursor: { next: null, previous: null } };
     }
-    return adapter.getMessages(ref, query, AbortSignal.timeout(15_000));
+    this.assertProviderAvailable(adapter.id);
+    return adapter.getMessages(
+      ref,
+      query,
+      AbortSignal.timeout(
+        Math.min(this.registry.timeoutMs(adapter.id), 15_000),
+      ),
+    );
   }
 
   async sendMessage(ref: string, input: SendInput): Promise<SendResult> {
@@ -252,6 +313,7 @@ export class SessionService {
     if (!adapter?.capabilities.send) {
       throw notImplemented("This provider does not support sending messages");
     }
+    this.assertProviderAvailable(adapter.id);
     const attachmentIDs = input.attachments ?? [];
     if (input.text.trim().length === 0 && attachmentIDs.length === 0) {
       throw badRequest("A message needs text or an attachment");
@@ -296,6 +358,7 @@ export class SessionService {
     if (!adapter.capabilities.branches || !adapter.listBranches) {
       return [];
     }
+    this.assertProviderAvailable(adapter.id);
     return adapter.listBranches(ref, AbortSignal.timeout(15_000));
   }
 
@@ -305,6 +368,7 @@ export class SessionService {
     if (!adapter.capabilities.retry || !adapter.retryMessage) {
       throw notImplemented("This provider does not support retrying messages");
     }
+    this.assertProviderAvailable(adapter.id);
     const result = await adapter.retryMessage(
       ref,
       messageId,
@@ -321,6 +385,7 @@ export class SessionService {
     if (!adapter.capabilities.branches || !adapter.switchBranch) {
       throw notImplemented("This provider does not support switching branches");
     }
+    this.assertProviderAvailable(adapter.id);
     await adapter.switchBranch(ref, siblingId, AbortSignal.timeout(15_000));
   }
 
@@ -330,6 +395,7 @@ export class SessionService {
     if (!adapter.capabilities.fork || !adapter.forkSession) {
       throw notImplemented("This provider does not support forking sessions");
     }
+    this.assertProviderAvailable(adapter.id);
     const session = await adapter.forkSession(
       ref,
       input,
@@ -348,6 +414,7 @@ export class SessionService {
     if (!adapter.setSessionOptions) {
       throw notImplemented("This provider does not support changing the model or agent");
     }
+    this.assertProviderAvailable(adapter.id);
 
     await adapter.setSessionOptions(ref, input, AbortSignal.timeout(15_000));
     const cached = this.sessions.get(ref);
@@ -369,6 +436,7 @@ export class SessionService {
     if (!adapter?.capabilities.create) {
       throw notImplemented("This provider does not support creating sessions");
     }
+    this.assertProviderAvailable(adapter.id);
     const session = await adapter.createSession(
       input,
       AbortSignal.timeout(30_000),
@@ -382,18 +450,26 @@ export class SessionService {
     if (!adapter?.interrupt) {
       throw notImplemented("This provider does not support interrupting sessions");
     }
+    this.assertProviderAvailable(adapter.id);
     await adapter.interrupt(ref, AbortSignal.timeout(15_000));
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "idle" });
   }
 
   async options(providerID: string): Promise<ProviderOptions> {
-    await this.ensureFresh();
+    if (!this.synced || this.now() - this.lastSyncAt >= this.ttlMs) {
+      void this.startRefresh();
+    }
     const adapter = this.registry.adapter(providerID);
     if (!adapter?.getOptions) {
       throw notImplemented("This provider does not expose creation options");
     }
-    const options = await adapter.getOptions(AbortSignal.timeout(15_000));
+    this.assertProviderAvailable(providerID);
+    const options = await adapter.getOptions(
+      AbortSignal.timeout(
+        Math.min(this.registry.timeoutMs(providerID), 15_000),
+      ),
+    );
     const providerSessions = [...this.sessions.values()]
       .filter((session) => session.providerID === providerID)
       .sort((left, right) => right.updatedAt - left.updatedAt);
@@ -434,7 +510,10 @@ export class SessionService {
   async markRead(ref: string): Promise<void> {
     const adapter = this.adapterForRef(ref);
     const session = this.sessions.get(ref);
-    if (!adapter?.markRead) {
+    const unavailable = adapter
+      ? providerUnavailableReason(this.registry, adapter.id)
+      : undefined;
+    if (!adapter?.markRead || unavailable) {
       if (!session) throw notFound("Session not found");
     } else {
       await adapter.markRead(ref, AbortSignal.timeout(15_000));
@@ -458,10 +537,9 @@ export class SessionService {
     return session.unread ? { ...session, unread: false } : session;
   }
 
-  private async ensureFresh(): Promise<void> {
-    if (this.now() - this.lastSyncAt >= this.ttlMs) {
-      await this.refresh();
-    }
+  private assertProviderAvailable(providerID: string): void {
+    const reason = providerUnavailableReason(this.registry, providerID);
+    if (reason) throw providerOfflineError(providerID, reason);
   }
 
   private adapterForRef(ref: string): ProviderAdapter | undefined {

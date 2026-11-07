@@ -12,12 +12,22 @@ import type { Logger } from "../lib/logger";
 import type { EventBus } from "./event-bus";
 import type { ProviderRegistry } from "./provider-registry";
 import type { SessionService } from "./session-service";
+import {
+  DEFAULT_ATTENTION_COLD_START_MS,
+  DEFAULT_SYNC_TIMEOUT_MS,
+  providerOfflineError,
+  providerUnavailableReason,
+  syncSignal,
+  waitAtMost,
+} from "./provider-sync";
 
 export interface AttentionServiceOptions {
   ttlMs?: number;
   now?: () => number;
   unreadWindowMs?: number;
   maxUnread?: number;
+  syncTimeoutMs?: number;
+  coldStartWaitMs?: number;
 }
 
 const PRIORITY_ORDER = { blocking: 0, high: 1, normal: 2 } as const;
@@ -25,12 +35,15 @@ const PRIORITY_ORDER = { blocking: 0, high: 1, normal: 2 } as const;
 export class AttentionService {
   private items = new Map<string, Attention>();
   private lastRefresh = 0;
+  private synced = false;
   private refreshing?: Promise<void>;
   private readonly pendingActions = new Set<string>();
   private readonly ttlMs: number;
   private readonly now: () => number;
   private readonly unreadWindowMs: number;
   private readonly maxUnread: number;
+  private readonly syncTimeoutMs: number;
+  private readonly coldStartWaitMs: number;
 
   constructor(
     private readonly registry: ProviderRegistry,
@@ -44,6 +57,9 @@ export class AttentionService {
     this.now = options.now ?? Date.now;
     this.unreadWindowMs = options.unreadWindowMs ?? 24 * 60 * 60 * 1_000;
     this.maxUnread = options.maxUnread ?? 10;
+    this.syncTimeoutMs = options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS;
+    this.coldStartWaitMs =
+      options.coldStartWaitMs ?? DEFAULT_ATTENTION_COLD_START_MS;
   }
 
   get count(): number {
@@ -65,9 +81,10 @@ export class AttentionService {
       const previous = this.items;
       const next = new Map<string, Attention>();
       const adapters = this.registry.adapters();
-      const sessionPage = await this.sessions.list({ limit: 200 });
-      const sessionByRef = new Map(
-        sessionPage.data.map((session) => [session.ref, session]),
+      const sessionPromise = this.sessions.list({ limit: 200 });
+      const cachedSessions = this.sessions.cached?.() ?? [];
+      const cachedByRef = new Map(
+        cachedSessions.map((session) => [session.ref, session]),
       );
       const directoriesByProvider = new Map<string, Set<string>>();
       const addDirectory = (providerID: string, directory: string) => {
@@ -79,7 +96,7 @@ export class AttentionService {
         directories.add(directory);
       };
 
-      for (const session of sessionPage.data) {
+      for (const session of cachedSessions) {
         if (session.status === "running" && session.directory) {
           addDirectory(session.providerID, session.directory);
         }
@@ -90,7 +107,7 @@ export class AttentionService {
         if (item.type !== "permission" && item.type !== "approval" && item.type !== "question") {
           continue;
         }
-        const session = sessionByRef.get(item.sessionRef);
+        const session = cachedByRef.get(item.sessionRef);
         const directory = session?.directory;
         if (directory) {
           const separator = item.sessionRef.indexOf(":");
@@ -103,15 +120,27 @@ export class AttentionService {
           );
         }
       }
-      const results = await Promise.all(
+      const resultsPromise = Promise.all(
         adapters.map(async (adapter) => {
+          const unavailable = providerUnavailableReason(
+            this.registry,
+            adapter.id,
+          );
+          if (unavailable) {
+            return {
+              adapterID: adapter.id,
+              items: [] as Attention[],
+              skipped: true,
+              error: new Error(`Provider ${adapter.id} is ${unavailable}`),
+            };
+          }
           if (!adapter.listAttention) return { adapterID: adapter.id, items: [] };
           try {
             return {
               adapterID: adapter.id,
               items: await adapter.listAttention(
                 [...(directoriesByProvider.get(adapter.id) ?? [])],
-                AbortSignal.timeout(this.registry.timeoutMs(adapter.id)),
+                syncSignal(this.registry, adapter.id, this.syncTimeoutMs),
               ),
             };
           } catch (error) {
@@ -123,6 +152,12 @@ export class AttentionService {
           }
         }),
       );
+
+      const sessionPage = await sessionPromise;
+      const sessionByRef = new Map(
+        sessionPage.data.map((session) => [session.ref, session]),
+      );
+      const results = await resultsPromise;
       for (const result of results) {
         if (!result.error) {
           for (const item of result.items) {
@@ -139,13 +174,15 @@ export class AttentionService {
           continue;
         }
 
-        this.logger.warn("Attention sync failed", {
-          providerID: result.adapterID,
-          error:
-            result.error instanceof Error
-              ? result.error.message
-              : String(result.error),
-        });
+        if (!("skipped" in result && result.skipped)) {
+          this.logger.warn("Attention sync failed", {
+            providerID: result.adapterID,
+            error:
+              result.error instanceof Error
+                ? result.error.message
+                : String(result.error),
+          });
+        }
         // A provider outage must not look like the user resolved every item.
         for (const [id, item] of previous) {
           if (
@@ -225,6 +262,7 @@ export class AttentionService {
 
       this.items = next;
       this.lastRefresh = this.now();
+      this.synced = true;
       await this.emitChanges(previous, next);
     })();
 
@@ -240,7 +278,7 @@ export class AttentionService {
     type?: AttentionType;
     sessionRef?: string;
   } = {}): Promise<AttentionPage> {
-    await this.ensureFresh();
+    await this.ensureReady();
     let data = [...this.items.values()];
     if (query.type) data = data.filter((item) => item.type === query.type);
     if (query.sessionRef) data = data.filter((item) => item.sessionRef === query.sessionRef);
@@ -258,7 +296,7 @@ export class AttentionService {
     action: string,
     input: AttentionActionInput = {},
   ): Promise<void> {
-    await this.ensureFresh();
+    await this.ensureReady();
     const item = this.items.get(id);
     if (!item) throw notFound("Attention item not found");
     if (this.pendingActions.has(id)) {
@@ -278,6 +316,8 @@ export class AttentionService {
         }
       } else {
         const providerID = item.sessionRef.slice(0, item.sessionRef.indexOf(":"));
+        const reason = providerUnavailableReason(this.registry, providerID);
+        if (reason) throw providerOfflineError(providerID, reason);
         const adapter = this.registry.adapter(providerID);
         if (!adapter?.actOnAttention) {
           throw notImplemented("This provider does not support attention actions");
@@ -360,8 +400,18 @@ export class AttentionService {
     }
   }
 
-  private async ensureFresh(): Promise<void> {
-    if (this.now() - this.lastRefresh >= this.ttlMs) await this.refresh();
+  private ensureReady(): Promise<void> {
+    if (this.synced && this.now() - this.lastRefresh < this.ttlMs) {
+      return Promise.resolve();
+    }
+    const refresh = this.refresh().catch((error) => {
+      this.logger.warn("Attention refresh failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    if (!this.synced) return waitAtMost(refresh, this.coldStartWaitMs);
+    void refresh;
+    return Promise.resolve();
   }
 
   private async acknowledge(id: string): Promise<void> {

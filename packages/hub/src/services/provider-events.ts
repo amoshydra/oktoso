@@ -12,6 +12,7 @@ export class ProviderEventService {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly messageTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pendingMessages = new Map<string, ProviderEvent>();
+  private invalidateTimer?: ReturnType<typeof setTimeout>;
   private started = false;
 
   constructor(
@@ -22,14 +23,29 @@ export class ProviderEventService {
     private readonly attention?: AttentionService,
     private readonly coalesceMs = 200,
     private readonly messageCoalesceMs = 50,
+    private readonly invalidateMs = 2_000,
   ) {}
 
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
 
-    for (const adapter of this.registry.adapters()) {
-      await this.subscribe(adapter);
+    await this.syncSubscriptions();
+  }
+
+  async syncSubscriptions(): Promise<void> {
+    if (!this.started) return;
+    const adapters = this.registry
+      .adapters()
+      .filter(
+        (adapter) => this.registry.get?.(adapter.id)?.status === "online",
+      );
+    const active = new Set(adapters.map((adapter) => adapter.id));
+    for (const id of [...this.subscriptions.keys()]) {
+      if (!active.has(id)) this.unsubscribe(id);
+    }
+    for (const adapter of adapters) {
+      if (!this.subscriptions.has(adapter.id)) await this.subscribe(adapter);
     }
   }
 
@@ -71,6 +87,8 @@ export class ProviderEventService {
       }
     }
     this.subscriptions.clear();
+    if (this.invalidateTimer) clearTimeout(this.invalidateTimer);
+    this.invalidateTimer = undefined;
     for (const timer of this.timers.values()) clearTimeout(timer);
     for (const timer of this.messageTimers.values()) clearTimeout(timer);
     this.timers.clear();
@@ -80,8 +98,7 @@ export class ProviderEventService {
   }
 
   private handle(event: ProviderEvent): void {
-    this.sessions.invalidate();
-    this.attention?.invalidate();
+    this.scheduleInvalidate();
 
     if (
       event.type === "message.created" ||
@@ -93,6 +110,15 @@ export class ProviderEventService {
     }
 
     this.publishSessionUpdated(event);
+  }
+
+  private scheduleInvalidate(): void {
+    if (this.invalidateTimer) return;
+    this.invalidateTimer = setTimeout(() => {
+      this.invalidateTimer = undefined;
+      this.sessions.invalidate();
+      this.attention?.invalidate();
+    }, this.invalidateMs);
   }
 
   private handleMessage(event: ProviderEvent): void {
