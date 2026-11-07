@@ -45,6 +45,7 @@ import {
   messageCopyText,
   pickAudioMimeType,
 } from "./chat-actions";
+import { createID } from "./ids";
 import { renderMarkdown } from "./markdown";
 import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
@@ -3632,7 +3633,7 @@ function SessionDetail(props: {
     ) {
       return;
     }
-    const idempotencyKey = crypto.randomUUID();
+    const idempotencyKey = createID();
     const optimistic = createOptimisticMessage({
       sessionRef: props.sessionRef,
       text,

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createID } from "./ids";
 import { DEFAULT_ROUTE, parseRoute, routeHref, type Route } from "./router";
 import { saveActiveScrolls } from "./scroll-store";
 
@@ -36,13 +37,6 @@ interface HistoryContextValue {
 
 const HistoryContext = createContext<HistoryContextValue | null>(null);
 
-function createKey(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
 function entryState(): HistoryEntryState {
   const state = window.history.state as HistoryEntryState | null;
   return state && typeof state === "object" ? state : {};
@@ -51,7 +45,7 @@ function entryState(): HistoryEntryState {
 function currentEntry(): { key: string; index: number } {
   const state = entryState();
   return {
-    key: typeof state.key === "string" ? state.key : createKey(),
+    key: typeof state.key === "string" ? state.key : createID(),
     index: typeof state.index === "number" ? state.index : 0,
   };
 }
@@ -77,7 +71,7 @@ function readLocation(): HistoryLocation {
 export function bootstrapBrowserHistory(): void {
   const parsed = parseRoute(window.location.pathname, window.location.search);
   const state = entryState();
-  const key = typeof state.key === "string" ? state.key : createKey();
+  const key = typeof state.key === "string" ? state.key : createID();
   const index = typeof state.index === "number" ? state.index : 0;
 
   if (!parsed) {
@@ -134,7 +128,7 @@ export function HistoryProvider(props: { children: ReactNode }) {
       }
 
       const entry = currentEntry();
-      const next = { key: createKey(), index: entry.index + 1 };
+      const next = { key: createID(), index: entry.index + 1 };
       window.history.pushState(next, "", href);
       setLocation({ route, ...next, href });
       setNavigationType("push");

@@ -1,4 +1,5 @@
 import type { Attachment, Message, MessagePart } from "@amoshydra/oktoso-contracts";
+import { createID } from "./ids";
 
 export type OptimisticSendStatus = "sending" | "sent" | "failed";
 
@@ -63,7 +64,7 @@ export function createOptimisticMessage(input: {
     idempotencyKey: input.idempotencyKey,
   };
   return {
-    id: `${OPTIMISTIC_PREFIX}${crypto.randomUUID()}`,
+    id: `${OPTIMISTIC_PREFIX}${createID()}`,
     sessionRef: input.sessionRef,
     role: "user",
     parts,
