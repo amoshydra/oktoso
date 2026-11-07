@@ -111,7 +111,10 @@ beforeAll(async () => {
     stdio: "ignore",
   });
   await waitForHealth();
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    args: ["--host-resolver-rules=MAP oktoso.insecure 127.0.0.1"],
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -217,6 +220,28 @@ describe("chat sending", () => {
     expect(
       await page!.locator(".chat-message.user", { hasText: text }).count(),
     ).toBe(1);
+  });
+
+  it("sends from an insecure origin without crypto.randomUUID", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.goto(`http://oktoso.insecure:${HUB_PORT}`);
+    await page
+      .getByRole("button", { name: "Sessions" })
+      .waitFor({ timeout: 5_000 });
+
+    expect(
+      await page.evaluate(() => ({
+        secure: window.isSecureContext,
+        randomUUID: typeof crypto.randomUUID,
+      })),
+    ).toEqual({ secure: false, randomUUID: "undefined" });
+
+    await openSession("Fix auth race in gateway");
+    const text = `Insecure origin ${Date.now()}`;
+    await sendPrompt(text);
+    await page
+      .locator(".chat-message.user", { hasText: text })
+      .waitFor({ timeout: 5_000 });
   });
 
   it("shows Open WebUI folders and sends an attachment", async () => {
