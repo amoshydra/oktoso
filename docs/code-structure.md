@@ -511,7 +511,10 @@ interface HubState {
   readMarkers: Record<string, { readAt: number; updatedAt: number }>;
   attention: Record<string, { acknowledgedAt?: number; snoozedUntil?: number }>;
   drafts: Record<string, { text: string; updatedAt: number }>;
-  idempotency: Record<string, { response: unknown; expiresAt: number }>;
+  idempotency: Record<
+    string,
+    { response: unknown; requestHash?: string; expiresAt: number }
+  >;
 }
 ```
 

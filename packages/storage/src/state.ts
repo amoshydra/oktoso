@@ -18,6 +18,8 @@ export const zDraftState = z.object({
 
 export const zIdempotencyState = z.object({
   response: z.unknown(),
+  /** SHA-256 of the request payload; guards against a reused key. */
+  requestHash: z.string().optional(),
   expiresAt: z.number().int().nonnegative(),
 });
 

@@ -146,7 +146,7 @@ The hard parts are not rendering a list:
 | Extract numbered/bulleted choices | Agent plans and task lists become buttons. | Adjacency, plan, task, code, and quote filters; confidence floor. |
 | Phone card above keyboard | Duplicates the existing composer and two send paths. | One composer in answer mode; the card only adds question/choices. |
 | No stale handling | A send can answer a question that was replaced. | `revision` + `409 question_changed` + `Review`. |
-| No idempotency | Retrying after a timeout can duplicate the answer. | `Idempotency-Key`; hub dedupes for 5 minutes. |
+| No idempotency | Retrying after a timeout can duplicate the answer. | `Idempotency-Key`; hub dedupes identical retries for 30 days. |
 
 ### 1.4 Spike constraints (measured)
 
@@ -1298,8 +1298,10 @@ Hub behavior:
    `reason: "question_incomplete"`.
 6. Valid → send `text` through the provider; return the existing `202`.
    Strip `answer`/`answers` before the provider adapter; they are hub-only.
-7. Cache `(sessionRef, Idempotency-Key)` → result for 5 minutes. A retry with the
-   same key returns the same result without a second provider send.
+7. Cache `(sessionRef, Idempotency-Key)` → result for 30 days. The cache also
+   stores a hash of the request; a reused key with different content is treated
+   as a new send. A retry with the same key and payload returns the same result
+   without a second provider send.
 8. Optionally annotate the hub's message cache with the answer metadata for
    audit; provider message metadata is not required.
 
@@ -1533,11 +1535,14 @@ prompt may not propagate to the parent UI and can stall the parent turn.
 
 ### 10.2 Idempotency and duplicate sends
 
-The hub cannot rely on providers to dedupe. It dedupes `Idempotency-Key` in
-memory for five minutes. If the hub restarts between the send and the retry, a
-duplicate is possible; this is rare and acceptable for chat. The key is scoped to
-the session and the answer draft, not to the text alone, so intentionally sending
-the same text twice is still possible.
+The hub cannot rely on providers to dedupe. It persists `Idempotency-Key`
+results in its state file for 30 days. Each entry also stores a hash of the
+request payload, so a reused key with different text, attachments, or answer
+metadata is treated as a new send instead of returning a stale result. If the
+hub state is lost between the send and the retry, a duplicate is possible; this
+is rare and acceptable for chat. The key is scoped to the session and the draft,
+not to the text alone; intentionally sending the same text twice still works
+when each send uses a fresh key.
 
 ### 10.3 Read state
 

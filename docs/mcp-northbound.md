@@ -267,7 +267,8 @@ Report what you changed and what you escalated.
   deliberate agent step, not a human approval; a policy layer that requires a
   human for destructive actions is a follow-up.
 - **Idempotency.** `sessions_send` accepts an idempotency key and passes it to
-  the hub's existing idempotency layer.
+  the hub's idempotency layer, which remembers successful sends for 30 days. A
+  reused key with a different payload is treated as a new send.
 - **No secrets.** The bridge never sends provider credentials to the agent.
 - **Audit.** Hub request logs record the REST calls. Hosted `/mcp` also appends
   one JSONL entry per tool call with the client ID, tool, target, caller session

@@ -29,7 +29,7 @@ The first slice is deliberately narrow:
 - subagent-aware attention: child sessions are excluded from `UNREAD`/`ERROR` noise and from the root-only Recent list. Child permissions and provider-native questions stay visible with a `›` marker because they can block the parent task.
 - question detection at `GET /api/v1/sessions/:ref/question`; derived from the latest completed assistant message, with no provider-side question API
 - stale-question protection: answer sends carry the question ID, message ID, and revision; a changed or resolved question returns `409` and the glasses show `ANSWER · changed` with `Review` / `Read chat`
-- idempotent answer retry: one key per answer draft; the hub caches the accepted result for five minutes
+- idempotent answer retry: one key per answer draft; the hub persists the accepted result for 30 days and matches it against the request payload
 - numbered-choice extraction for agent replies
 - full chat responses kept in memory and read through a six-line viewport; newlines and paragraph breaks are preserved, the footer shows line/message position and compact agent activity, chat opens at the start of the latest message, new messages preserve the reading position (or jump to their start only when already at the bottom), `New below` marks unseen content, slow swipes move one line, several rapid swipes accelerate gradually, and refresh never rebuilds the page or resets the reading position
 - Markdown formatting is stripped for glass display; fenced code keeps its content and paragraph breaks are preserved

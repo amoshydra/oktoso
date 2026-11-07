@@ -1,8 +1,22 @@
+import { createHash } from "node:crypto";
 import type { SendInput, SendResult } from "@amoshydra/oktoso-contracts";
 import { badRequest, conflict } from "../domain/errors";
 import type { IdempotencyService } from "./idempotency";
 import type { QuestionService } from "./question-service";
 import type { SessionService } from "./session-service";
+
+function requestHash(input: SendInput): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        text: input.text,
+        attachments: input.attachments ?? [],
+        answer: input.answer ?? null,
+        answers: input.answers ?? null,
+      }),
+    )
+    .digest("hex");
+}
 
 /**
  * Shared send path for the REST route and the MCP surface. It owns answer
@@ -21,8 +35,9 @@ export class SessionActions {
     idempotencyKey?: string,
   ): Promise<SendResult> {
     const cacheKey = idempotencyKey ? `${ref}:${idempotencyKey}` : undefined;
+    const hash = requestHash(input);
     if (cacheKey) {
-      const cached = await this.idempotency.get(cacheKey);
+      const cached = await this.idempotency.get(cacheKey, hash);
       if (cached !== undefined) return cached as SendResult;
     }
 
@@ -101,7 +116,7 @@ export class SessionActions {
       ...(input.attachments ? { attachments: input.attachments } : {}),
     });
     this.questions.invalidate(ref);
-    if (cacheKey) await this.idempotency.set(cacheKey, result);
+    if (cacheKey) await this.idempotency.set(cacheKey, result, hash);
     return result;
   }
 }
