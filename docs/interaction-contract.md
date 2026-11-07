@@ -384,7 +384,8 @@ discovery surface.
 - The composer clears, the transcript scrolls to the bottom, and the local
   message renders with `Sending…`.
 - The hub send uses a stable idempotency key. Retry reuses the same key, so an
-  ambiguous failure cannot double-send.
+  ambiguous failure cannot double-send; the hub remembers successful sends for
+  30 days.
 - On success the local state becomes `sent`; on failure it becomes `failed`
   with inline **Retry** and **Discard**. Discard removes the local message and
   deletes its staged attachments.
