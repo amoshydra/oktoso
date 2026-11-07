@@ -26,6 +26,7 @@ interface ProviderRuntimeState {
 
 const HEALTH_BACKOFF_BASE_MS = 5_000;
 const HEALTH_BACKOFF_MAX_MS = 300_000;
+const HEALTH_TIMEOUT_MS = 4_000;
 
 function healthBackoffMs(failures: number): number {
   const exponent = Math.min(Math.max(failures - 1, 0), 6);
@@ -174,7 +175,9 @@ export class ProviderRegistry {
   ): Promise<ProviderHealth> {
     const { config } = runtime;
     const started = Date.now();
-    const signal = AbortSignal.timeout(config.timeoutMs);
+    const signal = AbortSignal.timeout(
+      Math.min(config.timeoutMs, HEALTH_TIMEOUT_MS),
+    );
 
     if (runtime.adapter) {
       try {

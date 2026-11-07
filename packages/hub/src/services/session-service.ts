@@ -21,6 +21,7 @@ import type { ProviderRegistry } from "./provider-registry";
 import {
   DEFAULT_SESSION_COLD_START_MS,
   DEFAULT_SYNC_TIMEOUT_MS,
+  operationSignal,
   providerOfflineError,
   providerUnavailableReason,
   syncSignal,
@@ -279,7 +280,7 @@ export class SessionService {
       const session = this.applyReadMarker(
         await adapter.getSession(
           ref,
-          syncSignal(this.registry, adapter.id, this.syncTimeoutMs),
+          operationSignal(this.registry, adapter.id, 15_000),
         ),
       );
       this.sessions.set(session.ref, session);
@@ -302,9 +303,7 @@ export class SessionService {
     return adapter.getMessages(
       ref,
       query,
-      AbortSignal.timeout(
-        Math.min(this.registry.timeoutMs(adapter.id), 15_000),
-      ),
+      operationSignal(this.registry, adapter.id, 15_000),
     );
   }
 
@@ -340,7 +339,7 @@ export class SessionService {
     const result = await adapter.sendMessage(
       ref,
       { ...input, ...(files.length > 0 ? { files } : {}) },
-      AbortSignal.timeout(180_000),
+      operationSignal(this.registry, adapter.id, 180_000, 5_000),
     );
 
     for (const id of attachmentIDs) {
@@ -359,7 +358,10 @@ export class SessionService {
       return [];
     }
     this.assertProviderAvailable(adapter.id);
-    return adapter.listBranches(ref, AbortSignal.timeout(15_000));
+    return adapter.listBranches(
+      ref,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
   }
 
   async retryMessage(ref: string, messageId: string): Promise<SendResult> {
@@ -372,7 +374,7 @@ export class SessionService {
     const result = await adapter.retryMessage(
       ref,
       messageId,
-      AbortSignal.timeout(180_000),
+      operationSignal(this.registry, adapter.id, 180_000, 5_000),
     );
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });
@@ -386,7 +388,11 @@ export class SessionService {
       throw notImplemented("This provider does not support switching branches");
     }
     this.assertProviderAvailable(adapter.id);
-    await adapter.switchBranch(ref, siblingId, AbortSignal.timeout(15_000));
+    await adapter.switchBranch(
+      ref,
+      siblingId,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
   }
 
   async fork(ref: string, input: ForkInput): Promise<Session> {
@@ -399,7 +405,7 @@ export class SessionService {
     const session = await adapter.forkSession(
       ref,
       input,
-      AbortSignal.timeout(30_000),
+      operationSignal(this.registry, adapter.id, 30_000, 5_000),
     );
     this.sessions.set(session.ref, session);
     return session;
@@ -416,7 +422,11 @@ export class SessionService {
     }
     this.assertProviderAvailable(adapter.id);
 
-    await adapter.setSessionOptions(ref, input, AbortSignal.timeout(15_000));
+    await adapter.setSessionOptions(
+      ref,
+      input,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
     const cached = this.sessions.get(ref);
     const fetched = await this.get(ref).catch(() => undefined);
     const base = fetched ?? cached;
@@ -439,7 +449,7 @@ export class SessionService {
     this.assertProviderAvailable(adapter.id);
     const session = await adapter.createSession(
       input,
-      AbortSignal.timeout(30_000),
+      operationSignal(this.registry, adapter.id, 30_000, 5_000),
     );
     this.sessions.set(session.ref, session);
     return session;
@@ -451,7 +461,10 @@ export class SessionService {
       throw notImplemented("This provider does not support interrupting sessions");
     }
     this.assertProviderAvailable(adapter.id);
-    await adapter.interrupt(ref, AbortSignal.timeout(15_000));
+    await adapter.interrupt(
+      ref,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "idle" });
   }
@@ -466,9 +479,7 @@ export class SessionService {
     }
     this.assertProviderAvailable(providerID);
     const options = await adapter.getOptions(
-      AbortSignal.timeout(
-        Math.min(this.registry.timeoutMs(providerID), 15_000),
-      ),
+      operationSignal(this.registry, providerID, 15_000, 5_000),
     );
     const providerSessions = [...this.sessions.values()]
       .filter((session) => session.providerID === providerID)
@@ -516,7 +527,10 @@ export class SessionService {
     if (!adapter?.markRead || unavailable) {
       if (!session) throw notFound("Session not found");
     } else {
-      await adapter.markRead(ref, AbortSignal.timeout(15_000));
+      await adapter.markRead(
+        ref,
+        operationSignal(this.registry, adapter.id, 15_000, 5_000),
+      );
     }
 
     const readAt = this.now();
