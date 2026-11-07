@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.23](https://github.com/amoshydra/oktoso/compare/v0.1.22...v0.1.23) (2026-11-07)
+
+
+### Bug Fixes
+
+* **hub:** cap unknown-provider operations and health checks ([b886082](https://github.com/amoshydra/oktoso/commit/b88608280df95724de009122917ef798e9b61f97))
+
 ## [0.1.22](https://github.com/amoshydra/oktoso/compare/v0.1.21...v0.1.22) (2026-11-07)
 
 
