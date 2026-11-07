@@ -68,4 +68,38 @@ describe("SessionActions idempotency", () => {
 
     expect(sent).toHaveLength(2);
   });
+
+  it("dedupes concurrent sends with the same key", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const sessions = {
+      sendMessage: async (): Promise<SendResult> => {
+        calls += 1;
+        await gate;
+        return { accepted: true, messageID: "msg_1" };
+      },
+    } as unknown as SessionService;
+    const questions = {
+      get: async () => undefined,
+      invalidate: () => undefined,
+    } as unknown as QuestionService;
+    const actions = new SessionActions(
+      sessions,
+      questions,
+      new IdempotencyService(new MemoryStateStore()),
+    );
+
+    const first = actions.send("session:1", { text: "hello" }, "key-1");
+    const second = actions.send("session:1", { text: "hello" }, "key-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(calls).toBe(1);
+    release();
+    expect(await first).toEqual({ accepted: true, messageID: "msg_1" });
+    expect(await second).toEqual({ accepted: true, messageID: "msg_1" });
+    expect(calls).toBe(1);
+  });
 });

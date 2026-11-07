@@ -59,6 +59,31 @@ describe("IdempotencyService", () => {
     expect(await service.get("legacy", "hash-a")).toEqual({ accepted: true });
   });
 
+  it("runs concurrent callers with the same key once", async () => {
+    const store = new MemoryStateStore();
+    const service = new IdempotencyService(store, { now: () => 1_000 });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const execute = async () => {
+      calls += 1;
+      await gate;
+      return { accepted: true, messageID: `msg_${calls}` };
+    };
+
+    const first = service.run("session:answer-1", "hash-a", execute);
+    const second = service.run("session:answer-1", "hash-a", execute);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(calls).toBe(1);
+    release();
+    expect(await first).toEqual({ accepted: true, messageID: "msg_1" });
+    expect(await second).toEqual({ accepted: true, messageID: "msg_1" });
+    expect(calls).toBe(1);
+  });
+
   it("prunes expired entries when a new response is cached", async () => {
     const store = new MemoryStateStore();
     let now = 1_000;
