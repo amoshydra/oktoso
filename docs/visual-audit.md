@@ -258,6 +258,20 @@ The composer now exposes the provider’s session selection instead of leaving m
 
 Verified at 1440, 1024, 390, and 320px in dark and light themes. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
 
+## Page chrome and control alignment (2026-11-07)
+
+The remaining Phase 0 page chrome was removed from the product screens so the topbar is the only page header again. No routes, tokens, type roles, spacing steps, radii, or semantic color rules were added.
+
+- Inbox, Sessions, Search, and Providers no longer open with a hero card. Inbox keeps its filters and one quiet Refresh action in a toolbar; Sessions keeps a compact page lead with Refresh and New session; Search and Providers start directly with their first panel. Foundation keeps its status hero.
+- The hero gradient was removed. The hero is now a normal `surface` card.
+- The topbar and page content share one gutter: 24px on desktop and 16px on mobile. The topbar title, filters, panels, and page actions now start on the same x-axis.
+- The rail and mobile bottom navigation use the shared 16/18px line-icon set instead of lettermarks. Back, theme, close, branch, and disclosure controls use the same set instead of text glyphs. The attention badge is 10px/700, not 9px/800.
+- Desktop controls are 32px high (`btn small`, chips, icon buttons); quiet message actions remain 28px. Mobile controls keep the 44px target, except the 32px composer send that keeps its expanded hit area.
+- The Settings assistant cards pin their footer actions to the card bottom, so Save/Load models align across the two-column row.
+- The wide composer keeps its agent/model/reasoning picker on one row. The composer hint is nowrap with ellipsis instead of wrapping the action bar.
+
+Verification: 1440, 1024, 390, and 320px in dark and light. No horizontal overflow; the console is clean apart from the existing `apple-mobile-web-app-capable` deprecation warning.
+
 Remaining: per-message model overrides are not implemented, the New session form still creates with the provider default variant, and providers that do not expose options get no picker.
 
 ## Chat sidebar (2026-11-02)

@@ -242,15 +242,16 @@
 
 .rail-mark {
   position: relative;
-  display: inline-block;
-  font-size: var(--text-sm);
-  font-weight: 700;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
 }
 
 .nav-badge {
   position: absolute;
   top: -7px;
-  right: -22px;
+  right: -10px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -258,8 +259,8 @@
   border-radius: var(--radius-pill);
   background: var(--warning);
   color: var(--rail);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: 700;
   line-height: 14px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -311,7 +312,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-5);
   border-bottom: 1px solid var(--border);
   background: var(--rail);
 }
@@ -382,6 +383,32 @@
   padding: 0;
 }
 
+.page-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.page-lead {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.page-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.page-toolbar .inbox-tabs {
+  margin-bottom: 0;
+}
+
 .hero {
   display: flex;
   align-items: flex-start;
@@ -389,9 +416,7 @@
   gap: var(--space-5);
   padding: var(--space-5);
   margin-bottom: var(--space-4);
-  background:
-    linear-gradient(120deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 38%),
-    var(--surface);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
@@ -409,13 +434,6 @@
   max-width: 680px;
   margin: 0;
   color: var(--muted);
-}
-
-.hero-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--space-2);
-  align-items: center;
 }
 
 .hero-badge {
@@ -729,7 +747,7 @@
 
 .chip {
   padding: var(--space-1) 10px;
-  min-height: 30px;
+  min-height: 32px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   background: var(--surface-2);
@@ -1170,6 +1188,15 @@
   margin-bottom: var(--space-4);
 }
 
+.settings-assistant > .panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-assistant > .panel .form-actions {
+  margin-top: auto;
+}
+
 .settings-assistant > .form-note,
 .settings-assistant > .form-error {
   margin: 0;
@@ -1566,9 +1593,14 @@
 }
 
 .composer-hint {
+  flex: 0 1 auto;
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   color: var(--faint);
   font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .composer-hint.error {
@@ -1579,14 +1611,21 @@
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-1) var(--space-3);
   padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.composer-options::-webkit-scrollbar {
+  display: none;
 }
 
 .composer-option {
   display: inline-flex;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   align-items: center;
@@ -2137,10 +2176,10 @@
 }
 
 .message-aux-chevron {
+  display: inline-flex;
   flex: 0 0 auto;
   margin-left: auto;
   color: var(--faint);
-  font-size: var(--text-sm);
   line-height: 1;
   transform: rotate(0deg);
   transition: transform 120ms ease;
@@ -2657,13 +2696,14 @@
 }
 
 .btn.small {
+  min-height: 32px;
   padding: 6px 10px;
   font-size: var(--text-xs);
 }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -2744,14 +2784,29 @@
     padding: var(--space-4) var(--space-4) 88px;
   }
 
+  .page-toolbar {
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .page-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .page-toolbar.inbox-toolbar {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .page-toolbar.inbox-toolbar .inbox-tabs {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
   .hero {
     flex-direction: column;
     padding: var(--space-4);
-  }
-
-  .hero-actions {
-    width: 100%;
-    justify-content: flex-start;
   }
 
   .status-grid,
@@ -2906,6 +2961,10 @@
     position: relative;
   }
 
+  .composer-actions .btn.small {
+    min-height: 32px;
+  }
+
   .composer-actions .composer-send {
     width: 32px;
     min-width: 32px;
@@ -2940,6 +2999,10 @@
   .message-action,
   .message-branch-button,
   .composer-voice {
+    min-height: 44px;
+  }
+
+  .btn.small {
     min-height: 44px;
   }
 
@@ -2993,9 +3056,10 @@
 
   .bottom-mark {
     position: relative;
-    display: inline-block;
-    font-size: var(--text-xs);
-    font-weight: 700;
+    display: grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
   }
 
   .bottom-btn.active {

@@ -163,6 +163,8 @@ Every screen, session, overlay, and filter change that represents navigation is 
 - Session sidebar: 300 to 360 px, resizable.
 - Details panel: 280 to 340 px, collapsible.
 - Main area minimum width: about 400 px.
+- The topbar and page content share one horizontal gutter: 24 px on desktop and 16 px on mobile. The topbar owns the page title; product pages do not repeat it in a hero card.
+- Where a screen has page-level actions, they sit with a compact page lead in a toolbar above the first panel, not in a separate card.
 - At widths below 1320 px, details becomes a right-side overlay behind a button. At 1320 px and above it is a column.
 - At widths below 761 px, use the mobile layout: single column, bottom navigation, and full-screen chat.
 - At 761–1100 px, the session sidebar narrows to 300 px and the project column drops from the sessions table.
@@ -493,7 +495,8 @@ The type scale has six roles, not a continuum of half-steps:
 - Scale: 4, 8, 12, 16, 24, 32px. Optical 2px exceptions remain for rails and count badges.
 - Radius: 4px for badges, 8px for controls, 12px for cards, 16px for sheets, 999px for pills.
 - Borders carry structure. Shadows are minimal and functional.
-- Icons: 16 or 18px line icons, 1.7px stroke.
+- Icons: 16 or 18px line icons, 1.7px stroke. The rail and bottom navigation share the same set; lettermarks and text glyphs are not used for navigation or icon-only controls.
+- Desktop controls are 32px high. Quiet message actions are 28px. Mobile controls keep a 44px target, except the 32px composer send, which keeps an expanded hit area.
 
 ## 14. Mobile layout
 
