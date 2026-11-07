@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.21](https://github.com/amoshydra/oktoso/compare/v0.1.20...v0.1.21) (2026-11-07)
+
+
+### Bug Fixes
+
+* **g2:** recover unsent messages after a reload ([da9abae](https://github.com/amoshydra/oktoso/commit/da9abae8169164f6e8c44beadc28ddce2888b974))
+* **hub:** dedupe concurrent sends with the same key ([2a13559](https://github.com/amoshydra/oktoso/commit/2a13559a10a086566f7b393e42519e92ceadc857))
+* **web:** keep a failed prompt as the session draft ([cb06a5f](https://github.com/amoshydra/oktoso/commit/cb06a5fb510c9900f0860691c59feb2f0d491e06))
+
 ## [0.1.20](https://github.com/amoshydra/oktoso/compare/v0.1.19...v0.1.20) (2026-11-07)
 
 
