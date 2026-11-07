@@ -94,7 +94,11 @@ menu.
   `409` if the question changed or was already answered. The glasses show
   `ANSWER · changed` with `Review` / `Read chat`; the old choice list is never
   sent silently. `Review` reloads the question.
-- Retries reuse the same idempotency key. A changed answer draft gets a new key.
+- Every send carries an idempotency key, including answers, canned replies,
+  numbered choices, and phone messages. Retries reuse the key; changed text
+  gets a new key.
+- A send shows `Sending…` immediately and times out after 30 seconds. A timeout
+  or failure keeps the draft and key for Retry; it is never silently dropped.
 - The hub derives the question from the transcript at
   `GET /api/v1/sessions/:ref/question`. No provider-side question API is needed.
 - Multiple questions are returned together. The glass header reads

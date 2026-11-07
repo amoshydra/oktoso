@@ -1544,6 +1544,11 @@ is rare and acceptable for chat. The key is scoped to the session and the draft,
 not to the text alone; intentionally sending the same text twice still works
 when each send uses a fresh key.
 
+Reply options, numbered choices, and phone messages use the same idempotency
+layer with their own key. Every send call has a 30-second client timeout, so a
+hung request becomes a visible, retryable timeout rather than an indefinite
+`Sending…` state.
+
 ### 10.3 Read state
 
 Opening a chat marks the session read. The question prompt is independent of

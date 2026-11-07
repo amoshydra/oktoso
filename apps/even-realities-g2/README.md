@@ -33,7 +33,8 @@ Screenshot capture and framing are documented in
 - **Replies** — canned and model-assisted reply options, numbered choices, voice,
   and a phone keyboard for longer text.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
-  confirmation, stale-question protection, and idempotent retries.
+  confirmation, stale-question protection, and idempotent retries on every
+  send.
 - **Batch answers** — every question in a multi-question turn is shown on the
   phone and sent as one numbered message.
 - **Question discovery** — Home, Recent, and Inbox mark pending questions before
