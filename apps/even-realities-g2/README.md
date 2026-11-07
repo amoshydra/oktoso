@@ -41,6 +41,9 @@ Screenshot capture and framing are documented in
   the chat is opened.
 - **Failure states** — auth expired, hub offline, agent offline, timeout, rate
   limit, not found, and server errors have distinct retry or pairing actions.
+- **Unsent sends** — a send that times out or fails stays in a local queue and
+  appears as `Unsent` on Home. Retry reuses the original idempotency key;
+  discard removes it.
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
 

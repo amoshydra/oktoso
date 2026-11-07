@@ -43,6 +43,7 @@ Back always follows where you came from:
 - attention → inbox
 - inbox / recent → home
 - symbols → home
+- unsent → home
 - failure → the screen that started the action
 
 ## Interaction grammar
@@ -216,6 +217,11 @@ The legend is always discoverable:
   - `TIMEOUT` → `Retry`, `Back`
 - A failed listen action uses the failure screen. A failed background refresh
   keeps the current list and appends a `Retry · <state>` row.
+- Failed sends are kept locally and surface as an `UNSENT · n` row on Home.
+  The `UNSENT` screen shows the target session and first lines of the oldest
+  pending message. `Retry send` reuses the original idempotency key;
+  `Discard` removes the entry. The queue survives a webview reload, is capped
+  at ten entries, and expires after 30 days.
 - Back must always work, including on failure screens.
 - Recent sessions and chat open immediately show a loading panel; provider calls
   may take longer than the first frame. The list refresh is cached for 30 seconds

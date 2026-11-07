@@ -19,6 +19,7 @@ import type {
   QuestionPrompt,
   ReplyOption,
   SendAnswer,
+  SendInput,
   Session,
 } from "@amoshydra/oktoso-contracts";
 import {
@@ -54,6 +55,12 @@ import {
 import { glassInput } from "./input";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
+import {
+  forgetPendingSend,
+  loadPendingSends,
+  rememberPendingSend,
+  type PendingSend,
+} from "./pending-send";
 import { selectSendKey } from "./send-key";
 import {
   pcmChunksToWav,
@@ -81,6 +88,7 @@ type Screen =
   | "glass-form"
   | "glass-options"
   | "chat"
+  | "pending"
   | "answer"
   | "answer-more"
   | "answer-type"
@@ -201,6 +209,7 @@ let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
 let bridge: EvenAppBridge | undefined;
 let client: HubClient | undefined;
+let pendingSends: PendingSend[] = loadPendingSends();
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let scanController: AbortController | undefined;
@@ -394,6 +403,48 @@ function retryFailure(): void {
   render();
   if (retry) void retry();
   else void refreshCurrent();
+}
+
+async function retryPendingSend(): Promise<void> {
+  const item = pendingSends[0];
+  if (!client || !item || state.messageBusy) return;
+  state.messageBusy = true;
+  render();
+  try {
+    await client.sendMessage(item.sessionRef, item.payload, {
+      idempotencyKey: item.idempotencyKey,
+      signal: sendSignal(),
+    });
+    pendingSends = forgetPendingSend(item.idempotencyKey);
+    state.messageBusy = false;
+    markRequestSuccess();
+    if (pendingSends.length > 0) {
+      render();
+      return;
+    }
+    await openChat(item.sessionRef, item.sessionTitle, "home");
+  } catch (error) {
+    state.messageBusy = false;
+    const status = (error as { status?: number }).status;
+    if (status === 400 || status === 404 || status === 409) {
+      pendingSends = forgetPendingSend(item.idempotencyKey);
+    }
+    showFailure(error, {
+      returnScreen: pendingSends.length > 0 ? "pending" : "home",
+      ...(pendingSends.length > 0
+        ? { retry: () => retryPendingSend() }
+        : {}),
+    });
+    log(`Pending send failed: ${failureMessage(error)}`);
+  }
+}
+
+function discardPendingSend(): void {
+  const item = pendingSends[0];
+  if (!item || state.messageBusy) return;
+  pendingSends = forgetPendingSend(item.idempotencyKey);
+  if (pendingSends.length === 0) state.screen = "home";
+  render();
 }
 
 function focusPairing(): void {
@@ -790,6 +841,21 @@ function messageKeyFor(text: string): string {
 
 function sendSignal(): AbortSignal {
   return AbortSignal.timeout(SEND_TIMEOUT_MS);
+}
+
+function trackPendingSend(payload: SendInput, idempotencyKey: string): void {
+  if (!state.sessionRef) return;
+  pendingSends = rememberPendingSend({
+    idempotencyKey,
+    sessionRef: state.sessionRef,
+    sessionTitle: state.sessionTitle ?? state.sessionRef,
+    payload,
+    createdAt: Date.now(),
+  });
+}
+
+function clearPendingSend(idempotencyKey: string): void {
+  pendingSends = forgetPendingSend(idempotencyKey);
 }
 
 const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
@@ -1511,13 +1577,16 @@ async function sendAnswer(
   if (source === "phone") setPhoneStatus("Sending answer…");
   render();
 
+  let idempotencyKey: string | undefined;
   try {
-    const idempotencyKey = answerKeyFor(text);
-    await client.sendMessage(
-      ref,
-      { text, ...(answer ? { answer } : {}) },
-      { idempotencyKey, signal: sendSignal() },
-    );
+    idempotencyKey = answerKeyFor(text);
+    const payload: SendInput = { text, ...(answer ? { answer } : {}) };
+    trackPendingSend(payload, idempotencyKey);
+    await client.sendMessage(ref, payload, {
+      idempotencyKey,
+      signal: sendSignal(),
+    });
+    clearPendingSend(idempotencyKey);
     state.answerBusy = false;
     if (state.sessionRef !== ref) return;
     state.question = undefined;
@@ -1548,6 +1617,7 @@ async function sendAnswer(
     ) {
       state.answerStale =
         reason === "question_resolved" ? "resolved" : "changed";
+      if (idempotencyKey) clearPendingSend(idempotencyKey);
       state.answerKey = undefined;
       state.answerKeyText = undefined;
       state.screen = "answer-stale";
@@ -1912,13 +1982,16 @@ async function sendBatchAnswers(): Promise<void> {
   updatePhoneBatchSendState();
   render();
 
+  let idempotencyKey: string | undefined;
   try {
-    const idempotencyKey = answerKeyFor(text);
-    await client.sendMessage(
-      ref,
-      { text, answers },
-      { idempotencyKey, signal: sendSignal() },
-    );
+    idempotencyKey = answerKeyFor(text);
+    const payload: SendInput = { text, answers };
+    trackPendingSend(payload, idempotencyKey);
+    await client.sendMessage(ref, payload, {
+      idempotencyKey,
+      signal: sendSignal(),
+    });
+    clearPendingSend(idempotencyKey);
     state.answerBusy = false;
     if (state.sessionRef !== ref) return;
     state.question = undefined;
@@ -1946,6 +2019,7 @@ async function sendBatchAnswers(): Promise<void> {
     ) {
       state.answerStale =
         reason === "question_resolved" ? "resolved" : "changed";
+      if (idempotencyKey) clearPendingSend(idempotencyKey);
       state.answerKey = undefined;
       state.answerKeyText = undefined;
       state.screen = "answer-stale";
@@ -2426,11 +2500,14 @@ async function executeReply(option: ReplyOption): Promise<void> {
       render();
       try {
         const idempotencyKey = messageKeyFor(text);
+        const payload: SendInput = { text };
+        trackPendingSend(payload, idempotencyKey);
         await client.sendMessage(
           state.sessionRef,
-          { text },
+          payload,
           { idempotencyKey, signal: sendSignal() },
         );
+        clearPendingSend(idempotencyKey);
         state.question = undefined;
         rememberQuestionSummary(state.sessionRef, null);
         updatePhoneQuestion();
@@ -2503,11 +2580,14 @@ async function performChoice(index: number): Promise<void> {
   render();
   try {
     const idempotencyKey = messageKeyFor(text);
+    const payload: SendInput = { text };
+    trackPendingSend(payload, idempotencyKey);
     await client.sendMessage(
       state.sessionRef,
-      { text },
+      payload,
       { idempotencyKey, signal: sendSignal() },
     );
+    clearPendingSend(idempotencyKey);
     state.question = undefined;
     rememberQuestionSummary(state.sessionRef, null);
     updatePhoneQuestion();
@@ -2642,6 +2722,11 @@ function back(): void {
     state.screen = "home";
     state.notice = undefined;
     render();
+    return;
+  }
+  if (state.screen === "pending") {
+    state.screen = "home";
+    render();
   }
 }
 
@@ -2668,7 +2753,11 @@ function handleListClick(index: number): void {
     case "home": {
       const symbolsIndex = state.sessionTitle ? 3 : 2;
       const failureIndex = symbolsIndex + 1;
-      if (state.failure && index === failureIndex) {
+      const pendingIndex = symbolsIndex + 1 + (state.failure ? 1 : 0);
+      if (pendingSends.length > 0 && index === pendingIndex) {
+        state.screen = "pending";
+        render();
+      } else if (state.failure && index === failureIndex) {
         handleInlineFailure();
       } else if (index === 0) {
         state.screen = "inbox";
@@ -2735,6 +2824,10 @@ function handleListClick(index: number): void {
       break;
     case "choices":
       void performChoice(index);
+      break;
+    case "pending":
+      if (index === 0) void retryPendingSend();
+      else if (index === 1) discardPendingSend();
       break;
     case "failure":
       performFailureAction(index);
@@ -2862,6 +2955,26 @@ function render(): void {
     }
     return;
   }
+  if (state.screen === "pending") {
+    const item = pendingSends[0];
+    if (!item) {
+      state.screen = "home";
+      render();
+      return;
+    }
+    const header = `UNSENT · ${pendingSends.length}`;
+    const body = `${clampLine(item.sessionTitle, 54)}\n${wrapText(
+      item.payload.text,
+      54,
+      2,
+    ).join("\n")}`;
+    const items = ["Retry send", "Discard"];
+    const footer = state.messageBusy ? "Sending…" : "Tap choose · Back ×2";
+    if (setPreview(header, body, footer, items)) {
+      void showPage(listPage(header, items, footer, body));
+    }
+    return;
+  }
   if (state.screen === "voice") {
     const body = "Listening…\n\nTap the glasses to stop.\nBack cancels.";
     if (setPreview("VOICE", body, "Tap to stop")) {
@@ -2888,6 +3001,9 @@ function render(): void {
         : []),
       "Symbols",
       ...(state.failure ? [failureRowLabel()] : []),
+      ...(pendingSends.length > 0
+        ? [`Unsent · ${pendingSends.length}`]
+        : []),
     ];
     const footer = `Tap open   Swipe move   ${streamLabel()}`;
     if (setPreview("OKTOSO", items.join("\n"), footer, items)) {
@@ -3307,11 +3423,14 @@ async function sendPhone(): Promise<void> {
   setPhoneStatus("Sending…");
   try {
     const idempotencyKey = messageKeyFor(text);
+    const payload: SendInput = { text };
+    trackPendingSend(payload, idempotencyKey);
     await client.sendMessage(
       state.sessionRef,
-      { text },
+      payload,
       { idempotencyKey, signal: sendSignal() },
     );
+    clearPendingSend(idempotencyKey);
     markRequestSuccess();
     setPhoneStatus("Sent.");
     state.screen = "chat";
