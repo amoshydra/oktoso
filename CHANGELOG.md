@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.17](https://github.com/amoshydra/oktoso/compare/v0.1.16...v0.1.17) (2026-11-07)
+
+
+### Bug Fixes
+
+* **web:** generate IDs without secure-context APIs ([eae569c](https://github.com/amoshydra/oktoso/commit/eae569c6d4f6c1fe18e82dbd95fa334fa101d5cf))
+
 ## [0.1.16](https://github.com/amoshydra/oktoso/compare/v0.1.15...v0.1.16) (2026-11-04)
 
 
