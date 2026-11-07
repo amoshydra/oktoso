@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.19](https://github.com/amoshydra/oktoso/compare/v0.1.18...v0.1.19) (2026-11-07)
+
+
+### Bug Fixes
+
+* **hub:** extend idempotency retention and guard key reuse ([b8b34aa](https://github.com/amoshydra/oktoso/commit/b8b34aa6d025acd0368d6b48e3daaf7ec368431a))
+
 ## [0.1.18](https://github.com/amoshydra/oktoso/compare/v0.1.17...v0.1.18) (2026-11-07)
 
 
