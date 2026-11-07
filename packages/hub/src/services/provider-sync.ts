@@ -4,6 +4,7 @@ import type { ProviderRegistry } from "./provider-registry";
 export const DEFAULT_SYNC_TIMEOUT_MS = 3_000;
 export const DEFAULT_SESSION_COLD_START_MS = 1_200;
 export const DEFAULT_ATTENTION_COLD_START_MS = 2_000;
+export const DEFAULT_UNKNOWN_OPERATION_TIMEOUT_MS = 2_000;
 
 export function providerUnavailableReason(
   registry: ProviderRegistry,
@@ -25,6 +26,22 @@ export function syncSignal(
 ): AbortSignal {
   return AbortSignal.timeout(
     Math.min(registry.timeoutMs(providerID), maxTimeoutMs),
+  );
+}
+
+export function operationSignal(
+  registry: ProviderRegistry,
+  providerID: string,
+  fallbackTimeoutMs: number,
+  unknownTimeoutMs = DEFAULT_UNKNOWN_OPERATION_TIMEOUT_MS,
+): AbortSignal {
+  const provider = registry.get?.(providerID);
+  const ceiling =
+    provider?.status === "unknown"
+      ? Math.min(fallbackTimeoutMs, unknownTimeoutMs)
+      : fallbackTimeoutMs;
+  return AbortSignal.timeout(
+    Math.min(registry.timeoutMs(providerID), ceiling),
   );
 }
 
