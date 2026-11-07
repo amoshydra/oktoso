@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.22](https://github.com/amoshydra/oktoso/compare/v0.1.21...v0.1.22) (2026-11-07)
+
+
+### Bug Fixes
+
+* **hub:** keep slow providers from blocking reads ([7fb9368](https://github.com/amoshydra/oktoso/commit/7fb9368ab514d396689a004de83dc4911530c7ab))
+* **web:** align page chrome, icons, and control sizing ([f4420ea](https://github.com/amoshydra/oktoso/commit/f4420ea1ea863e8fc8b756e1c9d4f0bfb69c16e5))
+
 ## [0.1.21](https://github.com/amoshydra/oktoso/compare/v0.1.20...v0.1.21) (2026-11-07)
 
 
