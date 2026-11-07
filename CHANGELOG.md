@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.18](https://github.com/amoshydra/oktoso/compare/v0.1.17...v0.1.18) (2026-11-07)
+
+
+### Bug Fixes
+
+* **web:** surface send failures before the optimistic message ([0666aeb](https://github.com/amoshydra/oktoso/commit/0666aeb74e3f32633881c576cb1f592d2c6e1377))
+
 ## [0.1.17](https://github.com/amoshydra/oktoso/compare/v0.1.16...v0.1.17) (2026-11-07)
 
 
