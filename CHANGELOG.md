@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.25](https://github.com/amoshydra/oktoso/compare/v0.1.24...v0.1.25) (2026-11-08)
+
+
+### Bug Fixes
+
+* **web:** stop long session titles overflowing the mobile composer ([82cabad](https://github.com/amoshydra/oktoso/commit/82cabad1d217ef548df19075f26e2b1351a0baef))
+
 ## [0.1.24](https://github.com/amoshydra/oktoso/compare/v0.1.23...v0.1.24) (2026-11-08)
 
 
