@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.24](https://github.com/amoshydra/oktoso/compare/v0.1.23...v0.1.24) (2026-11-08)
+
+
+### Features
+
+* **web:** group model options by provider ([aa57eb6](https://github.com/amoshydra/oktoso/commit/aa57eb68a13a8ecf8ccbb33eb151a5a593b1ac3f))
+
 ## [0.1.23](https://github.com/amoshydra/oktoso/compare/v0.1.22...v0.1.23) (2026-11-07)
 
 
