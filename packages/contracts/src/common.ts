@@ -155,6 +155,7 @@ export type ProviderCapabilities = z.infer<typeof zProviderCapabilities>;
 export type Provider = z.infer<typeof zProvider>;
 export type ProviderHealth = z.infer<typeof zProviderHealth>;
 export type ProviderOptions = z.infer<typeof zProviderOptions>;
+export type ModelOption = z.infer<typeof zModelOption>;
 export type ModelVariant = z.infer<typeof zModelVariant>;
 export type Cursor = z.infer<typeof zCursor>;
 export type ErrorResponse = z.infer<typeof zError>;

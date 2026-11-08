@@ -21,6 +21,7 @@ import type {
   HubEvent,
   Message,
   MessagePart,
+  ModelOption,
   Provider,
   ProviderAuthKind,
   ProviderInput,
@@ -48,6 +49,7 @@ import {
 } from "./chat-actions";
 import { createID } from "./ids";
 import { renderMarkdown } from "./markdown";
+import { groupModelOptions } from "./model-options";
 import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
   useBackTo,
@@ -2857,6 +2859,16 @@ function NewSessionForm(props: {
   const [error, setError] = useState<string>();
 
   useEffect(() => {
+    const available = props.providers.filter(
+      (provider) => provider.enabled && provider.capabilities.create,
+    );
+    if (providerID && available.some((provider) => provider.id === providerID)) {
+      return;
+    }
+    setProviderID(available[0]?.id ?? "");
+  }, [props.providers, providerID]);
+
+  useEffect(() => {
     if (!providerID) return;
     let cancelled = false;
     setLoading(true);
@@ -2978,7 +2990,7 @@ function NewSessionForm(props: {
             <label className="form-field">
               <span>Model</span>
               <select value={model} disabled={loading} onChange={(event) => setModel((event.currentTarget as HTMLSelectElement).value)}>
-                {(options?.models ?? []).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+                <ModelSelectOptions models={options?.models ?? []} />
               </select>
             </label>
             <label className="form-field span-2">
@@ -4519,6 +4531,7 @@ function SessionDetail(props: {
                             value={modelValue}
                             disabled={selectionDisabled}
                             aria-label="Model"
+                            title={modelValue || undefined}
                             onChange={(event) => {
                               const next = event.currentTarget.value;
                               const nextVariants =
@@ -4535,11 +4548,7 @@ function SessionDetail(props: {
                               });
                             }}
                           >
-                            {modelChoices.map((model) => (
-                              <option value={model.id} key={model.id}>
-                                {model.label}
-                              </option>
-                            ))}
+                            <ModelSelectOptions models={modelChoices} />
                           </select>
                         </label>
                       ) : null}
@@ -5844,6 +5853,30 @@ function providerMark(type: string): string {
   if (type === "openwebui") return "OW";
   if (type === "hermes") return "H";
   return type.slice(0, 2).toUpperCase();
+}
+
+function ModelSelectOptions({ models }: { models: ModelOption[] }) {
+  const { ungrouped, groups } = groupModelOptions(models);
+  const renderOption = (model: ModelOption) => (
+    <option value={model.id} key={model.id}>
+      {model.label}
+    </option>
+  );
+
+  if (groups.length <= 1 && ungrouped.length === 0) {
+    return <>{models.map(renderOption)}</>;
+  }
+
+  return (
+    <>
+      {ungrouped.map(renderOption)}
+      {groups.map((group) => (
+        <optgroup label={group.label} key={group.provider}>
+          {group.models.map(renderOption)}
+        </optgroup>
+      ))}
+    </>
+  );
 }
 
 function connectionLabel(status: ConnectionStatus): string {

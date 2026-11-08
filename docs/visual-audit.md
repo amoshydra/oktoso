@@ -274,6 +274,17 @@ Verification: 1440, 1024, 390, and 320px in dark and light. No horizontal overfl
 
 Remaining: per-message model overrides are not implemented, the New session form still creates with the provider default variant, and providers that do not expose options get no picker.
 
+## Model selector grouping (2026-11-08)
+
+The composer and New Session model pickers now group options by the upstream model provider. The OpenCode catalog in the live hub returned 120 models across four providers, which made a flat select hard to scan.
+
+- The model option keeps its existing native `<select>`. Grouped options use `<optgroup>` with humanized provider labels (`OpenCode`, `OpenCode Go`, `Command Code`, `llama.cpp`).
+- Provider order and model order follow the provider response; groups are not alphabetized or re-sorted. Models without provider metadata and a selected model missing from the catalog remain ungrouped options.
+- A catalog with one group or no provider metadata stays a flat list, including Open WebUI’s model list.
+- Native select was kept deliberately: it preserves keyboard typeahead, the platform mobile picker, and screen-reader group semantics without adding a new popover, focus layer, or design token. A searchable combobox is a follow-up only if model catalogs grow beyond what grouped native scrolling can handle.
+
+Verified at 1440 and 390px in dark and light. The composer select exposed four optgroups with 120 options; selection, running-disabled state, and reasoning variants are unchanged.
+
 ## Chat sidebar (2026-11-02)
 
 The desktop chat now includes the prototype’s session sidebar.
