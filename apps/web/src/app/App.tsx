@@ -4448,7 +4448,7 @@ function SessionDetail(props: {
                   value={draft}
                   aria-label={`Reply to ${session.title}`}
                   aria-describedby="chat-composer-hint"
-                  placeholder={`Reply to ${session.title}…`}
+                  placeholder="Reply…"
                   onChange={(event) =>
                     updateDraft((event.currentTarget as HTMLTextAreaElement).value)
                   }

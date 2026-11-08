@@ -285,6 +285,14 @@ The composer and New Session model pickers now group options by the upstream mod
 
 Verified at 1440 and 390px in dark and light. The composer select exposed four optgroups with 120 options; selection, running-disabled state, and reasoning variants are unchanged.
 
+## Mobile composer placeholder (2026-11-08)
+
+The composer now uses the static `Reply…` placeholder. The full session title stays in the textarea’s `aria-label`.
+
+Previously the placeholder was `Reply to <session title>…`. At 360px and below, a 70-character title wrapped to three lines at the mobile 16px text scale, but the two-row composer textarea is only 64px high. Its `scrollHeight` was 88px, so the last line of the placeholder was clipped. The static placeholder removes the overflow without hiding the session title from screen readers.
+
+Verified at 320, 360, 375, and 390px; the textarea now reports `scrollHeight === clientHeight` with an empty draft.
+
 ## Chat sidebar (2026-11-02)
 
 The desktop chat now includes the prototype’s session sidebar.
