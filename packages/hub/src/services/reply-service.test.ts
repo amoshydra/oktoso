@@ -362,6 +362,62 @@ describe("ReplyService gate", () => {
     expect(result.kind).toBe("failure");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("treats a direct correction as a challenge, not a failure", async () => {
+    const data = [
+      textMessage(
+        "m1",
+        "user",
+        "Does running it over SSH cause the delay? It works without delay locally.",
+      ),
+      textMessage(
+        "m2",
+        "assistant",
+        "Short answer: no — SSH isn't in the audio path, so it can't add latency by itself. Check the local environment instead.",
+      ),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Check the local environment.",
+        opposite: "Test the SSH launch again.",
+        ask: "Should I compare the two launch environments first?",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const result = await service.list("desktop-opencode:ses_1", "reply");
+
+    expect(result.state).toBe("reply");
+    expect(result.kind).toBe("challenge");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failure when the user asks why it failed", async () => {
+    const data = [
+      textMessage("m1", "user", "Why did the build fail?"),
+      textMessage(
+        "m2",
+        "assistant",
+        "The build failed: missing dependency. I cannot continue.",
+      ),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Install the missing dependency.",
+        opposite: "Stop and check the lockfile.",
+        ask: "Should I check the lockfile first?",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const result = await service.list("desktop-opencode:ses_1", "reply");
+
+    expect(result.state).toBe("reply");
+    expect(result.kind).toBe("failure");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ReplyService moment", () => {

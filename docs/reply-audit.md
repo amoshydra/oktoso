@@ -36,7 +36,7 @@ For one session and mode (`reply` or `choices`):
   it;
 - every generated option, with `model`, `agent`, or `canned` provenance and a
   role (`answer`, `opposite`, `ask`). The opposite is labelled `Alt: …`; the
-  ask is a question.
+  ask is labelled `Ask: …`.
 - a **Pending question** block when the latest assistant message contains a
   provider-native `question` tool part. It shows the question header, full text,
   and every option with its description. Text questions use the same block.
@@ -50,9 +50,14 @@ The hub classifies the moment before calling the model:
 
 | State | When | Model call |
 |---|---|---|
-| `reply` | Pending question/approval, failure/blocker, explicit next action, delivery with an offer, or a challenge | Yes |
+| `reply` | Pending question/approval, failure/blocker, explicit next action, delivery with an offer, or a challenge/direct correction | Yes |
 | `wait` | Agent running with no ask | No |
 | `done` | Finished delivery with no ask or action | No |
+
+A direct correction (`No — …`, `Actually …`, `Not quite …`) to a user question
+is classified as `challenge`, not `failure`, even when the reply contains words
+like `can't` or `isn't`. Genuine failures still win when the user asks why
+something failed.
 
 `wait` and `done` return the canned actions and a state field; the clients show a
 notice instead of model suggestions. This removes the largest class of bad sets:
