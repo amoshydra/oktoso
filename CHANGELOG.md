@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.26](https://github.com/amoshydra/oktoso/compare/v0.1.25...v0.1.26) (2026-11-09)
+
+
+### Features
+
+* add reply audit and decision-state suggestions ([cac09ed](https://github.com/amoshydra/oktoso/commit/cac09ed99443165628e58b4c3fd69c858eb4ecc4))
+
 ## [0.1.25](https://github.com/amoshydra/oktoso/compare/v0.1.24...v0.1.25) (2026-11-08)
 
 
