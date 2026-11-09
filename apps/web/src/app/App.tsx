@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
 } from "react";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -41,6 +42,7 @@ import {
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
 import { BrandMark } from "./BrandMark";
+import { pastedFiles } from "./clipboard";
 import { Icon, type IconName } from "./Icon";
 import {
   appendTranscript,
@@ -3871,7 +3873,7 @@ function SessionDetail(props: {
     }
   };
 
-  const uploadAttachments = async (files: FileList | null) => {
+  const uploadAttachments = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     setAttachmentError(undefined);
     let count = attachments.length;
@@ -3909,6 +3911,14 @@ function SessionDetail(props: {
       current.filter((attachment) => attachment.id !== id),
     );
     await props.client.deleteAttachment(id).catch(() => undefined);
+  };
+
+  const pasteAttachments = (event: ClipboardEvent<HTMLFormElement>) => {
+    if (!attachSupported) return;
+    const files = pastedFiles(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void uploadAttachments(files);
   };
 
   const interrupt = async () => {
@@ -4496,6 +4506,7 @@ function SessionDetail(props: {
               ) : null}
               <form
                 className="chat-composer"
+                onPaste={pasteAttachments}
                 onSubmit={(event) => {
                   event.preventDefault();
                   void send();

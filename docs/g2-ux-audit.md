@@ -361,7 +361,7 @@ have not yet been exercised on G2 hardware.
 | 17 | Sent screen reused the session header | Sent screen header is `SENT`. |
 | 18 | Settings info looked selectable | Connection, version, and last refresh are body text, not rows. |
 
-Verification run: `pnpm typecheck`, `pnpm test` (407 passing), web build, G2
+Verification run: `pnpm typecheck`, `pnpm test` (411 passing), web build, G2
 build, hosted G2 build, browser checks driving the glass handlers through the
 phone preview, and Even Hub simulator captures of Home (including Current), Inbox,
 Settings, Reload confirmation, Chat (one-line footer), SESSION with `Stop`, and
