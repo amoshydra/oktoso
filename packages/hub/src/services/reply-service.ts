@@ -881,6 +881,12 @@ function buildMomentContext(input: {
     lastUser.length > 0 &&
     /\?\s*$/.test(lastUser) &&
     /\b(but|why|however|disagree|wrong|not sure|concern)\b/i.test(lastUser);
+  const directCorrection =
+    lastUser.length > 0 &&
+    /\?/.test(lastUser) &&
+    /^(?:short answer:\s*)?(?:no\s*[—–:,.!-]|nope\b|not quite\b|actually\b|that'?s not\b|it isn'?t\b|it wasn'?t\b)/i.test(
+      sanitized.trim(),
+    );
   const actionSentence = extractActionSentence(recentText);
   const approval = isApprovalText(
     question?.text ?? pendingFromText ?? actionSentence ?? lastSentence,
@@ -900,10 +906,10 @@ function buildMomentContext(input: {
   } else if (actionNeeded) {
     state = "reply";
     kind = approval ? "approval" : "delivery";
-  } else if (failure) {
+  } else if (failure && !directCorrection) {
     state = "reply";
     kind = /blocked/i.test(lastAssistantText) ? "blocker" : "failure";
-  } else if (challenge) {
+  } else if (challenge || directCorrection) {
     state = "reply";
     kind = "challenge";
   } else if (delivered && offer) {
@@ -1012,6 +1018,7 @@ function sanitizeGateText(text: string): string {
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/"[^"]{0,200}"/g, " ")
     .replace(/“[^”]{0,200}”/g, " ")
+    .replace(/\*\*|__/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
