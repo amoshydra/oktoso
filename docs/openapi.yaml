@@ -1027,6 +1027,12 @@ components:
                   - voice
                   - choices
                 default: send
+              role:
+                type: string
+                enum:
+                  - answer
+                  - opposite
+                  - ask
             required:
               - id
               - label
@@ -1041,10 +1047,560 @@ components:
           enum:
             - reply
             - choices
+        state:
+          type: string
+          enum:
+            - reply
+            - wait
+            - done
+        kind:
+          type: string
+          enum:
+            - question
+            - approval
+            - delivery
+            - blocker
+            - failure
+            - challenge
+            - running
+            - none
+        pending:
+          type: string
+        confidence:
+          type: string
+          enum:
+            - high
+            - medium
+            - low
       required:
         - data
         - generatedAt
         - mode
+    ReplyAudit:
+      type: object
+      properties:
+        sessionRef:
+          type: string
+        sessionTitle:
+          type: string
+        sessionStatus:
+          type: string
+          enum:
+            - running
+            - idle
+            - error
+            - offline
+        mode:
+          type: string
+          enum:
+            - reply
+            - choices
+        model:
+          type: string
+        generatedAt:
+          type: integer
+        durationMs:
+          type: integer
+          minimum: 0
+        modelMs:
+          type: integer
+          minimum: 0
+        systemPrompt:
+          type: string
+        context:
+          type: string
+        moment:
+          type: object
+          properties:
+            state:
+              type: string
+              enum:
+                - reply
+                - wait
+                - done
+            kind:
+              type: string
+              enum:
+                - question
+                - approval
+                - delivery
+                - blocker
+                - failure
+                - challenge
+                - running
+                - none
+            pending:
+              type: string
+            choices:
+              type: array
+              items:
+                type: string
+            done:
+              type: array
+              items:
+                type: string
+            constraints:
+              type: array
+              items:
+                type: string
+            confidence:
+              type: string
+              enum:
+                - high
+                - medium
+                - low
+          required:
+            - state
+            - kind
+            - choices
+            - done
+            - constraints
+            - confidence
+        rejected:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum:
+                  - answer
+                  - opposite
+                  - ask
+              text:
+                type: string
+              reason:
+                type: string
+            required:
+              - text
+              - reason
+        question:
+          type: object
+          properties:
+            header:
+              type: string
+            text:
+              type: string
+            choices:
+              type: array
+              items:
+                type: object
+                properties:
+                  label:
+                    type: string
+                  description:
+                    type: string
+                required:
+                  - label
+          required:
+            - text
+            - choices
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+                maxLength: 80
+              text:
+                type: string
+              source:
+                type: string
+                enum:
+                  - canned
+                  - model
+                  - agent
+              action:
+                type: string
+                enum:
+                  - send
+                  - interrupt
+                  - phone
+                  - voice
+                  - choices
+                default: send
+              role:
+                type: string
+                enum:
+                  - answer
+                  - opposite
+                  - ask
+            required:
+              - id
+              - label
+              - text
+              - source
+        raw:
+          type: string
+        reasoning:
+          type: string
+        finishReason:
+          type: string
+      required:
+        - sessionRef
+        - mode
+        - generatedAt
+        - durationMs
+        - modelMs
+        - systemPrompt
+        - context
+        - moment
+        - rejected
+        - options
+        - raw
+        - reasoning
+    ReplyFeedbackInput:
+      type: object
+      properties:
+        sessionRef:
+          type: string
+          minLength: 1
+        sessionTitle:
+          type: string
+          maxLength: 300
+        mode:
+          type: string
+          enum:
+            - reply
+            - choices
+        model:
+          type: string
+          maxLength: 200
+        systemPrompt:
+          type: string
+          maxLength: 10000
+        context:
+          type: string
+          maxLength: 20000
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+                maxLength: 80
+              text:
+                type: string
+              source:
+                type: string
+                enum:
+                  - canned
+                  - model
+                  - agent
+              action:
+                type: string
+                enum:
+                  - send
+                  - interrupt
+                  - phone
+                  - voice
+                  - choices
+                default: send
+              role:
+                type: string
+                enum:
+                  - answer
+                  - opposite
+                  - ask
+            required:
+              - id
+              - label
+              - text
+              - source
+          maxItems: 20
+        ratings:
+          type: array
+          items:
+            type: object
+            properties:
+              optionId:
+                type: string
+              verdict:
+                type: string
+                enum:
+                  - useful
+                  - not_useful
+                  - unsure
+              note:
+                type: string
+                maxLength: 500
+            required:
+              - optionId
+              - verdict
+          maxItems: 20
+        overall:
+          type: string
+          enum:
+            - useful
+            - not_useful
+            - unsure
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+          maxItems: 10
+        note:
+          type: string
+          maxLength: 2000
+        raw:
+          type: string
+          maxLength: 20000
+        reasoning:
+          type: string
+          maxLength: 50000
+      required:
+        - sessionRef
+        - mode
+        - systemPrompt
+        - context
+        - options
+        - ratings
+    ReplyFeedbackEntry:
+      type: object
+      properties:
+        sessionRef:
+          type: string
+          minLength: 1
+        sessionTitle:
+          type: string
+          maxLength: 300
+        mode:
+          type: string
+          enum:
+            - reply
+            - choices
+        model:
+          type: string
+          maxLength: 200
+        systemPrompt:
+          type: string
+          maxLength: 10000
+        context:
+          type: string
+          maxLength: 20000
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+                maxLength: 80
+              text:
+                type: string
+              source:
+                type: string
+                enum:
+                  - canned
+                  - model
+                  - agent
+              action:
+                type: string
+                enum:
+                  - send
+                  - interrupt
+                  - phone
+                  - voice
+                  - choices
+                default: send
+              role:
+                type: string
+                enum:
+                  - answer
+                  - opposite
+                  - ask
+            required:
+              - id
+              - label
+              - text
+              - source
+          maxItems: 20
+        ratings:
+          type: array
+          items:
+            type: object
+            properties:
+              optionId:
+                type: string
+              verdict:
+                type: string
+                enum:
+                  - useful
+                  - not_useful
+                  - unsure
+              note:
+                type: string
+                maxLength: 500
+            required:
+              - optionId
+              - verdict
+          maxItems: 20
+        overall:
+          type: string
+          enum:
+            - useful
+            - not_useful
+            - unsure
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+          maxItems: 10
+        note:
+          type: string
+          maxLength: 2000
+        raw:
+          type: string
+          maxLength: 20000
+        reasoning:
+          type: string
+          maxLength: 50000
+        id:
+          type: string
+        createdAt:
+          type: integer
+      required:
+        - sessionRef
+        - mode
+        - systemPrompt
+        - context
+        - options
+        - ratings
+        - id
+        - createdAt
+    ReplyFeedbackPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              sessionRef:
+                type: string
+                minLength: 1
+              sessionTitle:
+                type: string
+                maxLength: 300
+              mode:
+                type: string
+                enum:
+                  - reply
+                  - choices
+              model:
+                type: string
+                maxLength: 200
+              systemPrompt:
+                type: string
+                maxLength: 10000
+              context:
+                type: string
+                maxLength: 20000
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                      maxLength: 80
+                    text:
+                      type: string
+                    source:
+                      type: string
+                      enum:
+                        - canned
+                        - model
+                        - agent
+                    action:
+                      type: string
+                      enum:
+                        - send
+                        - interrupt
+                        - phone
+                        - voice
+                        - choices
+                      default: send
+                    role:
+                      type: string
+                      enum:
+                        - answer
+                        - opposite
+                        - ask
+                  required:
+                    - id
+                    - label
+                    - text
+                    - source
+                maxItems: 20
+              ratings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    optionId:
+                      type: string
+                    verdict:
+                      type: string
+                      enum:
+                        - useful
+                        - not_useful
+                        - unsure
+                    note:
+                      type: string
+                      maxLength: 500
+                  required:
+                    - optionId
+                    - verdict
+                maxItems: 20
+              overall:
+                type: string
+                enum:
+                  - useful
+                  - not_useful
+                  - unsure
+              tags:
+                type: array
+                items:
+                  type: string
+                  maxLength: 40
+                maxItems: 10
+              note:
+                type: string
+                maxLength: 2000
+              raw:
+                type: string
+                maxLength: 20000
+              reasoning:
+                type: string
+                maxLength: 50000
+              id:
+                type: string
+              createdAt:
+                type: integer
+            required:
+              - sessionRef
+              - mode
+              - systemPrompt
+              - context
+              - options
+              - ratings
+              - id
+              - createdAt
+      required:
+        - data
     QuestionPrompt:
       type: object
       properties:
@@ -3129,6 +3685,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/reply-audit:
+    get:
+      tags:
+        - replies
+      summary: Generate reply options with the prompt and context for review
+      description: Bypasses the reply cache and returns the exact system prompt, transcript context, generated options, and raw model output. Intended for the reply audit page.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+            enum:
+              - reply
+              - choices
+          required: false
+          name: mode
+          in: query
+      responses:
+        "200":
+          description: Reply audit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyAudit"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reply-feedback:
+    get:
+      tags:
+        - replies
+      summary: List saved reply feedback
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Reply feedback entries, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyFeedbackPage"
+    post:
+      tags:
+        - replies
+      summary: Save feedback for a generated reply set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplyFeedbackInput"
+      responses:
+        "201":
+          description: Saved feedback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplyFeedbackEntry"
+        "400":
+          description: Invalid feedback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reply-feedback/export:
+    get:
+      tags:
+        - replies
+      summary: Download all reply feedback as JSONL
+      responses:
+        "200":
+          description: Feedback JSONL
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
   /api/v1/questions:
     get:
       tags:

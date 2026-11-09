@@ -27,6 +27,7 @@ import type {
   ProviderInput,
   ProviderOptions,
   ProviderUpdateInput,
+  ReplyOption,
   Session,
   SessionSelectionInput,
   SessionStatus,
@@ -76,6 +77,10 @@ import {
   resolveSessionResource,
   type ResourceContext,
 } from "./urls";
+import {
+  collectToolImages,
+  sanitizeToolOutput,
+} from "./tool-images";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -3260,6 +3265,13 @@ function SessionDetail(props: {
   const [dictation, setDictation] = useState<DictationState>({ phase: "idle" });
   const [dictationElapsedMs, setDictationElapsedMs] = useState(0);
   const [dictationEnabled, setDictationEnabled] = useState(false);
+  const [suggestEnabled, setSuggestEnabled] = useState(false);
+  const [suggestions, setSuggestions] = useState<ReplyOption[]>([]);
+  const [suggestState, setSuggestState] = useState<
+    "idle" | "loading" | "error" | "notice"
+  >("idle");
+  const [suggestError, setSuggestError] = useState<string>();
+  const [suggestNotice, setSuggestNotice] = useState<string>();
   const dictationStream = useRef<MediaStream | null>(null);
   const dictationRecorder = useRef<MediaRecorder | null>(null);
   const dictationChunks = useRef<Blob[]>([]);
@@ -3446,10 +3458,19 @@ function SessionDetail(props: {
     void props.client
       .assistantSettings()
       .then((view) => {
-        if (!cancelled) setDictationEnabled(view.transcription.enabled);
+        if (cancelled) return;
+        setDictationEnabled(view.transcription.enabled);
+        setSuggestEnabled(
+          view.reply.enabled &&
+            view.reply.baseUrl.trim().length > 0 &&
+            view.reply.model.trim().length > 0,
+        );
       })
       .catch(() => {
-        if (!cancelled) setDictationEnabled(false);
+        if (!cancelled) {
+          setDictationEnabled(false);
+          setSuggestEnabled(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -3468,6 +3489,13 @@ function SessionDetail(props: {
     setDictationElapsedMs(0);
     return () => cleanupDictation();
   }, [props.sessionRef, cleanupDictation]);
+
+  useEffect(() => {
+    setSuggestions([]);
+    setSuggestState("idle");
+    setSuggestError(undefined);
+    setSuggestNotice(undefined);
+  }, [props.sessionRef]);
 
   useEffect(() => {
     if (dictation.phase !== "recording") {
@@ -3610,6 +3638,73 @@ function SessionDetail(props: {
     }
   };
 
+  const suggestReplies = async () => {
+    if (!suggestEnabled || suggestState === "loading" || sending) return;
+    setSuggestState("loading");
+    setSuggestError(undefined);
+    setSuggestNotice(undefined);
+    setSuggestions([]);
+    try {
+      const options = await props.client.replyOptions(
+        props.sessionRef,
+        "reply",
+      );
+      if (options.state && options.state !== "reply") {
+        setSuggestState("notice");
+        setSuggestNotice(
+          options.state === "wait"
+            ? "Agent is running. No reply needed yet."
+            : "No reply needed. The last turn is finished.",
+        );
+        return;
+      }
+      const modelOptions = options.data.filter(
+        (option) => option.source === "model" && option.text.trim(),
+      );
+      if (modelOptions.length === 0) {
+        setSuggestState("error");
+        setSuggestError(
+          "No grounded suggestions. Try again or check the reply model.",
+        );
+        return;
+      }
+      setSuggestions(modelOptions);
+      setSuggestState("idle");
+    } catch (reason) {
+      setSuggestState("error");
+      setSuggestError(
+        reason instanceof Error ? reason.message : "Unable to suggest replies",
+      );
+    }
+  };
+
+  const insertSuggestion = (option: ReplyOption) => {
+    const text = option.text.trim();
+    if (!text) return;
+    const current = draftRef.current.trimEnd();
+    const next = current ? `${current}\n${text}` : text;
+    updateDraft(next);
+    setSuggestions([]);
+    setSuggestState("idle");
+    setSuggestError(undefined);
+    setSuggestNotice(undefined);
+    requestAnimationFrame(() => {
+      const input = document.getElementById(
+        "chat-composer-input",
+      ) as HTMLTextAreaElement | null;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(next.length, next.length);
+    });
+  };
+
+  const dismissSuggestions = () => {
+    setSuggestions([]);
+    setSuggestState("idle");
+    setSuggestError(undefined);
+    setSuggestNotice(undefined);
+  };
+
   const send = async () => {
     const text = draft.trim();
     const attachmentIDs = attachments.map((attachment) => attachment.id);
@@ -3637,6 +3732,7 @@ function SessionDetail(props: {
       setAttachments([]);
       pendingScroll.current = { mode: "bottom" };
       await discardDraft();
+      dismissSuggestions();
       await props.client.sendMessage(
         props.sessionRef,
         { text, ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}) },
@@ -4441,6 +4537,67 @@ function SessionDetail(props: {
                     ))}
                   </div>
                 ) : null}
+                {suggestState !== "idle" || suggestions.length > 0 ? (
+                  <div className="composer-suggest" aria-live="polite">
+                    <div className="composer-suggest-head">
+                      <span className="composer-suggest-label">Suggested</span>
+                      {suggestState === "loading" ? (
+                        <span className="composer-suggest-status">
+                          Reading session…
+                        </span>
+                      ) : null}
+                      {suggestState === "error" ? (
+                        <span className="composer-suggest-status error">
+                          {suggestError}
+                        </span>
+                      ) : null}
+                      {suggestState === "notice" ? (
+                        <span className="composer-suggest-status">
+                          {suggestNotice}
+                        </span>
+                      ) : null}
+                      {suggestions.length > 0 || suggestState === "notice" ? (
+                        <button
+                          className="composer-suggest-dismiss"
+                          type="button"
+                          aria-label="Dismiss suggestions"
+                          onClick={dismissSuggestions}
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                    {suggestions.length > 0 ? (
+                      <div className="composer-suggest-list">
+                        {suggestions.map((option) => (
+                          <button
+                            className="composer-suggest-chip"
+                            type="button"
+                            key={option.id}
+                            aria-label={`Use suggestion: ${option.text}`}
+                            onClick={() => insertSuggestion(option)}
+                          >
+                            <span>{option.text}</span>
+                            {option.role === "opposite" ? (
+                              <span className="composer-suggest-tag">Alt</span>
+                            ) : option.role === "ask" ? (
+                              <span className="composer-suggest-tag">Ask</span>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {suggestState === "error" ? (
+                      <button
+                        className="composer-suggest-retry"
+                        type="button"
+                        onClick={() => void suggestReplies()}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <textarea
                   id="chat-composer-input"
                   name="message"
@@ -4591,6 +4748,20 @@ function SessionDetail(props: {
                     {composerHint}
                   </span>
                   <div className="composer-actions">
+                    {suggestEnabled ? (
+                      <button
+                        className="composer-voice"
+                        type="button"
+                        disabled={
+                          suggestState === "loading" ||
+                          dictationBusy ||
+                          sending
+                        }
+                        onClick={() => void suggestReplies()}
+                      >
+                        {suggestState === "loading" ? "Reading…" : "Suggest"}
+                      </button>
+                    ) : null}
                     {attachSupported ? (
                       <button
                         className="composer-voice"
@@ -5419,6 +5590,7 @@ function MessagePartView(props: {
     );
   }
   if (part.type === "tool") {
+    const outputImages = collectToolImages(part.output);
     return (
       <details className="message-aux message-tool">
         <summary>
@@ -5435,10 +5607,46 @@ function MessagePartView(props: {
               <pre>{formatJson(part.input)}</pre>
             </>
           ) : null}
+          {outputImages.length > 0 ? (
+            <>
+              <span className="tool-section-label">Images</span>
+              <div className="tool-images">
+                {outputImages.map((image, index) => {
+                  const resolved = resolveSessionResource(
+                    image.url,
+                    props.resource,
+                    "image",
+                  );
+                  return (
+                    <figure
+                      className="message-attachment"
+                      key={`${image.url.slice(0, 48)}-${index}`}
+                    >
+                      <AttachmentImage
+                        client={props.client}
+                        providerID={props.resource.providerID}
+                        url={resolved.url ?? image.url}
+                        viaProxy={resolved.attachment}
+                        name={image.name}
+                      />
+                      <figcaption>
+                        <span className="message-file-name">{image.name}</span>
+                        {image.mimeType ? (
+                          <span className="message-file-meta">
+                            {image.mimeType}
+                          </span>
+                        ) : null}
+                      </figcaption>
+                    </figure>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
           {part.output !== undefined ? (
             <>
               <span className="tool-section-label">Output</span>
-              <pre>{formatJson(part.output)}</pre>
+              <pre>{formatJson(sanitizeToolOutput(part.output))}</pre>
             </>
           ) : null}
         </div>

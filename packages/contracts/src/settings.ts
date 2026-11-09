@@ -82,6 +82,19 @@ export const zReplyOptionAction = z.enum([
   "voice",
   "choices",
 ]);
+export const zReplyState = z.enum(["reply", "wait", "done"]);
+export const zReplyMomentKind = z.enum([
+  "question",
+  "approval",
+  "delivery",
+  "blocker",
+  "failure",
+  "challenge",
+  "running",
+  "none",
+]);
+export const zReplyRole = z.enum(["answer", "opposite", "ask"]);
+export const zReplyConfidence = z.enum(["high", "medium", "low"]);
 
 export const zReplyOption = z.object({
   id: z.string(),
@@ -89,6 +102,7 @@ export const zReplyOption = z.object({
   text: z.string(),
   source: zReplyOptionSource,
   action: zReplyOptionAction.default("send"),
+  role: zReplyRole.optional(),
 });
 
 export const zReplyOptions = z.object({
@@ -96,6 +110,10 @@ export const zReplyOptions = z.object({
   generatedAt: z.number().int(),
   model: z.string().optional(),
   mode: z.enum(["reply", "choices"]),
+  state: zReplyState.optional(),
+  kind: zReplyMomentKind.optional(),
+  pending: z.string().optional(),
+  confidence: zReplyConfidence.optional(),
 });
 
 export const zReplyMode = z.enum(["reply", "choices"]);
@@ -126,3 +144,7 @@ export type AssistantInput = z.infer<typeof zAssistantInput>;
 export type ReplyOption = z.infer<typeof zReplyOption>;
 export type ReplyOptions = z.infer<typeof zReplyOptions>;
 export type ReplyMode = z.infer<typeof zReplyMode>;
+export type ReplyState = z.infer<typeof zReplyState>;
+export type ReplyMomentKind = z.infer<typeof zReplyMomentKind>;
+export type ReplyRole = z.infer<typeof zReplyRole>;
+export type ReplyConfidence = z.infer<typeof zReplyConfidence>;

@@ -11,6 +11,7 @@
       body { padding: 20px; max-width: 640px; margin: 0 auto; }
       h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.02em; }
       p { margin: 0; color: var(--muted); }
+      a { color: var(--accent); }
       .brand { width: 36px; height: 36px; margin-bottom: 16px; }
       .brand svg { display: block; }
       .panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -61,8 +62,11 @@
         <circle cx="256" cy="256" r="44" fill="#07080b"/>
       </svg>
     </div>
-    <h1>Oktoso for Even G2</h1>
-    <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge.</p>
+    <div class="composer-head">
+      <h1>Oktoso for Even G2</h1>
+      <span id="app-version" class="pill">v—</span>
+    </div>
+    <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge. <a href="./audit.html">Reply audit</a>.</p>
 
     <section class="panel">
       <h2>Pair this phone</h2>

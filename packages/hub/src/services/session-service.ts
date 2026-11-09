@@ -292,6 +292,14 @@ export class SessionService {
     }
   }
 
+  /**
+   * Return the last synced session without touching the provider. Read-path
+   * callers use this for cheap metadata on a latency budget.
+   */
+  cachedSession(ref: string): Session | undefined {
+    return this.sessions.get(ref);
+  }
+
   async messages(ref: string, query: MessagesQuery): Promise<MessagePage> {
     const adapter = this.adapterForRef(ref);
     if (!adapter) {

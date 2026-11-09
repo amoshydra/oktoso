@@ -15,6 +15,7 @@ import type { DraftService } from "./services/draft-service";
 import type { AssistantSettingsService } from "./services/assistant-settings";
 import type { AttachmentStore } from "./services/attachment-store";
 import type { ReplyService } from "./services/reply-service";
+import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import { IdempotencyService } from "./services/idempotency";
@@ -34,6 +35,7 @@ import { registerPairRoutes } from "./http/routes/pair";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerAttachmentRoutes } from "./http/routes/attachments";
 import { registerSessionRoutes } from "./http/routes/sessions";
+import { registerReplyAuditRoutes } from "./http/routes/reply-audit";
 import { registerQuestionRoutes } from "./http/routes/questions";
 import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerSettingsRoutes } from "./http/routes/settings";
@@ -57,6 +59,7 @@ export interface AppDependencies {
   attachments: AttachmentStore;
   settings: AssistantSettingsService;
   replies: ReplyService;
+  replyFeedback: ReplyFeedbackStore;
   transcription: TranscriptionService;
   questions: QuestionService;
   logger: Logger;
@@ -116,6 +119,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
     idempotency,
   );
   registerSessionRoutes(app, deps.sessions, deps.replies, actions);
+  registerReplyAuditRoutes(app, deps.replies, deps.replyFeedback);
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);
   registerSettingsRoutes(app, deps.settings);

@@ -168,4 +168,12 @@ describe("question parser", () => {
   it("returns null when there is no question", () => {
     expect(parse("The build is green.")).toBeNull();
   });
+
+  it("ignores a URL query string", () => {
+    expect(
+      parse(
+        "Plan:\n1. Inspect the repo\n2. Update the docs\n3. Run the tests\n\nhttps://example.test/?debug=true",
+      ),
+    ).toBeNull();
+  });
 });

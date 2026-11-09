@@ -575,9 +575,24 @@ No `Type answer` row. `Read chat` follows `More` below the fold if there is room
 └──────────────────────────────────────────────────────────────┘
 ```
 
-No summary container. This screen is unchanged; it pages three options at a
-time (`Stop`, `Find choices`, and `Phone keyboard` are on page 2). `Find choices`
-remains the manual escape hatch when detection misses.
+No summary container. This screen pages three options at a time (`Stop`,
+`Find choices`, and `Phone keyboard` are on page 2). `Find choices` remains the
+manual escape hatch when detection misses.
+
+When the hub's reply model is configured, the reply menu can show three grounded
+roles after `Continue`: an **answer**, an **opposite** labelled `Alt: …`, and an
+**ask** question. The hub first classifies the moment. If the agent is running
+with no ask, or a finished turn has no ask or action, it does not call the model
+and the reply screen shows `Agent is running…` or `No reply needed…` instead of
+model options. A page containing a model suggestion is headed
+`REPLY 1/3 · Suggested`. Model suggestions never replace `Continue`, `Stop`,
+`Find choices`, or `Phone keyboard`; when generation fails or the session has
+no transcript, the canned list is shown alone.
+
+The same rule applies to `CHOOSE`: choices parsed from the assistant text keep
+the header `CHOOSE n`, while a page containing model-extracted choices reads
+`CHOOSE n · Suggested`. Model extraction never invents an option; wording that
+does not appear in the assistant text is dropped.
 
 ### 4.6 Sending, sent, error, stale
 

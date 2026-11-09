@@ -45,6 +45,10 @@ import {
   zPendingQuestionSummary,
   zQuestionSummaryPage,
   zReplyOptions,
+  zReplyAudit,
+  zReplyFeedbackInput,
+  zReplyFeedbackEntry,
+  zReplyFeedbackPage,
   zSearchResult,
   zSendInput,
   zSendResult,
@@ -128,6 +132,19 @@ const AssistantModelsSchema = registry.register(
   }),
 );
 const ReplyOptionsSchema = registry.register("ReplyOptions", zReplyOptions);
+const ReplyAuditSchema = registry.register("ReplyAudit", zReplyAudit);
+const ReplyFeedbackInputSchema = registry.register(
+  "ReplyFeedbackInput",
+  zReplyFeedbackInput,
+);
+const ReplyFeedbackEntrySchema = registry.register(
+  "ReplyFeedbackEntry",
+  zReplyFeedbackEntry,
+);
+const ReplyFeedbackPageSchema = registry.register(
+  "ReplyFeedbackPage",
+  zReplyFeedbackPage,
+);
 const QuestionPromptSchema = registry.register(
   "QuestionPrompt",
   zQuestionPrompt,
@@ -737,6 +754,78 @@ registry.registerPath({
     200: { description: "Reply options", content: json(ReplyOptionsSchema) },
     404: errorResponse("Session not found"),
     502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/reply-audit",
+  tags: ["replies"],
+  summary: "Generate reply options with the prompt and context for review",
+  description:
+    "Bypasses the reply cache and returns the exact system prompt, transcript context, generated options, and raw model output. Intended for the reply audit page.",
+  request: {
+    params,
+    query: z.object({ mode: z.enum(["reply", "choices"]).optional() }),
+  },
+  responses: {
+    200: {
+      description: "Reply audit",
+      content: json(ReplyAuditSchema),
+    },
+    404: errorResponse("Session not found"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/reply-feedback",
+  tags: ["replies"],
+  summary: "List saved reply feedback",
+  request: {
+    query: z.object({ limit: z.coerce.number().int().min(1).max(500).optional() }),
+  },
+  responses: {
+    200: {
+      description: "Reply feedback entries, newest first",
+      content: json(ReplyFeedbackPageSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/reply-feedback",
+  tags: ["replies"],
+  summary: "Save feedback for a generated reply set",
+  request: {
+    body: {
+      required: true,
+      content: json(ReplyFeedbackInputSchema),
+    },
+  },
+  responses: {
+    201: {
+      description: "Saved feedback",
+      content: json(ReplyFeedbackEntrySchema),
+    },
+    400: errorResponse("Invalid feedback"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/reply-feedback/export",
+  tags: ["replies"],
+  summary: "Download all reply feedback as JSONL",
+  responses: {
+    200: {
+      description: "Feedback JSONL",
+      content: {
+        "application/x-ndjson": { schema: z.string() },
+      },
+    },
   },
 });
 

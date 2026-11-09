@@ -31,7 +31,11 @@ Screenshot capture and framing are documented in
 - **Chat** — six-line viewport, line/message position, agent activity, SSE updates,
   read markers, and incremental message streaming.
 - **Replies** — canned and model-assisted reply options, numbered choices, voice,
-  and a phone keyboard for longer text.
+  and a phone keyboard for longer text. The hub classifies the moment first: it
+  skips the model while the agent is running with no ask, or after a finished
+  turn with no ask or action. When it does generate, it returns an answer, an
+  opposite labelled `Alt:`, and an ask question, grounded in a compact MOMENT
+  block with pending, done, and constraint state.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
   send.
@@ -46,6 +50,9 @@ Screenshot capture and framing are documented in
   discard removes it.
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
+- **Settings** — app version beside the `OKTOSO` header, `Reload app` for a
+  full webview reload that picks up a new build, and `Refresh data` for
+  attention, unread sessions, and pending question markers.
 
 Voice replies use the glasses microphone (16 kHz, signed 16-bit little-endian,
 mono) and the hub's configured transcription endpoint. The voice action is
@@ -60,7 +67,8 @@ Home
 ├─ Inbox            attention items
 ├─ Recent           five most recent root sessions
 ├─ Current          last opened session, when available
-└─ Symbols          glyph legend
+├─ Symbols          glyph legend
+└─ Settings         app reload, connection, version, data refresh
 
 Inbox
 └─ Attention        permission / form / error / unread detail
@@ -204,6 +212,19 @@ they are not surfaced as separate question markers.
 Open WebUI exposes no parent/session hierarchy in the current adapter; its
 sessions are treated as primary.
 
+## Reply audit
+
+The G2 phone surface links to a reply audit page at:
+
+```text
+http://<hub-host>:8787/apps/even-g2/audit.html
+```
+
+It shows the exact system prompt, context, raw model output, and generated
+options for one session. Rate each option and save the feedback; entries are
+appended to `<dataDir>/reply-feedback.jsonl` and can be exported as JSONL for
+prompt and context analysis. See [`../../docs/reply-audit.md`](../../docs/reply-audit.md).
+
 ## Hardware validation
 
 ```sh
@@ -234,6 +255,8 @@ still require hardware.
   glyphs, reliability, and attention policy
 - [`../../docs/g2-question-flow.md`](../../docs/g2-question-flow.md) — full
   question-flow design and answer model
+- [`../../docs/reply-audit.md`](../../docs/reply-audit.md) — reply model audit and
+  feedback loop
 - [`../../docs/wearables.md`](../../docs/wearables.md) — Even Hub setup, packaging,
   and device limits
 - [`../../docs/g2-hardware-validation.md`](../../docs/g2-hardware-validation.md) —

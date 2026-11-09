@@ -1704,6 +1704,108 @@
   padding: var(--space-2) var(--space-2) 0;
 }
 
+.composer-suggest {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0;
+  margin-bottom: var(--space-1);
+}
+
+.composer-suggest-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 18px;
+}
+
+.composer-suggest-label {
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.composer-suggest-status {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.composer-suggest-status.error {
+  color: var(--danger);
+}
+
+.composer-suggest-dismiss {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.composer-suggest-dismiss:hover {
+  color: var(--text);
+}
+
+.composer-suggest-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.composer-suggest-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.composer-suggest-chip:hover {
+  border-color: var(--accent);
+}
+
+.composer-suggest-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.composer-suggest-chip > span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.composer-suggest-tag {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.composer-suggest-retry {
+  justify-self: start;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-xs);
+}
+
+
 .composer-attachment {
   display: inline-flex;
   align-items: center;
@@ -2218,6 +2320,16 @@
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.tool-images {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.tool-images .message-attachment {
+  margin: 0;
 }
 
 .tool-section-label {
@@ -2933,6 +3045,12 @@
     gap: 4px;
     padding: 0;
     scrollbar-width: none;
+  }
+
+  .composer-suggest-chip,
+  .composer-suggest-dismiss,
+  .composer-suggest-retry {
+    min-height: 44px;
   }
 
   .composer-options::-webkit-scrollbar {

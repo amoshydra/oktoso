@@ -27,6 +27,11 @@ select {
   color: inherit;
 }
 
+select {
+  field-sizing: content;
+  max-width: 100%;
+}
+
 button {
   cursor: pointer;
 }

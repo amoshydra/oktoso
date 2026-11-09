@@ -26,6 +26,10 @@ import type {
   QuestionPrompt,
   QuestionSummaryPage,
   ReplyMode,
+  ReplyAudit,
+  ReplyFeedbackEntry,
+  ReplyFeedbackInput,
+  ReplyFeedbackPage,
   ReplyOptions,
   SendInput,
   SendResult,
@@ -397,6 +401,30 @@ export class HubClient {
     return this.request<ReplyOptions>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/reply-options?mode=${mode}`,
     );
+  }
+
+  async replyAudit(
+    ref: string,
+    mode: ReplyMode = "reply",
+  ): Promise<ReplyAudit> {
+    return this.request<ReplyAudit>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/reply-audit?mode=${mode}`,
+    );
+  }
+
+  async replyFeedback(limit = 100): Promise<ReplyFeedbackPage> {
+    return this.request<ReplyFeedbackPage>(
+      `/api/v1/reply-feedback?limit=${limit}`,
+    );
+  }
+
+  async saveReplyFeedback(
+    input: ReplyFeedbackInput,
+  ): Promise<ReplyFeedbackEntry> {
+    return this.request<ReplyFeedbackEntry>("/api/v1/reply-feedback", {
+      method: "POST",
+      body: input,
+    });
   }
 
   async attention(query: { type?: AttentionType; sessionRef?: string } = {}): Promise<AttentionPage> {
