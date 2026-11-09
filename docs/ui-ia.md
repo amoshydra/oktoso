@@ -313,6 +313,9 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Drafts persist per session on the hub and follow the session across clients and reloads.
 - Drafts autosave shortly after typing and clear after a successful send.
 - While the agent is running, an interrupt button sits beside send in the composer bar. The same action is available in the details panel.
+- `Suggest` is a quiet composer action when the reply model is configured. It fetches on demand and shows model suggestions as wrapping chips above the textarea, labelled `Suggested`; the opposite chip carries an `Alt` tag and the question chip an `Ask` tag. Selecting a chip inserts the text into the draft (append when a draft already exists) and focuses the composer. It never sends. If the hub's decision gate says `wait` or `done`, the row reads `Agent is running. No reply needed yet.` or `No reply needed. The last turn is finished.` and shows no chips. Loading reads `Reading session…`; a failed or empty result reads `No grounded suggestions. Try again or check the reply model.` with `Retry`. The row is dismissible. No generation runs when a chat opens.
+- Mobile suggestion chips and their dismiss/retry controls use 44px targets; chips wrap above the textarea without horizontal overflow.
+- Selects use content sizing (`field-sizing: content`) so the agent, model, and reasoning controls fit their current value. Full-width form selects keep their width.
 
 ### Details panel
 

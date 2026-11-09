@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reply audit · Oktoso</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Reply audit</h1>
+        <p>
+          Inspect the exact prompt and context sent to the G2 reply model, then
+          rate whether the generated replies were useful. Saved feedback is the
+          raw material for prompt and context improvements.
+        </p>
+      </div>
+      <a class="quiet" href="./">Back to G2</a>
+    </header>
+
+    <main>
+      <section class="panel" id="auth-panel">
+        <h2>Connect</h2>
+        <p class="hint">
+          Uses the G2 token already stored by this browser when available.
+          Otherwise paste the hub owner or session token.
+        </p>
+        <div class="row">
+          <input
+            id="token"
+            type="password"
+            placeholder="Paste owner or session token"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="connect" class="primary" type="button">Connect</button>
+        </div>
+        <p id="auth-status" class="status" role="status"></p>
+      </section>
+
+      <section class="panel" id="workbench" hidden>
+        <div class="row wrap controls">
+          <label class="field">
+            <span>Session</span>
+            <select id="session"></select>
+          </label>
+          <label class="field">
+            <span>Mode</span>
+            <select id="mode">
+              <option value="reply">Reply suggestions</option>
+              <option value="choices">Extracted choices</option>
+            </select>
+          </label>
+          <button id="reload-sessions" type="button">Reload sessions</button>
+          <button id="generate" class="primary" type="button">Generate</button>
+        </div>
+        <p id="generate-status" class="status" role="status"></p>
+
+        <div id="audit" hidden>
+          <div id="audit-meta" class="meta"></div>
+
+          <details open>
+            <summary>System prompt</summary>
+            <pre id="system-prompt"></pre>
+          </details>
+          <details open>
+            <summary>Context sent to the model</summary>
+            <pre id="context"></pre>
+          </details>
+          <details>
+            <summary>Raw model output</summary>
+            <pre id="raw"></pre>
+          </details>
+          <details>
+            <summary>Reasoning output</summary>
+            <pre id="reasoning"></pre>
+          </details>
+
+          <section id="moment-panel" class="moment-panel" hidden>
+            <h2 class="section-title">Moment</h2>
+            <div id="moment-detail"></div>
+          </section>
+
+          <section id="rejected-panel" class="moment-panel" hidden>
+            <h2 class="section-title">Rejected suggestions</h2>
+            <div id="rejected-detail"></div>
+          </section>
+
+          <section id="question-panel" class="question-panel" hidden>
+            <h2 class="section-title">Pending question</h2>
+            <div id="question-detail"></div>
+          </section>
+
+          <h2 class="section-title">Options</h2>
+          <p class="hint">
+            Rate each generated option. <span class="badge">model</span> marks
+            replies produced by the model; the rest are canned actions.
+          </p>
+          <div id="options" class="options"></div>
+
+          <h2 class="section-title">Verdict</h2>
+          <div class="row wrap" id="overall" role="group" aria-label="Overall verdict">
+            <button type="button" data-verdict="useful">Useful</button>
+            <button type="button" data-verdict="unsure">Unsure</button>
+            <button type="button" data-verdict="not_useful">Not useful</button>
+          </div>
+
+          <fieldset id="tags" class="tags">
+            <legend>Reasons</legend>
+            <label><input type="checkbox" value="grounded" /> Grounded in the task</label>
+            <label><input type="checkbox" value="too_generic" /> Too generic</label>
+            <label><input type="checkbox" value="wrong_task" /> Wrong task</label>
+            <label><input type="checkbox" value="hallucinated" /> Hallucinated</label>
+            <label><input type="checkbox" value="too_long" /> Too long</label>
+            <label><input type="checkbox" value="bad_tone" /> Bad tone</label>
+            <label><input type="checkbox" value="missing_context" /> Missing context</label>
+            <label><input type="checkbox" value="no_contrast" /> No contrasting option</label>
+            <label><input type="checkbox" value="unsafe" /> Bypasses a guard</label>
+          </fieldset>
+
+          <label class="field full">
+            <span>Notes</span>
+            <textarea
+              id="note"
+              rows="3"
+              placeholder="What should the prompt or context show differently?"
+            ></textarea>
+          </label>
+
+          <div class="row">
+            <button id="save" class="primary" type="button">Save feedback</button>
+            <span id="save-status" class="status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="history-panel" hidden>
+        <div class="row space">
+          <h2>Recent feedback</h2>
+          <button id="export" type="button">Export JSONL</button>
+        </div>
+        <p id="history-status" class="status" role="status"></p>
+        <div id="history" class="history"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/audit.ts"></script>
+  </body>
+</html>

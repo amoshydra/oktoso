@@ -12,7 +12,8 @@ Home
 ├─ Inbox            attention items
 ├─ Recent           five most recent root sessions
 ├─ Current          last opened session, when available
-└─ Symbols          glyph legend
+├─ Symbols          glyph legend
+└─ Settings         app reload, connection, version, data refresh
 
 Inbox
 └─ Attention        permission / form / error / unread detail
@@ -43,6 +44,7 @@ Back always follows where you came from:
 - attention → inbox
 - inbox / recent → home
 - symbols → home
+- settings → home
 - unsent → home
 - failure → the screen that started the action
 
@@ -193,6 +195,25 @@ The legend is always discoverable:
 - The phone surface has a collapsible **Symbol guide** below the glasses preview.
 - The legend is read-only; swipe to see all rows and double-tap Back to leave.
 
+## Settings
+
+Home has a `Settings` row. The header is `SETTINGS`; rows are:
+
+- `Reload app` — reload the entire webview with a cache-busting query so a
+  newly deployed build is loaded without touching the phone. The app returns
+  to Home after reconnecting.
+- `Refresh data` — refetch attention, unread sessions, and pending-question
+  summaries. The result appears above the list as `Refreshed just now.` or
+  `Refresh failed · <state>`.
+- `Connection · Live | Polling | Reconnecting | Offline | Pair`.
+- `Version · v<app version>`.
+- `Last refresh · HH:MM` after the first manual data refresh.
+
+The version also appears in the Home header as `OKTOSO · v<app version>`. Reload
+is the first row because it is the recovery path for a stale build; Refresh data
+is the recovery path for stale content. It does not change pairing; pairing
+stays on the phone.
+
 ## Text policy
 
 - No Markdown rendering on the glass. Strip formatting that cannot render and keep
@@ -262,6 +283,7 @@ checklist in [`g2-hardware-validation.md`](g2-hardware-validation.md). Run
 ## Planned order
 
 1. Voice capture and STT if the SDK exposes microphone input.
-2. Suggested answers and model-assisted choices.
+2. Hardware acceptance for model-assisted reply suggestions and choices
+   (implemented; the reply menu and `Find choices` are wired).
 3. Frame snapshot tests against recorded hardware frames.
 4. Hardware acceptance using the scripted checklist.

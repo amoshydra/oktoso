@@ -486,7 +486,7 @@ export function parseQuestion(
     return null;
   }
 
-  const raw = messageText(latest);
+  const raw = messageText(latest).replace(/https?:\/\/\S+/g, " ");
   if (!raw.trim()) return null;
 
   const forQuestion = stripNonProseLines(stripFencedCode(raw));

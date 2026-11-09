@@ -18,6 +18,7 @@ when the simulator passes.
 - pairing, token refresh, and expired credentials;
 - single-question, free-form, stale, and multi-question answers;
 - home, recent-session, and inbox question discovery;
+- the Home version header and the manual reload/refresh path in Settings;
 - idle behavior: no page rebuilds and no repeated polling while SSE is live.
 
 ## Preflight
@@ -166,6 +167,17 @@ Seed or open a session with at least 300 readable lines.
 | D9 | Check the status glyphs. | `● ? ■ ▲ ! ▶ ▼ ◇ ◆ ›` render without tofu; `⚿`, `✓`, `↳`, `✕`, `✖`, `✔` are not used. |
 | D10 | Open Home → **Symbols**. | The full legend scrolls, every row is readable, and Back returns Home. |
 | D11 | Open the phone **Symbol guide**. | It expands and matches the glass legend. |
+
+## Home and settings
+
+| ID | Action | Expected |
+|---|---|---|
+| S1 | Open Home after pairing. | Header reads `OKTOSO · v<version>`; `Symbols` and `Settings` rows are present. |
+| S2 | Open Settings. | Rows are `Reload app`, `Refresh data`, `Connection · <state>`, and `Version · v<version>`; no `Last refresh` row yet. |
+| S3 | Tap `Refresh data` with the hub online. | Attention and question markers update; notice reads `Refreshed just now.`; `Last refresh · HH:MM` appears. |
+| S4 | Stop the hub, then tap `Refresh data`. | Notice reads `Refresh failed · <state>`; Back still returns Home. |
+| S5 | Double-tap Back from Settings. | Home returns; the version header remains. |
+| S6 | Tap `Reload app` after deploying a new build. | The webview reloads from the hub, shows the new version, and returns to Home without touching the phone. |
 
 ## Attention and forms
 

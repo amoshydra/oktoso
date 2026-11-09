@@ -16,6 +16,7 @@ import { DraftService } from "./services/draft-service";
 import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
+import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { VERSION } from "./version";
@@ -109,6 +110,10 @@ async function createTestApp(options: {
   const drafts = new DraftService(store);
   const settings = new AssistantSettingsService(store);
   const replies = new ReplyService(settings, sessions, logger);
+  const replyFeedback = new ReplyFeedbackStore({
+    filePath: join(await tempRoot(), "reply-feedback.jsonl"),
+  });
+  await replyFeedback.init();
   const transcription = new TranscriptionService(
     settings,
     logger,
@@ -137,6 +142,7 @@ async function createTestApp(options: {
     attachments,
     settings,
     replies,
+    replyFeedback,
     transcription,
     questions,
     logger,
@@ -155,6 +161,7 @@ async function createTestApp(options: {
     attachments,
     settings,
     replies,
+    replyFeedback,
     transcription,
     questions,
     fake,
@@ -996,6 +1003,73 @@ describe("hub app", () => {
 
     const removedAgain = await app.request(path, { method: "DELETE", headers });
     expect(removedAgain.status).toBe(204);
+  });
+
+  it("exposes reply audit and stores reply feedback", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const audit = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/reply-audit?mode=reply",
+      { headers },
+    );
+    expect(audit.status).toBe(200);
+    const auditPayload = (await audit.json()) as {
+      systemPrompt: string;
+      mode: string;
+      options: Array<{ id: string }>;
+    };
+    expect(auditPayload.mode).toBe("reply");
+    expect(auditPayload.systemPrompt).toContain("MOMENT");
+    expect(auditPayload.options.length).toBeGreaterThan(0);
+
+    const saved = await app.request("/api/v1/reply-feedback", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sessionRef: "desktop-opencode:ses_auth",
+        mode: "reply",
+        systemPrompt: "prompt",
+        context: "context",
+        options: [
+          {
+            id: "model-0",
+            label: "Use the mirror",
+            text: "Use the mirror",
+            source: "model",
+            action: "send",
+          },
+        ],
+        ratings: [{ optionId: "model-0", verdict: "useful" }],
+        overall: "useful",
+        tags: ["grounded"],
+        note: "Looks useful.",
+      }),
+    });
+    expect(saved.status).toBe(201);
+    const savedPayload = (await saved.json()) as {
+      id: string;
+      note: string;
+    };
+    expect(savedPayload.id).toMatch(/^rfb_/);
+
+    const list = await app.request("/api/v1/reply-feedback", { headers });
+    expect(list.status).toBe(200);
+    const listPayload = (await list.json()) as {
+      data: Array<{ note: string }>;
+    };
+    expect(listPayload.data).toHaveLength(1);
+    expect(listPayload.data[0]?.note).toBe("Looks useful.");
+
+    const exportResponse = await app.request(
+      "/api/v1/reply-feedback/export",
+      { headers },
+    );
+    expect(exportResponse.status).toBe(200);
+    expect(await exportResponse.text()).toContain("Looks useful.");
   });
 
   it("exposes assistant settings and canned reply options", async () => {

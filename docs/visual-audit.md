@@ -503,6 +503,31 @@ No new type, spacing, radius, or color tokens were introduced.
 - `docs/ui-ia.md`: copy and dictation rules.
 - `docs/visual-audit.md`: this section.
 
+### design-v1.4 composer reply suggestions and select sizing
+
+- `Suggest` is one quiet composer action, shown only when the reply model is
+  configured. It fetches model suggestions on demand and inserts a selected
+  suggestion into the draft. It never sends, never overwrites an existing draft,
+  and never runs when a chat opens.
+- The hub gate decides `reply` / `wait` / `done`. `wait` and `done` show a quiet
+  neutral notice instead of chips; no model call is made.
+- Suggestion chips use the existing surface, border, radius, and type tokens.
+  They wrap above the textarea, mark model output with a `Suggested` label, and
+  carry `Alt` / `Ask` role tags. Loading, empty, error, retry, and dismiss states
+  stay inline and do not move the composer.
+- The audit page exposes the gate result, MOMENT block, and rejected suggestions
+  so a reviewer can see why a suggestion was skipped or removed.
+- Selects use `field-sizing: content` so the composer and filter selects fit
+  their current value. Full-width form selects keep their layout width.
+- Mobile suggestion chips and their dismiss/retry controls use 44px targets. The
+  row wraps without horizontal overflow at 320px.
+- `apps/web/src/app/App.tsx`: suggestion state, gate notice, roles, generation,
+  insert, loading, error, and dismiss behavior.
+- `apps/web/src/styles.css`: suggestion row, chips, `Alt`/`Ask` tags, and mobile
+  targets.
+- `packages/ui/src/base.css`: `field-sizing: content` for selects.
+- `docs/ui-ia.md`: composer suggestion rules and select sizing.
+
 ### design-v1.3 attachment and branching slice
 
 - `packages/contracts/src/messages.ts`: attachment, branch point, branch switch, and fork schemas; attachment limits.

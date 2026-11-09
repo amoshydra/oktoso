@@ -51,6 +51,7 @@ import { DraftService } from "./services/draft-service";
 import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { ReplyService } from "./services/reply-service";
+import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { createApp } from "./app";
@@ -537,6 +538,10 @@ async function main(): Promise<void> {
     );
     const assistantSettings = new AssistantSettingsService(store);
     const replies = new ReplyService(assistantSettings, sessions, logger);
+    const replyFeedback = new ReplyFeedbackStore({
+      filePath: join(resolve(config.dataDir), "reply-feedback.jsonl"),
+    });
+    await replyFeedback.init();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
     providerEvents = new ProviderEventService(
@@ -585,6 +590,7 @@ async function main(): Promise<void> {
       attachments,
       settings: assistantSettings,
       replies,
+      replyFeedback,
       transcription,
       questions,
       logger,

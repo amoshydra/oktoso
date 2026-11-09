@@ -77,6 +77,8 @@ import {
 } from "./labels";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
+const APP_VERSION =
+  typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Screen =
@@ -99,7 +101,8 @@ type Screen =
   | "choices"
   | "voice"
   | "failure"
-  | "legend";
+  | "legend"
+  | "settings";
 
 interface AppState {
   screen: Screen;
@@ -149,6 +152,9 @@ interface AppState {
   failureReturnScreen: Screen;
   chatFailure?: FailureInfo;
   streamStatus: "connecting" | "live" | "reconnecting" | "polling";
+  settingsBusy: boolean;
+  settingsNotice?: string;
+  lastRefreshAt?: number;
 }
 
 interface BatchAnswerState {
@@ -196,6 +202,7 @@ const state: AppState = {
   pendingAnswerChoice: undefined,
   failureReturnScreen: "home",
   streamStatus: "connecting",
+  settingsBusy: false,
 };
 
 const MAX_VOICE_BYTES = 4_000_000;
@@ -305,7 +312,8 @@ function setStreamStatus(
     (state.screen === "home" ||
       state.screen === "sessions" ||
       state.screen === "inbox" ||
-      state.screen === "chat")
+      state.screen === "chat" ||
+      state.screen === "settings")
   ) {
     render();
   }
@@ -462,6 +470,17 @@ function streamLabel(): string {
   if (state.streamStatus === "reconnecting") return "Reconnecting";
   if (state.streamStatus === "live") return "Live";
   return "Polling";
+}
+
+function brandHeader(): string {
+  return `OKTOSO · v${APP_VERSION}`;
+}
+
+function timeLabel(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes(),
+  ).padStart(2, "0")}`;
 }
 
 function setPhoneStatus(message: string, error = false): void {
@@ -1210,8 +1229,9 @@ function scheduleEventRefresh(action: () => void | Promise<void>): void {
 
 function showLoading(body: string): void {
   if (!bridge) return;
-  if (setPreview("OKTOSO", body, "Please wait")) {
-    void showPage(textPage(body, "Please wait"));
+  const header = brandHeader();
+  if (setPreview(header, body, "Please wait")) {
+    void showPage(textPage(body, "Please wait", header));
   }
 }
 
@@ -2298,7 +2318,12 @@ async function openReply(): Promise<void> {
     state.screen = "reply";
     clearFailure();
     markRequestSuccess();
-    state.notice = undefined;
+    state.notice =
+      options.state === "wait"
+        ? "Agent is running. You can wait or type."
+        : options.state === "done"
+          ? "No reply needed. Review or type."
+          : undefined;
     render();
   } catch (error) {
     showFailure(error, {
@@ -2316,6 +2341,7 @@ function replyView(): {
   pages: number;
   hasPrevious: boolean;
   hasNext: boolean;
+  suggested: boolean;
 } {
   const page = pageChoices(state.replyOptions, state.replyPage, 3);
   const items = page.items.map((option) => option.label);
@@ -2330,6 +2356,7 @@ function replyView(): {
     pages: page.pages,
     hasPrevious,
     hasNext,
+    suggested: page.items.some((option) => option.source === "model"),
   };
 }
 
@@ -2540,6 +2567,7 @@ function choiceView(): {
   options: ReplyOption[];
   hasPrevious: boolean;
   hasNext: boolean;
+  suggested: boolean;
 } {
   const page = pageChoices(state.choiceOptions, state.choicePage, 3);
   const items = page.items.map((option) => option.label);
@@ -2552,6 +2580,7 @@ function choiceView(): {
     options: page.items,
     hasPrevious,
     hasNext,
+    suggested: page.items.some((option) => option.source === "model"),
   };
 }
 
@@ -2724,6 +2753,12 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "settings") {
+    state.screen = "home";
+    state.settingsNotice = undefined;
+    render();
+    return;
+  }
   if (state.screen === "pending") {
     state.screen = "home";
     render();
@@ -2752,8 +2787,9 @@ function handleListClick(index: number): void {
   switch (state.screen) {
     case "home": {
       const symbolsIndex = state.sessionTitle ? 3 : 2;
-      const failureIndex = symbolsIndex + 1;
-      const pendingIndex = symbolsIndex + 1 + (state.failure ? 1 : 0);
+      const settingsIndex = symbolsIndex + 1;
+      const failureIndex = settingsIndex + 1;
+      const pendingIndex = failureIndex + (state.failure ? 1 : 0);
       if (pendingSends.length > 0 && index === pendingIndex) {
         state.screen = "pending";
         render();
@@ -2770,7 +2806,16 @@ function handleListClick(index: number): void {
       } else if (index === symbolsIndex) {
         state.screen = "legend";
         render();
+      } else if (index === settingsIndex) {
+        state.screen = "settings";
+        state.settingsNotice = undefined;
+        render();
       }
+      break;
+    }
+    case "settings": {
+      if (index === 0) reloadApp();
+      else if (index === 1) void refreshSettings();
       break;
     }
     case "sessions": {
@@ -2931,8 +2976,9 @@ function render(): void {
   if (!client) {
     const body =
       "Pair in phone\n\nScan the hub QR\nor paste its code.\nThen connect.";
-    if (setPreview("OKTOSO", body, "Phone setup")) {
-      void showPage(textPage(body, "Phone setup"));
+    const header = brandHeader();
+    if (setPreview(header, body, "Phone setup")) {
+      void showPage(textPage(body, "Phone setup", header));
     }
     return;
   }
@@ -3000,14 +3046,36 @@ function render(): void {
           ]
         : []),
       "Symbols",
+      "Settings",
       ...(state.failure ? [failureRowLabel()] : []),
       ...(pendingSends.length > 0
         ? [`Unsent · ${pendingSends.length}`]
         : []),
     ];
+    const header = brandHeader();
     const footer = `Tap open   Swipe move   ${streamLabel()}`;
-    if (setPreview("OKTOSO", items.join("\n"), footer, items)) {
-      void showPage(listPage("OKTOSO", items, footer));
+    if (setPreview(header, items.join("\n"), footer, items)) {
+      void showPage(listPage(header, items, footer));
+    }
+    return;
+  }
+  if (state.screen === "settings") {
+    const items = [
+      "Reload app",
+      "Refresh data",
+      `Connection · ${streamLabel()}`,
+      `Version · v${APP_VERSION}`,
+      ...(state.lastRefreshAt
+        ? [`Last refresh · ${timeLabel(state.lastRefreshAt)}`]
+        : []),
+    ];
+    const footer = state.settingsBusy
+      ? "Refreshing…"
+      : "Tap open   Back ×2";
+    const notice = state.settingsNotice;
+    const body = notice ? `${notice}\n${items.join("\n")}` : items.join("\n");
+    if (setPreview("SETTINGS", body, footer, items)) {
+      void showPage(listPage("SETTINGS", items, footer, notice));
     }
     return;
   }
@@ -3239,10 +3307,13 @@ function render(): void {
   if (state.screen === "reply") {
     const view = replyView();
     const items = view.items.map((item) => clampLine(item, 54));
+    const header = `REPLY ${view.page + 1}/${view.pages}${
+      view.suggested ? " · Suggested" : ""
+    }`;
     const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
     if (
       setPreview(
-        `REPLY ${view.page + 1}/${view.pages}`,
+        header,
         items.join("\n"),
         footer,
         items,
@@ -3250,7 +3321,7 @@ function render(): void {
     ) {
       void showPage(
         listPage(
-          `REPLY ${view.page + 1}/${view.pages}`,
+          header,
           items,
           footer,
           state.notice,
@@ -3262,10 +3333,13 @@ function render(): void {
   if (state.screen === "choices") {
     const view = choiceView();
     const items = view.items.map((item) => clampLine(item, 54));
+    const header = `CHOOSE ${view.items.length}${
+      view.suggested ? " · Suggested" : ""
+    }`;
     const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
     if (
       setPreview(
-        `CHOOSE ${view.items.length}`,
+        header,
         items.join("\n"),
         footer,
         items,
@@ -3273,7 +3347,7 @@ function render(): void {
     ) {
       void showPage(
         listPage(
-          `CHOOSE ${view.items.length}`,
+          header,
           items,
           footer,
         ),
@@ -3370,6 +3444,7 @@ function errorMessage(error: unknown): string {
 }
 
 function setupPhone(): void {
+  byId<HTMLSpanElement>("app-version").textContent = `v${APP_VERSION}`;
   byId<HTMLSpanElement>("hub-origin").textContent = hubBaseURL() || "same origin";
   const token = byId<HTMLInputElement>("hub-token");
   if (storedToken) token.placeholder = "Saved token";
@@ -3461,9 +3536,40 @@ async function refreshCurrent(): Promise<void> {
     await loadQuestion(state.sessionRef);
   } else if (state.screen === "sessions") {
     await openSessions();
+  } else if (state.screen === "settings") {
+    await refreshSettings();
   } else {
     await refreshInbox();
     if (state.screen === "home") render();
+  }
+}
+
+function reloadApp(): void {
+  // A fresh query string forces the webview to fetch the document again
+  // instead of reusing a cached HTML shell that still points at old assets.
+  const url = new URL(window.location.href);
+  url.searchParams.set("reload", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
+async function refreshSettings(): Promise<void> {
+  if (!client || state.settingsBusy) return;
+  state.settingsBusy = true;
+  state.settingsNotice = "Refreshing…";
+  render();
+  try {
+    await refreshInbox();
+    if (state.failure) {
+      state.settingsNotice = `Refresh failed · ${state.failure.short}`;
+    } else {
+      state.lastRefreshAt = Date.now();
+      state.settingsNotice = "Refreshed just now.";
+    }
+  } catch (error) {
+    state.settingsNotice = `Refresh failed · ${failureMessage(error)}`;
+  } finally {
+    state.settingsBusy = false;
+    if (state.screen === "settings") render();
   }
 }
 
@@ -3501,7 +3607,7 @@ async function init(): Promise<void> {
             containerID: 1,
             containerName: "body",
             isEventCapture: 1,
-            content: "Oktoso\nConnecting…",
+            content: `Oktoso ${APP_VERSION}\nConnecting…`,
           }),
         ],
       }),
