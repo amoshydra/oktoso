@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import type {
+  AnswerChoice,
+  Message,
   PendingQuestionSummary,
   QuestionPrompt,
 } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "./session-service";
 import { parseQuestion } from "./question-parser";
+import { isDestructiveText, isSensitiveText } from "../lib/destructive";
+import { findToolQuestion, type ToolQuestion } from "./tool-question";
 
 export interface QuestionServiceOptions {
   ttlMs?: number;
@@ -23,6 +27,68 @@ interface SummaryCacheEntry {
 }
 
 const MAX_SUMMARY_REFS = 10;
+
+function toolQuestionPrompt(
+  latest: Message,
+  tool: ToolQuestion,
+  sessionRef: string,
+  now: number,
+): QuestionPrompt {
+  const risks = tool.choices.map((choice) => ({
+    destructive: isDestructiveText(choice.label),
+    sensitive: isSensitiveText(choice.label),
+  }));
+  const anyDestructive = risks.some((risk) => risk.destructive);
+  const anySensitive = risks.some((risk) => risk.sensitive);
+  const choices: AnswerChoice[] = tool.choices.map((choice, index) => ({
+    id: `${latest.id}:tool:${index}`,
+    label:
+      choice.label.length > 80
+        ? `${choice.label.slice(0, 79)}…`
+        : choice.label,
+    text: choice.label,
+    kind: "choice",
+    source: "explicit",
+    ...(risks[index]?.destructive
+      ? { destructive: true, requiresConfirmation: true }
+      : {}),
+    ...(risks[index]?.sensitive ? { sensitive: true } : {}),
+  }));
+  const revision = createHash("sha256")
+    .update(
+      `${latest.id}:${tool.text}:${choices.map((choice) => choice.text).join("|")}`,
+    )
+    .digest("hex")
+    .slice(0, 12);
+  return {
+    sessionRef,
+    messageId: latest.id,
+    revision,
+    askedAt: latest.createdAt,
+    questions: [
+      {
+        id: `${latest.id}:tool`,
+        text: tool.text,
+        ...(tool.header && tool.header !== tool.text
+          ? { context: tool.header }
+          : {}),
+        kind: choices.length > 0 ? "choice" : "freeform",
+        choices,
+        allowsFreeText: true,
+        allowsVoice: false,
+        multiSelect: false,
+        risk: anyDestructive
+          ? "destructive"
+          : anySensitive
+            ? "sensitive"
+            : "normal",
+        confidence: "high",
+        source: "explicit",
+      },
+    ],
+    generatedAt: now,
+  };
+}
 
 function summarize(prompt: QuestionPrompt): PendingQuestionSummary {
   const first = prompt.questions[0]!;
@@ -64,6 +130,33 @@ export class QuestionService {
       this.rememberSummary(ref, null);
       return null;
     }
+
+    const match = findToolQuestion(page.data);
+    if (match) {
+      const toolValue = toolQuestionPrompt(
+        match.message,
+        match.question,
+        ref,
+        this.now(),
+      );
+      const key = `${ref}:tool:${toolValue.messageId}:${toolValue.revision}`;
+      const cached = this.cache.get(key);
+      if (cached && cached.expiresAt > this.now()) {
+        this.rememberSummary(ref, cached.value);
+        return cached.value;
+      }
+      this.cache.set(key, {
+        value: toolValue,
+        expiresAt: this.now() + this.ttlMs,
+      });
+      if (this.cache.size > 100) {
+        const oldest = this.cache.keys().next().value;
+        if (oldest) this.cache.delete(oldest);
+      }
+      this.rememberSummary(ref, toolValue);
+      return toolValue;
+    }
+
     if (latest.streaming === true) {
       this.rememberSummary(ref, null);
       return null;

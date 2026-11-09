@@ -27,22 +27,28 @@ Screenshot capture and framing are documented in
 - **Pairing** — scan the hub's pairing QR, paste its link or code, or use a hub
   token. The phone surface exchanges the code for a session token.
 - **Attention inbox** — provider permissions and forms, errors, and unread root
-  sessions. Child sessions do not add unread noise.
-- **Chat** — six-line viewport, line/message position, agent activity, SSE updates,
-  read markers, and incremental message streaming.
+  sessions. Child sessions do not add unread noise. All blocking items are shown;
+  the Inbox adds a `More` row when the list is capped.
+- **Chat** — six-line viewport, compact prioritized footer with line/message
+  position, agent activity, stream state, and `? Answer` / `Tap actions`; SSE
+  updates, read markers, and incremental message streaming.
 - **Replies** — canned and model-assisted reply options, numbered choices, voice,
   and a phone keyboard for longer text. The hub classifies the moment first: it
   skips the model while the agent is running with no ask, or after a finished
-  turn with no ask or action. When it does generate, it returns an answer, an
-  opposite labelled `Alt:`, and an ask question, grounded in a compact MOMENT
-  block with pending, done, and constraint state.
+  turn with no ask or action, and the glass opens `SESSION` with `Stop` / `Phone
+  keyboard`. When it does generate, it returns an answer, an opposite labelled
+  `Alt:`, and an ask labelled `Ask:`, grounded in a compact MOMENT block with
+  pending, done, and constraint state.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
-  send.
+  send. Provider-native `question` tool calls use the same chat answer flow as
+  text questions; the Inbox form remains the formal alternative.
 - **Batch answers** — every question in a multi-question turn is shown on the
   phone and sent as one numbered message.
 - **Question discovery** — Home, Recent, and Inbox mark pending questions before
-  the chat is opened.
+  the chat is opened, including provider-native questions.
+- **Current session** — the last opened session is stored locally and restored
+  as the Home `Current` row after a reload.
 - **Failure states** — auth expired, hub offline, agent offline, timeout, rate
   limit, not found, and server errors have distinct retry or pairing actions.
 - **Unsent sends** — a send that times out or fails stays in a local queue and
@@ -50,9 +56,10 @@ Screenshot capture and framing are documented in
   discard removes it.
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
-- **Settings** — app version beside the `OKTOSO` header, `Reload app` for a
-  full webview reload that picks up a new build, and `Refresh data` for
-  attention, unread sessions, and pending question markers.
+- **Settings** — action list with `Refresh data` and `Reload app` (reload asks
+  for confirmation), plus connection, version, and last refresh in the body.
+  App version appears beside the `OKTOSO` header. A successful phone pairing
+  collapses the pairing form to a compact connected row.
 
 Voice replies use the glasses microphone (16 kHz, signed 16-bit little-endian,
 mono) and the hub's configured transcription endpoint. The voice action is
@@ -65,20 +72,24 @@ acceptance is still pending.
 ```text
 Home
 ├─ Inbox            attention items
+├─ Unsent           failed sends, when present
+├─ Retry / Pair     inline failure, when present
 ├─ Recent           five most recent root sessions
 ├─ Current          last opened session, when available
 ├─ Symbols          glyph legend
-└─ Settings         app reload, connection, version, data refresh
+└─ Settings         data refresh, reload, connection, version
 
 Inbox
-└─ Attention        permission / form / error / unread detail
+├─ Attention        permission / form / error / unread detail
+└─ More             additional items beyond the glass cap
 
 Chat
 ├─ Answer           choices + Type answer / More / Read chat
 ├─ Batch            Answer on phone / More / Read chat
+├─ Session          wait/done: Stop (running) / Phone keyboard
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
-├─ Reply            canned, model-assisted, and numbered choices
+├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            glasses microphone, hidden without hub STT
 └─ Phone keyboard   longer text fallback
 
@@ -132,7 +143,7 @@ The owner token is never included in the G2 package.
 
 | Input | Action |
 |---|---|
-| Ring tap / R1 tap | Open, select, or reply |
+| Ring tap / R1 tap | Open, select, reply, or run a session action |
 | Double tap | Back |
 | Scroll / swipe | Move selection or chat line |
 

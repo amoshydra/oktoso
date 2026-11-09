@@ -206,7 +206,7 @@ describe("ReplyService gate", () => {
       {
         role: "ask",
         text: "Should I check the mirror first?",
-        label: "Should I check the mirror first?",
+        label: "Ask: Should I check the mirror first?",
       },
     ]);
   });

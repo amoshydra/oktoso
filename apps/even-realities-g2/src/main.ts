@@ -53,6 +53,7 @@ import {
   type BatchAnswerDraft,
 } from "./answer-model";
 import { glassInput } from "./input";
+import { sortAttention, visibleAttention } from "./attention-model";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
 import {
@@ -77,6 +78,7 @@ import {
 } from "./labels";
 
 const TOKEN_KEY = "oktoso-even-g2-token";
+const CURRENT_KEY = "oktoso-even-g2-current";
 const APP_VERSION =
   typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 const SESSION_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -102,12 +104,15 @@ type Screen =
   | "voice"
   | "failure"
   | "legend"
-  | "settings";
+  | "settings"
+  | "settings-reload"
+  | "session-actions";
 
 interface AppState {
   screen: Screen;
   attention: Attention[];
   attentionTotal: number;
+  attentionExpanded: boolean;
   sessions: Session[];
   returnScreen: Screen;
   selectedAttention?: Attention;
@@ -115,6 +120,7 @@ interface AppState {
   sessionTitle?: string;
   sessionProject?: string;
   sessionParentRef?: string;
+  sessionStatus?: Session["status"];
   chatMessages: Message[];
   chatLines: string[];
   chatLineMessages: number[];
@@ -166,6 +172,7 @@ const state: AppState = {
   screen: "pairing",
   attention: [],
   attentionTotal: 0,
+  attentionExpanded: false,
   sessions: [],
   returnScreen: "home",
   chatMessages: [],
@@ -218,6 +225,7 @@ let bridge: EvenAppBridge | undefined;
 let client: HubClient | undefined;
 let pendingSends: PendingSend[] = loadPendingSends();
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
+let pairingExpanded = false;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let scanController: AbortController | undefined;
 let inputCount = 0;
@@ -271,6 +279,9 @@ const pairScan = byId<HTMLButtonElement>("pair-scan");
 const pairVideo = byId<HTMLVideoElement>("pair-video");
 const pairScanNote = byId<HTMLParagraphElement>("pair-scan-note");
 const pairingStatus = byId<HTMLDivElement>("pairing-status");
+const pairingBody = byId<HTMLDivElement>("pairing-body");
+const pairingSummary = byId<HTMLSpanElement>("pairing-summary");
+const pairingToggle = byId<HTMLButtonElement>("pairing-toggle");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
 const debug = byId<HTMLPreElement>("debug");
 const glassesPreview = byId<HTMLPreElement>("glasses-preview");
@@ -284,6 +295,24 @@ function setConnection(label: string, error = false): void {
   connection.textContent = label;
   connectionStatus.textContent = error ? label : "";
   connectionStatus.className = error ? "status error" : "status";
+  if (label === "Connected") {
+    pairingExpanded = false;
+    setPairingCollapsed(true);
+  } else if (label.startsWith("Connected")) {
+    if (!pairingExpanded) setPairingCollapsed(true);
+  } else if (
+    /expired|pair|failed|not connected|reconnect in phone/i.test(label)
+  ) {
+    pairingExpanded = false;
+    setPairingCollapsed(false);
+  }
+}
+
+function setPairingCollapsed(collapsed: boolean): void {
+  pairingBody.hidden = collapsed;
+  pairingSummary.hidden = !collapsed;
+  pairingToggle.hidden = !collapsed;
+  pairingSummary.textContent = `Connected · ${hubBaseURL() || "hub"}`;
 }
 
 function setPairingStatus(message: string, error = false): void {
@@ -313,7 +342,8 @@ function setStreamStatus(
       state.screen === "sessions" ||
       state.screen === "inbox" ||
       state.screen === "chat" ||
-      state.screen === "settings")
+      state.screen === "settings" ||
+      state.screen === "session-actions")
   ) {
     render();
   }
@@ -456,6 +486,7 @@ function discardPendingSend(): void {
 }
 
 function focusPairing(): void {
+  setPairingCollapsed(false);
   setPairingStatus(
     "Session expired. Create a new pairing code, then pair this phone again.",
     true,
@@ -909,6 +940,58 @@ function storeSessionToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+interface StoredCurrent {
+  ref: string;
+  title: string;
+  project?: string;
+  parentRef?: string;
+}
+
+function loadStoredCurrent(): StoredCurrent | undefined {
+  try {
+    const raw = localStorage.getItem(CURRENT_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as Partial<StoredCurrent>;
+    if (typeof parsed.ref !== "string" || typeof parsed.title !== "string") {
+      return undefined;
+    }
+    return {
+      ref: parsed.ref,
+      title: parsed.title,
+      ...(typeof parsed.project === "string" ? { project: parsed.project } : {}),
+      ...(typeof parsed.parentRef === "string"
+        ? { parentRef: parsed.parentRef }
+        : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function persistCurrent(): void {
+  if (!state.sessionRef || !state.sessionTitle) {
+    localStorage.removeItem(CURRENT_KEY);
+    return;
+  }
+  const current: StoredCurrent = {
+    ref: state.sessionRef,
+    title: state.sessionTitle,
+    ...(state.sessionProject ? { project: state.sessionProject } : {}),
+    ...(state.sessionParentRef ? { parentRef: state.sessionParentRef } : {}),
+  };
+  localStorage.setItem(CURRENT_KEY, JSON.stringify(current));
+}
+
+function restoreCurrent(): void {
+  const current = loadStoredCurrent();
+  if (!current) return;
+  state.sessionRef = current.ref;
+  state.sessionTitle = current.title;
+  state.sessionProject = current.project;
+  state.sessionParentRef = current.parentRef;
+  state.sessionStatus = undefined;
+}
+
 async function activateClient(hub: HubClient): Promise<void> {
   client = hub;
   const tokenInput = byId<HTMLInputElement>("hub-token");
@@ -917,6 +1000,7 @@ async function activateClient(hub: HubClient): Promise<void> {
   hidePhoneForm();
   clearFailure();
   setConnection("Connected");
+  restoreCurrent();
   log("Hub connected");
   startEventStream();
   await refreshInbox();
@@ -1085,6 +1169,7 @@ async function restoreConnection(): Promise<void> {
       hidePhoneForm();
       clearFailure();
       setConnection("Connected");
+      restoreCurrent();
       log("Restored hub session");
       startEventStream();
       await refreshInbox();
@@ -1230,8 +1315,9 @@ function scheduleEventRefresh(action: () => void | Promise<void>): void {
 function showLoading(body: string): void {
   if (!bridge) return;
   const header = brandHeader();
-  if (setPreview(header, body, "Please wait")) {
-    void showPage(textPage(body, "Please wait", header));
+  const footer = "Please wait · Back ×2";
+  if (setPreview(header, body, footer)) {
+    void showPage(textPage(body, footer, header));
   }
 }
 
@@ -1271,8 +1357,8 @@ async function refreshInbox(): Promise<void> {
   const previousFailure = state.failure;
   try {
     const page = await client.attention();
-    state.attentionTotal = page.data.length;
-    state.attention = page.data.slice(0, 5);
+    state.attention = sortAttention(page.data);
+    state.attentionTotal = state.attention.length;
     if (
       phoneFormItem &&
       !page.data.some((item) => item.id === phoneFormItem?.id)
@@ -1319,7 +1405,7 @@ function attentionListSignature(items: Attention[]): string {
 }
 
 async function openAttention(index: number): Promise<void> {
-  const item = state.attention[index];
+  const item = visibleAttention(state.attention, state.attentionExpanded)[index];
   if (!item) return;
   state.selectedAttention = item;
   clearFailure();
@@ -1500,6 +1586,8 @@ async function openChat(
   state.sessionTitle = title;
   state.sessionProject = undefined;
   state.sessionParentRef = undefined;
+  state.sessionStatus = undefined;
+  persistCurrent();
   state.returnScreen = origin;
   state.chatMessages = [];
   state.chatLines = [];
@@ -1538,6 +1626,8 @@ async function openChat(
       if (state.sessionRef !== ref) return;
       state.sessionProject = session.project;
       state.sessionParentRef = session.parentRef;
+      state.sessionStatus = session.status;
+      persistCurrent();
       if (state.screen === "chat") render();
     })
     .catch(() => undefined);
@@ -2215,24 +2305,28 @@ function chatView(): { header: string; body: string; footer: string } {
         : offset === 0
           ? "Swipe down"
           : "Swipe";
-  const footer = clampLine(
-    [
-      state.answerBusy || state.messageBusy
-        ? "Sending…"
-        : state.question
-          ? "? Answer"
-          : "",
-      `${first}-${last}/${total}`,
-      messageLabel,
-      state.chatActivity,
-      state.chatFailure?.short ?? "",
-      state.chatNewBelow ? "New below" : "",
-      hint,
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    60,
-  );
+  const actionHint =
+    state.answerBusy || state.messageBusy
+      ? "Sending…"
+      : state.question
+        ? "? Answer"
+        : "Tap actions";
+  const stream = streamLabel();
+  const base = [
+    actionHint,
+    `${first}-${last}/${total}`,
+    messageLabel,
+    state.chatActivity,
+    stream !== "Live" ? stream : "",
+    state.chatFailure?.short ?? "",
+    state.chatNewBelow ? "New below" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Keep the hint whole or drop it. A mid-word clamp reads as a broken UI.
+  const withHint =
+    base.length + 3 + hint.length <= 60 ? `${base} · ${hint}` : base;
+  const footer = clampLine(withHint, 60);
   return {
     header: sessionHeader({
       parentRef: state.sessionParentRef,
@@ -2315,15 +2409,19 @@ async function openReply(): Promise<void> {
       options.data,
       transcriptionConfigured(settings),
     );
-    state.screen = "reply";
     clearFailure();
     markRequestSuccess();
-    state.notice =
-      options.state === "wait"
-        ? "Agent is running. You can wait or type."
-        : options.state === "done"
-          ? "No reply needed. Review or type."
-          : undefined;
+    if (options.state === "wait" || options.state === "done") {
+      state.sessionStatus = options.state === "wait" ? "running" : "idle";
+      state.notice =
+        options.state === "wait"
+          ? "Agent is running. You can wait or type."
+          : "No reply needed. The last turn is finished.";
+      state.screen = "session-actions";
+    } else {
+      state.screen = "reply";
+      state.notice = undefined;
+    }
     render();
   } catch (error) {
     showFailure(error, {
@@ -2331,6 +2429,42 @@ async function openReply(): Promise<void> {
       retry: () => openReply(),
     });
     log(`Reply options failed: ${failureMessage(error)}`);
+  }
+}
+
+function sessionActionRows(): string[] {
+  const rows: string[] = [];
+  if (
+    state.sessionStatus === "running" ||
+    /working|running/i.test(state.chatActivity)
+  ) {
+    rows.push("Stop");
+  }
+  rows.push("Phone keyboard");
+  return rows;
+}
+
+async function performSessionAction(index: number): Promise<void> {
+  if (!client || !state.sessionRef) return;
+  const action = sessionActionRows()[index];
+  if (action === "Stop") {
+    try {
+      await client.interrupt(state.sessionRef);
+    } catch (error) {
+      log(`Interrupt failed: ${failureMessage(error)}`);
+    }
+    state.notice = undefined;
+    state.screen = "chat";
+    await loadChat(false);
+    return;
+  }
+  if (action === "Phone keyboard") {
+    phoneText.focus();
+    phoneText.scrollIntoView({ block: "center", behavior: "smooth" });
+    setPhoneStatus("Type on the phone, then send.");
+    state.notice = undefined;
+    state.screen = "chat";
+    render();
   }
 }
 
@@ -2343,7 +2477,11 @@ function replyView(): {
   hasNext: boolean;
   suggested: boolean;
 } {
-  const page = pageChoices(state.replyOptions, state.replyPage, 3);
+  const ordered = [...state.replyOptions].sort(
+    (left, right) =>
+      Number(right.source === "model") - Number(left.source === "model"),
+  );
+  const page = pageChoices(ordered, state.replyPage, 3);
   const items = page.items.map((option) => option.label);
   const hasPrevious = page.page > 0;
   const hasNext = page.page < page.pages - 1;
@@ -2759,6 +2897,18 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "settings-reload") {
+    state.screen = "settings";
+    render();
+    return;
+  }
+  if (state.screen === "session-actions") {
+    state.screen = state.replyReturnScreen;
+    state.replyReturnScreen = "chat";
+    state.notice = undefined;
+    render();
+    return;
+  }
   if (state.screen === "pending") {
     state.screen = "home";
     render();
@@ -2786,22 +2936,30 @@ function handleInlineFailure(): void {
 function handleListClick(index: number): void {
   switch (state.screen) {
     case "home": {
-      const symbolsIndex = state.sessionTitle ? 3 : 2;
-      const settingsIndex = symbolsIndex + 1;
-      const failureIndex = settingsIndex + 1;
-      const pendingIndex = failureIndex + (state.failure ? 1 : 0);
-      if (pendingSends.length > 0 && index === pendingIndex) {
-        state.screen = "pending";
-        render();
-      } else if (state.failure && index === failureIndex) {
-        handleInlineFailure();
-      } else if (index === 0) {
+      let cursor = 0;
+      const inboxIndex = cursor++;
+      const unsentIndex = pendingSends.length > 0 ? cursor++ : -1;
+      const failureIndex = state.failure ? cursor++ : -1;
+      const recentIndex = cursor++;
+      const currentIndex = state.sessionTitle ? cursor++ : -1;
+      const symbolsIndex = cursor++;
+      const settingsIndex = cursor++;
+      if (index === inboxIndex) {
         state.screen = "inbox";
         render();
         void refreshInbox();
-      } else if (index === 1) {
+      } else if (unsentIndex >= 0 && index === unsentIndex) {
+        state.screen = "pending";
+        render();
+      } else if (failureIndex >= 0 && index === failureIndex) {
+        handleInlineFailure();
+      } else if (index === recentIndex) {
         void openSessions();
-      } else if (index === 2 && state.sessionRef) {
+      } else if (
+        currentIndex >= 0 &&
+        index === currentIndex &&
+        state.sessionRef
+      ) {
         void openChat(state.sessionRef, state.sessionTitle ?? "Session", "home");
       } else if (index === symbolsIndex) {
         state.screen = "legend";
@@ -2813,9 +2971,24 @@ function handleListClick(index: number): void {
       }
       break;
     }
+    case "session-actions": {
+      void performSessionAction(index);
+      break;
+    }
     case "settings": {
+      if (index === 0) void refreshSettings();
+      else if (index === 1) {
+        state.screen = "settings-reload";
+        render();
+      }
+      break;
+    }
+    case "settings-reload": {
       if (index === 0) reloadApp();
-      else if (index === 1) void refreshSettings();
+      else if (index === 1) {
+        state.screen = "settings";
+        render();
+      }
       break;
     }
     case "sessions": {
@@ -2826,13 +2999,22 @@ function handleListClick(index: number): void {
       }
       break;
     }
-    case "inbox":
-      if (state.attention[index]) {
+    case "inbox": {
+      const visible = visibleAttention(state.attention, state.attentionExpanded);
+      const hasMore = visible.length < state.attention.length;
+      if (index < visible.length) {
         void openAttention(index);
-      } else if (state.failure && index === state.attention.length) {
+      } else if (hasMore && index === visible.length) {
+        state.attentionExpanded = true;
+        render();
+      } else if (
+        state.failure &&
+        index === visible.length + (hasMore ? 1 : 0)
+      ) {
         handleInlineFailure();
       }
       break;
+    }
     case "glass-form": {
       const item = state.selectedAttention;
       if (!item) break;
@@ -3031,6 +3213,10 @@ function render(): void {
   if (state.screen === "home") {
     const items = [
       `Inbox · ${state.attentionTotal}`,
+      ...(pendingSends.length > 0
+        ? [`Unsent · ${pendingSends.length}`]
+        : []),
+      ...(state.failure ? [failureRowLabel()] : []),
       "Recent sessions",
       ...(state.sessionTitle
         ? [
@@ -3047,10 +3233,6 @@ function render(): void {
         : []),
       "Symbols",
       "Settings",
-      ...(state.failure ? [failureRowLabel()] : []),
-      ...(pendingSends.length > 0
-        ? [`Unsent · ${pendingSends.length}`]
-        : []),
     ];
     const header = brandHeader();
     const footer = `Tap open   Swipe move   ${streamLabel()}`;
@@ -3060,22 +3242,28 @@ function render(): void {
     return;
   }
   if (state.screen === "settings") {
-    const items = [
-      "Reload app",
-      "Refresh data",
-      `Connection · ${streamLabel()}`,
-      `Version · v${APP_VERSION}`,
+    const items = ["Refresh data", "Reload app"];
+    const info = [
+      `Connection · ${streamLabel()} · v${APP_VERSION}`,
       ...(state.lastRefreshAt
         ? [`Last refresh · ${timeLabel(state.lastRefreshAt)}`]
         : []),
-    ];
+    ].join("\n");
     const footer = state.settingsBusy
       ? "Refreshing…"
-      : "Tap open   Back ×2";
-    const notice = state.settingsNotice;
-    const body = notice ? `${notice}\n${items.join("\n")}` : items.join("\n");
-    if (setPreview("SETTINGS", body, footer, items)) {
-      void showPage(listPage("SETTINGS", items, footer, notice));
+      : (state.settingsNotice ?? "Tap choose   Back ×2");
+    if (setPreview("SETTINGS", info, footer, items)) {
+      void showPage(listPage("SETTINGS", items, footer, info));
+    }
+    return;
+  }
+  if (state.screen === "settings-reload") {
+    const body =
+      "Reload the page to load a new build?\nThe current screen and chat position will be lost.";
+    const items = ["Reload", "Cancel"];
+    const footer = "Tap choose   Back ×2";
+    if (setPreview("RELOAD APP", body, footer, items)) {
+      void showPage(listPage("RELOAD APP", items, footer, body));
     }
     return;
   }
@@ -3095,7 +3283,9 @@ function render(): void {
             Boolean(questionSummaryFor(session.ref)),
           ),
         )
-      : [state.failure?.title ?? "No recent sessions"];
+      : state.failure
+        ? []
+        : ["No recent sessions"];
     if (state.failure) items.push(failureRowLabel());
     const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
     if (
@@ -3113,24 +3303,22 @@ function render(): void {
     return;
   }
   if (state.screen === "inbox") {
-    const items = state.attention.length
-      ? state.attention.map((item) =>
-          attentionRowLabel(item),
-        )
-      : [state.failure?.title ?? "Nothing needs you"];
+    const visible = visibleAttention(state.attention, state.attentionExpanded);
+    const hidden = state.attentionTotal - visible.length;
+    const items = visible.length
+      ? visible.map((item) => attentionRowLabel(item))
+      : state.failure
+        ? []
+        : ["Nothing needs you"];
+    if (hidden > 0) items.push(`More · ${hidden}`);
     if (state.failure) items.push(failureRowLabel());
+    const header =
+      hidden > 0
+        ? `ATTENTION ${visible.length}/${state.attentionTotal}`
+        : `ATTENTION ${state.attentionTotal}`;
     const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
-    if (
-      setPreview(
-        `ATTENTION ${state.attention.length}`,
-        items.join("\n"),
-        footer,
-        items,
-      )
-    ) {
-      void showPage(
-        listPage(`ATTENTION ${state.attention.length}`, items, footer),
-      );
+    if (setPreview(header, items.join("\n"), footer, items)) {
+      void showPage(listPage(header, items, footer));
     }
     return;
   }
@@ -3164,11 +3352,11 @@ function render(): void {
       setPreview(
         header,
         items.join("\n"),
-        "Tap select   Back ×2",
+        "Tap choose   Back ×2",
         items,
       )
     ) {
-      void showPage(listPage(header, items, "Tap select   Back ×2"));
+      void showPage(listPage(header, items, "Tap choose   Back ×2"));
     }
     return;
   }
@@ -3253,7 +3441,10 @@ function render(): void {
     return;
   }
   if (state.screen === "answer-stale") {
-    const header = "ANSWER · changed";
+    const header =
+      state.answerStale === "resolved"
+        ? "ANSWER · resolved"
+        : "ANSWER · changed";
     const body =
       state.answerStale === "resolved"
         ? "Answered already.\nRead the latest chat."
@@ -3276,7 +3467,7 @@ function render(): void {
       return;
     }
 
-    const header = answerHeader();
+    const header = answerHeader("SENT");
     const text = state.answerText ?? "";
     const answerCount = text.split("\n").filter(Boolean).length;
     const body =
@@ -3293,8 +3484,9 @@ function render(): void {
     if (state.chatLoading) {
       const header = clampLine(state.sessionTitle ?? "Session", 40);
       const body = "Opening session…";
-      if (setPreview(header, body, "Please wait")) {
-        void showPage(textPage(body, "Please wait", header));
+      const footer = "Please wait · Back ×2";
+      if (setPreview(header, body, footer)) {
+        void showPage(textPage(body, footer, header));
       }
       return;
     }
@@ -3304,13 +3496,26 @@ function render(): void {
     }
     return;
   }
+  if (state.screen === "session-actions") {
+    const rows = sessionActionRows();
+    const body =
+      state.notice ??
+      (state.sessionStatus === "running"
+        ? "Agent is running."
+        : "No reply needed.");
+    const footer = "Tap choose   Back ×2";
+    if (setPreview("SESSION", rows.join("\n"), footer, rows)) {
+      void showPage(listPage("SESSION", rows, footer, body));
+    }
+    return;
+  }
   if (state.screen === "reply") {
     const view = replyView();
     const items = view.items.map((item) => clampLine(item, 54));
     const header = `REPLY ${view.page + 1}/${view.pages}${
       view.suggested ? " · Suggested" : ""
     }`;
-    const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
+    const footer = state.messageBusy ? "Sending…" : "Tap choose   Back ×2";
     if (
       setPreview(
         header,
@@ -3336,7 +3541,7 @@ function render(): void {
     const header = `CHOOSE ${view.items.length}${
       view.suggested ? " · Suggested" : ""
     }`;
-    const footer = state.messageBusy ? "Sending…" : "Tap select   Back ×2";
+    const footer = state.messageBusy ? "Sending…" : "Tap choose   Back ×2";
     if (
       setPreview(
         header,
@@ -3446,6 +3651,11 @@ function errorMessage(error: unknown): string {
 function setupPhone(): void {
   byId<HTMLSpanElement>("app-version").textContent = `v${APP_VERSION}`;
   byId<HTMLSpanElement>("hub-origin").textContent = hubBaseURL() || "same origin";
+  pairingToggle.addEventListener("click", () => {
+    pairingExpanded = true;
+    setPairingCollapsed(false);
+    pairingCodeInput.focus();
+  });
   const token = byId<HTMLInputElement>("hub-token");
   if (storedToken) token.placeholder = "Saved token";
   const canScan = canScanPairingQr();

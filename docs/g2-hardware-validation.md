@@ -17,8 +17,14 @@ when the simulator passes.
 - long-session reading position and `New below`;
 - pairing, token refresh, and expired credentials;
 - single-question, free-form, stale, and multi-question answers;
+- provider-native `question` tool calls in the chat answer flow;
+- the gate-aware chat tap (`ANSWER`, `REPLY`, or `SESSION`);
 - home, recent-session, and inbox question discovery;
-- the Home version header and the manual reload/refresh path in Settings;
+- Inbox `More` expansion and the shown/total count;
+- the Home version header, Home row order, and the manual reload/refresh path
+  in Settings;
+- Current-session restore after a reload;
+- phone pairing-panel collapse after connection;
 - idle behavior: no page rebuilds and no repeated polling while SSE is live.
 
 ## Preflight
@@ -76,6 +82,8 @@ Create a code in the hub terminal with `p` and Enter.
 | P7 | Pair a browser through the hub `/pair/<code>` page, then open `/apps/even-g2/` in that browser. | Cookie restore connects without a token. |
 | P8 | Enter an invalid token and press **Connect with token**. | `Connection failed`; the previous valid token is not overwritten. |
 | P9 | Let a session token reach its refresh window, reopen the app, and open a chat. | The token refreshes silently; no re-pair is required. |
+| P10 | After a successful pairing, look at the phone surface. | The pairing/token form collapses to `Connected · <hub>` with `Pair another`; tapping it expands the form. |
+| P11 | Expire the session token and trigger a request. | The pairing form expands again with the session-expired message; pairing recovers without a relaunch. |
 
 ## Input and timing
 
@@ -138,6 +146,10 @@ Seed or open a session with at least 300 readable lines.
 | Q6 | Answer on the web, then tap the stale choice on the glasses. | `ANSWER · changed`; Review reloads or Read chat exits. |
 | Q7 | Retry a failed send. | The same idempotency key is reused; no duplicate message appears. |
 | Q8 | Answer a question with a provider-native form. | The glasses route to `Answer in Inbox`; the form is authoritative. |
+| Q9 | Trigger a provider-native `question` tool call (not a form). | Footer shows `? Answer`; tap opens `ANSWER` with the tool choices and free-text fallback. |
+| Q10 | Tap Chat while the agent is running with no pending question. | `SESSION` opens with `Stop` and `Phone keyboard`; the reply model is not called. |
+| Q11 | Tap Chat after a finished turn with no question or decision. | `SESSION` opens with `Phone keyboard` and no `Stop`; the reply model is not called. |
+| Q12 | Tap Chat when the gate says a decision is ready. | `REPLY` opens with model answer / `Alt:` / `Ask:` first. |
 
 ## Multi-question batches
 
@@ -172,12 +184,14 @@ Seed or open a session with at least 300 readable lines.
 
 | ID | Action | Expected |
 |---|---|---|
-| S1 | Open Home after pairing. | Header reads `OKTOSO · v<version>`; `Symbols` and `Settings` rows are present. |
-| S2 | Open Settings. | Rows are `Reload app`, `Refresh data`, `Connection · <state>`, and `Version · v<version>`; no `Last refresh` row yet. |
-| S3 | Tap `Refresh data` with the hub online. | Attention and question markers update; notice reads `Refreshed just now.`; `Last refresh · HH:MM` appears. |
+| S1 | Open Home after pairing. | Header reads `OKTOSO · v<version>`; row order is Inbox, Unsent? , Retry/failure?, Recent, Current?, Symbols, Settings. |
+| S2 | Open Settings. | List rows are only `Refresh data` and `Reload app`; connection, version, and last refresh appear as body text, not selectable rows. |
+| S3 | Tap `Refresh data` with the hub online. | Attention and question markers update; notice reads `Refreshed just now.`; `Last refresh · HH:MM` appears in the body. |
 | S4 | Stop the hub, then tap `Refresh data`. | Notice reads `Refresh failed · <state>`; Back still returns Home. |
 | S5 | Double-tap Back from Settings. | Home returns; the version header remains. |
-| S6 | Tap `Reload app` after deploying a new build. | The webview reloads from the hub, shows the new version, and returns to Home without touching the phone. |
+| S6 | Tap `Reload app` after deploying a new build. | `RELOAD APP` asks for confirmation; `Reload` loads the new build from the hub without touching the phone; `Cancel` returns to Settings. |
+| S7 | Open a session, return Home, then reload the app. | The Home `Current` row restores the last session with its title and project; tapping it reopens the chat. |
+| S8 | Add enough attention items to exceed the Inbox cap. | Header reads `ATTENTION <shown>/<total>` and a `More · n` row expands the full list. |
 
 ## Attention and forms
 
@@ -187,6 +201,7 @@ Seed or open a session with at least 300 readable lines.
 | A2 | Complete a boolean/select form on the glass. | Required-field validation works; submit is explicit. |
 | A3 | Complete a text/textarea/number/multiselect form on the phone. | The phone form validates and submits; the item disappears. |
 | A4 | Trigger a provider error session. | The inbox shows `ERROR`; dismiss works. |
+| A5 | Have more blocking items than the initial Inbox slots. | Every blocking item is reachable; unread rows are capped first, and `More` reveals the rest. |
 
 ## Connection failures
 
@@ -206,14 +221,15 @@ Copy this table into the hardware run notes.
 
 | ID | Result | Latency | Notes |
 |---|---|---|---|
-| P1–P9 |  |  |  |
+| P1–P11 |  |  |  |
 | I1–I9 |  |  |  |
 | R1–R8 |  |  |  |
 | L1–L5 |  |  |  |
-| Q1–Q8 |  |  |  |
+| Q1–Q12 |  |  |  |
 | B1–B8 |  |  |  |
-| D1–D6 |  |  |  |
-| A1–A4 |  |  |  |
+| D1–D11 |  |  |  |
+| S1–S8 |  |  |  |
+| A1–A5 |  |  |  |
 | F1–F5 |  |  |  |
 
 Record the device, firmware, Even Hub version, hub version, and network path
@@ -226,8 +242,8 @@ counters for any latency failure.
   footer is a hint.
 - There is no long-press event in the SDK. Do not add a required long-press.
 - Four rows are visible; longer lists scroll.
-- Voice capture and STT are not implemented. The phone remains the keyboard for
-  long or free-form answers.
+- Voice capture uses the glasses microphone but real-hardware acceptance is
+  still pending. The phone remains the keyboard for long or free-form answers.
 - Hardware validation cannot run in CI. The preflight script checks the
   manifest and build artifacts, and `layout.test.ts` snapshots container
   geometry, footer position, and the one-capture rule. Real input, latency, and
