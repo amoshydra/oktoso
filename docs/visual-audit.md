@@ -395,7 +395,10 @@ No new type, spacing, radius, or color tokens were introduced.
 
 - One quiet `Attach` action in the composer when `provider.capabilities.attach`
   is true. It is 11px/28px desktop and 44px mobile, using the existing
-  `composer-voice` grammar.
+  `composer-voice` grammar. Files or images pasted into the composer
+  (`Ctrl/⌘+V`) upload through the same staged-attachment path and produce the
+  same chips; a paste containing files never inserts binary data into the
+  textarea.
 - Staged files are a wrapping row above the textarea. Each chip is an 8px
   control surface with a 12px name, an 11px tabular size, and a remove control.
   The name truncates; the chip never exceeds the composer width. The remove
@@ -444,6 +447,9 @@ No new type, spacing, radius, or color tokens were introduced.
 - Fake Open WebUI retry: Retry on "Alternative two." created a new sibling, the
   picker became `‹ 3 / 3 ›`, and the transcript showed the new reply. The old
   answers remained reachable through the picker.
+- Paste: a synthetic `Ctrl+V` PNG in the live composer was intercepted, uploaded
+  as `paste-test.png` (68 B), and rendered as a chip; a text-only paste was not
+  intercepted. The chip was removed afterward.
 - Mobile: the branch arrows and attachment remove control are 44px; the
   attachment chip fits at 390px; no horizontal overflow.
 - Tests: 240 total after the attachment/branching slice. Typecheck, web/hub
