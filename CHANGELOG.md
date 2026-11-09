@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.28](https://github.com/amoshydra/oktoso/compare/v0.1.27...v0.1.28) (2026-11-09)
+
+
+### Features
+
+* **web:** paste files and images into the composer ([b0b0d68](https://github.com/amoshydra/oktoso/commit/b0b0d68ad61a9c5f3c1f3315f63d2f6b51c806e9))
+
 ## [0.1.27](https://github.com/amoshydra/oktoso/compare/v0.1.26...v0.1.27) (2026-11-09)
 
 
