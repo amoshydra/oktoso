@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.27](https://github.com/amoshydra/oktoso/compare/v0.1.26...v0.1.27) (2026-11-09)
+
+
+### Features
+
+* **g2:** implement glass UX audit fixes ([72ec0b1](https://github.com/amoshydra/oktoso/commit/72ec0b1186ffa840f988f2714e6fc7938ff79f20))
+
+
+### Bug Fixes
+
+* **reply:** classify direct corrections as challenges ([3ff48aa](https://github.com/amoshydra/oktoso/commit/3ff48aa5f696bfd7c75007c27cb8ac344cb77778))
+
 ## [0.1.26](https://github.com/amoshydra/oktoso/compare/v0.1.25...v0.1.26) (2026-11-09)
 
 
