@@ -29,6 +29,7 @@
       .row { display: flex; gap: 8px; align-items: center; }
       .status { color: var(--accent); font-size: 12px; margin-top: 8px; min-height: 18px; }
       .status.error { color: #ff9292; }
+      [hidden] { display: none !important; }
       .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--muted); }
       .composer { margin-top: 16px; }
       .composer-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
@@ -68,28 +69,34 @@
     </div>
     <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge. <a href="./audit.html">Reply audit</a>.</p>
 
-    <section class="panel">
-      <h2>Pair this phone</h2>
-      <p class="hint">In the hub terminal, type <code>p</code> and press Enter. Then scan the QR code or paste the pairing link or code here.</p>
-      <p class="hint"><code id="hub-origin">same origin</code></p>
-      <label for="pairing-code">Pairing link or code</label>
-      <input id="pairing-code" type="text" placeholder="Paste the pairing link or code" autocomplete="off" autocapitalize="off" spellcheck="false" />
-      <div class="row" style="margin-top:12px">
-        <button id="pair" class="primary" type="button">Pair this phone</button>
-        <button id="pair-scan" type="button" hidden>Scan QR</button>
+    <section class="panel" id="pairing-panel">
+      <div class="composer-head">
+        <h2>Phone pairing</h2>
+        <span id="pairing-summary" class="pill" hidden>Connected</span>
+        <button id="pairing-toggle" type="button" hidden>Pair another</button>
       </div>
-      <video id="pair-video" class="scan-video" muted playsinline hidden></video>
-      <p id="pair-scan-note" class="hint" hidden style="margin-top:8px">QR scanning needs a camera-capable secure browser. Paste the pairing link or code instead.</p>
-      <div id="pairing-status" class="status" role="status"></div>
+      <div id="pairing-body">
+        <p class="hint">In the hub terminal, type <code>p</code> and press Enter. Then scan the QR code or paste the pairing link or code here.</p>
+        <p class="hint"><code id="hub-origin">same origin</code></p>
+        <label for="pairing-code">Pairing link or code</label>
+        <input id="pairing-code" type="text" placeholder="Paste the pairing link or code" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <div class="row" style="margin-top:12px">
+          <button id="pair" class="primary" type="button">Pair this phone</button>
+          <button id="pair-scan" type="button" hidden>Scan QR</button>
+        </div>
+        <video id="pair-video" class="scan-video" muted playsinline hidden></video>
+        <p id="pair-scan-note" class="hint" hidden style="margin-top:8px">QR scanning needs a camera-capable secure browser. Paste the pairing link or code instead.</p>
+        <div id="pairing-status" class="status" role="status"></div>
 
-      <p class="hint" style="margin-top:16px">Already have a hub token? Use it instead.</p>
-      <label for="hub-token">Hub token</label>
-      <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
-      <div class="row" style="margin-top:12px">
-        <button id="connect" type="button">Connect with token</button>
-        <span id="connection" class="pill">Not connected</span>
+        <p class="hint" style="margin-top:16px">Already have a hub token? Use it instead.</p>
+        <label for="hub-token">Hub token</label>
+        <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
+        <div class="row" style="margin-top:12px">
+          <button id="connect" type="button">Connect with token</button>
+          <span id="connection" class="pill">Not connected</span>
+        </div>
+        <div id="connection-status" class="status"></div>
       </div>
-      <div id="connection-status" class="status"></div>
     </section>
 
     <section id="phone-question-panel" class="panel" hidden>
@@ -124,7 +131,7 @@
       <textarea id="phone-text" placeholder="Type a reply…"></textarea>
       <div class="row" style="margin-top:8px">
         <button id="phone-send" class="primary" type="button" disabled>Send to session</button>
-        <button id="phone-refresh" type="button">Refresh glasses</button>
+        <button id="phone-refresh" type="button">Refresh data</button>
       </div>
       <div id="phone-status" class="status"></div>
     </section>

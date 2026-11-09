@@ -282,13 +282,13 @@ was.
 | `sending` | Lock input until the hub accepts or fails. | Header, status summary, text body (capture ignores input), footer hint. |
 | `sent` | Confirm the exact text went to the hub. | Header, summary, text body (tap returns), footer hint. |
 | `error` | Preserve the answer and offer retry/rechoose. | Header, error summary, list `Retry`/`Choose again`/`Read chat`, footer hint. |
-| `stale` | Question changed or was answered elsewhere. | Header `ANSWER · changed`, warning summary, list `Review`/`Read chat`, footer hint. |
-| `reply` | Existing generic reply menu. | Unchanged. |
+| `stale` | Question changed or was answered elsewhere. | Header `ANSWER · changed` or `ANSWER · resolved`, warning summary, list `Review`/`Read chat`, footer hint. |
+| `reply` | Existing generic reply menu. | Model roles first; the gate may route wait/done to `SESSION` instead. |
 | `choices` | Existing manually extracted choices. | Unchanged. |
 
 State identifiers are lower-case; screen headers use the corresponding
-upper-case label (`ANSWER`, `MORE`, `CONFIRM`, `TYPE`). `sending` and `sent` keep
-the `ANSWER` header as status states, not separate destinations.
+upper-case label (`ANSWER`, `MORE`, `CONFIRM`, `TYPE`, `SENT`, `SESSION`).
+`sending` keeps the `ANSWER` header as a status state; `sent` uses `SENT`.
 
 Every state has **exactly one event-capturing container**. `answer`, `more`,
 `confirm`, `error`, and `stale` use the list. `type`, `sending`, and `sent` use a
@@ -302,7 +302,7 @@ from chat and always return to chat or `answer`.
 
 | From | Input | To | Notes |
 |---|---|---|---|
-| `chat` no question | Tap body | `reply` | Existing behavior. |
+| `chat` no question | Tap body | `reply` or `session` | The reply gate decides. `reply` only when a decision is ready; `wait`/`done` opens `session` actions. |
 | `chat` question | Tap body | `answer` | No send. Question captured with revision. |
 | `chat` question | Scroll | `chat` | Reading only. |
 | `chat` any | Double tap | origin | Existing back. |
@@ -395,6 +395,8 @@ includes `questionId`, `messageId`, and `revision`.
   user's finger. Set `stale = true`; header becomes `ANSWER · changed`; replace
   the list with `Review` / `Read chat`; footer hint becomes
   `Tap choose · Back ×2`. The old choices are not selectable.
+- **Already answered.** The header reads `ANSWER · resolved` and the body says
+  `Answered already.` The list offers `Read chat` only.
 - **Send with stale revision.** Hub returns `409` with
   `details.reason = "question_changed"` and the current prompt. Glasses show
   `stale` with `Review` / `Read chat`. No `Send anyway` in v1.
@@ -571,7 +573,7 @@ No `Type answer` row. `Read chat` follows `More` below the fold if there is room
 │                                                              │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
-│ Tap select   Back ×2                                         │ 42
+│ Tap choose   Back ×2                                         │ 42
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -579,15 +581,16 @@ No summary container. This screen pages three options at a time (`Stop`,
 `Find choices`, and `Phone keyboard` are on page 2). `Find choices` remains the
 manual escape hatch when detection misses.
 
-When the hub's reply model is configured, the reply menu can show three grounded
-roles after `Continue`: an **answer**, an **opposite** labelled `Alt: …`, and an
-**ask** question. The hub first classifies the moment. If the agent is running
-with no ask, or a finished turn has no ask or action, it does not call the model
-and the reply screen shows `Agent is running…` or `No reply needed…` instead of
-model options. A page containing a model suggestion is headed
-`REPLY 1/3 · Suggested`. Model suggestions never replace `Continue`, `Stop`,
-`Find choices`, or `Phone keyboard`; when generation fails or the session has
-no transcript, the canned list is shown alone.
+When the hub's reply model is configured, the reply menu puts the grounded model
+roles first: an **answer**, an **opposite** labelled `Alt: …`, and an **ask**
+labelled `Ask: …`. The canned actions follow, starting with `Continue`. The hub
+first classifies the moment. If the agent is running with no ask, or a finished
+turn has no ask or action, it does not call the model and the glass opens
+`SESSION` with `Stop` (when running) and `Phone keyboard` instead of `REPLY`. A
+page containing a model suggestion is headed `REPLY 1/3 · Suggested`. Model
+suggestions never replace `Continue`, `Stop`, `Find choices`, or `Phone
+keyboard`; when generation fails or the session has no transcript, the canned
+list is shown alone.
 
 The same rule applies to `CHOOSE`: choices parsed from the assistant text keep
 the header `CHOOSE n`, while a page containing model-extracted choices reads
@@ -786,7 +789,7 @@ with a second non-capturing footer hint is possible but adds nothing; keep four.
 
 | Input | Chat | Answer list | `more` / `confirm` / `error` / `stale` list | Sending | Sent | Type |
 |---|---|---|---|---|---|---|
-| Tap / R1 tap | Open `answer` if pending, else `reply` | Activate the selected row: choice sends, action acts | Activate the selected row | Ignored | Return to chat | Retry phone focus |
+| Tap / R1 tap | Open `answer` if pending, else `reply` when the gate allows a decision, else `session` actions | Activate the selected row: choice sends, action acts | Activate the selected row | Ignored | Return to chat | Retry phone focus |
 | Double tap / left temple / R1 double | Back to origin | Back to chat | Back to answer or chat per §5.5 | Ignored | Back to chat | Back to `answer` |
 | Scroll / swipe up | Previous chat line(s) | Previous row | Previous row | Ignored | Ignored | Ignored |
 | Scroll / swipe down | Next chat line(s) | Next row | Next row | Ignored | Ignored | Ignored |
@@ -1228,9 +1231,11 @@ GET /api/v1/sessions/:ref/question
 }
 ```
 
-`data` is `null` when there is no pending question. If a provider-native question
-attention item exists, include `attentionID`; the glass list becomes
-`Answer in Inbox`, `Read chat`, and the footer hint is
+`data` is `null` when there is no pending question. A running provider `question`
+tool part is mapped to the same chat prompt as a text question, so the glass can
+show `? Answer` and answer from chat. The Inbox form remains available for the
+same provider request. Provider **form** questions keep `attentionID`; the glass
+list then becomes `Answer in Inbox`, `Read chat`, and the footer hint is
 `Tap choose · Back ×2`. `Answer in Inbox` opens the attention detail by ID, not
 just the inbox list.
 
@@ -1243,13 +1248,16 @@ the glass still reads `/question`.
 The service:
 
 - fetches the last 6 messages (`order=desc`);
-- requires the latest to be assistant, completed, and text-bearing;
-- caches by `ref:messageId:textHash` for 30 s;
+- prefers a running `question` tool part, even while the message is streaming;
+- otherwise requires the latest message to be assistant, completed, and
+  text-bearing;
+- caches text questions by `ref:messageId:textHash` for 30 s and tool questions
+  by `ref:tool:messageId:revision`;
 - caches discovery summaries for 15 s and reports provider failures separately;
 - exposes a pure `parseQuestion(messages)` for unit tests;
-- returns `null` for no question, streaming, provider-native question, or a
-  user message after the assistant;
-- returns every question in the latest message, not just the first.
+- returns `null` for no question, a streaming text-only message, or a user
+  message after the assistant;
+- returns every question in the latest text message, not just the first.
 
 Consider a short-lived shared message snapshot cache in `SessionService` so the
 glass's parallel `messages` and `question` fetches do not hit the provider twice.
@@ -1504,7 +1512,7 @@ prompt may not propagate to the parent UI and can stall the parent turn.
 
 | Case | Behavior | Copy / state |
 |---|---|---|
-| No question | Chat tap opens `reply`. | Existing. |
+| No question | Chat tap opens `reply` for a decision, otherwise `session` actions (`Stop` when running, `Phone keyboard`). | `SESSION` |
 | Question is streaming | No prompt; footer keeps `Working`. | `Working` |
 | Multiple questions | Phone form for all; glass `Answer on phone`. | `ANSWER · 2 questions` |
 | Question changed while answering | Freeze list; `stale`; no silent swap. | `Question changed. Review before answering.` |
@@ -1764,9 +1772,8 @@ screen has exactly one capture.
 - Chat `Read chat` returns to the question line.
 
 **Acceptance:** all six choices reachable with scrolling; two questions answered
-on the phone; `Stop` reachable in three taps (chat tap, `More` row with scroll as
-needed, `Stop` tap); `Read chat` under `More` is one more tap; back paths are
-correct.
+on the phone; `Stop` reachable in two taps while running (chat tap → `Stop`);
+`Read chat` under `More` is one more tap; back paths are correct.
 
 ### Slice 4 — inbox/home markers, accessibility, polish
 
@@ -1841,6 +1848,7 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | Answer header | `ANSWER · <session>` |
 | Answer header, multiple | `ANSWER · 2 questions` |
 | Answer header, stale | `ANSWER · changed` |
+| Answer header, resolved | `ANSWER · resolved` |
 | Question prefix | `Q  ` |
 | More header | `MORE · <session>` |
 | Confirm header | `CONFIRM · <session>` |

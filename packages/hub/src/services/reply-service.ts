@@ -20,6 +20,7 @@ import type {
 import type { Logger } from "../lib/logger";
 import type { AssistantSettingsService } from "./assistant-settings";
 import { parseQuestion } from "./question-parser";
+import { extractToolQuestion } from "./tool-question";
 import type { SessionService } from "./session-service";
 
 interface CacheEntry {
@@ -1195,7 +1196,9 @@ function buildRoleOptions(
     label:
       item.role === "opposite"
         ? `Alt: ${truncateLabel(item.text)}`
-        : truncateLabel(item.text),
+        : item.role === "ask"
+          ? `Ask: ${truncateLabel(item.text)}`
+          : truncateLabel(item.text),
     text: item.text,
     source: "model" as const,
     action: "send" as const,
@@ -1424,75 +1427,6 @@ function parseJsonValue(raw: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-function extractToolQuestion(
-  messages: Message[],
-): ReplyAuditQuestion | undefined {
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    for (const part of message.parts) {
-      if (part.type !== "tool" || part.name !== "question") continue;
-      if (part.status === "completed" || part.status === "error") continue;
-      const question = parseQuestionToolInput(part.input);
-      if (question) return question;
-    }
-  }
-  return undefined;
-}
-
-function parseQuestionToolInput(
-  input: unknown,
-): ReplyAuditQuestion | undefined {
-  if (!input || typeof input !== "object") return undefined;
-  const record = input as Record<string, unknown>;
-  const questions = Array.isArray(record.questions) ? record.questions : [];
-  const first = questions[0];
-  const source =
-    first && typeof first === "object"
-      ? (first as Record<string, unknown>)
-      : record;
-  const text =
-    typeof source.question === "string"
-      ? source.question
-      : typeof record.question === "string"
-        ? record.question
-        : "";
-  if (!text.trim()) return undefined;
-  const header =
-    typeof source.header === "string" && source.header.trim()
-      ? source.header.trim()
-      : undefined;
-  const rawOptions = Array.isArray(source.options)
-    ? source.options
-    : Array.isArray(record.options)
-      ? record.options
-      : [];
-  const choices = rawOptions
-    .map((option) => {
-      if (!option || typeof option !== "object") return undefined;
-      const item = option as Record<string, unknown>;
-      const label =
-        typeof item.label === "string"
-          ? item.label
-          : typeof item.value === "string"
-            ? item.value
-            : "";
-      if (!label.trim()) return undefined;
-      const description =
-        typeof item.description === "string" && item.description.trim()
-          ? item.description.trim()
-          : undefined;
-      return {
-        label: label.trim(),
-        ...(description ? { description } : {}),
-      };
-    })
-    .filter(
-      (choice): choice is { label: string; description?: string } =>
-        Boolean(choice),
-    );
-  return { text: text.trim(), ...(header ? { header } : {}), choices };
 }
 
 function questionFromPrompt(

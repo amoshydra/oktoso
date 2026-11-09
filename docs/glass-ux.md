@@ -10,20 +10,30 @@ The app is served by the hub at `/apps/even-g2/`; the hub API is same-origin at 
 ```text
 Home
 ├─ Inbox            attention items
+├─ Unsent           failed sends, when present
+├─ Retry / Pair     inline failure, when present
 ├─ Recent           five most recent root sessions
 ├─ Current          last opened session, when available
 ├─ Symbols          glyph legend
-└─ Settings         app reload, connection, version, data refresh
+└─ Settings         data refresh, reload, connection, version
 
 Inbox
-└─ Attention        permission / form / error / unread detail
+├─ Attention        permission / form / error / unread detail
+└─ More             additional items beyond the glass cap
+
+Attention
+├─ Answer on glass  simple boolean / select forms
+├─ Answer on phone  text or complex forms
+├─ Provider action  approve / deny / mark read / retry / dismiss
+└─ Open chat        read the transcript
 
 Chat
 ├─ Answer           pending question: choices + Type answer / More / Read chat
 ├─ Batch            two or more questions: Answer on phone / More / Read chat
+├─ Session          wait/done: Stop (running) / Phone keyboard
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
-├─ Reply            canned, 4B, and numbered choices
+├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 └─ Phone keyboard   longer text fallback
 
 Failure (any screen)
@@ -37,6 +47,7 @@ token.
 Back always follows where you came from:
 
 - chat → inbox, recent, or home
+- session → chat or More
 - answer → chat
 - answer more / type / confirm → answer
 - sent → chat
@@ -45,6 +56,7 @@ Back always follows where you came from:
 - inbox / recent → home
 - symbols → home
 - settings → home
+- reload confirmation → settings
 - unsent → home
 - failure → the screen that started the action
 
@@ -52,7 +64,7 @@ Back always follows where you came from:
 
 | Input | Action |
 |---|---|
-| Tap / R1 tap | open, select, or reply |
+| Tap / R1 tap | open, select, reply, or run a session action |
 | Double tap | back |
 | Scroll / swipe | move selection or chat line |
 
@@ -71,16 +83,25 @@ does not expose.
 - Several rapid swipes accelerate within a 500 ms window: `1, 1, 2, 2, 4` lines.
 - Newlines and paragraph breaks are preserved. Multiple spaces within a line are
   collapsed.
-- The footer reports visible line and readable-message position, plus compact
-  agent activity when present:
-  `L456-461/461 · M30/30 · Working · 3 steps`.
+- The footer is one line. The 42 px footer container fits one line at G2 type
+  size, so it prioritizes `? Answer` or `Tap actions`, then the line range,
+  readable-message range, compact agent activity, non-live connection state,
+  failure, `New below`, and the swipe/back hint. The hint is dropped whole when
+  the line is full; it is never cut mid-word. The action affordance and position
+  stay first.
 - The header reports `project · session title` so the glass shows which home the session belongs to.
+- Tapping the body opens `ANSWER` when a question is pending, `REPLY` when the
+  reply gate says a decision is ready, and `SESSION` otherwise. `SESSION` is a
+  short action list: `Stop` while running and `Phone keyboard`. It never calls
+  the reply model.
 
 ## Question reply
 
-When the latest completed assistant message ends in a question, the chat footer
-adds `? Answer`. Tapping the chat opens `ANSWER` instead of the generic reply
-menu.
+When the latest completed assistant message ends in a question, or its latest
+`question` tool call is still running, the chat footer adds `? Answer`. Tapping
+the chat opens `ANSWER` instead of the reply menu. Provider-native questions use
+the same answer screen as text questions; the Inbox form remains the formal
+alternative for complex fields.
 
 - One event-capturing list owns input. The footer is a hint, never a button.
   The G2 page builder accepts only one capture container, and a text tap has no
@@ -135,8 +156,12 @@ Attention contains:
 3. unread sessions updated within 24 hours, newest first, capped at 10;
 4. minus acknowledged items.
 
-The glass shows the first five attention rows. The home screen shows the total
-count. Older unread sessions are intentionally not pushed onto the glasses.
+The glass shows **every blocking item** (permissions, questions, approvals,
+errors) and fills the remaining initial slots with unread sessions. If more items
+exist, the Inbox header reads `ATTENTION <shown>/<total>` and a `More · n` row
+expands the list. The home screen shows the total count. Unread sessions are
+still capped by the attention policy; blocking items are never hidden behind the
+cap.
 
 ### Subagents
 
@@ -197,22 +222,24 @@ The legend is always discoverable:
 
 ## Settings
 
-Home has a `Settings` row. The header is `SETTINGS`; rows are:
+Home has a `Settings` row. The header is `SETTINGS`. The list contains only
+actions:
 
-- `Reload app` — reload the entire webview with a cache-busting query so a
-  newly deployed build is loaded without touching the phone. The app returns
-  to Home after reconnecting.
 - `Refresh data` — refetch attention, unread sessions, and pending-question
-  summaries. The result appears above the list as `Refreshed just now.` or
+  summaries. The result appears in the footer as `Refreshed just now.` or
   `Refresh failed · <state>`.
-- `Connection · Live | Polling | Reconnecting | Offline | Pair`.
-- `Version · v<app version>`.
-- `Last refresh · HH:MM` after the first manual data refresh.
+- `Reload app` — opens `RELOAD APP` with `Reload` / `Cancel`. `Reload` reloads
+  the entire webview with a cache-busting query so a newly deployed build is
+  loaded without touching the phone. The current screen and chat position are
+  lost.
 
-The version also appears in the Home header as `OKTOSO · v<app version>`. Reload
-is the first row because it is the recovery path for a stale build; Refresh data
-is the recovery path for stale content. It does not change pairing; pairing
-stays on the phone.
+The body shows `Connection · Live | Polling | Reconnecting | Offline | Pair`,
+`v<app version>`, and the last data refresh time. The version also appears in the
+Home header as `OKTOSO · v<app version>`. Settings does not change pairing;
+pairing stays on the phone.
+
+The phone pairing panel collapses to a compact `Connected · <hub>` row after a
+successful connection. `Pair another` expands it again.
 
 ## Text policy
 
@@ -228,7 +255,11 @@ stays on the phone.
   SSE is disconnected.
 - The home footer reports `Live`, `Polling`, or `Reconnecting`, so the reader
   knows whether updates are pushed or polled. The phone connection pill reports
-  the same state.
+  the same state. Chat shows a non-live state in its first footer line.
+- The last opened session is persisted locally and restored as the Home
+  `Current` row after a reload.
+- Loading screens advertise `Please wait · Back ×2`; Back still follows the
+  normal origin chain.
 - Reconnect and resync must preserve the reader's line unless new content is being
   followed intentionally.
 - Auth, offline, provider failure, and timeout have distinct states:
