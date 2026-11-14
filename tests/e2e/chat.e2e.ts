@@ -667,3 +667,66 @@ describe("offline queue", () => {
     ).toBe(1);
   }, 60_000);
 });
+
+describe("service worker push", () => {
+  it("turns a push payload into a notification with the deep link", async () => {
+    await page!.evaluate(() =>
+      navigator.serviceWorker.ready.then(() => undefined),
+    );
+    const context = page!.context();
+    let worker = context.serviceWorkers()[0];
+    if (!worker) worker = await context.waitForEvent("serviceworker");
+
+    expect(
+      await worker.evaluate(
+        () =>
+          typeof (self as unknown as { PushEvent?: unknown }).PushEvent ===
+          "function",
+      ),
+    ).toBe(true);
+
+    await worker.evaluate(() => {
+      const scope = self as unknown as { __oktosoShown: unknown[] };
+      scope.__oktosoShown = [];
+      ServiceWorkerRegistration.prototype.showNotification = async function (
+        title: string,
+        options?: NotificationOptions,
+      ) {
+        scope.__oktosoShown.push({ title, options });
+      } as typeof ServiceWorkerRegistration.prototype.showNotification;
+    });
+
+    await worker.evaluate((data) => {
+      const scope = self as unknown as {
+        PushEvent: new (type: string, init: { data: string }) => Event;
+      };
+      self.dispatchEvent(
+        new scope.PushEvent("push", { data: JSON.stringify(data) }),
+      );
+    }, {
+      title: "Build finished",
+      body: "Open the session",
+      url: "/sessions/desktop-opencode%3Ases_auth?attention=per_1",
+      tag: "ses_auth:permission",
+      priority: "blocking",
+    });
+
+    const shown = await worker.evaluate(
+      () => (self as unknown as { __oktosoShown: unknown[] }).__oktosoShown,
+    );
+
+    expect(shown).toEqual([
+      {
+        title: "Build finished",
+        options: expect.objectContaining({
+          body: "Open the session",
+          tag: "ses_auth:permission",
+          data: {
+            url: "/sessions/desktop-opencode%3Ases_auth?attention=per_1",
+          },
+          requireInteraction: true,
+        }),
+      },
+    ]);
+  }, 30_000);
+});

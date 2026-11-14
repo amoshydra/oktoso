@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: A1–A6 and A8 complete; A7 is deferred (local-first, no cloud channels). A9 (release) is next.
+Status: complete. A1–A6, A8, and A9 are done; A7 (outbound channels) is deferred local-first. `0.1.29` is ready for release-please on merge.
 
 ### A1. Contracts and configuration
 
@@ -223,15 +223,28 @@ queue, reload, reconnect, and one POST.
 
 ### A9. Tests and docs
 
-- [ ] e2e: subscribe with a fake push receiver, trigger a blocking attention,
-  assert one delivery, click through to the item.
-- [ ] e2e: quiet hours suppress and digest.
-- [ ] Unit: coalescing, retry cap, subscription cleanup, payload size.
-- [ ] Docs: `deployment.md` (VAPID, channels, firewall), `ui-ia.md`,
+- [x] e2e/transport: capture the encrypted request with a mocked push
+  receiver, assert one delivery, and assert the service worker turns the
+  payload into a notification with the deep link.
+- [x] Quiet hours suppress, then flush the digest after the window (service
+  test).
+- [x] Unit: coalescing, retry cap, subscription cleanup, payload size.
+- [x] Docs: `deployment.md` (VAPID, HTTPS, reserved channels), `ui-ia.md`,
   `interaction-contract.md`, `visual-audit.md`.
 
 **Done:** `pnpm test`, `pnpm test:e2e`, `pnpm brand:check`, and
 `pnpm openapi:check` pass.
+
+Status: complete. The browser-side push handler is tested by dispatching a
+`PushEvent` in the live service worker and stubbing `showNotification`; the
+wire payload is tested by capturing the `fetch` the sender makes to a fake
+`https://` receiver (real VAPID keys, real ECDH subscription, encrypted
+`aes128gcm` body). A full hub-to-HTTPS-receiver e2e is deliberately skipped
+because the push library requires TLS and the repository does not commit a
+test certificate.
+
+Release: the branch is release-ready. `release-please` will cut `0.1.29` when
+the branch merges; nothing is published from the worktree.
 
 ## Phase 4 — Supervisor
 
