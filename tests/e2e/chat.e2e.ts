@@ -595,3 +595,33 @@ describe("responsive history surfaces", () => {
     });
   }
 });
+
+describe("notification settings", () => {
+  it("saves routing and keeps it across a reload", async () => {
+    await page!.goto(`${BASE_URL}/settings`);
+    await page!.getByRole("heading", { name: "Notifications" }).waitFor();
+
+    const enabled = page!.getByLabel("Send notifications");
+    if (!(await enabled.isChecked())) await enabled.check();
+    await page!.getByLabel("Quiet hours").check();
+    await page!.getByLabel("Start", { exact: true }).fill("23:00");
+    await page!.getByLabel("End", { exact: true }).fill("06:00");
+    await page!.getByRole("button", { name: "Save routing" }).click();
+    await page!
+      .getByText("Notification settings saved.")
+      .waitFor({ state: "visible" });
+
+    await page!.reload();
+    await page!.getByRole("heading", { name: "Notifications" }).waitFor();
+
+    await expect(
+      page!.getByLabel("Send notifications").isChecked(),
+    ).resolves.toBe(true);
+    await expect(page!.getByLabel("Quiet hours").isChecked()).resolves.toBe(
+      true,
+    );
+    await expect(
+      page!.getByLabel("Start", { exact: true }).inputValue(),
+    ).resolves.toBe("23:00");
+  });
+});

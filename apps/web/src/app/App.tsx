@@ -81,6 +81,7 @@ import {
 } from "./router";
 import { readRouteCache, writeRouteCache } from "./route-cache";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
+import { NotificationSettingsPanel } from "./settings-notifications";
 import {
   createOptimisticMessage,
   optimisticSend,
@@ -1100,6 +1101,7 @@ export function App() {
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
+                <NotificationSettingsPanel client={client as HubClient} />
                 {diagnosticsPanel}
               </>
             ) : (

@@ -917,3 +917,13 @@ instead of raw fences, without changing the transcript hierarchy.
   target.
 - The outline is transient only in the sense that it follows the query param.
   It does not replace the card's blocking or focused states.
+
+## Notification settings (2026-11-15)
+
+- Routing uses the existing form grid: one full-width select per attention
+  type, a digest window, and quiet-hours time fields. Selects never clip at
+  320px.
+- Device rows are one line at desktop and stack at 760px and below. Revoke is
+  secondary; enable is the only primary action in the panel.
+- The permission state is a metadata badge (`ALLOWED`, `NOT ASKED`, `BLOCKED`),
+  not a status dot. It never borrows a provider hue.

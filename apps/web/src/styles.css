@@ -1424,6 +1424,69 @@
   grid-column: span 2;
 }
 
+.settings-notifications {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.settings-notifications > .panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-device-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-device-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-device-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-device-list li:last-child {
+  padding-bottom: 0;
+}
+
+.settings-device-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-device-name {
+  color: var(--text);
+  font-size: var(--text-base);
+}
+
+.settings-device-detail {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .settings-device-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .form-field > span {
   color: var(--muted);
   font-size: var(--text-xs);
