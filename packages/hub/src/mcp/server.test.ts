@@ -422,6 +422,80 @@ describe("automation tools", () => {
     }
   });
 
+  it("limits runs and approvals and wraps the view", async () => {
+    const rich: AutomationView = {
+      ...automationView,
+      runs: [
+        {
+          id: "run_1",
+          watcherID: "w1",
+          trigger: "attention:question",
+          decision: "acted",
+          reason: "answered",
+          sessionRef: "opencode:ses_abc",
+          at: 1,
+        },
+        {
+          id: "run_2",
+          watcherID: "w1",
+          trigger: "attention:question",
+          decision: "skipped",
+          reason: "budget",
+          sessionRef: "opencode:ses_abc",
+          at: 2,
+        },
+      ],
+      approvals: [approval, { ...approval, id: "approval_2", attentionID: "att_2" }],
+    };
+    const api = fakeApi({
+      automation: vi.fn(async () => rich),
+      approvals: vi.fn(async () => rich.approvals),
+    });
+    const { client, close } = await connect(api);
+    try {
+      const result = await client.callTool({
+        name: "automation_list",
+        arguments: { runs: 1, approvals: 1 },
+      });
+      const body = JSON.parse(toolText(result)) as {
+        data: { runs: Array<{ id: string }>; approvals: Array<{ id: string }> };
+      };
+      expect(body.data.runs).toHaveLength(1);
+      expect(body.data.runs[0]?.id).toBe("run_1");
+      expect(body.data.approvals).toHaveLength(1);
+      expect(body.data.approvals[0]?.id).toBe("approval_1");
+
+      const list = await client.callTool({
+        name: "approvals_list",
+        arguments: { limit: 1 },
+      });
+      const listBody = JSON.parse(toolText(list)) as {
+        data: Array<{ id: string }>;
+      };
+      expect(listBody.data).toHaveLength(1);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns an empty automation view", async () => {
+    const { client, close } = await connect(fakeApi());
+    try {
+      const result = await client.callTool({
+        name: "automation_list",
+        arguments: {},
+      });
+      const body = JSON.parse(toolText(result)) as {
+        data: { watchers: unknown[]; runs: unknown[]; approvals: unknown[] };
+      };
+      expect(body.data.watchers).toEqual([]);
+      expect(body.data.runs).toEqual([]);
+      expect(body.data.approvals).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
   it("hides automation writes without write access", async () => {
     const { client, close } = await connect(fakeApi());
     try {
