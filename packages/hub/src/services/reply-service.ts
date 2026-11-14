@@ -255,6 +255,7 @@ const CHOICE_SCHEMA = {
 
 export class ReplyService {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly inflight = new Map<string, Promise<ReplyOptions>>();
 
   constructor(
     private readonly settings: AssistantSettingsService,
@@ -358,6 +359,32 @@ export class ReplyService {
       return cached.value;
     }
 
+    const pending = this.inflight.get(cacheKey);
+    if (pending) return pending;
+    const work = this.generate(
+      mode,
+      messages,
+      config,
+      question,
+      momentContext,
+      context,
+      cacheKey,
+    ).finally(() => {
+      this.inflight.delete(cacheKey);
+    });
+    this.inflight.set(cacheKey, work);
+    return work;
+  }
+
+  private async generate(
+    mode: ReplyMode,
+    messages: Message[],
+    config: AssistantConfig,
+    question: ReplyAuditQuestion | undefined,
+    momentContext: MomentContext,
+    context: string,
+    cacheKey: string,
+  ): Promise<ReplyOptions> {
     if (mode === "choices") {
       const generation = await this.choices(messages, config, question);
       const value: ReplyOptions = {

@@ -572,6 +572,45 @@ describe("ReplyService moment", () => {
   });
 });
 
+describe("ReplyService concurrency", () => {
+  it("shares one generation for concurrent identical requests", async () => {
+    const data = [
+      textMessage("m1", "user", "Fix the docker pull failure"),
+      textMessage("m2", "assistant", "Should I switch to the mirror?"),
+    ];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn(async () => {
+      await gate;
+      return completionWith(
+        JSON.stringify({
+          answer: "Use the mirror.",
+          opposite: "Retry the pull.",
+          next: "Switch back to docker.",
+          verify: "Check the pull logs.",
+          extend: "Add a mirror fallback test.",
+          ask: "Should I check the mirror first?",
+        }),
+        "The registry is unreachable.",
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const first = service.list("desktop-opencode:ses_1", "reply");
+    const second = service.list("desktop-opencode:ses_1", "reply");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+  });
+});
+
 describe("ReplyService role generation and lint", () => {
   it("keeps every usable role", async () => {
     const data = [
