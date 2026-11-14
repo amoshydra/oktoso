@@ -54,6 +54,8 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
+Status: A1–A3 complete. A4 (subscription routes) is next.
+
 ### A1. Contracts and configuration
 
 - [x] Add `packages/contracts/src/notifications.ts`:
@@ -99,20 +101,22 @@ delivery attempts. It is wired in `main.ts` with a no-op transport until A3.
 
 ### A3. Web Push transport
 
-- [ ] Choose and pin the push implementation. Prefer a pure-JS package over a
-  hand-rolled VAPID + `aes128gcm` path.
-- [ ] Generate VAPID keys on first enable; store the private key in `dataDir`
+- [x] Choose and pin the push implementation. `web-push` 4.0.0, pure JS and
+  bundled by tsup.
+- [x] Generate VAPID keys on first start; store the private key in `dataDir`
   with `0600`; never log it.
-- [ ] Send with a bounded payload (title, attention type, session ref, deep
+- [x] Send with a bounded payload (title, attention type, session ref, deep
   link, one line of summary). No transcript content.
-- [ ] Handle `404`/`410` by deleting the subscription; handle `429` and `5xx`
+- [x] Handle `404`/`410` by deleting the subscription; handle `429` and `5xx`
   with capped exponential backoff.
-- [ ] Record every attempt in the delivery log.
+- [x] Record every attempt in the delivery log.
 
-**Touch:** `packages/hub/src/services/push-service.ts`,
+**Touch:** `packages/hub/src/services/web-push-transport.ts`,
+`packages/hub/src/services/vapid.ts`,
 `packages/hub/src/services/notification-service.ts`, `dataDir`.
-**Done:** a fake push endpoint receives a valid encrypted request; expired
-subscriptions are removed; retries stop after the cap.
+**Done:** an injected sender receives the exact payload for each subscription;
+expired subscriptions are removed; retries stop after the cap. Real payload
+encryption is delegated to `web-push`.
 
 ### A4. Subscription and settings routes
 
@@ -499,11 +503,11 @@ A task is done when:
 
 These need an answer before the task that depends on them.
 
-1. **Push implementation.** Pin a pure-JS package or hand-roll VAPID +
-   `aes128gcm`? Recommendation: pin a maintained pure-JS package. Owner: A3.
-2. **VAPID key location.** Generate into `dataDir` on first enable, or accept
-   operator-provided keys? Recommendation: generate, print the public key once,
-   allow an override in config. Owner: A3.
+1. **Push implementation.** Resolved: `web-push` 4.0.0, pure JS and bundled.
+   The transport accepts an injected sender so tests never hit the network.
+2. **VAPID key location.** Resolved: generated at
+   `dataDir/notifications/vapid.json` (mode `0600`) on first start, with a
+   config override for operators who keep keys elsewhere.
 3. **Channel scope.** Web Push only, or Web Push plus ntfy/Telegram/webhook?
    Recommendation: Web Push first, ntfy in the same phase as the escape hatch.
    Owner: A7.

@@ -82,6 +82,41 @@ reachability.
 - Provider secrets should use environment references. Keep the config at mode
   `0600`.
 
+## Notifications
+
+`notifications` is off by default. Enabling it turns attention events into
+phone notifications.
+
+```jsonc
+{
+  "notifications": {
+    "enabled": true,
+    "channels": [
+      { "kind": "ntfy", "url": "https://ntfy.sh", "topic": "oktoso", "token": "${NTFY_TOKEN}" }
+    ],
+    "routing": {
+      "immediate": ["permission", "approval"],
+      "digest": ["question", "unread", "error"],
+      "digestWindowMs": 900000,
+      "quietHours": { "enabled": true, "start": "22:00", "end": "07:00", "timezone": "Asia/Kuala_Lumpur" }
+    }
+  }
+}
+```
+
+- Web Push needs no channel entry. It activates when a browser registers a
+  subscription and the device is served over HTTPS or `localhost`.
+- `ntfy`, `telegram`, and `webhook` are optional fallbacks. Keep their tokens in
+  environment references.
+- A blocking item always wakes the device. Everything else respects quiet hours
+  and the digest window.
+- VAPID keys are generated once at `dataDir/notifications/vapid.json` with mode
+  `0600`. Override them with `notifications.vapid.publicKey` and
+  `notifications.vapid.privateKey` only if you must keep the pair elsewhere.
+  Never commit or log the private key.
+- Rotating the VAPID pair invalidates every existing browser subscription; those
+  devices must subscribe again.
+
 ## OpenCode on another host
 
 Start the OpenCode server on an interface the hub can reach:
