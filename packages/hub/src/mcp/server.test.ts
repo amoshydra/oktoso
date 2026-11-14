@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   Attention,
   AttentionPage,
+  AutomationApproval,
+  AutomationView,
   HubEvent,
   MessagePage,
   Provider,
@@ -71,6 +73,16 @@ const attention: Attention = {
   actions: [{ id: "allow_once", label: "Allow once" }],
 };
 
+const automationView: AutomationView = {
+  enabled: true,
+  paused: false,
+  dryRun: true,
+  watchers: [],
+  pausedWatchers: [],
+  runs: [],
+  approvals: [],
+};
+
 function fakeApi(overrides: Partial<McpHubApi> = {}): McpHubApi {
   const api: McpHubApi = {
     providers: vi.fn(async () => [provider]),
@@ -100,6 +112,12 @@ function fakeApi(overrides: Partial<McpHubApi> = {}): McpHubApi {
     interrupt: vi.fn(async () => undefined),
     markRead: vi.fn(async () => undefined),
     actOnAttention: vi.fn(async () => undefined),
+    automation: vi.fn(async () => automationView),
+    automationRuns: vi.fn(async () => []),
+    approvals: vi.fn(async () => []),
+    setAutomation: vi.fn(async () => automationView),
+    setWatcherPaused: vi.fn(async () => automationView),
+    actOnApproval: vi.fn(async () => undefined),
     ...overrides,
   };
   return api;
@@ -363,6 +381,97 @@ describe("Oktoso MCP server", () => {
     try {
       const listed = await client.listResources();
       expect(listed.resources).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("automation tools", () => {
+  const approval: AutomationApproval = {
+    id: "approval_1",
+    watcherID: "w1",
+    attentionID: "att_1",
+    sessionRef: "opencode:ses_abc",
+    title: "Answer the question",
+    summary: "Proceed?",
+    action: { kind: "escalate" },
+    reason: "not_low_risk",
+    status: "pending",
+    createdAt: 1,
+    expiresAt: 2,
+  };
+
+  it("reads automation and approvals", async () => {
+    const api = fakeApi({ approvals: vi.fn(async () => [approval]) });
+    const { client, close } = await connect(api);
+    try {
+      const automation = await client.callTool({
+        name: "automation_list",
+        arguments: {},
+      });
+      expect(toolText(automation)).toContain('"dryRun": true');
+
+      const approvals = await client.callTool({
+        name: "approvals_list",
+        arguments: {},
+      });
+      expect(toolText(approvals)).toContain("approval_1");
+    } finally {
+      await close();
+    }
+  });
+
+  it("hides automation writes without write access", async () => {
+    const { client, close } = await connect(fakeApi());
+    try {
+      const { tools } = await client.listTools();
+      const names = tools.map((tool) => tool.name);
+      expect(names).toContain("automation_list");
+      expect(names).toContain("approvals_list");
+      expect(names).not.toContain("automation_pause");
+      expect(names).not.toContain("approvals_act");
+    } finally {
+      await close();
+    }
+  });
+
+  it("pauses a watcher and decides an approval with write access", async () => {
+    const api = fakeApi({ approvals: vi.fn(async () => [approval]) });
+    const { client, close } = await connect(api, true);
+    try {
+      const pause = await client.callTool({
+        name: "automation_pause",
+        arguments: { paused: true },
+      });
+      expect(pause.isError).toBeUndefined();
+      expect(api.setAutomation).toHaveBeenCalledWith({ paused: true });
+
+      const watcher = await client.callTool({
+        name: "automation_pause",
+        arguments: { paused: true, watcher: "w1" },
+      });
+      expect(watcher.isError).toBeUndefined();
+      expect(api.setWatcherPaused).toHaveBeenCalledWith("w1", true);
+
+      const act = await client.callTool({
+        name: "approvals_act",
+        arguments: { id: "approval_1", action: "deny" },
+      });
+      expect(act.isError).toBeUndefined();
+      expect(api.actOnApproval).toHaveBeenCalledWith("approval_1", "deny");
+    } finally {
+      await close();
+    }
+  });
+
+  it("registers only the allowlisted automation tools", async () => {
+    const { client, close } = await connect(fakeApi(), false, {
+      tools: ["automation_list"],
+    });
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toEqual(["automation_list"]);
     } finally {
       await close();
     }

@@ -163,8 +163,19 @@ schedule triggers under a policy.
   `condition.sessionRef` and fire every `everyMs`.
 - Quiet hours escalate answer and retry actions instead of acting.
 - Actions: `answer`, `escalate`, `notify`, `retry`.
-- Not implemented yet: token budgets, `start`, always-allow, G2 approvals, and
-  MCP/CLI controls.
+- Not implemented yet: token budgets, `start`, always-allow, and G2 approvals.
+
+Control it from the CLI:
+
+```sh
+npx @amoshydra/oktoso automation status
+npx @amoshydra/oktoso automation pause
+npx @amoshydra/oktoso automation pause --watcher answer-safe-questions
+npx @amoshydra/oktoso automation resume
+```
+
+The command reads the same config and owner token as `oktoso status`; pass
+`--url` for a remote hub.
 
 ## OpenCode on another host
 
