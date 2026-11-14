@@ -316,6 +316,7 @@ start-from-template, always-allow, G2 approvals, and an in-flight abort.
   `approvals_act`; write tools stay behind `--allow-write` and the token tool
   allowlist.
 - [x] `oktoso automation status|pause|resume`, including `--watcher <id>`.
+- [x] `oktoso://automation` MCP resource with subscription updates.
 
 ### B8. Safety tests
 
