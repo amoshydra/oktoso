@@ -726,10 +726,39 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
         title: "Read automation",
         description:
           "List watchers, dry-run/pause state, recent runs, and pending approvals.",
+        inputSchema: {
+          runs: z
+            .number()
+            .int()
+            .min(0)
+            .max(50)
+            .optional()
+            .describe("Recent runs to include (default 10)"),
+          approvals: z
+            .number()
+            .int()
+            .min(0)
+            .max(50)
+            .optional()
+            .describe("Pending approvals to include (default 10)"),
+        },
         annotations: { readOnlyHint: true },
       },
-      async (extra) =>
-        respond("automation_list", async () => api.automation(), { extra }),
+      async ({ runs, approvals }, extra) =>
+        respond(
+          "automation_list",
+          async () => {
+            const view = await api.automation();
+            return {
+              data: {
+                ...view,
+                runs: view.runs.slice(0, runs ?? 10),
+                approvals: view.approvals.slice(0, approvals ?? 10),
+              },
+            };
+          },
+          { args: { runs, approvals }, extra },
+        ),
     );
   }
 
@@ -739,13 +768,24 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       {
         title: "List automation approvals",
         description: "List actions the automation policy escalated to a human.",
+        inputSchema: {
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe("Approvals to return (default 20)"),
+        },
         annotations: { readOnlyHint: true },
       },
-      async (extra) =>
+      async ({ limit }, extra) =>
         respond(
           "approvals_list",
-          async () => ({ data: await api.approvals() }),
-          { extra },
+          async () => ({
+            data: (await api.approvals()).slice(0, limit ?? 20),
+          }),
+          { args: { limit }, extra },
         ),
     );
   }

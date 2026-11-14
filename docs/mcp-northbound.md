@@ -226,8 +226,8 @@ Read-only:
 | `sessions_messages` | Paginated transcript |
 | `attention_list` | Permissions, approvals, questions, unread, and errors |
 | `questions_get` | Pending question with choices and risk |
-| `automation_list` | Watchers, dry-run/pause state, recent runs, and approvals |
-| `approvals_list` | Actions the automation policy escalated to a human |
+| `automation_list` | Watchers, dry-run/pause state, recent runs, and approvals; `runs` and `approvals` default to 10 and cap at 50 |
+| `approvals_list` | Actions the automation policy escalated to a human; `limit` defaults to 20 and caps at 100 |
 
 Write (`--allow-write`):
 
@@ -240,6 +240,11 @@ Write (`--allow-write`):
 | `attention_act` | Run an action listed on an attention item |
 | `automation_pause` | Pause or resume the policy or one watcher |
 | `approvals_act` | Approve or deny an automation approval |
+
+Automation read results use a `{ data: ... }` envelope. A provider-scoped
+token sees only watchers whose condition names an allowed provider, plus
+watchers without a provider condition; runs, approvals, and paused watcher IDs
+are filtered the same way.
 
 ## Controller policy
 
