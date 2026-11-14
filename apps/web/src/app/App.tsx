@@ -83,6 +83,21 @@ import { readRouteCache, writeRouteCache } from "./route-cache";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import {
+  readSessionCache,
+  readSessionsCache,
+  writeSessionCache,
+  writeSessionsCache,
+} from "./offline-cache";
+import {
+  enqueueSend,
+  isOnline,
+  queuedMessages,
+  removeQueued as removeQueuedSend,
+  shouldQueue,
+  subscribeQueueResults,
+} from "./send-queue";
+import { useSendQueue } from "./use-send-queue";
+import {
   createOptimisticMessage,
   optimisticSend,
   updateOptimisticStatus,
@@ -250,6 +265,7 @@ export function App() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [attentionCount, setAttentionCount] = useState(0);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
+  const queuedCount = useSendQueue(client, connection);
   const [events, setEvents] = useState<HubEvent[]>([]);
   const [checkingProviders, setCheckingProviders] = useState(false);
   const [error, setError] = useState<string>();
@@ -551,6 +567,17 @@ export function App() {
         if (cancelled) return;
         if (reason instanceof HubError && reason.status === 401) {
           signOut();
+          return;
+        }
+        // Offline: keep the cached shell usable and let the next successful
+        // check or SSE connection confirm the session. A real auth failure
+        // still signs out above.
+        if (
+          reason instanceof HubError &&
+          (reason.code === "network_error" || reason.code === "timeout")
+        ) {
+          setAuth("signed-in");
+          void loadSnapshot(hub).catch(() => undefined);
           return;
         }
         setAuth("signed-out");
@@ -878,6 +905,14 @@ export function App() {
             <i />
             {connectionLabel(connection)}
           </span>
+          {queuedCount > 0 ? (
+            <span
+              className="status-chip topbar-queued"
+              title={`${queuedCount} message${queuedCount === 1 ? "" : "s"} waiting to send`}
+            >
+              {queuedCount} queued
+            </span>
+          ) : null}
           <button className="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
             <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
           </button>
@@ -2628,17 +2663,22 @@ function SessionsView(props: {
   onOpen: (ref: string) => void;
 }) {
   const { key } = useHistoryLocation();
-  const cached = useRef(
+  const cached = useRef<
+    { sessions: Session[]; cursor: string | null; savedAt?: number } | undefined
+  >(
     readRouteCache<{ sessions: Session[]; cursor: string | null }>(
       key,
       "sessions-list",
-    ),
+    ) ?? readSessionsCache(),
   );
   const [sessions, setSessions] = useState<Session[]>(
     () => cached.current?.sessions ?? [],
   );
   const [cursor, setCursor] = useState<string | null>(
     () => cached.current?.cursor ?? null,
+  );
+  const [syncedAt, setSyncedAt] = useState<number | undefined>(
+    cached.current?.savedAt,
   );
   const [loading, setLoading] = useState(!cached.current);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -2719,6 +2759,10 @@ function SessionsView(props: {
         return [...current, ...page.data.filter((session) => !seen.has(session.ref))];
       });
       setCursor(page.cursor.next);
+      if (!next) {
+        writeSessionsCache({ sessions: page.data, cursor: page.cursor.next });
+        setSyncedAt(Date.now());
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load sessions");
     } finally {
@@ -2787,12 +2831,22 @@ function SessionsView(props: {
       ) : null}
 
       {error ? (
-        <div className="alert" role="alert">
-          {error}
-          <button className="text-button" type="button" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
+        sessions.length > 0 ? (
+          <p className="page-offline-note" role="status">
+            Offline · showing the last synced list
+            {syncedAt ? ` from ${new Date(syncedAt).toLocaleString()}` : ""}.
+            <button className="text-button" type="button" onClick={() => void load()}>
+              Retry
+            </button>
+          </p>
+        ) : (
+          <div className="alert" role="alert">
+            {error}
+            <button className="text-button" type="button" onClick={() => void load()}>
+              Retry
+            </button>
+          </div>
+        )
       ) : null}
 
       <section className="panel">
@@ -3558,8 +3612,11 @@ function SessionDetail(props: {
   attentionID?: string;
   onBack: () => void;
 }) {
-  const [session, setSession] = useState<Session>();
+  const [session, setSession] = useState<Session | undefined>(() =>
+    readSessionCache(props.sessionRef),
+  );
   const [messages, setMessages] = useState<Message[]>([]);
+  const [online, setOnline] = useState(() => isOnline());
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -4045,6 +4102,17 @@ function SessionDetail(props: {
   }, []);
 
   useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     setDictation({ phase: "idle" });
     setDictationElapsedMs(0);
     return () => cleanupDictation();
@@ -4098,6 +4166,7 @@ function SessionDetail(props: {
       const latest = [...page.data].reverse();
       const stick = (forceBottom || nearBottom()) && !restoreScroll.current;
       setSession(nextSession);
+      writeSessionCache(nextSession);
       setMessages((current) =>
         replace ? latest : mergeLatestPage(current, latest),
       );
@@ -4105,6 +4174,30 @@ function SessionDetail(props: {
       if (stick) pendingScroll.current = { mode: "bottom" };
     },
     [props.client, props.sessionRef],
+  );
+
+  useEffect(
+    () =>
+      subscribeQueueResults(({ idempotencyKey, status, error }) => {
+        setMessages((current) =>
+          current.map((message) => {
+            const payload = optimisticSend(message);
+            if (!payload || payload.idempotencyKey !== idempotencyKey) {
+              return message;
+            }
+            return status === "sent"
+              ? updateOptimisticStatus(message, "sent")
+              : updateOptimisticStatus(message, "failed", error);
+          }),
+        );
+        if (status === "sent") {
+          window.setTimeout(
+            () => void refreshLatest(true).catch(() => undefined),
+            300,
+          );
+        }
+      }),
+    [refreshLatest],
   );
 
   const loadOlder = useCallback(async () => {
@@ -4318,22 +4411,67 @@ function SessionDetail(props: {
     const previousAttachments = attachments;
     setSending(true);
     setSendError(undefined);
-    let optimistic: Message | undefined;
+
+    let idempotencyKey: string;
+    let created: Message;
     try {
-      const idempotencyKey = createID();
+      idempotencyKey = createID();
+      created = createOptimisticMessage({
+        sessionRef: props.sessionRef,
+        text,
+        attachments,
+        idempotencyKey,
+      });
+    } catch (reason) {
+      setSendError(promptFailure(reason));
+      setSending(false);
+      return;
+    }
+
+    let appended = false;
+    const queue = () => {
+      enqueueSend({
+        id: created.id,
+        sessionRef: props.sessionRef,
+        text,
+        attachments,
+        idempotencyKey,
+        createdAt: created.createdAt,
+        ...(delivery ? { delivery } : {}),
+      });
+      if (appended) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === created.id
+              ? updateOptimisticStatus(message, "queued")
+              : message,
+          ),
+        );
+      } else {
+        appended = true;
+        setMessages((current) => [
+          ...current,
+          updateOptimisticStatus(created, "queued"),
+        ]);
+        pendingScroll.current = { mode: "bottom" };
+      }
+    };
+
+    try {
       if (!queueDelivery) {
-        const created = createOptimisticMessage({
-          sessionRef: props.sessionRef,
-          text,
-          attachments,
-          idempotencyKey,
-        });
-        optimistic = created;
+        appended = true;
         setMessages((current) => [...current, created]);
         pendingScroll.current = { mode: "bottom" };
       }
+      setAttachments([]);
       await discardDraft();
       dismissSuggestions();
+
+      if (!isOnline()) {
+        queue();
+        return;
+      }
+
       await props.client.sendMessage(
         props.sessionRef,
         {
@@ -4346,11 +4484,10 @@ function SessionDetail(props: {
       setAttachments([]);
       if (queueDelivery) {
         await refreshInbox();
-      } else if (optimistic) {
-        const sentID = optimistic.id;
+      } else if (appended) {
         setMessages((current) =>
           current.map((message) =>
-            message.id === sentID
+            message.id === created.id
               ? updateOptimisticStatus(message, "sent")
               : message,
           ),
@@ -4362,6 +4499,10 @@ function SessionDetail(props: {
         void refreshBranches();
       }, 500);
     } catch (reason) {
+      if (shouldQueue(reason)) {
+        queue();
+        return;
+      }
       const message = promptFailure(reason);
       if (text && !draftRef.current.trim()) {
         // The draft was deleted before the request. Restore it so a reload
@@ -4370,11 +4511,10 @@ function SessionDetail(props: {
         void props.client.saveDraft(props.sessionRef, text).catch(() => undefined);
       }
       if (queueDelivery) setAttachments(previousAttachments);
-      if (optimistic) {
-        const failedID = optimistic.id;
+      if (appended) {
         setMessages((current) =>
           current.map((item) =>
-            item.id === failedID
+            item.id === created.id
               ? updateOptimisticStatus(item, "failed", message)
               : item,
           ),
@@ -4435,6 +4575,7 @@ function SessionDetail(props: {
 
   const discardOptimistic = (message: Message) => {
     const payload = optimisticSend(message);
+    if (payload) removeQueuedSend(payload.idempotencyKey);
     setMessages((current) => current.filter((item) => item.id !== message.id));
     for (const id of payload?.attachmentIDs ?? []) {
       void props.client.deleteAttachment(id).catch(() => undefined);
@@ -4808,8 +4949,8 @@ function SessionDetail(props: {
     let cancelled = false;
     pendingScroll.current = undefined;
     restoreScroll.current = hasSavedScroll("transcript");
-    setSession(undefined);
-    setMessages([]);
+    setSession(readSessionCache(props.sessionRef));
+    setMessages(queuedMessages(props.sessionRef));
     setOlderCursor(null);
     setLoading(true);
     setError(undefined);
@@ -5467,6 +5608,11 @@ function SessionDetail(props: {
                   : ""}
               </span>
               {backgroundItems.length > 0 || !atBottom ? (
+              {!online ? (
+                <p className="composer-offline-note" role="status">
+                  Offline · sends will be queued.
+                </p>
+              ) : null}
                 <div className="composer-status">
                   {backgroundItems.length > 0 ? (
                     <button
@@ -6390,6 +6536,20 @@ function TranscriptMessage(props: {
           </>
         )}
       </div>
+      {send?.status === "queued" ? (
+        <div className="message-send-state queued" role="status">
+          <span>Queued. Sends when the hub is reachable.</span>
+          <div className="message-send-actions">
+            <button
+              className="message-action"
+              type="button"
+              onClick={() => props.onDiscardOptimistic?.(message)}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      ) : null}
       {send?.status === "sending" ? (
         <div className="message-send-state" role="status">
           <span>Sending…</span>

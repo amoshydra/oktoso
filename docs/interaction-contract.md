@@ -530,6 +530,15 @@ discovery surface.
 - A failed local message is not persisted. Navigating away loses the inline
   retry. The message text is re-saved as the session draft so a reload can
   recover it; attachments are not re-queued.
+- A retryable failure (offline, timeout, 5xx) does not become `failed`. The
+  message becomes `queued`, is persisted in local storage with its idempotency
+  key, attachments, and optimistic id, and replays in order when the browser or
+  hub connection returns. The topbar shows the pending count, and a queued row
+  offers Discard. The queue drains one item at a time; a terminal 4xx removes
+  the item and shows `Not sent.` with Retry.
+- An offline auth check keeps the cached shell signed in instead of showing the
+  login screen; a 401 still signs out. This is what lets a reload while offline
+  reach the transcript and the queue.
 
 ### Edit and fork
 

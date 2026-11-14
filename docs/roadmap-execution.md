@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: A1–A6 complete. A7 (outbound channels) is next.
+Status: A1–A6 and A8 complete; A7 is deferred (local-first, no cloud channels). A9 (release) is next.
 
 ### A1. Contracts and configuration
 
@@ -185,7 +185,12 @@ Status: implemented. The panel lives in
 `/api/v1/notifications`, and uses the existing panel/form/button grammar.
 An e2e saves routing and verifies it survives a reload.
 
-### A7. Outbound channels
+### A7. Outbound channels (deferred)
+
+Status: deferred on 2026-11-15. Keep notifications local-first: no ntfy,
+Telegram, or webhook until a local consumer exists. The transport seam,
+config schema, and settings channel view are already in place; add the generic
+webhook first when something on the LAN is ready to receive it.
 
 - [ ] `packages/hub/src/services/channels/ntfy.ts`, `telegram.ts`,
   `webhook.ts`.
@@ -200,14 +205,21 @@ channel does not block Web Push.
 
 ### A8. Offline shell and queued sends
 
-- [ ] Cache the shell and the last session list.
-- [ ] Queue composer sends while offline and replay in order on reconnect.
-- [ ] Show a clear offline/queued state; never silently drop a send.
-- [ ] Reuse the existing optimistic-send and retry path.
+- [x] Cache the shell and the last session list.
+- [x] Queue composer sends while offline and replay in order on reconnect.
+- [x] Show a clear offline/queued state; never silently drop a send.
+- [x] Reuse the existing optimistic-send and retry path.
 
 **Touch:** `apps/web/src/app/App.tsx` (thin), `apps/web/src/pwa.ts`,
 `apps/web/public/sw.js`.
 **Done:** a send made offline appears queued, survives a reload, and lands once.
+
+Status: implemented. The worker precaches the built index's hashed assets
+(not just `/`), the first session page and the last session header are cached
+in local storage, and queued sends persist in `oktoso-send-queue-v1`. The queue
+replays on `online` or an open event stream, in order, with the original
+idempotency key. An offline auth check keeps the cached shell open. E2e covers
+queue, reload, reconnect, and one POST.
 
 ### A9. Tests and docs
 
