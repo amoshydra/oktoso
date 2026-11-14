@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  DEFAULT_NOTIFICATION_ROUTING,
+  zNotificationRouting,
+} from "@amoshydra/oktoso-contracts";
 
 export const zProviderAuth = z.discriminatedUnion("kind", [
   z.object({
@@ -98,6 +102,79 @@ export const zMcpConfig = z
     });
   });
 
+export const zNotificationWebPushConfig = z.object({
+  kind: z.literal("webpush"),
+  enabled: z.boolean().default(true),
+});
+
+export const zNotificationNtfyConfig = z.object({
+  kind: z.literal("ntfy"),
+  enabled: z.boolean().default(true),
+  url: z.string().url(),
+  topic: z.string().min(1),
+  token: z.string().optional(),
+});
+
+export const zNotificationTelegramConfig = z.object({
+  kind: z.literal("telegram"),
+  enabled: z.boolean().default(true),
+  botToken: z.string().min(1),
+  chatID: z.string().min(1),
+});
+
+export const zNotificationWebhookConfig = z.object({
+  kind: z.literal("webhook"),
+  enabled: z.boolean().default(true),
+  url: z.string().url(),
+  secret: z.string().optional(),
+});
+
+export const zNotificationChannelConfig = z.discriminatedUnion("kind", [
+  zNotificationWebPushConfig,
+  zNotificationNtfyConfig,
+  zNotificationTelegramConfig,
+  zNotificationWebhookConfig,
+]);
+
+export const zNotificationVapidConfig = z.object({
+  publicKey: z.string().min(1).optional(),
+  privateKey: z.string().min(1).optional(),
+  subject: z.string().min(1).default("mailto:oktoso@localhost"),
+});
+
+export const zNotificationConfig = z
+  .object({
+    enabled: z.boolean().default(false),
+    channels: z.array(zNotificationChannelConfig).default([]),
+    routing: zNotificationRouting.default(DEFAULT_NOTIFICATION_ROUTING),
+    vapid: zNotificationVapidConfig.default({
+      subject: "mailto:oktoso@localhost",
+    }),
+    maxAttempts: z.number().int().min(1).max(10).default(3),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    value.channels.forEach((channel, index) => {
+      if (seen.has(channel.kind)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Duplicate notification channel: ${channel.kind}`,
+          path: ["channels", index, "kind"],
+        });
+      }
+      seen.add(channel.kind);
+    });
+    const hasPublic = Boolean(value.vapid.publicKey);
+    const hasPrivate = Boolean(value.vapid.privateKey);
+    if (hasPublic !== hasPrivate) {
+      ctx.addIssue({
+        code: "custom",
+        message: "vapid.publicKey and vapid.privateKey must be set together",
+        path: ["vapid"],
+      });
+    }
+  });
+
 export const zHubConfig = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
@@ -120,6 +197,13 @@ export const zHubConfig = z.object({
     .max(3_600_000)
     .default(30_000),
   providers: z.array(zProviderConfig).default([]),
+  notifications: zNotificationConfig.default({
+    enabled: false,
+    channels: [],
+    routing: DEFAULT_NOTIFICATION_ROUTING,
+    vapid: { subject: "mailto:oktoso@localhost" },
+    maxAttempts: 3,
+  }),
   mcp: zMcpConfig.default({
     enabled: false,
     tokens: [],
@@ -147,3 +231,7 @@ export type HubTarget = z.infer<typeof zHubTarget>;
 export type HubPairingConfig = z.infer<typeof zHubPairingConfig>;
 export type McpConfig = z.infer<typeof zMcpConfig>;
 export type McpTokenConfig = z.infer<typeof zMcpToken>;
+export type NotificationConfig = z.infer<typeof zNotificationConfig>;
+export type NotificationChannelConfig = z.infer<
+  typeof zNotificationChannelConfig
+>;
