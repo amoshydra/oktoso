@@ -294,7 +294,13 @@ export class OpenCodeAdapter implements ProviderAdapter {
       {},
       signal,
       "POST",
-      { text: input.text, ...(files.length > 0 ? { files } : {}) },
+      {
+        text: input.text,
+        // The hub exposes steer only today. Be explicit instead of relying on
+        // the provider default if it changes.
+        delivery: "steer",
+        ...(files.length > 0 ? { files } : {}),
+      },
     );
     return {
       accepted: true,
@@ -484,7 +490,7 @@ export class OpenCodeAdapter implements ProviderAdapter {
       {},
       signal,
       "POST",
-      { text },
+      { text, delivery: "steer" },
     );
     return {
       accepted: true,

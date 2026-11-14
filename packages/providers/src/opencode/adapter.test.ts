@@ -201,7 +201,7 @@ describe("OpenCodeAdapter.retryMessage", () => {
       "POST /api/session/ses_test/prompt",
     ]);
     expect(calls[1]?.body).toEqual({ messageID: "msg_user" });
-    expect(calls[3]?.body).toEqual({ text: "retry me" });
+    expect(calls[3]?.body).toEqual({ text: "retry me", delivery: "steer" });
   });
 
   it("refuses to retry a turn that changed files", async () => {
