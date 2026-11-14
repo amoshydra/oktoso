@@ -521,17 +521,30 @@ export function buildPayload(
     attention: primary,
     count,
     sessionCount,
-    title: kind === "digest" ? `${count} items need attention` : primary.title,
+    title:
+      kind === "digest"
+        ? `${count} items need attention`
+        : truncate(primary.title, MAX_TITLE_CHARS),
     body:
       kind === "digest"
         ? `${count} item${count === 1 ? "" : "s"} from ${sessionCount} session${sessionCount === 1 ? "" : "s"}`
-        : primary.summary,
+        : truncate(primary.summary, MAX_BODY_CHARS),
     url: attentionDeepLink(primary),
     tag:
       kind === "digest"
         ? "oktoso-digest"
         : `${primary.sessionRef}:${primary.type}`,
   };
+}
+
+const MAX_TITLE_CHARS = 80;
+const MAX_BODY_CHARS = 240;
+
+/** Keep push payloads inside the service-worker and APNs size limits. */
+function truncate(value: string, max: number): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
 export function attentionDeepLink(item: Attention): string {

@@ -85,15 +85,14 @@ reachability.
 ## Notifications
 
 `notifications` is off by default. Enabling it turns attention events into
-phone notifications.
+phone notifications. Web Push is the only delivery path implemented today;
+`ntfy`, `telegram`, and `webhook` are accepted by the schema but reserved.
 
 ```jsonc
 {
   "notifications": {
     "enabled": true,
-    "channels": [
-      { "kind": "ntfy", "url": "https://ntfy.sh", "topic": "oktoso", "token": "${NTFY_TOKEN}" }
-    ],
+    // "channels": [] — reserved for future ntfy/Telegram/webhook senders
     "routing": {
       "immediate": ["permission", "approval"],
       "digest": ["question", "unread", "error"],
@@ -105,9 +104,10 @@ phone notifications.
 ```
 
 - Web Push needs no channel entry. It activates when a browser registers a
-  subscription and the device is served over HTTPS or `localhost`.
-- `ntfy`, `telegram`, and `webhook` are optional fallbacks. Keep their tokens in
-  environment references.
+  subscription and the device is served over **HTTPS or `localhost`**. On iOS,
+  the PWA must be installed from the share sheet before push is available.
+- The Settings screen enables notifications per device, sends a test, edits
+  routing and quiet hours, and revokes a device without rotating the hub token.
 - A blocking item always wakes the device. Everything else respects quiet hours
   and the digest window.
 - VAPID keys are generated once at `dataDir/notifications/vapid.json` with mode
@@ -116,6 +116,8 @@ phone notifications.
   Never commit or log the private key.
 - Rotating the VAPID pair invalidates every existing browser subscription; those
   devices must subscribe again.
+- If the hub is behind a reverse proxy, terminate TLS there and set `publicUrl`
+  so notification links open the external origin.
 
 ## OpenCode on another host
 

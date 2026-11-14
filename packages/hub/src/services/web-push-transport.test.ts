@@ -1,13 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createECDH, randomBytes } from "node:crypto";
 import type { Attention } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
 import { buildPayload } from "./notification-service";
 import {
   WebPushTransport,
+  createWebPushSender,
   type PushSender,
   type PushSubscriptionTarget,
 } from "./web-push-transport";
+import { generateVapidKeys } from "./vapid";
 
 const now = Date.UTC(2026, 10, 14, 12, 0, 0);
 const logger = createLogger({ level: "silent" });
@@ -158,5 +161,68 @@ describe("WebPushTransport", () => {
     await push.send(buildPayload("digest", [attention()], "webpush"));
 
     expect(sender.calls[0]?.options.urgency).toBe("normal");
+  });
+});
+
+describe("WebPush sender", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function subscription() {
+    const ecdh = createECDH("prime256v1");
+    ecdh.generateKeys();
+    return {
+      endpoint: "https://push.example.com/abc",
+      keys: {
+        p256dh: ecdh.getPublicKey().toString("base64url"),
+        auth: randomBytes(16).toString("base64url"),
+      },
+    };
+  }
+
+  it("encrypts the payload and sends VAPID headers", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 201 });
+    });
+
+    const target = subscription();
+    const sender = createWebPushSender({
+      ...generateVapidKeys(),
+      subject: "mailto:test@example.com",
+    });
+
+    await sender.send(target, JSON.stringify({ title: "hi" }), {
+      ttlSeconds: 60,
+      urgency: "high",
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(target.endpoint);
+    expect(calls[0]?.init.method).toBe("post");
+
+    const headers = calls[0]?.init.headers as Record<string, string>;
+    expect(headers.authorization).toMatch(/^vapid t=/);
+    expect(headers["content-encoding"]).toBe("aes128gcm");
+    expect(headers.ttl).toBe("60");
+    expect(headers.urgency).toBe("high");
+    expect((calls[0]?.init.body as Uint8Array).length).toBeGreaterThan(1_024);
+  });
+
+  it("maps a 410 response to a statusCode error", async () => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 410 }));
+    const sender = createWebPushSender({
+      ...generateVapidKeys(),
+      subject: "mailto:test@example.com",
+    });
+
+    await expect(
+      sender.send(subscription(), JSON.stringify({ title: "hi" }), {
+        ttlSeconds: 60,
+        urgency: "normal",
+      }),
+    ).rejects.toMatchObject({ statusCode: 410 });
   });
 });

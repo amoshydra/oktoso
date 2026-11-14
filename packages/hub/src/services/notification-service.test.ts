@@ -11,6 +11,7 @@ import { createLogger } from "../lib/logger";
 import { EventBus } from "./event-bus";
 import {
   NotificationService,
+  buildPayload,
   isQuietHours,
   msUntilQuietHoursEnd,
   type NotificationPayload,
@@ -73,11 +74,13 @@ async function setup(
   options: {
     config?: Partial<NotificationConfig>;
     now?: number;
+    clock?: { now: number };
     transport?: RecordingTransport;
   } = {},
 ) {
+  const clock = options.clock ?? { now: options.now ?? now };
   const store = new MemoryStateStore();
-  const bus = new EventBus(store, logger, { now: () => options.now ?? now });
+  const bus = new EventBus(store, logger, { now: () => clock.now });
   await bus.init();
   const transport = options.transport ?? new RecordingTransport();
   const service = new NotificationService({
@@ -86,7 +89,7 @@ async function setup(
     eventBus: bus,
     logger,
     transport,
-    now: () => options.now ?? now,
+    now: () => clock.now,
     retryDelayMs: 0,
   });
   service.start();
@@ -123,6 +126,24 @@ describe("NotificationService", () => {
       attempts: 1,
       attentionID: "att-1",
     });
+  });
+
+  it("bounds the push title and body", () => {
+    const payload = buildPayload(
+      "immediate",
+      [
+        attention("long", "permission", {
+          title: "T".repeat(200),
+          summary: "S".repeat(600),
+        }),
+      ],
+      "webpush",
+    );
+
+    expect(payload.title.length).toBeLessThanOrEqual(80);
+    expect(payload.title.endsWith("…")).toBe(true);
+    expect(payload.body.length).toBeLessThanOrEqual(240);
+    expect(payload.body.endsWith("…")).toBe(true);
   });
 
   it("dedupes repeated created events for the same item", async () => {
@@ -177,6 +198,34 @@ describe("NotificationService", () => {
       sessionCount: 2,
       tag: "oktoso-digest",
     });
+  });
+
+  it("sends the digest after quiet hours end", async () => {
+    const clock = { now: Date.UTC(2026, 10, 14, 23, 30) };
+    const quietRouting: NotificationRouting = {
+      ...DEFAULT_NOTIFICATION_ROUTING,
+      quietHours: {
+        enabled: true,
+        start: "22:00",
+        end: "07:00",
+        timezone: "UTC",
+      },
+    };
+    const { bus, transport, service } = await setup({
+      config: { routing: quietRouting },
+      clock,
+    });
+
+    await publish(bus, attention("q-1", "question", { priority: "normal" }));
+    await service.whenIdle();
+    expect(transport.payloads).toHaveLength(0);
+
+    clock.now = Date.UTC(2026, 10, 15, 7, 30);
+    await service.flush();
+
+    expect(transport.payloads).toHaveLength(1);
+    expect(transport.payloads[0]?.kind).toBe("digest");
+    service.stop();
   });
 
   it("does not notify for an item resolved before the digest flushes", async () => {
