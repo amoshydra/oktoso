@@ -1838,6 +1838,36 @@ components:
             type:
               type: string
               enum:
+                - shell
+            id:
+              type: string
+            command:
+              type: string
+            status:
+              type: string
+            background:
+              type: boolean
+            exit:
+              type: number
+            output:
+              type: string
+            truncated:
+              type: boolean
+            startedAt:
+              type: integer
+            completedAt:
+              type: integer
+          required:
+            - type
+            - id
+            - command
+            - status
+            - background
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
                 - compaction
             reason:
               type: string
@@ -1957,6 +1987,36 @@ components:
                   - id
                   - name
                   - status
+              - type: object
+                properties:
+                  type:
+                    type: string
+                    enum:
+                      - shell
+                  id:
+                    type: string
+                  command:
+                    type: string
+                  status:
+                    type: string
+                  background:
+                    type: boolean
+                  exit:
+                    type: number
+                  output:
+                    type: string
+                  truncated:
+                    type: boolean
+                  startedAt:
+                    type: integer
+                  completedAt:
+                    type: integer
+                required:
+                  - type
+                  - id
+                  - command
+                  - status
+                  - background
               - type: object
                 properties:
                   type:
@@ -2101,6 +2161,36 @@ components:
                         - id
                         - name
                         - status
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - shell
+                        id:
+                          type: string
+                        command:
+                          type: string
+                        status:
+                          type: string
+                        background:
+                          type: boolean
+                        exit:
+                          type: number
+                        output:
+                          type: string
+                        truncated:
+                          type: boolean
+                        startedAt:
+                          type: integer
+                        completedAt:
+                          type: integer
+                      required:
+                        - type
+                        - id
+                        - command
+                        - status
+                        - background
                     - type: object
                       properties:
                         type:

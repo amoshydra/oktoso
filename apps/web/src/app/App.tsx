@@ -87,7 +87,7 @@ import {
   sanitizeToolOutput,
   toolOutputText,
 } from "./tool-images";
-import { formatBytes, formatChars } from "./metrics";
+import { formatBytes, formatChars, formatDuration } from "./metrics";
 import {
   isTextPreview,
   previewKind,
@@ -97,6 +97,7 @@ import {
 } from "./file-preview";
 import {
   compactionPart,
+  shellPart,
   stepsFromMessages,
   stepsFromParts,
   type ActivityStep,
@@ -4322,6 +4323,52 @@ function SessionDetail(props: {
     sessionRef: session?.ref,
     fileRead: Boolean(sessionProvider?.capabilities.files),
   };
+  const backgroundItems = useMemo<BackgroundItem[]>(() => {
+    const items: BackgroundItem[] = [];
+    for (const message of messages) {
+      const part = shellPart(message);
+      if (!part || part.status !== "running") continue;
+      items.push({
+        key: `shell:${part.id}`,
+        kind: "shell",
+        label: "Background shell",
+        detail: part.command,
+        status: "running",
+        meta:
+          part.startedAt !== undefined
+            ? `${formatDuration(Date.now() - part.startedAt)} elapsed`
+            : "running",
+      });
+    }
+    for (const step of stepsFromMessages(messages)) {
+      if (step.kind !== "subagent" || step.status !== "running") continue;
+      const part = step.part;
+      const metadata = part.type === "tool" ? part.metadata ?? {} : {};
+      const sessionID =
+        typeof metadata.sessionID === "string" ? metadata.sessionID : undefined;
+      const detail =
+        part.type === "tool"
+          ? [inputText(part.input, ["agent"]), inputText(part.input, ["description"])]
+              .filter(Boolean)
+              .join(" · ")
+          : "";
+      items.push({
+        key: step.key,
+        kind: "subagent",
+        label: "Subagent",
+        detail: detail || "child session",
+        status: "running",
+        meta:
+          step.startedAt !== undefined
+            ? `${formatDuration(Date.now() - step.startedAt)} elapsed`
+            : "running",
+        ...(sessionID && session?.providerID
+          ? { childRef: `${session.providerID}:${sessionID}` }
+          : {}),
+      });
+    }
+    return items;
+  }, [messages, session?.providerID]);
 
   return (
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
@@ -4440,6 +4487,8 @@ function SessionDetail(props: {
                       client={props.client}
                       resource={resource}
                     />
+                  ) : item.kind === "shell" ? (
+                    <ShellRow message={item.message} key={item.key} />
                   ) : (
                     <ActivityTiles
                       steps={item.steps}
@@ -4918,6 +4967,7 @@ function SessionDetail(props: {
             provider={sessionProvider}
             markingRead={markingRead}
             interrupting={interrupting}
+            background={backgroundItems}
             onClose={() => props.onDetailsOpenChange(false)}
             onMarkRead={() => void markRead()}
             onInterrupt={() => void interrupt()}
@@ -4939,10 +4989,21 @@ function SessionDetail(props: {
   );
 }
 
+interface BackgroundItem {
+  key: string;
+  kind: "shell" | "subagent";
+  label: string;
+  detail: string;
+  status: "running";
+  meta: string;
+  childRef?: string;
+}
+
 type TranscriptItem =
   | { kind: "message"; message: Message }
   | { kind: "activity"; messages: Message[]; key: string; steps: ActivityStep[] }
   | { kind: "compaction"; message: Message; key: string }
+  | { kind: "shell"; message: Message; key: string }
   | { kind: "date"; at: number; key: string };
 
 function groupTranscript(messages: Message[]): TranscriptItem[] {
@@ -4976,6 +5037,9 @@ function groupTranscript(messages: Message[]): TranscriptItem[] {
     if (compactionPart(message)) {
       flush();
       push({ kind: "compaction", message, key: `compaction:${message.id}` }, message.createdAt);
+    } else if (shellPart(message)) {
+      flush();
+      push({ kind: "shell", message, key: `shell:${message.id}` }, message.createdAt);
     } else if (isActivityMessage(message)) {
       activity.push(message);
     } else {
@@ -5924,6 +5988,63 @@ function CompactionRow(props: {
   );
 }
 
+
+function ShellRow(props: { message: Message }) {
+  const part = shellPart(props.message);
+  const [open, setOpen] = useState(false);
+  if (!part) return null;
+
+  const running = part.status === "running";
+  const exit = part.exit;
+  const failed = !running && exit !== undefined && exit !== 0;
+  const status = running
+    ? "running"
+    : exit !== undefined
+      ? `exit ${exit}`
+      : part.status;
+  const duration =
+    part.startedAt !== undefined
+      ? formatDuration(
+          (part.completedAt ?? (running ? Date.now() : part.startedAt)) -
+            part.startedAt,
+        )
+      : undefined;
+  const output = part.output ?? "";
+
+  return (
+    <section className="shell-run">
+      <div className="shell-run-row">
+        <span className="shell-run-icon" aria-hidden="true">
+          <Icon name="terminal" size={16} />
+        </span>
+        <span className="shell-run-title">
+          {part.background ? "Background shell" : "Shell"}
+        </span>
+        <code className="shell-run-command">{part.command}</code>
+        <span
+          className={`shell-run-status ${running ? "running" : failed ? "error" : ""}`}
+        >
+          {status}
+        </span>
+        {duration ? <span className="shell-run-time">{duration}</span> : null}
+        {output ? (
+          <button
+            className="text-button shell-run-toggle"
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? "Hide output" : "Show output"}
+          </button>
+        ) : null}
+      </div>
+      {open && output ? (
+        <pre className="shell-run-output">{output}</pre>
+      ) : null}
+    </section>
+  );
+}
+
 function DateSeparator(props: { at: number }) {
   return (
     <div className="chat-date-separator">
@@ -5938,6 +6059,7 @@ function SessionDetails(props: {
   provider: Provider | undefined;
   markingRead: boolean;
   interrupting: boolean;
+  background: BackgroundItem[];
   onClose: () => void;
   onMarkRead: () => void;
   onInterrupt: () => void;
@@ -6080,6 +6202,32 @@ function SessionDetails(props: {
           <Detail label="Created" value={formatDateTime(session.createdAt)} />
           <Detail label="Updated" value={formatDateTime(session.updatedAt)} />
         </section>
+
+        {props.background.length > 0 ? (
+          <section className="chat-details-section">
+            <div className="chat-details-label">Background</div>
+            {props.background.map((item) => (
+              <div className="background-item" key={item.key}>
+                <span className="background-item-head">
+                  <Icon name={item.kind === "subagent" ? "bot" : "terminal"} size={14} />
+                  <span>{item.label}</span>
+                  <span className="tool-status running">running</span>
+                </span>
+                <strong>{item.detail}</strong>
+                <span className="background-item-meta">{item.meta}</span>
+                {item.childRef ? (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => props.onOpenSession(item.childRef!)}
+                  >
+                    Open session
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </section>
+        ) : null}
 
         {session.cost !== undefined || tokens ? (
           <section className="chat-details-section">
@@ -6265,7 +6413,12 @@ function MessagePartView(props: {
   onPreviewFile?: (path: string) => void;
 }) {
   const part = props.part;
-  if (part.type === "tool" || part.type === "reasoning" || part.type === "compaction") {
+  if (
+    part.type === "tool" ||
+    part.type === "reasoning" ||
+    part.type === "compaction" ||
+    part.type === "shell"
+  ) {
     return null;
   }
   if (part.type === "text") {

@@ -886,6 +886,32 @@ describe("hub app", () => {
     expect(String(compaction?.summary)).toContain("Reconcile sessions");
   });
 
+  it("maps background shell runs with their output", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_index/messages?order=asc",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const body = (await response.json()) as {
+      data: Array<{ parts: Array<Record<string, unknown>> }>;
+    };
+    const shells = body.data
+      .flatMap((message) => message.parts)
+      .filter((part) => part.type === "shell");
+
+    expect(shells).toHaveLength(2);
+    expect(shells[0]).toMatchObject({
+      command: "pnpm build",
+      status: "exited",
+      exit: 0,
+      background: true,
+      output: "built in 1.4s",
+      startedAt: 1_792_968_060_000,
+      completedAt: 1_792_968_061_400,
+    });
+    expect(shells[1]).toMatchObject({ command: "pnpm dev", status: "running" });
+  });
+
   it("returns a pending question from the latest assistant message", async () => {
     const { app } = await createTestApp();
     const headers = { Authorization: `Bearer ${token}` };

@@ -3165,6 +3165,128 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   justify-self: start;
 }
 
+/* Background shell runs: a transcript row with output on demand. */
+.shell-run {
+  margin: var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shell-run-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem var(--space-2);
+  padding: var(--space-2) 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.shell-run-icon {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.shell-run-title {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.shell-run-command {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-run-status {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-2xs);
+}
+
+.shell-run-status.running {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border));
+}
+
+.shell-run-status.error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+}
+
+.shell-run-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-run-toggle {
+  margin-left: auto;
+}
+
+.shell-run-output {
+  margin: 0 0 var(--space-3);
+  max-height: 14rem;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Background list in the details panel. */
+.background-item {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.background-item:first-of-type {
+  border-top: 0;
+}
+
+.background-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.background-item-head .tool-status {
+  margin-left: auto;
+}
+
+.background-item strong {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.background-item-meta {
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.background-item .text-button {
+  justify-self: start;
+}
+
 /* Compaction: a transcript divider, never a tile. */
 .chat-compaction {
   margin: var(--space-4) 0;
@@ -3669,7 +3791,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     padding-bottom: calc(54px + env(safe-area-inset-bottom));
   }
 
-  .chat-shell {
+  .shell-run {
     grid-template-columns: minmax(0, 1fr);
   }
 
