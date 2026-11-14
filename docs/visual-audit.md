@@ -952,3 +952,12 @@ instead of raw fences, without changing the transcript hierarchy.
   and both use the existing 44px mobile target.
 - The card is not a new attention type visually; it reads as an approval and
   counts toward the same Inbox badge.
+
+## Always-allow shapes (2026-11-15)
+
+- **Always allow** is a quiet secondary action on an approval, not a third
+  primary. Selecting it replaces the row with `Confirm always` and `Cancel`;
+  the standing permission never lands on the first click.
+- Remembered shapes use the same automation list row: selected label as the
+  name, watcher/kind/uses/options as the meta line, Revoke as the only action.
+

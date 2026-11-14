@@ -110,6 +110,9 @@ export function withProviderPolicy(
         approvals: view.approvals.filter((approval) =>
           allowed.has(providerOf(approval.sessionRef)),
         ),
+        allowedShapes: view.allowedShapes.filter((shape) =>
+          visibleWatchers.has(shape.watcherID),
+        ),
       };
     },
     async automationRuns(limit) {

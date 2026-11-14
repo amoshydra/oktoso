@@ -311,9 +311,13 @@ describe("AutomationService", () => {
       reason: "not_low_risk",
       status: "pending",
       actionable: true,
+      allowShape: false,
       proposed: { label: "Delete everything", text: "Delete everything" },
     });
     expect(approval).not.toHaveProperty("plan");
+    await expect(
+      service.actOnApproval(approval.id, "always"),
+    ).rejects.toThrow(/no shape/);
 
     await service.actOnApproval(approval.id, "approve");
 
@@ -385,6 +389,72 @@ describe("AutomationService", () => {
     expect(service.runs()[0]).toMatchObject({ reason: "budget" });
   });
 
+  it("remembers a safe choice shape and reuses it", async () => {
+    const mixed = question({
+      choices: [
+        {
+          id: "safe",
+          label: "Use the safe path",
+          text: "Use the safe path",
+          kind: "choice",
+          source: "explicit",
+        },
+        {
+          id: "delete",
+          label: "Delete everything",
+          text: "Delete everything",
+          kind: "choice",
+          source: "explicit",
+          destructive: true,
+        },
+      ],
+    });
+    const { bus, service, sends } = await setup({
+      prompt: prompt(mixed),
+      config: {
+        watchers: [
+          {
+            id: "w1",
+            enabled: true,
+            trigger: { kind: "attention", types: ["question"] },
+            action: { kind: "answer", choice: "id", value: "safe" },
+            dryRun: false,
+            limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+          },
+        ],
+      },
+    });
+
+    await publish(bus, attention({ id: "att_1" }));
+    await service.whenIdle();
+
+    const approval = service.approvals()[0]!;
+    expect(approval.allowShape).toBe(true);
+    await service.actOnApproval(approval.id, "always");
+
+    expect(sends).toHaveLength(1);
+    expect(service.view().allowedShapes).toHaveLength(1);
+
+    await publish(bus, attention({ id: "att_2" }));
+    await service.whenIdle();
+
+    expect(sends).toHaveLength(2);
+    expect(service.approvals()).toHaveLength(0);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      reason: "answered_shape",
+    });
+
+    const shape = service.view().allowedShapes[0]!;
+    expect(await service.revokeShape(shape.id)).toBe(true);
+
+    await publish(bus, attention({ id: "att_3" }));
+    await service.whenIdle();
+
+    expect(sends).toHaveLength(2);
+    expect(service.approvals()).toHaveLength(1);
+  });
+
   it("escalates a multi-question prompt", async () => {
     const { bus, service, sends } = await setup({
       prompt: {
@@ -403,8 +473,12 @@ describe("AutomationService", () => {
     });
     const approval = service.approvals()[0]!;
     expect(approval.actionable).toBe(false);
+    expect(approval.allowShape).toBe(false);
     expect(approval.proposed).toBeUndefined();
     expect(approval).not.toHaveProperty("plan");
+    await expect(
+      service.actOnApproval(approval.id, "always"),
+    ).rejects.toThrow(/no shape/);
   });
 });
 

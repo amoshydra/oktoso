@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type {
   AutomationApproval,
+  AutomationApprovalAction,
   AutomationRun,
   AutomationTrigger,
   AutomationView,
@@ -32,6 +33,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
   const [view, setView] = useState<AutomationView>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
+  const [confirmShape, setConfirmShape] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
@@ -93,13 +95,28 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
       setView(await props.client.pauseWatcher(id, !paused));
     });
 
-  const decide = (approval: AutomationApproval, action: "approve" | "deny") =>
+  const decide = (
+    approval: AutomationApproval,
+    action: AutomationApprovalAction,
+  ) =>
     run(`approval:${approval.id}`, async () => {
       await props.client.actOnApproval(approval.id, action);
+      setConfirmShape(undefined);
       await load(false);
       setNotice(
-        action === "approve" ? "Approval executed." : "Approval denied.",
+        action === "deny"
+          ? "Approval denied."
+          : action === "always"
+            ? "Approval executed and this shape remembered."
+            : "Approval executed.",
       );
+    });
+
+  const revokeShape = (id: string) =>
+    run(`shape:${id}`, async () => {
+      await props.client.revokeAutomationShape(id);
+      await load(false);
+      setNotice("Allowed shape revoked.");
     });
 
   const badge = view?.paused
@@ -245,6 +262,36 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                   >
                     Approve
                   </button>
+                  {approval.allowShape ? (
+                    confirmShape === approval.id ? (
+                      <>
+                        <button
+                          className="btn primary small"
+                          type="button"
+                          disabled={busy === `approval:${approval.id}`}
+                          onClick={() => void decide(approval, "always")}
+                        >
+                          Confirm always
+                        </button>
+                        <button
+                          className="btn small"
+                          type="button"
+                          onClick={() => setConfirmShape(undefined)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={busy === `approval:${approval.id}`}
+                        onClick={() => setConfirmShape(approval.id)}
+                      >
+                        Always allow
+                      </button>
+                    )
+                  ) : null}
                   <button
                     className="btn small"
                     type="button"
@@ -259,6 +306,47 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
           </ul>
         ) : (
           <p className="form-note">Nothing is waiting for approval.</p>
+        )}
+      </article>
+
+      <article className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Allowed shapes</h2>
+            <p>
+              Patterns you approved for automatic answers. Revoke one to make
+              the policy ask again.
+            </p>
+          </div>
+          <span className="mode-badge">
+            {view?.allowedShapes.length ?? 0}
+          </span>
+        </div>
+
+        {view && view.allowedShapes.length > 0 ? (
+          <ul className="automation-list">
+            {view.allowedShapes.map((shape) => (
+              <li key={shape.id}>
+                <div className="settings-device-meta">
+                  <span className="settings-device-name">{shape.label}</span>
+                  <span className="settings-device-detail">
+                    {shape.watcherID} · {shape.kind} · {shape.uses} use
+                    {shape.uses === 1 ? "" : "s"} · {shape.choices.join(" / ")}
+                  </span>
+                </div>
+                <button
+                  className="btn small"
+                  type="button"
+                  disabled={busy === `shape:${shape.id}`}
+                  onClick={() => void revokeShape(shape.id)}
+                >
+                  {busy === `shape:${shape.id}` ? "Revoking…" : "Revoke"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="form-note">No shapes have been remembered yet.</p>
         )}
       </article>
 

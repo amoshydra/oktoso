@@ -81,6 +81,7 @@ import {
   zAutomationRun,
   zAutomationRunPage,
   zAutomationSettingsInput,
+  zAutomationShape,
   zAutomationTrigger,
   zAutomationView,
   zAutomationWatcher,
@@ -308,6 +309,10 @@ const AutomationApprovalSchema = registry.register(
 const AutomationApprovalPageSchema = registry.register(
   "AutomationApprovalPage",
   zAutomationApprovalPage,
+);
+const AutomationShapeSchema = registry.register(
+  "AutomationShape",
+  zAutomationShape,
 );
 const AutomationViewSchema = registry.register(
   "AutomationView",
@@ -1328,6 +1333,18 @@ registry.registerPath({
       description: "Pending approvals",
       content: json(AutomationApprovalPageSchema),
     },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/automation/shapes/{id}",
+  tags: ["automation"],
+  summary: "Revoke a remembered automation shape",
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    204: { description: "Allowed shape revoked" },
+    404: errorResponse("Allowed shape not found"),
   },
 });
 

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   zAttention,
   type AnswerChoice,
@@ -7,6 +7,7 @@ import {
   type AutomationApproval,
   type AutomationRun,
   type AutomationSettingsInput,
+  type AutomationShape,
   type AutomationView,
   type AutomationWatcher,
   type PendingQuestion,
@@ -46,6 +47,9 @@ interface AnswerPlan {
   question: PendingQuestion;
   choice: AnswerChoice;
   answer: SendAnswer;
+  /** Set when a remembered shape, rather than the low-risk allowlist, allowed it. */
+  viaShape?: boolean;
+  shapeID?: string;
 }
 
 interface PlanFailure {
@@ -191,6 +195,7 @@ export class AutomationService {
             approval.status === "pending" && approval.expiresAt > now,
         )
         .map(toPublicApproval),
+      allowedShapes: state.automationAllowedShapes,
     };
   }
 
@@ -233,7 +238,7 @@ export class AutomationService {
 
   async actOnApproval(
     id: string,
-    action: "approve" | "deny",
+    action: "approve" | "deny" | "always",
   ): Promise<void> {
     const approval = this.store
       .getState()
@@ -264,6 +269,10 @@ export class AutomationService {
     const plan = approval.plan;
     const text = plan?.text;
     const answers = plan?.answers;
+
+    if (action === "always" && (!plan || !approval.shape)) {
+      throw conflict("This approval has no shape to remember");
+    }
 
     if (!plan || !text || !answers) {
       // An escalation approval has no executable plan; approving it records
@@ -304,16 +313,60 @@ export class AutomationService {
       throw error;
     }
 
+    if (action === "always" && approval.shape) {
+      await this.addShape(approval.shape);
+    }
+
     await this.updateApproval(id, "approved", now);
     await this.recordApprovalRun(
       approval,
       "acted",
-      "approved",
+      action === "always" ? "always_allowed" : "approved",
       typeof plan?.label === "string"
-        ? `Approved: ${plan.label}`
+        ? `${action === "always" ? "Always allowed" : "Approved"}: ${plan.label}`
         : "Approved by a human",
       true,
     );
+  }
+
+  async revokeShape(id: string): Promise<boolean> {
+    let removed = false;
+    await this.store.update((state) => {
+      const index = state.automationAllowedShapes.findIndex(
+        (shape) => shape.id === id,
+      );
+      if (index >= 0) {
+        state.automationAllowedShapes.splice(index, 1);
+        removed = true;
+      }
+    });
+    return removed;
+  }
+
+  private async addShape(shape: AutomationShape): Promise<void> {
+    await this.store.update((state) => {
+      if (state.automationAllowedShapes.some((item) => item.id === shape.id)) {
+        return;
+      }
+      state.automationAllowedShapes.push({
+        ...shape,
+        createdAt: this.now(),
+        uses: 0,
+      });
+      const overflow = state.automationAllowedShapes.length - 100;
+      if (overflow > 0) state.automationAllowedShapes.splice(0, overflow);
+    });
+  }
+
+  private async touchShape(id: string): Promise<void> {
+    await this.store.update((state) => {
+      const shape = state.automationAllowedShapes.find(
+        (item) => item.id === id,
+      );
+      if (!shape) return;
+      shape.uses += 1;
+      shape.lastUsedAt = this.now();
+    });
   }
 
   private async tick(): Promise<void> {
@@ -542,11 +595,14 @@ export class AutomationService {
             `automation:${watcher.id}:${item.id}`,
           ),
         );
+        if (plan.viaShape && plan.shapeID) {
+          await this.touchShape(plan.shapeID);
+        }
         await this.record(
           watcher,
           item,
           "acted",
-          "answered",
+          plan.viaShape ? "answered_shape" : "answered",
           `Answered: ${plan.choice.label}`,
         );
       } catch (error) {
@@ -656,16 +712,29 @@ export class AutomationService {
     }
 
     const question = prompt.questions[0]!;
-    if (!isLowRiskQuestion(question)) {
-      return { ok: false, reason: "not_low_risk" };
-    }
-
     const action =
       watcher.action.kind === "answer" ? watcher.action : undefined;
     if (!action) return { ok: false, reason: "not_an_answer_watcher" };
 
-    const choice = pickSafeChoice(question, action);
+    const lowRisk = isLowRiskQuestion(question);
+    const choice = pickProposalChoice(question, action);
     if (!choice) return { ok: false, reason: "no_safe_choice" };
+
+    let shapeID: string | undefined;
+    if (!lowRisk && isChoiceSafe(choice)) {
+      const shape = shapeFor(watcher, question, choice, this.now());
+      if (
+        shape &&
+        this.store
+          .getState()
+          .automationAllowedShapes.some((item) => item.id === shape.id)
+      ) {
+        shapeID = shape.id;
+      }
+    }
+    if (!lowRisk && !shapeID) {
+      return { ok: false, reason: "not_low_risk" };
+    }
 
     return {
       ok: true,
@@ -678,6 +747,7 @@ export class AutomationService {
         choiceId: choice.id,
         source: "choice",
       },
+      ...(shapeID ? { viaShape: true, shapeID } : {}),
     };
   }
 
@@ -729,6 +799,9 @@ export class AutomationService {
     }
 
     const now = this.now();
+    const shape = plan
+      ? shapeFor(watcher, plan.question, plan.choice, now)
+      : undefined;
     const approval: AutomationApprovalState = {
       id: randomUUID(),
       watcherID: watcher.id,
@@ -750,6 +823,7 @@ export class AutomationService {
             },
           }
         : {}),
+      ...(shape ? { shape } : {}),
     };
 
     await this.store.update((state) => {
@@ -943,13 +1017,68 @@ export function pickSafeChoice(
   );
 }
 
+function shapeFor(
+  watcher: AutomationWatcher,
+  question: PendingQuestion,
+  choice: AnswerChoice,
+  at: number,
+): AutomationShape | undefined {
+  if (question.risk !== "normal" || question.source !== "explicit") {
+    return undefined;
+  }
+  if (question.kind !== "boolean" && question.kind !== "choice") {
+    return undefined;
+  }
+  if (question.multiSelect || question.allowsFreeText) return undefined;
+  if (!isChoiceSafe(choice)) return undefined;
+
+  const choices = question.choices.map((item) => item.label).sort();
+  const choiceKey = normalizeLabel(choice.label);
+  const id = createHash("sha256")
+    .update(
+      [
+        watcher.id,
+        question.kind,
+        ...choices.map(normalizeLabel),
+        choiceKey,
+      ].join("\u0000"),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
+  return {
+    id,
+    watcherID: watcher.id,
+    kind: question.kind,
+    choices,
+    choice: choiceKey,
+    label: choice.label,
+    createdAt: at,
+    uses: 0,
+  };
+}
+
+function isChoiceSafe(choice: AnswerChoice): boolean {
+  return (
+    choice.source === "explicit" &&
+    !choice.destructive &&
+    !choice.sensitive &&
+    !choice.requiresConfirmation
+  );
+}
+
+function normalizeLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function toPublicApproval(
   approval: AutomationApprovalState,
 ): AutomationApproval {
-  const { plan, ...base } = approval;
+  const { plan, shape, ...base } = approval;
   return {
     ...base,
     actionable: Boolean(plan),
+    allowShape: Boolean(shape),
     ...(plan
       ? {
           proposed: {

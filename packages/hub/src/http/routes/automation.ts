@@ -5,7 +5,7 @@ import {
 } from "@amoshydra/oktoso-contracts";
 import type { AutomationService } from "../../services/automation-service";
 import type { AppEnv } from "../types";
-import { badRequest } from "../../domain/errors";
+import { badRequest, notFound } from "../../domain/errors";
 
 export function registerAutomationRoutes(
   app: Hono<AppEnv>,
@@ -51,6 +51,12 @@ export function registerAutomationRoutes(
   app.get("/api/v1/automation/approvals", (c) =>
     c.json({ data: automation.approvals() }),
   );
+
+  app.delete("/api/v1/automation/shapes/:id", async (c) => {
+    const removed = await automation.revokeShape(c.req.param("id"));
+    if (!removed) throw notFound("Allowed shape not found");
+    return c.body(null, 204);
+  });
 
   app.post("/api/v1/automation/approvals/:id/:action", async (c) => {
     const action = zAutomationApprovalAction.safeParse(

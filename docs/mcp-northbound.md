@@ -227,7 +227,7 @@ Read-only:
 | `sessions_messages` | Paginated transcript |
 | `attention_list` | Permissions, approvals, questions, unread, and errors |
 | `questions_get` | Pending question with choices and risk |
-| `automation_list` | Watchers, dry-run/pause state, recent runs, and approvals; `runs` and `approvals` default to 10 and cap at 50 |
+| `automation_list` | Watchers, dry-run/pause state, recent runs, approvals, and allowed shapes; `runs`/`approvals` default to 10 and cap at 50, `shapes` defaults to 20 and caps at 100 |
 | `approvals_list` | Actions the automation policy escalated to a human; `limit` defaults to 20 and caps at 100 |
 
 Write (`--allow-write`):
@@ -243,8 +243,9 @@ Write (`--allow-write`):
 | `approvals_act` | Approve or deny an automation approval |
 
 Automation read results use a `{ data: ... }` envelope. An approval exposes
-`actionable` and a typed `proposed` answer; the execution plan stays inside the
-hub. A provider-scoped token sees only watchers whose condition names an
+`actionable`, a typed `proposed` answer, and `allowShape`; the execution plan
+stays inside the hub. Remembered shapes appear as `allowedShapes` and can be
+revoked over HTTP from Settings. A provider-scoped token sees only watchers whose condition names an
 allowed provider, plus watchers without a provider condition; runs, approvals,
 and paused watcher IDs are filtered the same way.
 

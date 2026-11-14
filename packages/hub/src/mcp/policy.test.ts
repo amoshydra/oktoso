@@ -96,6 +96,7 @@ const automationView: AutomationView = {
       createdAt: 1,
       expiresAt: 2,
       actionable: false,
+      allowShape: false,
     },
     {
       id: "approval_web",
@@ -112,6 +113,28 @@ const automationView: AutomationView = {
       actionable: false,
     },
   ] as AutomationApproval[],
+  allowedShapes: [
+    {
+      id: "shape_open",
+      watcherID: "open",
+      kind: "boolean",
+      choices: ["No", "Yes"],
+      choice: "yes",
+      label: "Yes",
+      createdAt: 1,
+      uses: 0,
+    },
+    {
+      id: "shape_web",
+      watcherID: "web",
+      kind: "boolean",
+      choices: ["No", "Yes"],
+      choice: "yes",
+      label: "Yes",
+      createdAt: 1,
+      uses: 0,
+    },
+  ],
 };
 
 function createApi() {
@@ -196,6 +219,9 @@ describe("withProviderPolicy", () => {
     expect(view.runs.map((run) => run.id)).toEqual(["run_open"]);
     expect(view.approvals.map((approval) => approval.id)).toEqual([
       "approval_open",
+    ]);
+    expect(view.allowedShapes.map((shape) => shape.id)).toEqual([
+      "shape_open",
     ]);
   });
 

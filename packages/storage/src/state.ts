@@ -4,6 +4,7 @@ import {
   zAssistantConfig,
   zAutomationApproval,
   zAutomationRun,
+  zAutomationShape,
   zSendAnswer,
   zNotificationDelivery,
   zNotificationRouting,
@@ -54,7 +55,7 @@ export const zNotificationOverrideState = z.object({
  * exposes a typed `actionable`/`proposed` summary instead of this blob.
  */
 export const zAutomationApprovalState = zAutomationApproval
-  .omit({ actionable: true, proposed: true })
+  .omit({ actionable: true, proposed: true, allowShape: true })
   .extend({
     plan: z
       .object({
@@ -63,6 +64,8 @@ export const zAutomationApprovalState = zAutomationApproval
         answers: z.array(zSendAnswer).min(1),
       })
       .optional(),
+    /** The shape to remember if a human chooses "always allow". */
+    shape: zAutomationShape.optional(),
   });
 
 export const zHubState = z.object({
@@ -80,6 +83,7 @@ export const zHubState = z.object({
   notificationOverrides: zNotificationOverrideState.default({}),
   automationRuns: z.array(zAutomationRun).default([]),
   automationApprovals: z.array(zAutomationApprovalState).default([]),
+  automationAllowedShapes: z.array(zAutomationShape).default([]),
   automationLeases: z
     .record(z.string(), z.number().int().nonnegative())
     .default({}),
@@ -111,6 +115,7 @@ export function createInitialState(): HubState {
     notificationOverrides: {},
     automationRuns: [],
     automationApprovals: [],
+    automationAllowedShapes: [],
     automationLeases: {},
     automationPaused: false,
     automationWatcherPause: {},

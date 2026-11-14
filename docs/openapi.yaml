@@ -3869,6 +3869,8 @@ components:
               maxLength: 500
           required:
             - text
+        allowShape:
+          type: boolean
       required:
         - id
         - watcherID
@@ -3882,6 +3884,7 @@ components:
         - createdAt
         - expiresAt
         - actionable
+        - allowShape
     AutomationApprovalPage:
       type: object
       properties:
@@ -3974,6 +3977,8 @@ components:
                     maxLength: 500
                 required:
                   - text
+              allowShape:
+                type: boolean
             required:
               - id
               - watcherID
@@ -3987,8 +3992,45 @@ components:
               - createdAt
               - expiresAt
               - actionable
+              - allowShape
       required:
         - data
+    AutomationShape:
+      type: object
+      properties:
+        id:
+          type: string
+        watcherID:
+          type: string
+        kind:
+          type: string
+          enum:
+            - boolean
+            - choice
+        choices:
+          type: array
+          items:
+            type: string
+        choice:
+          type: string
+        label:
+          type: string
+        createdAt:
+          type: integer
+        lastUsedAt:
+          type: integer
+        uses:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - watcherID
+        - kind
+        - choices
+        - choice
+        - label
+        - createdAt
+        - uses
     AutomationView:
       type: object
       properties:
@@ -4283,6 +4325,8 @@ components:
                     maxLength: 500
                 required:
                   - text
+              allowShape:
+                type: boolean
             required:
               - id
               - watcherID
@@ -4296,6 +4340,45 @@ components:
               - createdAt
               - expiresAt
               - actionable
+              - allowShape
+        allowedShapes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              watcherID:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - boolean
+                  - choice
+              choices:
+                type: array
+                items:
+                  type: string
+              choice:
+                type: string
+              label:
+                type: string
+              createdAt:
+                type: integer
+              lastUsedAt:
+                type: integer
+              uses:
+                type: integer
+                minimum: 0
+            required:
+              - id
+              - watcherID
+              - kind
+              - choices
+              - choice
+              - label
+              - createdAt
+              - uses
       required:
         - enabled
         - paused
@@ -4304,6 +4387,7 @@ components:
         - pausedWatchers
         - runs
         - approvals
+        - allowedShapes
     AutomationSettingsInput:
       type: object
       properties:
@@ -4316,6 +4400,7 @@ components:
       enum:
         - approve
         - deny
+        - always
   parameters: {}
 paths:
   /api/v1/health:
@@ -6118,6 +6203,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AutomationApprovalPage"
+  /api/v1/automation/shapes/{id}:
+    delete:
+      tags:
+        - automation
+      summary: Revoke a remembered automation shape
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Allowed shape revoked
+        "404":
+          description: Allowed shape not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/automation/approvals/{id}/{action}:
     post:
       tags:
