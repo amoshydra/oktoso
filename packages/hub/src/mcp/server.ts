@@ -296,6 +296,7 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
                   ...view,
                   runs: view.runs.slice(0, 10),
                   approvals: view.approvals.slice(0, 10),
+                  allowedShapes: view.allowedShapes.slice(0, 20),
                 },
               }),
             },
@@ -777,10 +778,17 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
             .max(50)
             .optional()
             .describe("Pending approvals to include (default 10)"),
+          shapes: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .optional()
+            .describe("Allowed shapes to include (default 20)"),
         },
         annotations: { readOnlyHint: true },
       },
-      async ({ runs, approvals }, extra) =>
+      async ({ runs, approvals, shapes }, extra) =>
         respond(
           "automation_list",
           async () => {
@@ -790,10 +798,11 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
                 ...view,
                 runs: view.runs.slice(0, runs ?? 10),
                 approvals: view.approvals.slice(0, approvals ?? 10),
+                allowedShapes: view.allowedShapes.slice(0, shapes ?? 20),
               },
             };
           },
-          { args: { runs, approvals }, extra },
+          { args: { runs, approvals, shapes }, extra },
         ),
     );
   }

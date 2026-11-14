@@ -2343,6 +2343,34 @@ describe("automation routes", () => {
     ).toBe(false);
   });
 
+  it("revokes a remembered shape", async () => {
+    const { app, store } = await createTestApp();
+    await store.update((state) => {
+      state.automationAllowedShapes.push({
+        id: "shape_1",
+        watcherID: "w1",
+        kind: "boolean",
+        choices: ["No", "Yes"],
+        choice: "yes",
+        label: "Yes",
+        createdAt: 1,
+        uses: 0,
+      });
+    });
+
+    const removed = await app.request("/api/v1/automation/shapes/shape_1", {
+      method: "DELETE",
+      headers: auth,
+    });
+    expect(removed.status).toBe(204);
+
+    const missing = await app.request("/api/v1/automation/shapes/shape_1", {
+      method: "DELETE",
+      headers: auth,
+    });
+    expect(missing.status).toBe(404);
+  });
+
   it("escalates an attention item and lets a human deny it", async () => {
     const { app, eventBus, automation } = await createTestApp();
     const item = {

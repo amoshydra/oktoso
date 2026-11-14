@@ -738,6 +738,10 @@ describe("automation settings", () => {
       .getByRole("heading", { name: "Automation" })
       .waitFor({ timeout: 5_000 });
 
+    await page!
+      .getByRole("heading", { name: "Allowed shapes" })
+      .waitFor({ timeout: 5_000 });
+
     await page!.getByRole("button", { name: "Pause all" }).click();
     await page!
       .getByRole("button", { name: "Resume" })

@@ -252,9 +252,9 @@ Target: 4–6 weeks. Release: `v0.3.0`.
 
 Status: in progress. Attention, session-idle/error, and schedule watchers are
 implemented, with the low-risk answer policy, dry-run, leases, budgets, quiet
-hours, notify/retry/escalate actions, approvals in the Inbox and Settings, runs,
-pause, MCP tools, and the CLI. Remaining: token/day budget,
-start-from-template, always-allow, G2 approvals, and an in-flight abort.
+hours, notify/retry/escalate actions, approvals in the Inbox and Settings,
+always-allow shapes, runs, pause, MCP tools, and the CLI. Remaining: token/day
+budget, start-from-template, G2 approvals, and an in-flight abort.
 
 ### B1. Contracts
 
@@ -300,7 +300,10 @@ start-from-template, always-allow, G2 approvals, and an in-flight abort.
 - [x] Approve and deny from the API, the Settings panel, and the Inbox.
 - [x] Inbox uses the existing group and card grammar; approvals count toward
   the attention badge.
-- [ ] "Always allow this shape".
+- [x] "Always allow this shape": a two-step confirmation in Settings stores a
+  bounded fingerprint (watcher + question kind + option labels + selected
+  label), only for normal explicit questions with a safe choice. Settings lists
+  remembered shapes with uses and Revoke.
 - [ ] G2 approvals.
 
 ### B6. Audit and kill switch
