@@ -30,10 +30,11 @@ Attention
 Chat
 ├─ Answer           pending question: choices + Type answer / More / Read chat
 ├─ Batch            two or more questions: Answer on phone / More / Read chat
-├─ Session          wait/done: Stop (running) / Phone keyboard
+├─ Session          reply model off: Stop (running) / Phone keyboard
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
-├─ Reply            answer / opposite (`Alt`) / ask, plus canned
+├─ Reply            answer / opposite (`Alt`) / next (`Next`) / verify
+│                   (`Check`) / extend (`More`) / ask, plus canned
 └─ Phone keyboard   longer text fallback
 
 Failure (any screen)
@@ -90,10 +91,10 @@ does not expose.
   the line is full; it is never cut mid-word. The action affordance and position
   stay first.
 - The header reports `project · session title` so the glass shows which home the session belongs to.
-- Tapping the body opens `ANSWER` when a question is pending, `REPLY` when the
-  reply gate says a decision is ready, and `SESSION` otherwise. `SESSION` is a
-  short action list: `Stop` while running and `Phone keyboard`. It never calls
-  the reply model.
+- Tapping the body opens `ANSWER` when a question is pending. With a reply
+  model configured it opens `REPLY` for every moment, including a running or
+  finished turn. Without one, it opens `SESSION`, a short action list: `Stop`
+  while running and `Phone keyboard`.
 
 ## Question reply
 

@@ -3332,10 +3332,9 @@ function SessionDetail(props: {
   const [suggestEnabled, setSuggestEnabled] = useState(false);
   const [suggestions, setSuggestions] = useState<ReplyOption[]>([]);
   const [suggestState, setSuggestState] = useState<
-    "idle" | "loading" | "error" | "notice"
+    "idle" | "loading" | "error"
   >("idle");
   const [suggestError, setSuggestError] = useState<string>();
-  const [suggestNotice, setSuggestNotice] = useState<string>();
   const dictationStream = useRef<MediaStream | null>(null);
   const dictationRecorder = useRef<MediaRecorder | null>(null);
   const dictationChunks = useRef<Blob[]>([]);
@@ -3558,7 +3557,6 @@ function SessionDetail(props: {
     setSuggestions([]);
     setSuggestState("idle");
     setSuggestError(undefined);
-    setSuggestNotice(undefined);
   }, [props.sessionRef]);
 
   useEffect(() => {
@@ -3706,22 +3704,14 @@ function SessionDetail(props: {
     if (!suggestEnabled || suggestState === "loading" || sending) return;
     setSuggestState("loading");
     setSuggestError(undefined);
-    setSuggestNotice(undefined);
     setSuggestions([]);
     try {
       const options = await props.client.replyOptions(
         props.sessionRef,
         "reply",
       );
-      if (options.state && options.state !== "reply") {
-        setSuggestState("notice");
-        setSuggestNotice(
-          options.state === "wait"
-            ? "Agent is running. No reply needed yet."
-            : "No reply needed. The last turn is finished.",
-        );
-        return;
-      }
+      // A finished or running turn is still a conversation: show the model's
+      // suggestions instead of a "no reply needed" notice.
       const modelOptions = options.data.filter(
         (option) => option.source === "model" && option.text.trim(),
       );
@@ -3751,7 +3741,6 @@ function SessionDetail(props: {
     setSuggestions([]);
     setSuggestState("idle");
     setSuggestError(undefined);
-    setSuggestNotice(undefined);
     requestAnimationFrame(() => {
       const input = document.getElementById(
         "chat-composer-input",
@@ -3766,7 +3755,6 @@ function SessionDetail(props: {
     setSuggestions([]);
     setSuggestState("idle");
     setSuggestError(undefined);
-    setSuggestNotice(undefined);
   };
 
   const send = async () => {
@@ -4762,12 +4750,7 @@ function SessionDetail(props: {
                           {suggestError}
                         </span>
                       ) : null}
-                      {suggestState === "notice" ? (
-                        <span className="composer-suggest-status">
-                          {suggestNotice}
-                        </span>
-                      ) : null}
-                      {suggestions.length > 0 || suggestState === "notice" ? (
+                      {suggestions.length > 0 ? (
                         <button
                           className="composer-suggest-dismiss"
                           type="button"
@@ -4789,10 +4772,10 @@ function SessionDetail(props: {
                             onClick={() => insertSuggestion(option)}
                           >
                             <span>{option.text}</span>
-                            {option.role === "opposite" ? (
-                              <span className="composer-suggest-tag">Alt</span>
-                            ) : option.role === "ask" ? (
-                              <span className="composer-suggest-tag">Ask</span>
+                            {roleTag(option.role) ? (
+                              <span className="composer-suggest-tag">
+                                {roleTag(option.role)}
+                              </span>
                             ) : null}
                           </button>
                         ))}
@@ -5473,6 +5456,24 @@ const STEP_ICONS: Record<StepKind, Parameters<typeof Icon>[0]["name"]> = {
 
 function stepStatusLabel(status: StepStatus): string {
   return status === "error" ? "error" : status === "running" ? "running" : "completed";
+}
+
+/** Short role tag for a suggestion chip, or undefined for the primary answer. */
+function roleTag(role: ReplyOption["role"]): string | undefined {
+  switch (role) {
+    case "opposite":
+      return "Alt";
+    case "next":
+      return "Next";
+    case "verify":
+      return "Check";
+    case "extend":
+      return "More";
+    case "ask":
+      return "Ask";
+    default:
+      return undefined;
+  }
 }
 
 function inputText(input: unknown, keys: string[]): string | undefined {

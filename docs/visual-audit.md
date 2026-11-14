@@ -515,8 +515,9 @@ No new type, spacing, radius, or color tokens were introduced.
   configured. It fetches model suggestions on demand and inserts a selected
   suggestion into the draft. It never sends, never overwrites an existing draft,
   and never runs when a chat opens.
-- The hub gate decides `reply` / `wait` / `done`. `wait` and `done` show a quiet
-  neutral notice instead of chips; no model call is made.
+- The hub gate still classifies `reply` / `wait` / `done`, but no state is a
+  dead end: `wait` and `done` get the same four-to-six suggestion chips. The
+  chips are tagged `Alt`, `Next`, `Check`, `More`, or `Ask`.
 - Suggestion chips use the existing surface, border, radius, and type tokens.
   They wrap above the textarea, mark model output with a `Suggested` label, and
   carry `Alt` / `Ask` role tags. Loading, empty, error, retry, and dismiss states

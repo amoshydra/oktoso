@@ -582,15 +582,15 @@ No summary container. This screen pages three options at a time (`Stop`,
 manual escape hatch when detection misses.
 
 When the hub's reply model is configured, the reply menu puts the grounded model
-roles first: an **answer**, an **opposite** labelled `Alt: …`, and an **ask**
-labelled `Ask: …`. The canned actions follow, starting with `Continue`. The hub
-first classifies the moment. If the agent is running with no ask, or a finished
-turn has no ask or action, it does not call the model and the glass opens
-`SESSION` with `Stop` (when running) and `Phone keyboard` instead of `REPLY`. A
-page containing a model suggestion is headed `REPLY 1/3 · Suggested`. Model
-suggestions never replace `Continue`, `Stop`, `Find choices`, or `Phone
-keyboard`; when generation fails or the session has no transcript, the canned
-list is shown alone.
+roles first: an **answer**, an **opposite** labelled `Alt: …`, a **next** step
+labelled `Next: …`, a **verify** check labelled `Check: …`, an **extend**
+follow-up labelled `More: …`, and an **ask** labelled `Ask: …`. The canned
+actions follow, starting with `Continue`. The hub still classifies the moment,
+but it calls the model for `reply`, `wait`, and `done`; a running or finished
+turn is still a conversation. A page containing a model suggestion is headed
+`REPLY 1/3 · Suggested`. Model suggestions never replace `Continue`, `Stop`,
+`Find choices`, or `Phone keyboard`; when generation fails or the session has
+no transcript, the canned list is shown alone.
 
 The same rule applies to `CHOOSE`: choices parsed from the assistant text keep
 the header `CHOOSE n`, while a page containing model-extracted choices reads
@@ -1240,8 +1240,9 @@ list then becomes `Answer in Inbox`, `Read chat`, and the footer hint is
 just the inbox list.
 
 **Do not put this on `reply-options`.** Reply options are a generation endpoint;
-the chat read path must not depend on the reply model, and generating 2–3
-suggestions just to learn whether a question exists wastes latency and tokens.
+the chat read path must not depend on the reply model, and generating a handful
+of suggestions just to learn whether a question exists wastes latency and
+tokens.
 If a single request is later required, mirror the object on `reply-options`, but
 the glass still reads `/question`.
 

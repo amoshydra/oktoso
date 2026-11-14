@@ -93,7 +93,14 @@ export const zReplyMomentKind = z.enum([
   "running",
   "none",
 ]);
-export const zReplyRole = z.enum(["answer", "opposite", "ask"]);
+export const zReplyRole = z.enum([
+  "answer",
+  "opposite",
+  "next",
+  "verify",
+  "extend",
+  "ask",
+]);
 export const zReplyConfidence = z.enum(["high", "medium", "low"]);
 
 export const zReplyOption = z.object({
