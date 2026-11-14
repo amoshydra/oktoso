@@ -177,7 +177,7 @@ const openCodeCapabilities: ProviderCapabilities = {
   files: true,
   branches: false,
   fork: true,
-  retry: false,
+  retry: true,
   search: false,
   options: true,
   markRead: true,
@@ -380,6 +380,114 @@ export class OpenCodeAdapter implements ProviderAdapter {
             : {}),
         })),
       directories: [],
+    };
+  }
+
+  /**
+   * Retry the latest turn on the session's current model.
+   *
+   * OpenCode has no retry endpoint, but it can stage a revert at the user
+   * message, commit it, and accept the same prompt again. The model is read at
+   * prompt time, so switching the session model first is enough to retry on a
+   * different model. A turn that changed files is refused: reverting would
+   * restore them, and the user should choose Continue instead.
+   */
+  async retryMessage(
+    ref: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<SendResult> {
+    const nativeID = this.nativeID(ref);
+    const page = await this.getMessages(ref, { limit: 100, order: "desc" }, signal);
+    let index = page.data.findIndex((message) => message.id === messageId);
+    let messages = page.data;
+    let cursor = page.cursor.next;
+    for (let hop = 0; index < 0 && cursor && hop < 4; hop += 1) {
+      const next = await this.getMessages(
+        ref,
+        { limit: 100, cursor },
+        signal,
+      );
+      messages = [...messages, ...next.data];
+      index = messages.findIndex((message) => message.id === messageId);
+      cursor = next.cursor.next;
+    }
+    if (index < 0) {
+      throw new ProviderError("invalid_request", "The failed message was not found");
+    }
+    if (messages[index]?.role !== "assistant") {
+      throw new ProviderError(
+        "invalid_request",
+        "Retry needs the failed assistant message",
+      );
+    }
+    const user = messages.slice(index + 1).find((message) => message.role === "user");
+    if (!user) {
+      throw new ProviderError(
+        "invalid_request",
+        "Retry needs the user message that started the turn",
+      );
+    }
+    if (messages.slice(0, index).some((message) => message.role === "user")) {
+      throw new ProviderError(
+        "invalid_request",
+        "Only the latest turn can be retried",
+      );
+    }
+    const text = user.parts
+      .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+    if (!text) {
+      throw new ProviderError("invalid_request", "The user message has no text to retry");
+    }
+    if (user.parts.some((part) => part.type === "file")) {
+      throw new ProviderError(
+        "invalid_request",
+        "Retry with attachments is not supported. Fork the message instead.",
+      );
+    }
+
+    const staged = await this.request<{
+      data?: { files?: unknown[] };
+    }>(
+      `/api/session/${encodeURIComponent(nativeID)}/revert/stage`,
+      {},
+      signal,
+      "POST",
+      { messageID: user.id },
+    );
+    const changed = Array.isArray(staged.data?.files) ? staged.data.files : [];
+    if (changed.length > 0) {
+      await this.request(
+        `/api/session/${encodeURIComponent(nativeID)}/revert`,
+        {},
+        signal,
+        "DELETE",
+      ).catch(() => undefined);
+      throw new ProviderError(
+        "invalid_request",
+        `Retry would restore ${changed.length} changed file(s). Use Continue instead.`,
+      );
+    }
+    await this.request(
+      `/api/session/${encodeURIComponent(nativeID)}/revert/commit`,
+      {},
+      signal,
+      "POST",
+    );
+
+    const response = await this.request<{ data?: { id?: string } }>(
+      `/api/session/${encodeURIComponent(nativeID)}/prompt`,
+      {},
+      signal,
+      "POST",
+      { text },
+    );
+    return {
+      accepted: true,
+      ...(response.data?.id ? { messageID: response.data.id } : {}),
     };
   }
 

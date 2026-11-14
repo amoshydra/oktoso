@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  OpenCodeAdapter,
   openCodeSessionStatus,
   type OpenCodeSessionRaw,
 } from "./adapter";
@@ -15,6 +18,139 @@ function session(
     ...(outcome ? { outcome } : {}),
   };
 }
+
+interface RecordedCall {
+  method: string;
+  path: string;
+  body: unknown;
+}
+
+function json(response: import("node:http").ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body));
+}
+
+const servers: Server[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    servers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        }),
+    ),
+  );
+});
+
+async function retryServer(stageFiles: unknown[]): Promise<{
+  adapter: OpenCodeAdapter;
+  calls: RecordedCall[];
+}> {
+  const calls: RecordedCall[] = [];
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    let raw = "";
+    request.on("data", (chunk) => {
+      raw += chunk;
+    });
+    request.on("end", () => {
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({ method: request.method ?? "GET", path: url.pathname, body });
+      if (url.pathname.endsWith("/message")) {
+        json(response, 200, {
+          data: [
+            {
+              id: "msg_assistant",
+              type: "assistant",
+              time: { created: 2, completed: 3 },
+              content: [],
+              error: { type: "provider.quota" },
+            },
+            {
+              id: "msg_user",
+              type: "user",
+              time: { created: 1 },
+              text: "retry me",
+            },
+          ],
+          cursor: { next: null, previous: null },
+        });
+        return;
+      }
+      if (url.pathname.endsWith("/revert/stage")) {
+        json(response, 200, {
+          data: { messageID: "msg_user", files: stageFiles },
+        });
+        return;
+      }
+      if (url.pathname.endsWith("/revert/commit")) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      if (url.pathname.endsWith("/revert")) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      if (url.pathname.endsWith("/prompt")) {
+        json(response, 200, { data: { id: "msg_new" } });
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return {
+    adapter: new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    }),
+    calls,
+  };
+}
+
+describe("OpenCodeAdapter.retryMessage", () => {
+  it("reverts the failed user turn and replays its text", async () => {
+    const { adapter, calls } = await retryServer([]);
+    const result = await adapter.retryMessage(
+      "desktop-opencode:ses_test",
+      "msg_assistant",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(result).toEqual({ accepted: true, messageID: "msg_new" });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/session/ses_test/message",
+      "POST /api/session/ses_test/revert/stage",
+      "POST /api/session/ses_test/revert/commit",
+      "POST /api/session/ses_test/prompt",
+    ]);
+    expect(calls[1]?.body).toEqual({ messageID: "msg_user" });
+    expect(calls[3]?.body).toEqual({ text: "retry me" });
+  });
+
+  it("refuses to retry a turn that changed files", async () => {
+    const { adapter, calls } = await retryServer([{ path: "src/app.ts" }]);
+    await expect(
+      adapter.retryMessage(
+        "desktop-opencode:ses_test",
+        "msg_assistant",
+        AbortSignal.timeout(5_000),
+      ),
+    ).rejects.toThrow(/changed file/);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/session/ses_test/message",
+      "POST /api/session/ses_test/revert/stage",
+      "DELETE /api/session/ses_test/revert",
+    ]);
+  });
+});
 
 describe("openCodeSessionStatus", () => {
   it("stays idle after a completed run", () => {

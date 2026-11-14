@@ -309,7 +309,12 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 - Open WebUI creates a new assistant sibling under the same user message,
   switches `history.currentId` to it, and runs the completion from the user
   prompt. The branch picker exposes the old and new answers.
-- Providers without `retry` return a capability error.
+- OpenCode stages a revert at the failed turn's user message, commits it, and
+  replays the same text on the current model. It refuses a turn that changed
+  files, a turn with attachments, or an older turn; those use Continue or Edit &
+  fork instead. The filesystem restore comes from OpenCode's revert snapshot.
+- Providers without `retry` return a capability error. The UI hides Retry turn;
+  Continue and Edit & fork stay available.
 
 `POST /api/v1/sessions/{ref}/fork`
 
@@ -433,6 +438,10 @@ discovery surface.
 
 - The optimistic user message appears before the POST settles.
 - A failed send shows Retry and Discard; Retry uses the same idempotency key.
+- An assistant error card shows the provider message, a model hint for quota
+  and rate-limit errors, and **Retry turn** / **Continue** when the provider
+  supports them. Retry reuses the failed turn's user message; Continue appends
+  a new turn and keeps partial work.
 - A successful send shows one user message after reconciliation.
 - Edit & fork opens the new session with the edited text in the draft and does
   not present the fork as an in-chat branch.
