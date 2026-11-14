@@ -1936,6 +1936,14 @@
   display: none;
 }
 
+.composer-stop-square {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
 .composer-tools {
   display: none;
 }
@@ -1995,10 +2003,10 @@
 .composer-context-chip {
   display: none;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
   min-height: 36px;
-  max-width: 60px;
-  padding: 0 var(--space-1);
+  max-width: 64px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
   background: var(--surface);
@@ -4503,7 +4511,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     gap: var(--space-1);
     flex-wrap: nowrap;
     align-items: center;
-    padding-top: 4px;
+    padding-top: var(--space-2);
   }
 
   .composer-options {
@@ -4532,16 +4540,50 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     display: inline-flex;
   }
 
+  .composer-tools-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .composer-tools-toggle:hover {
+    background: var(--surface-3);
+    color: var(--text);
+  }
+
+  .composer-tools-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+
   .composer-tools-menu button {
     min-height: 44px;
   }
 
-  .composer-interrupt-long {
+  .composer-interrupt-long,
+  .composer-interrupt-short {
     display: none;
   }
 
-  .composer-interrupt-short {
-    display: inline;
+  .composer-stop-square {
+    display: inline-block;
+  }
+
+  .composer-actions .btn.composer-interrupt {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
   }
 
   .composer-suggest-chip,

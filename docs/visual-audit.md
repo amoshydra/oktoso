@@ -861,11 +861,12 @@ tap on a common action. This revision supersedes the mobile bar.
 
 - **Height audit.** The v1.8 composer measured about 172px: 24px padding,
   64px two-line draft, 32px context row, 8px gap, 44px actions. The one-row
-  revision is about 108px: 16px padding, 44px one-line draft, 4px bar padding,
+  revision is about 112px: 16px padding, 44px one-line draft, 8px bar padding,
   44px row.
 - **Action order.** `Suggest` and `Attach` are inline quiet actions; Send is
-  the only accent control. Interrupt becomes `Stop`. `Dictate` and `Queue`
-  move to the `⋯` menu. At 360px and below, `Attach` joins the menu only while
+  the only accent control. Interrupt becomes a 32px stop square. `Dictate` and
+  `Queue` move to the `⋯` menu. The `⋯`, stop, and send controls form one
+  32px square cluster with 4px gaps; the text actions keep 44px hit areas. At 360px and below, `Attach` joins the menu only while
   running, keeping the row at five controls.
 - **Context chip.** A 60px pill shows the agent (or the model when no agent is
   set) with an ellipsis. It is 44px on mobile, uses the pill radius and a
