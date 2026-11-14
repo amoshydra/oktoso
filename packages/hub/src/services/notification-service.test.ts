@@ -261,6 +261,63 @@ describe("NotificationService", () => {
 
     expect(transport.payloads).toHaveLength(0);
   });
+
+  it("upserts a subscription by endpoint and hides transport secrets", async () => {
+    const { service } = await setup();
+    const input = {
+      deviceID: "phone-1",
+      label: "Pixel",
+      endpoint: "https://push.example.com/one",
+      keys: { p256dh: "public-key", auth: "auth-secret" },
+    };
+
+    const first = await service.addSubscription(input);
+    const second = await service.addSubscription({
+      ...input,
+      label: "Pixel (updated)",
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(service.subscriptions()).toHaveLength(1);
+    expect(service.subscriptions()[0]).toMatchObject({
+      deviceID: "phone-1",
+      label: "Pixel (updated)",
+    });
+    expect(service.subscriptions()[0]).not.toHaveProperty("endpoint");
+    expect(service.subscriptions()[0]).not.toHaveProperty("p256dh");
+    expect(service.subscriptions()[0]).not.toHaveProperty("auth");
+    expect(service.settings().subscriptions).toHaveLength(1);
+  });
+
+  it("removes a subscription once", async () => {
+    const { service } = await setup();
+    const created = await service.addSubscription({
+      deviceID: "phone-1",
+      endpoint: "https://push.example.com/one",
+      keys: { p256dh: "public-key", auth: "auth-secret" },
+    });
+
+    expect(await service.removeSubscription(created.id)).toBe(true);
+    expect(await service.removeSubscription(created.id)).toBe(false);
+    expect(service.subscriptions()).toHaveLength(0);
+  });
+
+  it("persists settings overrides", async () => {
+    const { service } = await setup();
+
+    const settings = await service.updateSettings({
+      enabled: true,
+      routing: { quietHours: { enabled: true, start: "23:00", end: "06:00" } },
+    });
+
+    expect(settings.enabled).toBe(true);
+    expect(settings.routing.quietHours).toMatchObject({
+      enabled: true,
+      start: "23:00",
+      end: "06:00",
+    });
+    expect(service.settings().enabled).toBe(true);
+  });
 });
 
 describe("quiet hours", () => {

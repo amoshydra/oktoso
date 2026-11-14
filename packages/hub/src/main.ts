@@ -567,6 +567,7 @@ async function main(): Promise<void> {
         logger,
         vapid: { ...vapidKeys, subject: config.notifications.vapid.subject },
       }),
+      applicationServerKey: vapidKeys.publicKey,
     });
     notifications.start();
     providerEvents = new ProviderEventService(
@@ -618,6 +619,7 @@ async function main(): Promise<void> {
       replyFeedback,
       transcription,
       questions,
+      notifications,
       logger,
       startedAt,
       webRoot: configuredWebRoot,
