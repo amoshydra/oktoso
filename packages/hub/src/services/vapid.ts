@@ -1,7 +1,7 @@
+import { generateKeyPairSync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import * as webpush from "web-push";
 
 export const zVapidKeys = z.object({
   publicKey: z.string().min(1),
@@ -32,7 +32,8 @@ export async function loadVapidKeys(
 /**
  * Load the hub's VAPID key pair, generating and persisting one on first use.
  *
- * The private key never leaves the hub and is stored owner-only.
+ * VAPID private keys are the raw P-256 scalar, not a PKCS#8 document. The
+ * public key is the uncompressed point `04 || x || y`, both base64url encoded.
  */
 export async function loadOrCreateVapidKeys(
   dataDir: string,
@@ -40,7 +41,7 @@ export async function loadOrCreateVapidKeys(
   const existing = await loadVapidKeys(dataDir);
   if (existing) return existing;
 
-  const keys = webpush.generateVAPIDKeys();
+  const keys = generateVapidKeys();
   const filePath = vapidKeysPath(dataDir);
   await mkdir(dirname(filePath), { recursive: true, mode: 0o700 });
   await writeFile(filePath, `${JSON.stringify(keys, null, 2)}\n`, {
@@ -48,4 +49,27 @@ export async function loadOrCreateVapidKeys(
     mode: 0o600,
   });
   return keys;
+}
+
+export function generateVapidKeys(): VapidKeys {
+  const { privateKey } = generateKeyPairSync("ec", {
+    namedCurve: "prime256v1",
+  });
+  const jwk = privateKey.export({ format: "jwk" }) as {
+    x?: string;
+    y?: string;
+    d?: string;
+  };
+  if (!jwk.x || !jwk.y || !jwk.d) {
+    throw new Error("Unable to export the generated VAPID key pair");
+  }
+
+  const x = Buffer.from(jwk.x, "base64url");
+  const y = Buffer.from(jwk.y, "base64url");
+  const point = Buffer.concat([Buffer.from([0x04]), x, y]);
+
+  return {
+    publicKey: point.toString("base64url"),
+    privateKey: jwk.d,
+  };
 }

@@ -6,7 +6,13 @@ export type Route =
   | { name: "foundation" }
   | { name: "inbox"; filter: string }
   | { name: "sessions"; newSession?: boolean }
-  | { name: "chat"; ref: string; details: boolean; preview?: string }
+  | {
+      name: "chat";
+      ref: string;
+      details: boolean;
+      preview?: string;
+      attention?: string;
+    }
   | {
       name: "search";
       query: string;
@@ -76,11 +82,13 @@ export function parseRoute(pathname: string, search = ""): Route | null {
         !requested.split(/[\\/]/).includes("..")
           ? requested
           : undefined;
+      const attention = params.get("attention");
       return {
         name: "chat",
         ref,
         details: params.get("details") === "1",
         ...(preview ? { preview } : {}),
+        ...(attention ? { attention } : {}),
       };
     }
 
@@ -139,6 +147,7 @@ export function routeHref(route: Route): string {
       const params = new URLSearchParams();
       if (route.details) params.set("details", "1");
       if (route.preview) params.set("preview", route.preview);
+      if (route.attention) params.set("attention", route.attention);
       return withQuery(`/sessions/${encodeURIComponent(route.ref)}`, params);
     }
     case "search": {

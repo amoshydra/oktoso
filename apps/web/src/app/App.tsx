@@ -1020,6 +1020,7 @@ export function App() {
                     onDetailsOpenChange={setDetailsOpen}
                     onSessionChange={setActiveSession}
                     onOpenSession={openSession}
+                    attentionID={route.name === "chat" ? route.attention : undefined}
                     onBack={() => backTo({ name: "sessions" })}
                   />
                 </div>
@@ -3552,6 +3553,7 @@ function SessionDetail(props: {
   onDetailsOpenChange: (open: boolean) => void;
   onSessionChange: (session: Session | undefined) => void;
   onOpenSession: (ref: string) => void;
+  attentionID?: string;
   onBack: () => void;
 }) {
   const [session, setSession] = useState<Session>();
@@ -3583,6 +3585,7 @@ function SessionDetail(props: {
 
   const [attentionBusyID, setAttentionBusyID] = useState<string>();
   const [attentionError, setAttentionError] = useState<string>();
+  const focusedAttention = useRef<string | undefined>(undefined);
   const [selectionOptions, setSelectionOptions] = useState<ProviderOptions>();
   const [selectionSaving, setSelectionSaving] = useState(false);
   const [selectionError, setSelectionError] = useState<string>();
@@ -4739,6 +4742,28 @@ function SessionDetail(props: {
     return () => clearTimeout(timer);
   }, [attentionSeq, loadAttention]);
 
+  // A notification deep link names one item. Scroll it into view once it
+  // arrives; the inline card is the action surface, so no separate sheet.
+  useEffect(() => {
+    if (!props.attentionID) {
+      focusedAttention.current = undefined;
+      return;
+    }
+    if (focusedAttention.current === props.attentionID) return;
+    const element = document.getElementById(`attention-${props.attentionID}`);
+    if (!element) return;
+    focusedAttention.current = props.attentionID;
+    const frame = requestAnimationFrame(() => {
+      element.scrollIntoView({
+        block: "center",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [props.attentionID, inlineAttention]);
+
   useEffect(() => {
     if (!atBottom || stepPanelOpen) return;
     const scroller = getScroller();
@@ -5325,41 +5350,46 @@ function SessionDetail(props: {
               {inlineAttention.length > 0 ? (
                 <div className="chat-inline-attention" aria-label="Needs your input">
                   {inlineAttention.map((item) => (
-                    <AttentionCard
-                      item={item}
+                    <div
+                      className={`chat-inline-attention-item${props.attentionID === item.id ? " is-focused" : ""}`}
+                      id={`attention-${item.id}`}
                       key={item.id}
-                      busy={attentionBusyID === item.id}
-                      inline
-                      detail={
-                        item.type === "error"
-                          ? attentionDetail
-                          : item.type === "question"
-                            ? item.fields?.some((field) =>
-                                field.description?.trim(),
-                              )
-                              ? undefined
-                              : attentionDetailText(item) ?? latestQuestion
+                    >
+                      <AttentionCard
+                        item={item}
+                        busy={attentionBusyID === item.id}
+                        inline
+                        detail={
+                          item.type === "error"
+                            ? attentionDetail
+                            : item.type === "question"
+                              ? item.fields?.some((field) =>
+                                  field.description?.trim(),
+                                )
+                                ? undefined
+                                : attentionDetailText(item) ?? latestQuestion
+                              : undefined
+                        }
+                        onAction={(action, input) => void actOnAttention(item, action, input)}
+                        onRetry={
+                          item.type === "error" &&
+                          errorMessage &&
+                          sessionProvider?.capabilities.retry &&
+                          !selectionSaving
+                            ? () => void retryMessage(errorMessage.id)
                             : undefined
-                      }
-                      onAction={(action, input) => void actOnAttention(item, action, input)}
-                      onRetry={
-                        item.type === "error" &&
-                        errorMessage &&
-                        sessionProvider?.capabilities.retry &&
-                        !selectionSaving
-                          ? () => void retryMessage(errorMessage.id)
-                          : undefined
-                      }
-                      retryBusy={retryBusy === errorMessage?.id}
-                      onContinue={
-                        item.type === "error" &&
-                        errorMessage &&
-                        sessionProvider?.capabilities.send
-                          ? () => void continueTurn(errorMessage.id)
-                          : undefined
-                      }
-                      continueBusy={continueBusy === errorMessage?.id}
-                    />
+                        }
+                        retryBusy={retryBusy === errorMessage?.id}
+                        onContinue={
+                          item.type === "error" &&
+                          errorMessage &&
+                          sessionProvider?.capabilities.send
+                            ? () => void continueTurn(errorMessage.id)
+                            : undefined
+                        }
+                        continueBusy={continueBusy === errorMessage?.id}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : null}

@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: A1–A4 complete. A5 (service worker and deep links) is next.
+Status: A1–A5 complete. A6 (Settings UI) is next.
 
 ### A1. Contracts and configuration
 
@@ -101,8 +101,10 @@ delivery attempts. It is wired in `main.ts` with a no-op transport until A3.
 
 ### A3. Web Push transport
 
-- [x] Choose and pin the push implementation. `web-push` 4.0.0, pure JS and
-  bundled by tsup.
+- [x] Choose and pin the push implementation.
+  `@block65/webcrypto-web-push` 2.0.0: pure JS, one tiny dependency, and it
+  bundles cleanly. (`web-push` broke the ESM bundle on a dynamic `tty`
+  require.)
 - [x] Generate VAPID keys on first start; store the private key in `dataDir`
   with `0600`; never log it.
 - [x] Send with a bounded payload (title, attention type, session ref, deep
@@ -116,7 +118,7 @@ delivery attempts. It is wired in `main.ts` with a no-op transport until A3.
 `packages/hub/src/services/notification-service.ts`, `dataDir`.
 **Done:** an injected sender receives the exact payload for each subscription;
 expired subscriptions are removed; retries stop after the cap. Real payload
-encryption is delegated to `web-push`.
+encryption is delegated to the Web Crypto library.
 
 ### A4. Subscription and settings routes
 
@@ -144,21 +146,26 @@ below it. The settings view exposes the VAPID public key as
 
 ### A5. Service worker and deep links
 
-- [ ] Add `apps/web/public/sw.js`:
+- [x] Add `apps/web/public/sw.js`:
   - `push` handler with a safe fallback payload
   - `notificationclick` that focuses an existing tab or opens the deep link
   - shell precache and cache-first static assets
-- [ ] Register the worker from a small `apps/web/src/pwa.ts` module.
-- [ ] Add `mobile-web-app-capable` alongside the deprecated Apple meta.
-- [ ] Deep link format: `/sessions/<ref>?attention=<id>`; the chat opens the
-  attention panel and scrolls it into view.
-- [ ] Add a "notifications" permission prompt only from a user gesture in
-  Settings.
+- [x] Register the worker from a small `apps/web/src/pwa.ts` module.
+- [x] Add `mobile-web-app-capable` alongside the deprecated Apple meta.
+- [x] Deep link format: `/sessions/<ref>?attention=<id>`; the chat scrolls
+  the matching inline attention card into view and outlines it.
+- [x] Provide `enablePush`/`disablePush` helpers that request permission only
+  from a user gesture; A6 wires the Settings button.
 
 **Touch:** `apps/web/public/sw.js`, `apps/web/src/pwa.ts`,
 `apps/web/src/app/App.tsx` (mount only), `apps/web/index.html`.
 **Done:** a synthetic push opens the exact item; a second tab is focused, not
 duplicated.
+
+Status: implemented. The worker precaches the shell, uses network-first
+navigation, handles `push`/`notificationclick`, and is registered in
+production only. The deep link is carried by the router and focuses the inline
+card. Push subscription helpers live in `apps/web/src/pwa.ts`.
 
 ### A6. Settings UI
 
@@ -508,8 +515,9 @@ A task is done when:
 
 These need an answer before the task that depends on them.
 
-1. **Push implementation.** Resolved: `web-push` 4.0.0, pure JS and bundled.
-   The transport accepts an injected sender so tests never hit the network.
+1. **Push implementation.** Resolved: `@block65/webcrypto-web-push` 2.0.0,
+   pure JS and bundled. The transport accepts an injected sender so tests never
+   hit the network.
 2. **VAPID key location.** Resolved: generated at
    `dataDir/notifications/vapid.json` (mode `0600`) on first start, with a
    config override for operators who keep keys elsewhere.

@@ -81,6 +81,29 @@ describe("parseRoute", () => {
     });
   });
 
+  it("carries a notification attention deep link", () => {
+    expect(
+      parseRoute(
+        "/sessions/desktop-opencode%3Ases_auth",
+        "?attention=att_1&details=1",
+      ),
+    ).toEqual({
+      name: "chat",
+      ref: "desktop-opencode:ses_auth",
+      attention: "att_1",
+      details: true,
+    });
+
+    expect(
+      routeHref({
+        name: "chat",
+        ref: "desktop-opencode:ses_auth",
+        details: false,
+        attention: "att_1",
+      }),
+    ).toBe("/sessions/desktop-opencode%3Ases_auth?attention=att_1");
+  });
+
   it("parses search filters and ignores invalid status values", () => {
     expect(
       parseRoute(
