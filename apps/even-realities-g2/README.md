@@ -26,9 +26,11 @@ Screenshot capture and framing are documented in
 
 - **Pairing** — scan the hub's pairing QR, paste its link or code, or use a hub
   token. The phone surface exchanges the code for a session token.
-- **Attention inbox** — provider permissions and forms, errors, and unread root
-  sessions. Child sessions do not add unread noise. All blocking items are shown;
-  the Inbox adds a `More` row when the list is capped.
+- **Attention inbox** — provider permissions and forms, errors, unread root
+  sessions, and automation approvals. Approvals reuse the same blocking row and
+  detail screen with Approve / Deny; approval decisions call
+  `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
+  blocking items are shown; the Inbox adds a `More` row when the list is capped.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap actions`; SSE
   updates, read markers, and incremental message streaming.
@@ -80,7 +82,7 @@ Home
 └─ Settings         data refresh, reload, connection, version
 
 Inbox
-├─ Attention        permission / form / error / unread detail
+├─ Attention        permission / form / error / unread / automation detail
 └─ More             additional items beyond the glass cap
 
 Chat
