@@ -8,10 +8,22 @@ import { zAttentionType } from "./attention";
  * triggers only; session-idle and schedule triggers are reserved.
  */
 
-export const zAutomationTrigger = z.object({
-  kind: z.literal("attention"),
-  types: z.array(zAttentionType).min(1).default(["question"]),
-});
+export const zAutomationTrigger = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("attention"),
+    types: z.array(zAttentionType).min(1).default(["question"]),
+  }),
+  z.object({
+    kind: z.literal("session"),
+    on: z.enum(["idle", "error"]),
+    /** Require the status to hold before firing. */
+    idleMs: z.number().int().min(0).max(86_400_000).default(60_000),
+  }),
+  z.object({
+    kind: z.literal("schedule"),
+    everyMs: z.number().int().min(60_000).max(86_400_000),
+  }),
+]);
 
 export const zAutomationCondition = z.object({
   providerID: z.string().min(1).optional(),
@@ -30,6 +42,8 @@ export const zAutomationAction = z.discriminatedUnion("kind", [
     value: z.string().min(1).optional(),
   }),
   z.object({ kind: z.literal("escalate") }),
+  z.object({ kind: z.literal("notify") }),
+  z.object({ kind: z.literal("retry") }),
 ]);
 
 export const zAutomationLimits = z.object({
@@ -37,7 +51,8 @@ export const zAutomationLimits = z.object({
   maxActionsPerDay: z.number().int().min(1).max(10_000).default(24),
 });
 
-export const zAutomationWatcher = z.object({
+export const zAutomationWatcher = z
+  .object({
   id: z
     .string()
     .min(1)
@@ -57,7 +72,16 @@ export const zAutomationWatcher = z.object({
     maxActionsPerHour: 6,
     maxActionsPerDay: 24,
   }),
-});
+  })
+  .superRefine((value, ctx) => {
+    if (value.trigger.kind !== "attention" && value.action.kind === "answer") {
+      ctx.addIssue({
+        code: "custom",
+        message: "Only attention watchers can auto-answer",
+        path: ["action", "kind"],
+      });
+    }
+  });
 
 export const zAutomationDecision = z.enum([
   "acted",

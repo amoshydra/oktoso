@@ -3425,27 +3425,60 @@ components:
                   type: string
                   minLength: 1
     AutomationTrigger:
-      type: object
-      properties:
-        kind:
-          type: string
-          enum:
-            - attention
-        types:
-          type: array
-          items:
-            type: string
-            enum:
-              - permission
-              - approval
-              - question
-              - unread
-              - error
-          minItems: 1
-          default:
-            - question
-      required:
-        - kind
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - attention
+            types:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+              minItems: 1
+              default:
+                - question
+          required:
+            - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - session
+            on:
+              type: string
+              enum:
+                - idle
+                - error
+            idleMs:
+              type: integer
+              minimum: 0
+              maximum: 86400000
+              default: 60000
+          required:
+            - kind
+            - on
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - schedule
+            everyMs:
+              type: integer
+              minimum: 60000
+              maximum: 86400000
+          required:
+            - kind
+            - everyMs
     AutomationCondition:
       type: object
       properties:
@@ -3487,6 +3520,22 @@ components:
                 - escalate
           required:
             - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - notify
+          required:
+            - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - retry
+          required:
+            - kind
     AutomationLimits:
       type: object
       properties:
@@ -3516,27 +3565,60 @@ components:
           type: boolean
           default: true
         trigger:
-          type: object
-          properties:
-            kind:
-              type: string
-              enum:
-                - attention
-            types:
-              type: array
-              items:
-                type: string
-                enum:
-                  - permission
-                  - approval
-                  - question
-                  - unread
-                  - error
-              minItems: 1
-              default:
-                - question
-          required:
-            - kind
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - attention
+                types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - permission
+                      - approval
+                      - question
+                      - unread
+                      - error
+                  minItems: 1
+                  default:
+                    - question
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - session
+                on:
+                  type: string
+                  enum:
+                    - idle
+                    - error
+                idleMs:
+                  type: integer
+                  minimum: 0
+                  maximum: 86400000
+                  default: 60000
+              required:
+                - kind
+                - on
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - schedule
+                everyMs:
+                  type: integer
+                  minimum: 60000
+                  maximum: 86400000
+              required:
+                - kind
+                - everyMs
         condition:
           type: object
           properties:
@@ -3576,6 +3658,22 @@ components:
                   type: string
                   enum:
                     - escalate
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - notify
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - retry
               required:
                 - kind
         dryRun:
@@ -3727,6 +3825,22 @@ components:
                     - escalate
               required:
                 - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - notify
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - retry
+              required:
+                - kind
         reason:
           type: string
         status:
@@ -3803,6 +3917,22 @@ components:
                           - escalate
                     required:
                       - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - notify
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - retry
+                    required:
+                      - kind
               reason:
                 type: string
               status:
@@ -3860,27 +3990,60 @@ components:
                 type: boolean
                 default: true
               trigger:
-                type: object
-                properties:
-                  kind:
-                    type: string
-                    enum:
-                      - attention
-                  types:
-                    type: array
-                    items:
-                      type: string
-                      enum:
-                        - permission
-                        - approval
-                        - question
-                        - unread
-                        - error
-                    minItems: 1
-                    default:
-                      - question
-                required:
-                  - kind
+                oneOf:
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - attention
+                      types:
+                        type: array
+                        items:
+                          type: string
+                          enum:
+                            - permission
+                            - approval
+                            - question
+                            - unread
+                            - error
+                        minItems: 1
+                        default:
+                          - question
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - session
+                      on:
+                        type: string
+                        enum:
+                          - idle
+                          - error
+                      idleMs:
+                        type: integer
+                        minimum: 0
+                        maximum: 86400000
+                        default: 60000
+                    required:
+                      - kind
+                      - on
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - schedule
+                      everyMs:
+                        type: integer
+                        minimum: 60000
+                        maximum: 86400000
+                    required:
+                      - kind
+                      - everyMs
               condition:
                 type: object
                 properties:
@@ -3920,6 +4083,22 @@ components:
                         type: string
                         enum:
                           - escalate
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - notify
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - retry
                     required:
                       - kind
               dryRun:
@@ -4032,6 +4211,22 @@ components:
                         type: string
                         enum:
                           - escalate
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - notify
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - retry
                     required:
                       - kind
               reason:

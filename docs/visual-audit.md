@@ -944,3 +944,11 @@ instead of raw fences, without changing the transcript hierarchy.
   provider hue is used for policy state.
 - The panel reuses the device-list row, the form-action cluster, and the 44px
   mobile targets. Watchers and approvals stack below 760px.
+
+## Automation approvals in the Inbox (2026-11-15)
+
+- Automation approvals reuse the Inbox group header and approval card. The
+  detail line carries `watcherID · reason`; Approve is primary, Deny is danger,
+  and both use the existing 44px mobile target.
+- The card is not a new attention type visually; it reads as an approval and
+  counts toward the same Inbox badge.
