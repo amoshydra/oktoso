@@ -102,6 +102,11 @@ moment:
   moment knows what it is waiting for instead of guessing.
 - Up to three prior text messages are included at 400 characters each as
   evidence. No raw tool output is sent; only the running command.
+- `user_goal` is the current request, not the session's first turn. A terse
+  acknowledgement (`yes`, `continue`, `thanks`) falls back to the most recent
+  substantive user turn, then to the original request. The original request is
+  still paged for that fallback and for constraints, so a long session that
+  moved on does not keep proposing work on the first turn's files.
 - The original and latest user request are paged; subagent prompts are compacted
   to their task line, worktree paths become `<path>`, and request lines clip on
   sentence boundaries.

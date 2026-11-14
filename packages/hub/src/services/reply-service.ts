@@ -84,6 +84,9 @@ const MAX_MOMENT_TAIL_CHARS = 700;
 const MAX_PENDING_CHARS = 300;
 const MAX_REQUEST_CHARS = 200;
 const MAX_DONE_CHARS = 160;
+const MIN_GOAL_WORDS = 4;
+const ACKNOWLEDGEMENT =
+  /^(?:yes|yeah|yep|yup|ok|okay|sure|continue|proceed|go ahead|do it|please do|sounds good|looks good|lgtm|ship it|thanks|thank you|perfect|great)(?:\s+please)?[.!]*$/i;
 const MAX_CONSTRAINT_CHARS = 200;
 const MAX_SUGGESTION_CHARS = 80;
 const MAX_ROLE_WORDS = 12;
@@ -297,10 +300,10 @@ export class ReplyService {
   }
 
   /**
-   * The first user turn is the task anchor, but it is often far outside the
-   * newest page. Fetch it oldest-first and only trust it when it is actually
-   * older than the window; providers that ignore `order` may return the newest
-   * page again.
+   * The first user turn is a fallback goal and a source of constraints, not the
+   * current goal. It is often far outside the newest page. Fetch it
+   * oldest-first and only trust it when it is actually older than the window;
+   * providers that ignore `order` may return the newest page again.
    */
   private async loadOriginalRequest(
     ref: string,
@@ -964,12 +967,30 @@ function buildMomentContext(input: {
     .filter((message) => message.role === "user")
     .map(messageText)
     .filter(Boolean);
-  const userGoal = compactRequest(
-    input.originalRequest ?? userTexts[0] ?? "",
-  );
-  const lastUser = compactRequest(
+  const latestUserText = compactRequest(
     input.latestRequest ?? userTexts.at(-1) ?? "",
   );
+  // The session's first request anchors a short conversation, but it goes
+  // stale once the session moves on. Prefer the current request; only fall
+  // back to an earlier substantive turn (or the original request) when the
+  // user is just acknowledging the previous answer.
+  const recentGoals = [...userTexts]
+    .reverse()
+    .map((text) => compactRequest(text))
+    .filter(Boolean);
+  const latestSubstantive = [latestUserText, ...recentGoals].find(
+    isSubstantiveRequest,
+  );
+  const userGoal = compactRequest(
+    !ACKNOWLEDGEMENT.test(latestUserText) && latestUserText
+      ? latestUserText
+      : latestSubstantive ||
+          input.originalRequest ||
+          latestUserText ||
+          recentGoals[0] ||
+          "",
+  );
+  const lastUser = latestUserText;
   const latestMessage = messages.at(-1);
   const isRunning =
     session?.status === "running" ||
@@ -1743,6 +1764,10 @@ function questionFromPrompt(
         : {}),
     })),
   };
+}
+
+function isSubstantiveRequest(text: string): boolean {
+  return text.split(/\s+/).filter(Boolean).length >= MIN_GOAL_WORDS;
 }
 
 function compactRequest(text: string): string {

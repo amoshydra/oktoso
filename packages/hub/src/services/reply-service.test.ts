@@ -507,6 +507,69 @@ describe("ReplyService moment", () => {
     );
     expect(audit.context).not.toContain("You are a subagent spawned");
   });
+
+  it("uses the latest request instead of a stale original goal", async () => {
+    const data = [
+      // Newest-first, like the desc page the hub loads.
+      textMessage("m4", "assistant", "Re-signed successfully. The commit is signed."),
+      textMessage("m3", "user", "i unlocked gpg. resign again"),
+      textMessage("m2", "assistant", "The md file is only a template."),
+      textMessage(
+        "m1",
+        "user",
+        "load and check session ses_e34f notice that it mention a md file. but there is nothing i can do about this md file. what do you suggest?",
+      ),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Let it finish.",
+        opposite: "Stop the run.",
+        next: "Check the signed commit.",
+        verify: "Run git log --show-signature.",
+        extend: "Tag the release.",
+        ask: "Should I rerun the suite?",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const goal = audit.context
+      .split("\n")
+      .find((line) => line.startsWith("  user_goal:"));
+
+    expect(goal).toBe("  user_goal: i unlocked gpg. resign again");
+    expect(goal).not.toContain("md file");
+  });
+
+  it("falls back to the last substantive request for an acknowledgement", async () => {
+    const data = [
+      // Newest-first, like the desc page the hub loads.
+      textMessage("m4", "assistant", "Switched to the mirror."),
+      textMessage("m3", "user", "yes"),
+      textMessage("m2", "assistant", "Should I switch to the mirror?"),
+      textMessage("m1", "user", "Fix the docker pull failure"),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Thanks.",
+        opposite: "Switch back.",
+        next: "Check the pull log.",
+        verify: "Rerun the pull.",
+        extend: "Pin the mirror.",
+        ask: "Should I pin the mirror?",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const goal = audit.context
+      .split("\n")
+      .find((line) => line.startsWith("  user_goal:"));
+
+    expect(goal).toBe("  user_goal: Fix the docker pull failure");
+  });
 });
 
 describe("ReplyService role generation and lint", () => {
