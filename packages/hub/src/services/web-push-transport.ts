@@ -1,4 +1,4 @@
-import * as webpush from "web-push";
+import { buildPushPayload } from "@block65/webcrypto-web-push";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { Logger } from "../lib/logger";
 import type {
@@ -27,22 +27,36 @@ export interface WebPushTransportOptions {
   sender?: PushSender;
 }
 
-/** Default sender backed by `web-push`. Injected in tests. */
+/** Default sender backed by Web Crypto. Injected in tests. */
 export function createWebPushSender(
   vapid: VapidKeys & { subject: string },
 ): PushSender {
-  webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
   return {
     async send(subscription, body, options) {
-      await webpush.sendNotification(
+      const payload = await buildPushPayload(
+        {
+          data: JSON.parse(body) as Record<string, string | number | boolean>,
+          options: { ttl: options.ttlSeconds, urgency: options.urgency },
+        },
         {
           endpoint: subscription.endpoint,
-          keys: subscription.keys,
           expirationTime: null,
+          keys: subscription.keys,
         },
-        body,
-        { TTL: options.ttlSeconds, urgency: options.urgency },
+        vapid,
       );
+
+      const response = await fetch(subscription.endpoint, {
+        method: payload.method,
+        headers: payload.headers as Record<string, string>,
+        body: payload.body,
+      });
+      if (!response.ok) {
+        throw Object.assign(
+          new Error(`Push service returned ${response.status}`),
+          { statusCode: response.status },
+        );
+      }
     },
   };
 }
