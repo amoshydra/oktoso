@@ -249,8 +249,8 @@ Deliverables:
 
 - Web Push (VAPID) from the hub, with a service worker, subscription lifecycle,
   and `410 Gone` cleanup.
-- Outbound channels: ntfy, Telegram, and a generic webhook. Config only, plain
-  HTTP, no new runtime dependency.
+- Outbound channels (deferred): ntfy, Telegram, and a generic webhook. Local-
+  first for now; add the generic webhook first when a LAN consumer exists.
 - Routing rules: blocking immediate, unread/error digest, quiet hours, and
   coalescing ("3 questions from 2 sessions").
 - Installable PWA: offline shell, cached session list, queued sends, and a

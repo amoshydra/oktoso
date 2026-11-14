@@ -927,3 +927,12 @@ instead of raw fences, without changing the transcript hierarchy.
   secondary; enable is the only primary action in the panel.
 - The permission state is a metadata badge (`ALLOWED`, `NOT ASKED`, `BLOCKED`),
   not a status dot. It never borrows a provider hue.
+
+## Offline and queued sends (2026-11-15)
+
+- The queued count is a quiet topbar chip: text color, strong border, no amber.
+  It must not compete with the attention marker.
+- The offline line and the composer offline note are 11px muted text, not
+  alerts. They state what will happen; they do not block the composer.
+- A queued row keeps the normal user-message anatomy and adds one muted status
+  line with Discard. It uses no new color or icon.

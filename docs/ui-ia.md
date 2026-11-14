@@ -214,6 +214,7 @@ The inbox is the default screen when something needs attention. It groups items 
 ## 6. Sessions
 
 The sessions view is the full browsing surface.
+- The first page is cached in local storage after a successful load. When the hub is unreachable, the list renders that page and shows a quiet `Offline · showing the last synced list from <time>` line with Retry instead of an empty error. A cold load with no cache keeps the normal error state.
 
 ```text
 ┌──────────────────────┬────────────────────────────────────────────┐
@@ -344,6 +345,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Dictation needs HTTPS or localhost. The hub does not terminate TLS; an operator serving the web client over plain HTTP on a LAN cannot use microphone capture. The Settings panel states this and notes that the hub does not store audio and never sends the endpoint key to the browser.
 - Wearable clients can show short reply options from deterministic steering, a configured 4B model, or extracted agent choices.
 - Drafts persist per session on the hub and follow the session across clients and reloads.
+- When the browser is offline, the composer shows `Offline · sends will be queued.` A send becomes a queued optimistic row (`Queued. Sends when the hub is reachable.` with Discard), persists across a reload, and replays in order when the hub returns. The topbar shows `N queued` until the queue drains. A terminal 4xx still shows `Not sent.` with Retry.
 - Drafts autosave shortly after typing and clear after a successful send.
 - While the agent is running, an interrupt button sits beside send in the composer bar. The same action is available in the details panel.
 - On OpenCode, Send becomes **Steer** while the agent runs; the hint reads `Agent running · Ctrl/⌘ Enter to steer`. The message lands at the next safe step boundary, running tools finish first, and it stays in the transcript.
