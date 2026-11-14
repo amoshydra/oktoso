@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.29](https://github.com/amoshydra/oktoso/compare/v0.1.28...v0.1.29) (2026-11-14)
+
+
+### Features
+
+* **attention:** show question choice detail and custom answers ([0e42cd4](https://github.com/amoshydra/oktoso/commit/0e42cd4114dc25b9396460566c25b3d9b1269a64))
+* **chat:** preview files and redesign agent activity as tiles ([e0ccab4](https://github.com/amoshydra/oktoso/commit/e0ccab4f9d96f6a8983546632474e172ad46732b))
+* **chat:** queue OpenCode messages while the agent runs ([ed8ce4a](https://github.com/amoshydra/oktoso/commit/ed8ce4a7b396a49c30483af50d80e1a75c71c70e))
+* **chat:** show background shells and running subagents ([4ae6301](https://github.com/amoshydra/oktoso/commit/4ae630178823c09e8d8e8329bfbafce34daf1f33))
+* **files:** render HTML previews in a sandboxed frame ([6d4d70a](https://github.com/amoshydra/oktoso/commit/6d4d70a43a64006d3b3de3a2997e9fd171286f4b))
+* **reply:** always suggest a way forward ([b64bcd3](https://github.com/amoshydra/oktoso/commit/b64bcd3df7c4f617ed3edf82d211f34051a9d8ef))
+* **sessions:** retry the latest OpenCode turn on another model ([8ea86b1](https://github.com/amoshydra/oktoso/commit/8ea86b1d9f2eef1e74377c812b5a5b1bd666cde3))
+* **ui:** nest subagents under their parent ([ff62464](https://github.com/amoshydra/oktoso/commit/ff6246497634afe4f0b9e56c74c1ccc421efd593))
+* **web:** add a subagent scope to the sessions list ([96d1ab3](https://github.com/amoshydra/oktoso/commit/96d1ab30dc067df3e3de93fd66f7895ff4541896))
+
+
+### Bug Fixes
+
+* **chat:** keep the provider's part order in a message ([a2c7426](https://github.com/amoshydra/oktoso/commit/a2c74267323a268f9c5fcdabebe432d4a2a0701e))
+* **chat:** make the running send mode truthful ([a6235cf](https://github.com/amoshydra/oktoso/commit/a6235cfa2a58fd8398b3846af709e9875b38d15e))
+* **chat:** render embedded images in a read step ([a1d487e](https://github.com/amoshydra/oktoso/commit/a1d487e802b239c2af56f12a12000db7c51de291))
+* **chat:** track subagent liveness from the child session ([199624a](https://github.com/amoshydra/oktoso/commit/199624ad4d37cfcecf0fb12707cbb407b85d3f1e))
+* **opencode:** request steer explicitly ([bc0d0b9](https://github.com/amoshydra/oktoso/commit/bc0d0b98b13d9aa4f55e8b97f45d01fd7519bdf6))
+* **web:** restore the mobile chat width ([d035f80](https://github.com/amoshydra/oktoso/commit/d035f80969735f6008b14f40067bf7c2db931f23))
+
 ## [0.1.28](https://github.com/amoshydra/oktoso/compare/v0.1.27...v0.1.28) (2026-11-09)
 
 
