@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { DEFAULT_ASSISTANT_CONFIG, zAssistantConfig } from "@amoshydra/oktoso-contracts";
+import {
+  DEFAULT_ASSISTANT_CONFIG,
+  zAssistantConfig,
+  zNotificationDelivery,
+  zNotificationRouting,
+} from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
   readAt: z.number().int().nonnegative(),
@@ -23,6 +28,24 @@ export const zIdempotencyState = z.object({
   expiresAt: z.number().int().nonnegative(),
 });
 
+export const zNotificationSubscriptionState = z.object({
+  id: z.string(),
+  deviceID: z.string(),
+  label: z.string().optional(),
+  /** Push capability URL. Never returned by the API. */
+  endpoint: z.string(),
+  p256dh: z.string(),
+  auth: z.string(),
+  createdAt: z.number().int().nonnegative(),
+  lastSeenAt: z.number().int().nonnegative(),
+  expirationTime: z.number().int().nonnegative().nullable().optional(),
+});
+
+export const zNotificationOverrideState = z.object({
+  enabled: z.boolean().optional(),
+  routing: zNotificationRouting.optional(),
+});
+
 export const zHubState = z.object({
   schemaVersion: z.literal(1),
   lastSeq: z.number().int().nonnegative(),
@@ -31,6 +54,11 @@ export const zHubState = z.object({
   drafts: z.record(z.string(), zDraftState),
   idempotency: z.record(z.string(), zIdempotencyState),
   settings: zAssistantConfig.default(DEFAULT_ASSISTANT_CONFIG),
+  notificationSubscriptions: z
+    .record(z.string(), zNotificationSubscriptionState)
+    .default({}),
+  notificationDeliveries: z.array(zNotificationDelivery).default([]),
+  notificationOverrides: zNotificationOverrideState.default({}),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -45,6 +73,9 @@ export function createInitialState(): HubState {
     drafts: {},
     idempotency: {},
     settings: structuredClone(DEFAULT_ASSISTANT_CONFIG),
+    notificationSubscriptions: {},
+    notificationDeliveries: [],
+    notificationOverrides: {},
   };
 }
 

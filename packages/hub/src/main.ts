@@ -54,6 +54,7 @@ import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
+import { NotificationService } from "./services/notification-service";
 import { createApp } from "./app";
 import { watchPairingCommands } from "./lib/pairing-prompt";
 import { VERSION } from "./version";
@@ -544,6 +545,15 @@ async function main(): Promise<void> {
     await replyFeedback.init();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
+    // The push transport lands with the notification slice; until then the
+    // service is inert and delivers nothing.
+    const notifications = new NotificationService({
+      config: config.notifications,
+      store,
+      eventBus,
+      logger,
+    });
+    notifications.start();
     providerEvents = new ProviderEventService(
       registry,
       eventBus,
@@ -678,6 +688,7 @@ async function main(): Promise<void> {
       logger.info("shutting down", { signal });
       if (attentionRefreshTimer) clearInterval(attentionRefreshTimer);
       if (healthCheckTimer) clearInterval(healthCheckTimer);
+      notifications.stop();
       providerEvents?.stop();
       unsubscribeUi();
       server?.close();

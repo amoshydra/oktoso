@@ -75,22 +75,27 @@ minimal and a full notification config.
 
 ### A2. Notification service core
 
-- [ ] Add `packages/hub/src/services/notification-service.ts`.
-- [ ] Subscribe to the event bus and select attention events only.
-- [ ] Implement routing: blocking immediate, high/normal per rule, unread/error
+- [x] Add `packages/hub/src/services/notification-service.ts`.
+- [x] Subscribe to the event bus and select attention events only.
+- [x] Implement routing: blocking immediate, high/normal per rule, unread/error
   digest.
-- [ ] Implement coalescing by session and type inside a window. Four events from
+- [x] Implement coalescing by session and type inside a window. Four events from
   one session produce one delivery.
-- [ ] Implement quiet hours in the hub's configured timezone.
-- [ ] Persist subscription and delivery state under `dataDir` with the existing
+- [x] Implement quiet hours in the hub's configured timezone.
+- [x] Persist subscription and delivery state under `dataDir` with the existing
   JSON store.
-- [ ] Add a `notify test` path callable from the CLI and the settings screen.
+- [x] Add `NotificationService.test()` for the settings button and CLI; the
+  HTTP/CLI wiring lands with A4.
 
 **Touch:** `packages/hub/src/services/notification-service.ts`,
 `packages/hub/src/services/event-bus.ts`, `packages/hub/src/storage/*`,
 `packages/hub/src/app.ts`.
 **Done:** unit tests cover routing, coalescing, quiet hours, and an empty
 attention payload; no message body is logged.
+
+Status: implemented. `NotificationService` routes, coalesces by session and
+type, respects quiet hours, dedupes by attention id, retries, and records
+delivery attempts. It is wired in `main.ts` with a no-op transport until A3.
 
 ### A3. Web Push transport
 
