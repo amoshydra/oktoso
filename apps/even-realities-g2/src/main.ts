@@ -231,6 +231,8 @@ let pairingExpanded = false;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let scanController: AbortController | undefined;
 let replyRequest = 0;
+let replyPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
+let replyPrefetchKey = "";
 let inputCount = 0;
 let frameCount = 0;
 let lastInputMs = 0;
@@ -1585,6 +1587,11 @@ async function openChat(
 ): Promise<void> {
   if (!client) return;
   chatLoadSequence += 1;
+  if (replyPrefetchTimer) {
+    clearTimeout(replyPrefetchTimer);
+    replyPrefetchTimer = undefined;
+  }
+  replyPrefetchKey = "";
   state.sessionRef = ref;
   state.sessionTitle = title;
   state.sessionProject = undefined;
@@ -2202,10 +2209,12 @@ async function loadChat(quiet: boolean): Promise<void> {
         await updateChatView();
       }
       updatePhoneState();
+      scheduleReplyPrefetch();
       return;
     }
     render();
     updatePhoneState();
+    scheduleReplyPrefetch();
   } catch (error) {
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
     const failure = classifyFailure(error);
@@ -2257,6 +2266,7 @@ function applyLiveMessage(message: Message): void {
     void updateChatView();
   }
   updatePhoneState();
+  scheduleReplyPrefetch();
 }
 
 async function loadReadableMessages(ref: string): Promise<Message[]> {
@@ -2398,8 +2408,29 @@ function scrollChat(direction: -1 | 1): void {
   moveChatLine(direction * chatScrollStep(chatScrollBurst));
 }
 
+function scheduleReplyPrefetch(): void {
+  if (!client || !state.sessionRef || state.screen !== "chat") return;
+  if (state.chatLoading || state.chatMessageCount === 0) return;
+  if (/working|running/i.test(state.chatActivity)) return;
+  const ref = state.sessionRef;
+  const key = `${ref}:${state.chatMessageCount}:${state.chatMessages.at(-1)?.id ?? ""}`;
+  if (replyPrefetchKey === key) return;
+  if (replyPrefetchTimer) clearTimeout(replyPrefetchTimer);
+  replyPrefetchTimer = setTimeout(() => {
+    replyPrefetchTimer = undefined;
+    if (!client || state.sessionRef !== ref || state.screen !== "chat") return;
+    if (replyPrefetchKey === key) return;
+    replyPrefetchKey = key;
+    void client.replyOptions(ref, "reply").catch(() => undefined);
+  }, 2_000);
+}
+
 async function openReply(): Promise<void> {
   if (!client || !state.sessionRef) return;
+  if (replyPrefetchTimer) {
+    clearTimeout(replyPrefetchTimer);
+    replyPrefetchTimer = undefined;
+  }
   const sessionRef = state.sessionRef;
   const request = ++replyRequest;
   state.replyReturnScreen =

@@ -45,6 +45,8 @@ The audit call bypasses the reply cache, so pressing **Generate** gives a fresh
 sample. The normal `reply-options` call remains cached. The cache is keyed by
 the context digest; concurrent identical requests share one generation, so the
 web composer and the G2 reply screen cannot pay for the same model call twice.
+Clients may warm the cache before the user asks: the active web session after a
+short idle dwell, and an open G2 chat after two seconds.
 
 ## Decision gate
 

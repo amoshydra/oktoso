@@ -3655,6 +3655,11 @@ function SessionDetail(props: {
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const toolsToggleRef = useRef<HTMLButtonElement | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const prefetchedSuggestKey = useRef("");
+  const suggestPrefetchTimer = useRef<number | undefined>(undefined);
+  const [documentVisible, setDocumentVisible] = useState(
+    () => document.visibilityState === "visible",
+  );
   const canSteer = Boolean(sessionProvider?.capabilities.steer);
   const canQueue = Boolean(sessionProvider?.capabilities.queue);
   const running = session?.status === "running";
@@ -3743,6 +3748,51 @@ function SessionDetail(props: {
   useEffect(() => {
     setToolsOpen(false);
   }, [props.sessionRef]);
+
+  const suggestPrefetchKey = useCallback(() => {
+    const last = messages.at(-1);
+    return `${props.sessionRef}:${session?.updatedAt ?? 0}:${messages.length}:${last?.id ?? ""}`;
+  }, [messages, props.sessionRef, session?.updatedAt]);
+
+  useEffect(() => {
+    const onChange = () =>
+      setDocumentVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+
+  // Warm the hub cache for the session the reader is looking at. The result is
+  // discarded; Suggest still renders its own loading state if the context
+  // changed since the prefetch. Failures stay silent.
+  useEffect(() => {
+    if (!suggestEnabled || running || !documentVisible || messages.length === 0) {
+      return;
+    }
+    const key = suggestPrefetchKey();
+    if (prefetchedSuggestKey.current === key) return;
+    suggestPrefetchTimer.current = window.setTimeout(() => {
+      suggestPrefetchTimer.current = undefined;
+      if (document.visibilityState !== "visible") return;
+      prefetchedSuggestKey.current = key;
+      void props.client
+        .replyOptions(props.sessionRef, "reply")
+        .catch(() => undefined);
+    }, 1_000);
+    return () => {
+      if (suggestPrefetchTimer.current) {
+        window.clearTimeout(suggestPrefetchTimer.current);
+        suggestPrefetchTimer.current = undefined;
+      }
+    };
+  }, [
+    documentVisible,
+    messages.length,
+    props.client,
+    props.sessionRef,
+    running,
+    suggestEnabled,
+    suggestPrefetchKey,
+  ]);
 
   const getScroller = () => transcriptRef.current;
 
@@ -4102,6 +4152,11 @@ function SessionDetail(props: {
 
   const suggestReplies = async () => {
     if (!suggestEnabled || suggestState === "loading" || sending) return;
+    if (suggestPrefetchTimer.current) {
+      window.clearTimeout(suggestPrefetchTimer.current);
+      suggestPrefetchTimer.current = undefined;
+    }
+    prefetchedSuggestKey.current = suggestPrefetchKey();
     setSuggestState("loading");
     setSuggestError(undefined);
     setSuggestions([]);
