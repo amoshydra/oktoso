@@ -91,6 +91,40 @@ export function withProviderPolicy(
       assert(item.sessionRef);
       return api.actOnAttention(id, action, input);
     },
+    async automation() {
+      const view = await api.automation();
+      return {
+        ...view,
+        runs: view.runs.filter(
+          (run) => !run.sessionRef || allowed.has(providerOf(run.sessionRef)),
+        ),
+        approvals: view.approvals.filter((approval) =>
+          allowed.has(providerOf(approval.sessionRef)),
+        ),
+      };
+    },
+    async automationRuns(limit) {
+      return (await api.automationRuns(limit)).filter(
+        (run) => !run.sessionRef || allowed.has(providerOf(run.sessionRef)),
+      );
+    },
+    async approvals() {
+      return (await api.approvals()).filter((approval) =>
+        allowed.has(providerOf(approval.sessionRef)),
+      );
+    },
+    async setAutomation(input) {
+      return api.setAutomation(input);
+    },
+    async setWatcherPaused(id, paused) {
+      return api.setWatcherPaused(id, paused);
+    },
+    async actOnApproval(id, action) {
+      const approval = (await api.approvals()).find((item) => item.id === id);
+      if (!approval) throw new Error(`Approval not found: ${id}`);
+      assert(approval.sessionRef);
+      return api.actOnApproval(id, action);
+    },
   };
 }
 

@@ -9,6 +9,10 @@ import type {
   AttentionActionInput,
   AttentionPage,
   AttentionType,
+  AutomationApproval,
+  AutomationRun,
+  AutomationSettingsInput,
+  AutomationView,
   CreateSessionInput,
   HubEvent,
   MessagePage,
@@ -48,6 +52,12 @@ export interface McpHubApi {
     action: string,
     input?: AttentionActionInput,
   ): Promise<void>;
+  automation(): Promise<AutomationView>;
+  automationRuns(limit?: number): Promise<AutomationRun[]>;
+  approvals(): Promise<AutomationApproval[]>;
+  setAutomation(input: AutomationSettingsInput): Promise<AutomationView>;
+  setWatcherPaused(id: string, paused: boolean): Promise<AutomationView>;
+  actOnApproval(id: string, action: "approve" | "deny"): Promise<void>;
 }
 
 export interface McpCallRecord {
@@ -84,6 +94,8 @@ const WRITE_TOOLS = new Set([
   "sessions_interrupt",
   "sessions_mark_read",
   "attention_act",
+  "automation_pause",
+  "approvals_act",
 ]);
 
 export const MCP_READ_TOOL_NAMES = [
@@ -94,6 +106,8 @@ export const MCP_READ_TOOL_NAMES = [
   "sessions_messages",
   "attention_list",
   "questions_get",
+  "automation_list",
+  "approvals_list",
 ] as const;
 
 export const MCP_WRITE_TOOL_NAMES = [
@@ -102,6 +116,8 @@ export const MCP_WRITE_TOOL_NAMES = [
   "sessions_interrupt",
   "sessions_mark_read",
   "attention_act",
+  "automation_pause",
+  "approvals_act",
 ] as const;
 
 export const MCP_TOOL_NAMES = [
@@ -119,7 +135,9 @@ Never act on the OpenCode session that invoked you; the server rejects it.
 Only answer questions when the intent is clear. Deny destructive or sensitive
 permission requests unless the user explicitly approved them.
 Use a stable idempotencyKey for sessions_send so retries do not double-send.
-Prefer mark_read or a reply over interrupt.`;
+Prefer mark_read or a reply over interrupt.
+Use automation_list and approvals_list before approvals_act, and only approve
+actions the user has explicitly approved.`;
 
 function textResult(value: unknown): CallToolResult {
   return {
@@ -697,6 +715,90 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
             return { ok: true };
           },
           { args: { attentionId }, extra, target: attentionId },
+        ),
+    );
+  }
+
+  if (enabled("automation_list")) {
+    server.registerTool(
+      "automation_list",
+      {
+        title: "Read automation",
+        description:
+          "List watchers, dry-run/pause state, recent runs, and pending approvals.",
+        annotations: { readOnlyHint: true },
+      },
+      async (extra) =>
+        respond("automation_list", async () => api.automation(), { extra }),
+    );
+  }
+
+  if (enabled("approvals_list")) {
+    server.registerTool(
+      "approvals_list",
+      {
+        title: "List automation approvals",
+        description: "List actions the automation policy escalated to a human.",
+        annotations: { readOnlyHint: true },
+      },
+      async (extra) =>
+        respond(
+          "approvals_list",
+          async () => ({ data: await api.approvals() }),
+          { extra },
+        ),
+    );
+  }
+
+  if (enabled("automation_pause")) {
+    server.registerTool(
+      "automation_pause",
+      {
+        title: "Pause or resume automation",
+        description:
+          "Pause the whole policy or one watcher. Paused watchers drop new work.",
+        inputSchema: {
+          paused: z.boolean(),
+          watcher: z
+            .string()
+            .optional()
+            .describe("Pause only this watcher ID"),
+        },
+        annotations: { destructiveHint: true },
+      },
+      async ({ paused, watcher }, extra) =>
+        respond(
+          "automation_pause",
+          async () =>
+            watcher
+              ? api.setWatcherPaused(watcher, paused)
+              : api.setAutomation({ paused }),
+          { args: { watcher }, extra, target: watcher },
+        ),
+    );
+  }
+
+  if (enabled("approvals_act")) {
+    server.registerTool(
+      "approvals_act",
+      {
+        title: "Approve or deny an automation action",
+        description:
+          "Decide a pending automation approval. Approve executes the stored plan; deny never sends.",
+        inputSchema: {
+          id: z.string().describe("Approval ID from approvals_list"),
+          action: z.enum(["approve", "deny"]),
+        },
+        annotations: { destructiveHint: true },
+      },
+      async ({ id, action }, extra) =>
+        respond(
+          "approvals_act",
+          async () => {
+            await api.actOnApproval(id, action);
+            return { ok: true };
+          },
+          { args: { id }, extra, target: id },
         ),
     );
   }

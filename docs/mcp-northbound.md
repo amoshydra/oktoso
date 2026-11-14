@@ -125,8 +125,12 @@ the hub config and add at least one client token:
           "sessions_list",
           "sessions_messages",
           "attention_list",
+          "automation_list",
+          "approvals_list",
           "sessions_send",
-          "attention_act"
+          "attention_act",
+          "automation_pause",
+          "approvals_act"
         ],
         "rateLimit": { "windowMs": 60000, "max": 120 },
         "timeoutMs": 60000
@@ -222,6 +226,8 @@ Read-only:
 | `sessions_messages` | Paginated transcript |
 | `attention_list` | Permissions, approvals, questions, unread, and errors |
 | `questions_get` | Pending question with choices and risk |
+| `automation_list` | Watchers, dry-run/pause state, recent runs, and approvals |
+| `approvals_list` | Actions the automation policy escalated to a human |
 
 Write (`--allow-write`):
 
@@ -232,6 +238,8 @@ Write (`--allow-write`):
 | `sessions_interrupt` | Stop the current run |
 | `sessions_mark_read` | Clear unread state |
 | `attention_act` | Run an action listed on an attention item |
+| `automation_pause` | Pause or resume the policy or one watcher |
+| `approvals_act` | Approve or deny an automation approval |
 
 ## Controller policy
 
@@ -251,6 +259,8 @@ At the start of each turn:
    confirm: true only after that check.
 5. Never act on the session that invoked you.
 6. Prefer mark_read or a reply over interrupt.
+7. Use automation_list and approvals_list before approvals_act. Approve only
+   what the user explicitly approved; deny everything else.
 
 Report what you changed and what you escalated.
 ```
@@ -261,6 +271,10 @@ Report what you changed and what you escalated.
   `--allow-write`.
 - **No self-control.** The server compares the target ref with OpenCode's
   `_meta["ai.opencode/sessionID"]` and rejects writes to the caller's session.
+- **Automation approval is a write.** `approvals_act` only exists with
+  `--allow-write`, respects the token's tool allowlist, and is audited with the
+  client identity. Approve only after reading `automation_list` and the
+  session; deny is always safe.
 - **Approval confirmation.** `attention_act` requires `confirm: true` for
   allow/approve actions and for attention text that looks destructive or
   sensitive. Denials and mark-read do not require confirmation. This is a
@@ -297,10 +311,12 @@ fixture with a real question message for a live run.
 Verified on 2026-11-03 against the fake OpenCode/Open WebUI/Hermes dev hub with
 the official MCP SDK stdio client and a real OpenCode v2.1.4 client:
 
-- read-only mode exposes the seven read tools and no write tools;
+- read-only mode exposes the nine read tools and no write tools (the
+  2026-11-03 run covered seven; `automation_list` and `approvals_list` were
+  added later);
 - `providers_list` returns all three fake providers;
 - `sessions_list` returns a paginated session page;
-- read-write mode exposes all twelve tools;
+- read-write mode exposes all sixteen tools;
 - `sessions_send` accepts an idempotency key and sends to a fake session;
 - `_meta["ai.opencode/sessionID"]` rejects writes to the caller's own session;
 - `attention_act` answers a pending form and the attention item clears;

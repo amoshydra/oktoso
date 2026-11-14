@@ -264,7 +264,7 @@ describe("hosted MCP route", () => {
     expect(listed.status).toBe(200);
     const body = await listed.json();
     const names = body.result.tools.map((tool: { name: string }) => tool.name);
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(9);
     expect(names).toContain("providers_list");
     expect(names).not.toContain("sessions_send");
 
@@ -300,7 +300,7 @@ describe("hosted MCP route", () => {
     const names = (await listed.json()).result.tools.map(
       (tool: { name: string }) => tool.name,
     );
-    expect(names).toHaveLength(12);
+    expect(names).toHaveLength(16);
     expect(names).toContain("sessions_send");
 
     const sent = await call(app, "controller-token-long-enough", sessionId, {

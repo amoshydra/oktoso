@@ -253,8 +253,8 @@ Target: 4–6 weeks. Release: `v0.3.0`.
 Status: in progress. Attention, session-idle/error, and schedule watchers are
 implemented, with the low-risk answer policy, dry-run, leases, budgets, quiet
 hours, notify/retry/escalate actions, approvals in the Inbox and Settings, runs,
-and pause. Remaining: token/day budget, start-from-template, always-allow, G2
-approvals, MCP/CLI, and an in-flight abort.
+pause, MCP tools, and the CLI. Remaining: token/day budget,
+start-from-template, always-allow, G2 approvals, and an in-flight abort.
 
 ### B1. Contracts
 
@@ -312,9 +312,10 @@ approvals, MCP/CLI, and an in-flight abort.
 
 ### B7. MCP and CLI
 
-- [ ] `automation_list`, `automation_pause`, `approvals_list`,
-  `approvals_act`.
-- [ ] `oktoso automation status|pause|resume`.
+- [x] `automation_list`, `automation_pause`, `approvals_list`,
+  `approvals_act`; write tools stay behind `--allow-write` and the token tool
+  allowlist.
+- [x] `oktoso automation status|pause|resume`, including `--watcher <id>`.
 
 ### B8. Safety tests
 
