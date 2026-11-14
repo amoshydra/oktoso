@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DEFAULT_NOTIFICATION_ROUTING,
+  zAutomationTemplate,
   zAutomationWatcher,
   zNotificationRouting,
   zQuietHours,
@@ -182,6 +183,7 @@ export const zAutomationConfig = z
     enabled: z.boolean().default(false),
     dryRun: z.boolean().default(true),
     watchers: z.array(zAutomationWatcher).default([]),
+    templates: z.array(zAutomationTemplate).default([]),
     quietHours: zQuietHours.default({
       enabled: false,
       start: "22:00",
@@ -215,6 +217,31 @@ export const zAutomationConfig = z
       }
       seen.add(watcher.id);
     });
+
+    const templates = new Set<string>();
+    value.templates.forEach((template, index) => {
+      if (templates.has(template.id)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Duplicate template ID: ${template.id}`,
+          path: ["templates", index, "id"],
+        });
+      }
+      templates.add(template.id);
+    });
+
+    value.watchers.forEach((watcher, index) => {
+      if (
+        watcher.action.kind === "start" &&
+        !templates.has(watcher.action.template)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Unknown template: ${watcher.action.template}`,
+          path: ["watchers", index, "action", "template"],
+        });
+      }
+    });
   });
 
 export const zHubConfig = z.object({
@@ -243,6 +270,7 @@ export const zHubConfig = z.object({
     enabled: false,
     dryRun: true,
     watchers: [],
+    templates: [],
     quietHours: {
       enabled: false,
       start: "22:00",

@@ -489,7 +489,7 @@ export class AutomationService {
       createdAt: now,
       actions: [],
     };
-    if (!ref) {
+    if (!ref && watcher.action.kind !== "start") {
       await this.record(watcher, item, "skipped", "missing_target");
       return;
     }
@@ -655,6 +655,59 @@ export class AutomationService {
           item,
           "failed",
           "retry_failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      return;
+    }
+
+    if (watcher.action.kind === "start") {
+      const action = watcher.action;
+      const template = this.config.templates.find(
+        (item) => item.id === action.template,
+      );
+      if (!template) {
+        await this.record(watcher, item, "skipped", "template_missing");
+        return;
+      }
+      if (dryRun) {
+        await this.record(
+          watcher,
+          item,
+          "dry_run",
+          "dry_run",
+          `Would start ${template.title}`,
+        );
+        return;
+      }
+      if (!this.withinBudget(watcher)) {
+        await this.record(watcher, item, "skipped", "budget");
+        return;
+      }
+      try {
+        const session = await this.withRetry(() =>
+          this.sessions.create({
+            providerID: template.providerID,
+            title: template.title,
+            ...(template.directory ? { directory: template.directory } : {}),
+            ...(template.agent ? { agent: template.agent } : {}),
+            ...(template.model ? { model: template.model } : {}),
+            ...(template.text ? { text: template.text } : {}),
+          }),
+        );
+        await this.record(
+          watcher,
+          item,
+          "acted",
+          "started",
+          `Started ${session.ref}`,
+        );
+      } catch (error) {
+        await this.record(
+          watcher,
+          item,
+          "failed",
+          "start_failed",
           error instanceof Error ? error.message : String(error),
         );
       }

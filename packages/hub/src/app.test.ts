@@ -140,6 +140,7 @@ async function createTestApp(options: {
           limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
         },
       ],
+      templates: [],
       quietHours: {
         enabled: false,
         start: "22:00",

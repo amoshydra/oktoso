@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   Attention,
+  CreateSessionInput,
   HubEvent,
   PendingQuestion,
   QuestionPrompt,
@@ -95,6 +96,7 @@ function config(overrides: Partial<AutomationConfig> = {}): AutomationConfig {
     maxActionsPerDay: 24,
     approvalTtlMs: 24 * 60 * 60 * 1_000,
     audit: { maxRuns: 100 },
+    templates: [],
     watchers: [
       {
         id: "w1",
@@ -149,6 +151,9 @@ async function setup(
     },
     async retryMessage() {
       return { accepted: true };
+    },
+    async create() {
+      return { ref: "opencode:ses_new" } as Session;
     },
     ...options.sessions,
   } as unknown as SessionService;
@@ -639,6 +644,86 @@ describe("AutomationService triggers and actions", () => {
     expect(service.runs()[0]).toMatchObject({
       decision: "acted",
       reason: "retried",
+    });
+  });
+
+  it("starts a session from a template on a schedule", async () => {
+    const clock = { now };
+    const created: CreateSessionInput[] = [];
+    const { service } = await setup({
+      config: {
+        templates: [
+          {
+            id: "nightly-review",
+            providerID: "opencode",
+            title: "Nightly review",
+            text: "Review the repository",
+          },
+        ],
+        watchers: [
+          {
+            id: "start-review",
+            enabled: true,
+            trigger: { kind: "schedule", everyMs: 60_000 },
+            action: { kind: "start", template: "nightly-review" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+      sessions: {
+        create: async (input: CreateSessionInput) => {
+          created.push(input);
+          return { ref: "opencode:ses_new" } as Session;
+        },
+      },
+      clock,
+    });
+
+    await service.tickNow();
+    clock.now += 60_000;
+    await service.tickNow();
+
+    expect(created).toEqual([
+      {
+        providerID: "opencode",
+        title: "Nightly review",
+        text: "Review the repository",
+      },
+    ]);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      reason: "started",
+      detail: "Started opencode:ses_new",
+    });
+  });
+
+  it("records a missing template instead of starting", async () => {
+    const clock = { now };
+    const { service } = await setup({
+      config: {
+        templates: [],
+        watchers: [
+          {
+            id: "start-missing",
+            enabled: true,
+            trigger: { kind: "schedule", everyMs: 60_000 },
+            action: { kind: "start", template: "missing" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+      clock,
+    });
+
+    clock.now += 60_000;
+    await service.tickNow();
+
+    expect(service.runs()).toHaveLength(1);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "skipped",
+      reason: "template_missing",
     });
   });
 
