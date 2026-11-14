@@ -178,6 +178,8 @@ export const zNotificationSettings = z.object({
   channels: z.array(zNotificationChannelView),
   routing: zNotificationRouting,
   subscriptions: z.array(zPushSubscription),
+  /** VAPID public key for `pushManager.subscribe`. Not a secret. */
+  applicationServerKey: z.string().optional(),
 });
 
 export const DEFAULT_NOTIFICATION_ROUTING = {

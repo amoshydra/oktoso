@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: A1–A3 complete. A4 (subscription routes) is next.
+Status: A1–A4 complete. A5 (service worker and deep links) is next.
 
 ### A1. Contracts and configuration
 
@@ -120,22 +120,27 @@ encryption is delegated to `web-push`.
 
 ### A4. Subscription and settings routes
 
-- [ ] `GET /api/v1/notifications/subscriptions` for the current owner.
-- [ ] `POST /api/v1/notifications/subscriptions` (register a browser
+- [x] `GET /api/v1/notifications/subscriptions` for the current owner.
+- [x] `POST /api/v1/notifications/subscriptions` (register a browser
   subscription).
-- [ ] `DELETE /api/v1/notifications/subscriptions/:id`.
-- [ ] `POST /api/v1/notifications/test`.
-- [ ] `GET`/`PUT /api/v1/notifications/rules`.
-- [ ] Gate all writes behind the owner session; subscriptions are tied to the
-  paired device, not to an arbitrary client.
-- [ ] Add a stable device identity. The current pairing is stateless, so accept
-  a client-generated `deviceID` plus a label with the subscription, and allow a
-  per-subscription revoke without rotating the owner token.
+- [x] `DELETE /api/v1/notifications/subscriptions/:id`.
+- [x] `POST /api/v1/notifications/test`.
+- [x] `GET`/`PUT /api/v1/notifications` (settings and routing).
+- [x] Gate all writes behind the authenticated session; subscriptions carry a
+  client-generated `deviceID` and can be revoked individually.
+- [x] Add a stable device identity. The current pairing is stateless, so the
+  client sends a `deviceID` plus a label with the subscription; revoke is
+  per-subscription, without rotating the owner token.
 
 **Touch:** `packages/hub/src/http/routes/notifications.ts`,
 `packages/hub/src/app.ts`, `packages/client/src/hub-client.ts`.
 **Done:** route tests cover auth, validation, and device revocation; the client
 has typed methods.
+
+Status: implemented. Settings and subscriptions live at
+`/api/v1/notifications`, with `/subscriptions`, `/deliveries`, and `/test`
+below it. The settings view exposes the VAPID public key as
+`applicationServerKey`.
 
 ### A5. Service worker and deep links
 

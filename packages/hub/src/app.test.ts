@@ -19,6 +19,7 @@ import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
+import { NotificationService } from "./services/notification-service";
 import { VERSION } from "./version";
 import {
   JsonStateStore,
@@ -120,6 +121,17 @@ async function createTestApp(options: {
     options.transcriptionFetch,
   );
   const questions = new QuestionService(sessions);
+  const notifications = new NotificationService({
+    config: config.notifications,
+    store,
+    eventBus,
+    logger,
+    transport: {
+      supports: (channel) => channel === "webpush",
+      async send() {},
+    },
+    applicationServerKey: "test-application-server-key",
+  });
   const providerAdmin = options.providerConfigPath
     ? new ProviderAdminService(
         registry,
@@ -145,6 +157,7 @@ async function createTestApp(options: {
     replyFeedback,
     transcription,
     questions,
+    notifications,
     logger,
     startedAt: Date.now(),
     appsRoot: options.appsRoot,
@@ -164,6 +177,7 @@ async function createTestApp(options: {
     replyFeedback,
     transcription,
     questions,
+    notifications,
     fake,
     openwebui,
   };
@@ -2110,5 +2124,144 @@ describe("chat attachments and branches", () => {
       },
     );
     expect(response.status).toBe(501);
+  });
+});
+
+describe("notification routes", () => {
+  const auth = { Authorization: `Bearer ${token}` };
+  const jsonHeaders = { ...auth, "Content-Type": "application/json" };
+
+  it("requires auth", async () => {
+    const { app } = await createTestApp();
+
+    expect((await app.request("/api/v1/notifications")).status).toBe(401);
+  });
+
+  it("returns settings and the public application server key", async () => {
+    const { app } = await createTestApp();
+
+    const response = await app.request("/api/v1/notifications", {
+      headers: auth,
+    });
+    const body = (await response.json()) as {
+      data: {
+        enabled: boolean;
+        applicationServerKey?: string;
+        channels: Array<{ kind: string; configured: boolean }>;
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.data.enabled).toBe(false);
+    expect(body.data.applicationServerKey).toBe("test-application-server-key");
+    expect(body.data.channels).toContainEqual({
+      kind: "webpush",
+      enabled: true,
+      configured: true,
+    });
+  });
+
+  it("registers and removes a subscription without leaking transport secrets", async () => {
+    const { app } = await createTestApp();
+
+    const created = await app.request("/api/v1/notifications/subscriptions", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        deviceID: "phone-1",
+        label: "Pixel",
+        endpoint: "https://push.example.com/one",
+        keys: { p256dh: "public-key", auth: "auth-secret" },
+      }),
+    });
+    const body = (await created.json()) as {
+      data: Record<string, unknown>;
+    };
+
+    expect(created.status).toBe(201);
+    expect(body.data).toMatchObject({ deviceID: "phone-1", label: "Pixel" });
+    expect(body.data).not.toHaveProperty("endpoint");
+    expect(body.data).not.toHaveProperty("keys");
+
+    const removed = await app.request(
+      `/api/v1/notifications/subscriptions/${String(body.data.id)}`,
+      { method: "DELETE", headers: auth },
+    );
+    expect(removed.status).toBe(204);
+
+    const missing = await app.request(
+      `/api/v1/notifications/subscriptions/${String(body.data.id)}`,
+      { method: "DELETE", headers: auth },
+    );
+    expect(missing.status).toBe(404);
+  });
+
+  it("updates routing and rejects overlapping rules", async () => {
+    const { app } = await createTestApp();
+
+    const updated = await app.request("/api/v1/notifications", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        enabled: true,
+        routing: {
+          quietHours: {
+            enabled: true,
+            start: "22:00",
+            end: "07:00",
+            timezone: "UTC",
+          },
+        },
+      }),
+    });
+    const body = (await updated.json()) as {
+      data: { enabled: boolean; routing: { quietHours: { enabled: boolean } } };
+    };
+
+    expect(updated.status).toBe(200);
+    expect(body.data.enabled).toBe(true);
+    expect(body.data.routing.quietHours.enabled).toBe(true);
+
+    const invalid = await app.request("/api/v1/notifications", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        routing: { immediate: ["question"], digest: ["question"] },
+      }),
+    });
+    expect(invalid.status).toBe(400);
+  });
+
+  it("sends a test notification and returns the delivery counts", async () => {
+    const { app } = await createTestApp();
+
+    const response = await app.request("/api/v1/notifications/test", {
+      method: "POST",
+      headers: auth,
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()) as unknown).toEqual({
+      data: { attempted: 1, delivered: 1, failed: 0 },
+    });
+  });
+
+  it("lists the delivery log newest first", async () => {
+    const { app } = await createTestApp();
+
+    await app.request("/api/v1/notifications/test", {
+      method: "POST",
+      headers: auth,
+    });
+
+    const response = await app.request(
+      "/api/v1/notifications/deliveries?limit=10",
+      { headers: auth },
+    );
+    const body = (await response.json()) as { data: Array<{ status: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({ status: "sent" });
   });
 });

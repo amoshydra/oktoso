@@ -17,8 +17,14 @@ import type {
   InboxPage,
   MessagePage,
   MessagesQuery,
+  NotificationDelivery,
+  NotificationSettings,
+  NotificationSettingsInput,
+  NotificationTestResult,
   PairingCode,
   PairingSession,
+  PushSubscription,
+  PushSubscriptionInput,
   SessionRefresh,
   Provider,
   ProviderInput,
@@ -331,8 +337,63 @@ export class HubClient {
     );
   }
 
-  async assistantSettings(): Promise<AssistantView> {
-    const response = await this.request<{ data: AssistantView }>(
+  async notificationSettings(): Promise<NotificationSettings> {
+    const response = await this.request<{ data: NotificationSettings }>(
+      "/api/v1/notifications",
+    );
+    return response.data;
+  }
+
+  async saveNotificationSettings(
+    input: NotificationSettingsInput,
+  ): Promise<NotificationSettings> {
+    const response = await this.request<{ data: NotificationSettings }>(
+      "/api/v1/notifications",
+      { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async notificationSubscriptions(): Promise<PushSubscription[]> {
+    const response = await this.request<{ data: PushSubscription[] }>(
+      "/api/v1/notifications/subscriptions",
+    );
+    return response.data;
+  }
+
+  async addPushSubscription(
+    input: PushSubscriptionInput,
+  ): Promise<PushSubscription> {
+    const response = await this.request<{ data: PushSubscription }>(
+      "/api/v1/notifications/subscriptions",
+      { method: "POST", body: input },
+    );
+    return response.data;
+  }
+
+  async removePushSubscription(id: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/notifications/subscriptions/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async testNotification(): Promise<NotificationTestResult> {
+    const response = await this.request<{ data: NotificationTestResult }>(
+      "/api/v1/notifications/test",
+      { method: "POST" },
+    );
+    return response.data;
+  }
+
+  async notificationDeliveries(limit = 50): Promise<NotificationDelivery[]> {
+    const response = await this.request<{ data: NotificationDelivery[] }>(
+      `/api/v1/notifications/deliveries?limit=${limit}`,
+    );
+    return response.data;
+  }
+
+  async assistantSettings(): Promise<AssistantView> {    const response = await this.request<{ data: AssistantView }>(
       "/api/v1/settings/assistant",
     );
     return response.data;

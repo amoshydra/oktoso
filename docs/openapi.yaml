@@ -3368,6 +3368,8 @@ components:
               - deviceID
               - createdAt
               - lastSeenAt
+        applicationServerKey:
+          type: string
       required:
         - enabled
         - channels
@@ -4962,4 +4964,146 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Diagnostics"
+  /api/v1/notifications:
+    get:
+      tags:
+        - notifications
+      summary: Read notification settings
+      responses:
+        "200":
+          description: Notification settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/NotificationSettings"
+                required:
+                  - data
+    put:
+      tags:
+        - notifications
+      summary: Update notification settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSettingsInput"
+      responses:
+        "200":
+          description: Updated notification settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/NotificationSettings"
+                required:
+                  - data
+        "400":
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/notifications/subscriptions:
+    get:
+      tags:
+        - notifications
+      summary: List push subscriptions
+      responses:
+        "200":
+          description: Push subscriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushSubscriptionPage"
+    post:
+      tags:
+        - notifications
+      summary: Register a push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscriptionInput"
+      responses:
+        "201":
+          description: Registered subscription
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PushSubscription"
+                required:
+                  - data
+        "400":
+          description: Invalid subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/notifications/subscriptions/{id}:
+    delete:
+      tags:
+        - notifications
+      summary: Remove a push subscription
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Subscription removed
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/notifications/deliveries:
+    get:
+      tags:
+        - notifications
+      summary: Read the recent delivery log
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Recent deliveries, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationDeliveryPage"
+  /api/v1/notifications/test:
+    post:
+      tags:
+        - notifications
+      summary: Send a test notification
+      responses:
+        "200":
+          description: Delivery result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/NotificationTestResult"
+                required:
+                  - data
 webhooks: {}
