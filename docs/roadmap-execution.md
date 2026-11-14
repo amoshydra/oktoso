@@ -291,7 +291,9 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
 - [x] Auto-answer, escalate, notify, and retry.
 - [x] Every action goes through the existing service path.
 - [x] Retry a failed action once before recording it as failed.
-- [ ] start-from-template.
+- [x] start-from-template: a `start` action references a configured
+  template and creates a session; schedule watchers may omit
+  `condition.sessionRef`. Dry-run, budgets, and the startup lease apply.
 
 ### B5. Approval queue
 

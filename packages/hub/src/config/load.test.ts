@@ -361,6 +361,84 @@ describe("notification config", () => {
     }
   });
 
+  it("loads a start watcher with a known template", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      automation: {
+        templates: [
+          {
+            id: "nightly-review",
+            providerID: "opencode",
+            title: "Nightly review",
+            text: "Review the repository",
+          },
+        ],
+        watchers: [
+          {
+            id: "start-review",
+            trigger: { kind: "schedule", everyMs: 60_000 },
+            action: { kind: "start", template: "nightly-review" },
+          },
+        ],
+      },
+    });
+    try {
+      const config = await loadConfig(filePath, {});
+      expect(config.automation.templates[0]).toMatchObject({
+        id: "nightly-review",
+        title: "Nightly review",
+      });
+      expect(config.automation.watchers[0]?.action).toEqual({
+        kind: "start",
+        template: "nightly-review",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a start watcher with an unknown template", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      automation: {
+        templates: [],
+        watchers: [
+          {
+            id: "start-review",
+            trigger: { kind: "schedule", everyMs: 60_000 },
+            action: { kind: "start", template: "missing" },
+          },
+        ],
+      },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /Unknown template: missing/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate template IDs", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      automation: {
+        templates: [
+          { id: "same", providerID: "opencode", title: "One" },
+          { id: "same", providerID: "opencode", title: "Two" },
+        ],
+      },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /Duplicate template ID: same/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects half a VAPID key pair", async () => {
     const { root, filePath } = await writeConfig({
       token: "this-is-a-long-dev-token",

@@ -3536,6 +3536,18 @@ components:
                 - retry
           required:
             - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - start
+            template:
+              type: string
+              minLength: 1
+          required:
+            - kind
+            - template
     AutomationLimits:
       type: object
       properties:
@@ -3676,6 +3688,18 @@ components:
                     - retry
               required:
                 - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - start
+                template:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - template
         dryRun:
           type: boolean
           default: true
@@ -3841,6 +3865,18 @@ components:
                     - retry
               required:
                 - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - start
+                template:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - template
         reason:
           type: string
         status:
@@ -3949,6 +3985,18 @@ components:
                           - retry
                     required:
                       - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - start
+                      template:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                      - template
               reason:
                 type: string
               status:
@@ -4169,6 +4217,18 @@ components:
                           - retry
                     required:
                       - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - start
+                      template:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                      - template
               dryRun:
                 type: boolean
                 default: true
@@ -4297,6 +4357,18 @@ components:
                           - retry
                     required:
                       - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - start
+                      template:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                      - template
               reason:
                 type: string
               status:

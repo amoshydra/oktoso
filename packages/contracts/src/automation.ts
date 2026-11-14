@@ -44,7 +44,29 @@ export const zAutomationAction = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("escalate") }),
   z.object({ kind: z.literal("notify") }),
   z.object({ kind: z.literal("retry") }),
+  z.object({
+    kind: z.literal("start"),
+    template: z.string().min(1),
+  }),
 ]);
+
+export const zAutomationTemplate = z.object({
+  id: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      "Template IDs may contain letters, numbers, dot, underscore, or dash",
+    ),
+  name: z.string().min(1).max(80).optional(),
+  providerID: z.string().min(1),
+  title: z.string().min(1).max(120),
+  directory: z.string().min(1).optional(),
+  agent: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  text: z.string().min(1).optional(),
+});
 
 export const zAutomationLimits = z.object({
   maxActionsPerHour: z.number().int().min(1).max(1_000).default(6),
@@ -187,6 +209,7 @@ export const zAutomationApprovalAction = z.enum([
 export type AutomationTrigger = z.infer<typeof zAutomationTrigger>;
 export type AutomationCondition = z.infer<typeof zAutomationCondition>;
 export type AutomationAction = z.infer<typeof zAutomationAction>;
+export type AutomationTemplate = z.infer<typeof zAutomationTemplate>;
 export type AutomationLimits = z.infer<typeof zAutomationLimits>;
 export type AutomationWatcher = z.infer<typeof zAutomationWatcher>;
 export type AutomationDecision = z.infer<typeof zAutomationDecision>;
