@@ -250,16 +250,15 @@ the branch merges; nothing is published from the worktree.
 
 Target: 4–6 weeks. Release: `v0.3.0`.
 
-Status: the first supervisor slice is implemented. Attention watchers, the
-low-risk answer policy, dry-run, budgets, leases, approvals, runs, pause, the
-HTTP/client surface, and a Settings panel are in place. Session-idle and
-schedule triggers, token/quiet-hour budgets, notify/retry/start actions, MCP,
-CLI, and G2 approvals remain for the next slices.
+Status: in progress. Attention, session-idle/error, and schedule watchers are
+implemented, with the low-risk answer policy, dry-run, leases, budgets, quiet
+hours, notify/retry/escalate actions, approvals in the Inbox and Settings, runs,
+and pause. Remaining: token/day budget, start-from-template, always-allow, G2
+approvals, MCP/CLI, and an in-flight abort.
 
 ### B1. Contracts
 
-- [x] `zAutomationWatcher` (id, trigger, condition, action, dryRun, enabled,
-  limits).
+- [x] `zAutomationWatcher` with attention, session, and schedule triggers.
 - [x] `zAutomationRun` (id, watcherID, trigger, decision, reason, sessionRef,
   attentionID, action, at).
 - [x] `zAutomationApproval` (attention identity, action, reason, plan, status,
@@ -268,12 +267,13 @@ CLI, and G2 approvals remain for the next slices.
 
 ### B2. Watcher runtime
 
-- [x] `automation-service.ts` subscribing to `attention.created`; questions,
-  permissions, approvals, and errors arrive through that event.
+- [x] Attention events (questions, permissions, approvals, errors).
+- [x] Session idle/error triggers with a poll and a stability window.
+- [x] Schedule triggers on `everyMs`.
 - [x] Match conditions without fetching every session on every event.
-- [x] Lease per watcher + attention id so duplicate events cannot act twice.
-- [ ] Debounce session idle/running flaps (needs the session trigger).
-- [ ] Session-idle and schedule triggers.
+- [x] Lease per watcher + target so duplicate events cannot act twice.
+- [x] Debounce idle/running flaps by resetting the stability timer on a status
+  change.
 
 ### B3. Policy and risk
 
@@ -282,23 +282,24 @@ CLI, and G2 approvals remain for the next slices.
 - [x] Escalate everything else to the approval queue, with a concrete proposed
   choice when the watcher names one.
 - [x] Enforce actions/hour and actions/day, globally and per watcher.
+- [x] Quiet hours: answer and retry escalate instead of acting.
 - [x] Record the policy decision on every run.
-- [ ] Token/day budget and quiet hours.
+- [ ] Token/day budget.
 
 ### B4. Actions
 
-- [x] Auto-answer and escalate.
-- [x] Every action goes through `SessionActions`, the same path the UI and MCP
-  use.
-- [ ] notify, retry, and start-from-template.
-- [ ] Retry a failed action once before recording it as failed.
+- [x] Auto-answer, escalate, notify, and retry.
+- [x] Every action goes through the existing service path.
+- [x] Retry a failed action once before recording it as failed.
+- [ ] start-from-template.
 
 ### B5. Approval queue
 
 - [x] Pending approvals with the session, watcher, policy reason, and proposed
   answer.
-- [x] Approve and deny from the API and the Settings panel.
-- [ ] Reuse the inbox card grammar and surface approvals in the Inbox.
+- [x] Approve and deny from the API, the Settings panel, and the Inbox.
+- [x] Inbox uses the existing group and card grammar; approvals count toward
+  the attention badge.
 - [ ] "Always allow this shape".
 - [ ] G2 approvals.
 
@@ -322,8 +323,11 @@ CLI, and G2 approvals remain for the next slices.
 - [x] A destructive question always escalates.
 - [x] Budget exhaustion stops the watcher cleanly.
 - [x] Pause stops new work.
+- [x] Quiet hours escalates instead of answering.
+- [x] Session idle/error and schedule triggers fire once.
+- [x] Retry-once and retry-action tests.
 - [ ] Kill switch stops an action mid-flight.
-- [ ] Approval execution is covered end to end on a real provider.
+- [ ] Approval execution on a real provider.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
 real session.

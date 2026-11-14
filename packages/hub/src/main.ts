@@ -552,15 +552,6 @@ async function main(): Promise<void> {
     const questions = new QuestionService(sessions);
     const idempotency = new IdempotencyService(store);
     const actions = new SessionActions(sessions, questions, idempotency);
-    const automation = new AutomationService({
-      config: config.automation,
-      store,
-      eventBus,
-      logger,
-      questions,
-      actions,
-    });
-    automation.start();
     // Generate the VAPID pair once and keep it owner-only. It is cheap, and a
     // later runtime enable should not need a restart to start delivering.
     const vapidKeys =
@@ -584,6 +575,17 @@ async function main(): Promise<void> {
       applicationServerKey: vapidKeys.publicKey,
     });
     notifications.start();
+    const automation = new AutomationService({
+      config: config.automation,
+      store,
+      eventBus,
+      logger,
+      questions,
+      actions,
+      sessions,
+      notifications,
+    });
+    automation.start();
     providerEvents = new ProviderEventService(
       registry,
       eventBus,

@@ -4,6 +4,7 @@ import type {
   PendingQuestion,
   QuestionPrompt,
   SendInput,
+  Session,
 } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import type { AutomationConfig } from "../config/schema";
@@ -16,6 +17,8 @@ import {
 import { EventBus } from "./event-bus";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
+import type { SessionService } from "./session-service";
+import type { NotificationService } from "./notification-service";
 
 const now = 1_793_000_000_000;
 const logger = createLogger({ level: "silent" });
@@ -80,6 +83,13 @@ function config(overrides: Partial<AutomationConfig> = {}): AutomationConfig {
   return {
     enabled: true,
     dryRun: false,
+    quietHours: {
+      enabled: false,
+      start: "22:00",
+      end: "07:00",
+      timezone: "UTC",
+    },
+    pollIntervalMs: 30_000,
     maxActionsPerHour: 6,
     maxActionsPerDay: 24,
     approvalTtlMs: 24 * 60 * 60 * 1_000,
@@ -103,10 +113,14 @@ async function setup(
     config?: Partial<AutomationConfig>;
     prompt?: QuestionPrompt | null;
     send?: (input: SendInput) => Promise<void>;
+    clock?: { now: number };
+    sessions?: Record<string, unknown>;
+    notify?: (item: Attention) => Promise<void>;
   } = {},
 ) {
+  const clock = options.clock ?? { now };
   const store = new MemoryStateStore();
-  const bus = new EventBus(store, logger, { now: () => now });
+  const bus = new EventBus(store, logger, { now: () => clock.now });
   await bus.init();
   const sends: Array<{ ref: string; input: SendInput; key?: string }> = [];
   const promptValue = "prompt" in options ? options.prompt : prompt();
@@ -122,6 +136,27 @@ async function setup(
       return { accepted: true };
     },
   } as unknown as SessionActions;
+  const sessions = {
+    async list() {
+      return { data: [], cursor: { previous: null, next: null } };
+    },
+    async messages() {
+      return { data: [] };
+    },
+    async get() {
+      throw new Error("not found");
+    },
+    async retryMessage() {
+      return { accepted: true };
+    },
+    ...options.sessions,
+  } as unknown as SessionService;
+  const notifications = options.notify
+    ? ({
+        enabled: true,
+        notify: options.notify,
+      } as unknown as NotificationService)
+    : undefined;
   const service = new AutomationService({
     config: config(options.config),
     store,
@@ -129,7 +164,10 @@ async function setup(
     logger,
     questions,
     actions,
-    now: () => now,
+    sessions,
+    ...(notifications ? { notifications } : {}),
+    retryDelayMs: 0,
+    now: () => clock.now,
   });
   service.start();
   return { store, bus, service, sends };
@@ -350,5 +388,200 @@ describe("AutomationService", () => {
       reason: "multiple_questions",
     });
     expect(service.approvals()[0]?.plan).toBeUndefined();
+  });
+});
+
+describe("AutomationService triggers and actions", () => {
+  const sessionFixture = (status: Session["status"]): Session => ({
+    ref: "desktop-opencode:ses_auth",
+    providerID: "desktop-opencode",
+    nativeID: "ses_auth",
+    title: "Fix auth race in gateway",
+    status,
+    unread: false,
+    updatedAt: now,
+    createdAt: now - 1_000,
+  });
+  const limits = { maxActionsPerHour: 6, maxActionsPerDay: 24 };
+
+  it("escalates instead of answering during quiet hours", async () => {
+    const { bus, service, sends } = await setup({
+      config: {
+        quietHours: {
+          enabled: true,
+          start: "22:00",
+          end: "07:00",
+          timezone: "UTC",
+        },
+      },
+      clock: { now: Date.UTC(2026, 10, 14, 23, 30) },
+    });
+
+    await publish(bus, attention());
+    await service.whenIdle();
+
+    expect(sends).toHaveLength(0);
+    expect(service.approvals()[0]).toMatchObject({ reason: "quiet_hours" });
+    expect(service.runs()[0]).toMatchObject({
+      decision: "escalated",
+      reason: "quiet_hours",
+    });
+  });
+
+  it("retries a failed action once", async () => {
+    let calls = 0;
+    const { bus, service } = await setup({
+      send: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("transient");
+      },
+    });
+
+    await publish(bus, attention());
+    await service.whenIdle();
+
+    expect(calls).toBe(2);
+    expect(service.runs()[0]).toMatchObject({ decision: "acted" });
+  });
+
+  it("notifies without answering", async () => {
+    const notified: Attention[] = [];
+    const { bus, service, sends } = await setup({
+      notify: async (item) => {
+        notified.push(item);
+      },
+      config: {
+        watchers: [
+          {
+            id: "w1",
+            enabled: true,
+            trigger: { kind: "attention", types: ["question"] },
+            action: { kind: "notify" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+    });
+
+    await publish(bus, attention());
+    await service.whenIdle();
+
+    expect(sends).toHaveLength(0);
+    expect(notified).toHaveLength(1);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      reason: "notified",
+    });
+  });
+
+  it("fires once when a session becomes idle and stays idle", async () => {
+    const session = sessionFixture("idle");
+    const page = { data: [session], cursor: { previous: null, next: null } };
+    const { service } = await setup({
+      config: {
+        watchers: [
+          {
+            id: "s1",
+            enabled: true,
+            trigger: { kind: "session", on: "idle", idleMs: 0 },
+            action: { kind: "escalate" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+      sessions: {
+        list: async () => page,
+        get: async () => session,
+      },
+      clock: { now },
+    });
+
+    await service.tickNow();
+    await service.tickNow();
+    await service.tickNow();
+
+    expect(service.runs()).toHaveLength(1);
+    expect(service.runs()[0]).toMatchObject({
+      watcherID: "s1",
+      decision: "escalated",
+    });
+  });
+
+  it("retries the failed turn for a session error", async () => {
+    const session = sessionFixture("error");
+    const retried: string[] = [];
+    const { service } = await setup({
+      config: {
+        watchers: [
+          {
+            id: "e1",
+            enabled: true,
+            trigger: { kind: "session", on: "error", idleMs: 0 },
+            action: { kind: "retry" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+      sessions: {
+        list: async () => ({
+          data: [session],
+          cursor: { previous: null, next: null },
+        }),
+        messages: async () => ({
+          data: [{ id: "msg_1", metadata: { error: { message: "boom" } } }],
+        }),
+        retryMessage: async (_ref: string, id: string) => {
+          retried.push(id);
+          return { accepted: true };
+        },
+      },
+      clock: { now },
+    });
+
+    await service.tickNow();
+    await service.tickNow();
+
+    expect(retried).toEqual(["msg_1"]);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      reason: "retried",
+    });
+  });
+
+  it("fires a schedule watcher on its interval", async () => {
+    const clock = { now };
+    const session = sessionFixture("idle");
+    const { service } = await setup({
+      config: {
+        watchers: [
+          {
+            id: "t1",
+            enabled: true,
+            trigger: { kind: "schedule", everyMs: 60_000 },
+            condition: { sessionRef: session.ref },
+            action: { kind: "escalate" },
+            dryRun: false,
+            limits,
+          },
+        ],
+      },
+      sessions: { get: async () => session },
+      clock,
+    });
+
+    await service.tickNow();
+    expect(service.runs()).toHaveLength(0);
+
+    clock.now += 60_000;
+    await service.tickNow();
+
+    expect(service.runs()).toHaveLength(1);
+    expect(service.runs()[0]).toMatchObject({
+      watcherID: "t1",
+      decision: "escalated",
+    });
   });
 });
