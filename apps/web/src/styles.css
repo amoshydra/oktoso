@@ -2754,11 +2754,6 @@
   line-height: 1.5;
 }
 
-.message-error-hint {
-  color: var(--muted) !important;
-  font-size: var(--text-xs) !important;
-}
-
 .message-error-actions {
   display: flex;
   flex-wrap: wrap;

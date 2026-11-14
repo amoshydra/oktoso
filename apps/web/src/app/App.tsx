@@ -1797,7 +1797,6 @@ function AttentionCard(props: {
   retryBusy?: boolean;
   onContinue?: () => void;
   continueBusy?: boolean;
-  retryHint?: string;
 }) {
   const item = props.item;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -1828,9 +1827,6 @@ function AttentionCard(props: {
       <div className="attention-title">{item.title}</div>
       <div className="attention-summary">{item.summary}</div>
       {props.detail ? <div className="attention-detail">{props.detail}</div> : null}
-      {props.retryHint ? (
-        <div className="attention-detail">{props.retryHint}</div>
-      ) : null}
 
       {hasFields ? (
         <div className="attention-fields">
@@ -4704,11 +4700,6 @@ function SessionDetail(props: {
                           : undefined
                       }
                       continueBusy={continueBusy === errorMessage?.id}
-                      retryHint={
-                        item.type === "error" && isRateLimitError(providerError)
-                          ? "Change the model in the composer, then retry the turn."
-                          : undefined
-                      }
                     />
                   ))}
                 </div>
@@ -5445,12 +5436,6 @@ function TranscriptMessage(props: {
               <div className="message-error" role="alert">
                 <span className="message-error-label">Provider error</span>
                 <p>{providerErrorMessage(message.metadata.error)}</p>
-                {isRateLimitError(message.metadata.error) ? (
-                  <p className="message-error-hint">
-                    Change the model in the composer, then retry the turn. Or
-                    continue from where the agent stopped.
-                  </p>
-                ) : null}
                 <div className="message-error-actions">
                   {props.canRetry ? (
                     <button
@@ -7375,17 +7360,6 @@ function previewErrorMessage(reason: unknown): string {
     }
   }
   return reason instanceof Error ? reason.message : "Unable to open this file.";
-}
-
-function isRateLimitError(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  const record = value as {
-    status?: unknown;
-    type?: unknown;
-    message?: unknown;
-  };
-  const text = `${String(record.type ?? "")} ${String(record.message ?? "")}`;
-  return record.status === 429 || /quota|rate.?limit|usage limit/i.test(text);
 }
 
 function providerErrorMessage(value: unknown): string {
