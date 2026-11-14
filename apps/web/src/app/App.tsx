@@ -5704,12 +5704,12 @@ function SessionDetail(props: {
                     }`
                   : ""}
               </span>
-              {backgroundItems.length > 0 || !atBottom ? (
               {!online ? (
                 <p className="composer-offline-note" role="status">
                   Offline · sends will be queued.
                 </p>
               ) : null}
+              {backgroundItems.length > 0 || !atBottom ? (
                 <div className="composer-status">
                   {backgroundItems.length > 0 ? (
                     <button
