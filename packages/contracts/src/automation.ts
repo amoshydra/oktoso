@@ -117,6 +117,21 @@ export const zAutomationApprovalStatus = z.enum([
   "expired",
 ]);
 
+export const zAutomationShape = z.object({
+  id: z.string(),
+  watcherID: z.string(),
+  kind: z.enum(["boolean", "choice"]),
+  /** Display labels of every option, sorted for a stable fingerprint. */
+  choices: z.array(z.string()),
+  /** Normalized selected label used in the fingerprint. */
+  choice: z.string(),
+  /** Display label of the selected choice. */
+  label: z.string(),
+  createdAt: z.number().int(),
+  lastUsedAt: z.number().int().optional(),
+  uses: z.number().int().nonnegative(),
+});
+
 export const zAutomationProposal = z.object({
   label: z.string().max(80).optional(),
   text: z.string().max(500),
@@ -139,6 +154,8 @@ export const zAutomationApproval = z.object({
   actionable: z.boolean(),
   /** The answer that approve will send, when actionable. */
   proposed: zAutomationProposal.optional(),
+  /** True when this shape can be remembered for future approvals. */
+  allowShape: z.boolean(),
 });
 
 export const zAutomationApprovalPage = z.object({
@@ -153,6 +170,7 @@ export const zAutomationView = z.object({
   pausedWatchers: z.array(z.string()),
   runs: z.array(zAutomationRun),
   approvals: z.array(zAutomationApproval),
+  allowedShapes: z.array(zAutomationShape),
 });
 
 export const zAutomationSettingsInput = z.object({
@@ -160,7 +178,11 @@ export const zAutomationSettingsInput = z.object({
   dryRun: z.boolean().optional(),
 });
 
-export const zAutomationApprovalAction = z.enum(["approve", "deny"]);
+export const zAutomationApprovalAction = z.enum([
+  "approve",
+  "deny",
+  "always",
+]);
 
 export type AutomationTrigger = z.infer<typeof zAutomationTrigger>;
 export type AutomationCondition = z.infer<typeof zAutomationCondition>;
@@ -170,6 +192,7 @@ export type AutomationWatcher = z.infer<typeof zAutomationWatcher>;
 export type AutomationDecision = z.infer<typeof zAutomationDecision>;
 export type AutomationRun = z.infer<typeof zAutomationRun>;
 export type AutomationRunPage = z.infer<typeof zAutomationRunPage>;
+export type AutomationShape = z.infer<typeof zAutomationShape>;
 export type AutomationProposal = z.infer<typeof zAutomationProposal>;
 export type AutomationApproval = z.infer<typeof zAutomationApproval>;
 export type AutomationApprovalStatus = z.infer<

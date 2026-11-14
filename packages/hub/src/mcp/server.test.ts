@@ -81,6 +81,7 @@ const automationView: AutomationView = {
   pausedWatchers: [],
   runs: [],
   approvals: [],
+  allowedShapes: [],
 };
 
 function fakeApi(overrides: Partial<McpHubApi> = {}): McpHubApi {
@@ -429,6 +430,7 @@ describe("automation tools", () => {
     createdAt: 1,
     expiresAt: 2,
     actionable: false,
+    allowShape: false,
   };
 
   it("reads automation and approvals", async () => {
@@ -475,6 +477,28 @@ describe("automation tools", () => {
         },
       ],
       approvals: [approval, { ...approval, id: "approval_2", attentionID: "att_2" }],
+      allowedShapes: [
+        {
+          id: "shape_1",
+          watcherID: "w1",
+          kind: "boolean",
+          choices: ["No", "Yes"],
+          choice: "yes",
+          label: "Yes",
+          createdAt: 1,
+          uses: 0,
+        },
+        {
+          id: "shape_2",
+          watcherID: "w1",
+          kind: "choice",
+          choices: ["A", "B"],
+          choice: "a",
+          label: "A",
+          createdAt: 2,
+          uses: 1,
+        },
+      ],
     };
     const api = fakeApi({
       automation: vi.fn(async () => rich),
@@ -484,7 +508,7 @@ describe("automation tools", () => {
     try {
       const result = await client.callTool({
         name: "automation_list",
-        arguments: { runs: 1, approvals: 1 },
+        arguments: { runs: 1, approvals: 1, shapes: 1 },
       });
       const body = JSON.parse(toolText(result)) as {
         data: { runs: Array<{ id: string }>; approvals: Array<{ id: string }> };
@@ -493,6 +517,10 @@ describe("automation tools", () => {
       expect(body.data.runs[0]?.id).toBe("run_1");
       expect(body.data.approvals).toHaveLength(1);
       expect(body.data.approvals[0]?.id).toBe("approval_1");
+      expect(
+        (body.data as unknown as { allowedShapes: Array<{ id: string }> })
+          .allowedShapes,
+      ).toHaveLength(1);
 
       const list = await client.callTool({
         name: "approvals_list",

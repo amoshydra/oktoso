@@ -437,6 +437,13 @@ export class HubClient {
     );
   }
 
+  async revokeAutomationShape(id: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/automation/shapes/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  }
+
   async pauseWatcher(id: string, paused: boolean): Promise<AutomationView> {
     const response = await this.request<{ data: AutomationView }>(
       `/api/v1/automation/watchers/${encodeURIComponent(id)}/pause`,
