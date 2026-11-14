@@ -814,7 +814,25 @@
   opacity: 0.6;
 }
 
-.search-results-panel .session-list-item {
+.search-results-panel .session-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.session-subagent-tag {
+  margin-right: 0.375rem;
+  padding: 0 0.3125rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.session-list-item {
   align-items: center;
 }
 
