@@ -42,7 +42,9 @@ For one session and mode (`reply` or `choices`):
   and every option with its description. Text questions use the same block.
 
 The audit call bypasses the reply cache, so pressing **Generate** gives a fresh
-sample. The normal `reply-options` call remains cached.
+sample. The normal `reply-options` call remains cached. The cache is keyed by
+the context digest; concurrent identical requests share one generation, so the
+web composer and the G2 reply screen cannot pay for the same model call twice.
 
 ## Decision gate
 

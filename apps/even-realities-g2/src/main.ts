@@ -135,6 +135,7 @@ interface AppState {
   formBusy: boolean;
   replyOptions: ReplyOption[];
   replyPage: number;
+  replyLoading: boolean;
   replyReturnScreen: Screen;
   choiceOptions: ReplyOption[];
   choicePage: number;
@@ -189,6 +190,7 @@ const state: AppState = {
   formBusy: false,
   replyOptions: [],
   replyPage: 0,
+  replyLoading: false,
   replyReturnScreen: "chat",
   choiceOptions: [],
   choicePage: 0,
@@ -228,6 +230,7 @@ let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let pairingExpanded = false;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let scanController: AbortController | undefined;
+let replyRequest = 0;
 let inputCount = 0;
 let frameCount = 0;
 let lastInputMs = 0;
@@ -2397,18 +2400,32 @@ function scrollChat(direction: -1 | 1): void {
 
 async function openReply(): Promise<void> {
   if (!client || !state.sessionRef) return;
+  const sessionRef = state.sessionRef;
+  const request = ++replyRequest;
   state.replyReturnScreen =
     state.screen === "answer-more" ? "answer-more" : "chat";
   state.replyPage = 0;
+  state.replyOptions = [];
+  state.replyLoading = true;
+  state.notice = undefined;
+  state.screen = "reply";
+  render();
+
   try {
     const [options, settings] = await Promise.all([
-      client.replyOptions(state.sessionRef, "reply"),
+      client.replyOptions(sessionRef, "reply"),
       client.assistantSettings().catch(() => undefined),
     ]);
+    if (request !== replyRequest) return;
+    if (state.sessionRef !== sessionRef || state.screen !== "reply") {
+      state.replyLoading = false;
+      return;
+    }
     state.replyOptions = withVoiceOption(
       options.data,
       transcriptionConfigured(settings),
     );
+    state.replyLoading = false;
     clearFailure();
     markRequestSuccess();
     // A running or finished turn still gets suggestions: the reply screen is
@@ -2416,14 +2433,17 @@ async function openReply(): Promise<void> {
     if (options.state === "wait" || options.state === "done") {
       state.sessionStatus = options.state === "wait" ? "running" : "idle";
     }
-    state.screen = "reply";
     state.notice = undefined;
     render();
   } catch (error) {
-    showFailure(error, {
-      returnScreen: state.replyReturnScreen,
-      retry: () => openReply(),
-    });
+    if (request !== replyRequest || state.sessionRef !== sessionRef) return;
+    state.replyLoading = false;
+    if (state.screen === "reply") {
+      showFailure(error, {
+        returnScreen: state.replyReturnScreen,
+        retry: () => openReply(),
+      });
+    }
     log(`Reply options failed: ${failureMessage(error)}`);
   }
 }
@@ -2844,6 +2864,7 @@ function back(): void {
   if (state.screen === "reply") {
     state.screen = state.replyReturnScreen;
     state.replyReturnScreen = "chat";
+    state.replyLoading = false;
     state.notice = undefined;
     render();
     return;
@@ -3502,6 +3523,15 @@ function render(): void {
     const footer = "Tap choose   Back ×2";
     if (setPreview("SESSION", rows.join("\n"), footer, rows)) {
       void showPage(listPage("SESSION", rows, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "reply" && state.replyLoading) {
+    const header = "REPLY";
+    const body = "Reading suggestions…";
+    const footer = "Back ×2";
+    if (setPreview(header, body, footer)) {
+      void showPage(listPage(header, [], footer, body));
     }
     return;
   }
