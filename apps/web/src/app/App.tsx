@@ -3655,6 +3655,14 @@ function SessionDetail(props: {
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const toolsToggleRef = useRef<HTMLButtonElement | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const contextChipRef = useRef<HTMLButtonElement | null>(null);
+  const contextSheetRef = useRef<HTMLElement | null>(null);
+  const contextCloseRef = useRef<HTMLButtonElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [narrow, setNarrow] = useState(() =>
+    window.matchMedia("(max-width: 360px)").matches,
+  );
   const prefetchedSuggestKey = useRef("");
   const suggestPrefetchTimer = useRef<number | undefined>(undefined);
   const [documentVisible, setDocumentVisible] = useState(
@@ -3747,7 +3755,60 @@ function SessionDetail(props: {
 
   useEffect(() => {
     setToolsOpen(false);
+    setContextOpen(false);
   }, [props.sessionRef]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 360px)");
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const input = composerInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+  }, [draft]);
+
+  useEffect(() => {
+    if (!contextOpen) return;
+    const previous = contextChipRef.current;
+    const sheet = contextSheetRef.current;
+    contextCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !sheet) return;
+      const focusable = sheet.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const mq = window.matchMedia("(min-width: 761px)");
+    const onMediaChange = () => {
+      if (mq.matches) setContextOpen(false);
+    };
+    mq.addEventListener("change", onMediaChange);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      mq.removeEventListener("change", onMediaChange);
+      previous?.focus();
+    };
+  }, [contextOpen]);
 
   const suggestPrefetchKey = useCallback(() => {
     const last = messages.at(-1);
@@ -4851,6 +4912,118 @@ function SessionDetail(props: {
   );
   const selectionDisabled =
     selectionSaving || sending || session?.status === "running";
+  const attachInTools = running && attachSupported && narrow;
+  const hasComposerTools =
+    dictationSupported ||
+    (running && canSteer && canQueue) ||
+    attachInTools;
+  const selectedAgentLabel =
+    agentChoices.find((agent) => agent.id === agentValue)?.label ?? "";
+  const selectedModelLabel =
+    modelChoices.find((model) => model.id === modelValue)?.label ?? "";
+  const contextChipTitle = [selectedAgentLabel, selectedModelLabel]
+    .filter(Boolean)
+    .join(" · ");
+  const contextChipLabel =
+    selectedAgentLabel || selectedModelLabel || "Setup";
+  const renderSelection = (layout: "inline" | "sheet") => {
+    const fieldClass =
+      layout === "inline" ? "composer-option" : "composer-sheet-field";
+    return (
+      <>
+        {agentChoices.length > 0 ? (
+          <label className={fieldClass}>
+            <span>Agent</span>
+            <select
+              value={agentValue}
+              disabled={selectionDisabled}
+              aria-label="Agent"
+              onChange={(event) => {
+                const next = event.currentTarget.value;
+                setAgentValue(next);
+                void applySelection({ agent: next });
+              }}
+            >
+              {agentChoices.map((agent) => (
+                <option value={agent.id} key={agent.id}>
+                  {agent.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {modelChoices.length > 0 ? (
+          <label className={fieldClass}>
+            <span>Model</span>
+            <select
+              value={modelValue}
+              disabled={selectionDisabled}
+              aria-label="Model"
+              title={modelValue || undefined}
+              onChange={(event) => {
+                const next = event.currentTarget.value;
+                const nextVariants =
+                  models.find((model) => model.id === next)?.variants ?? [];
+                const nextVariant = nextVariants.some(
+                  (variant) => variant.id === variantValue,
+                )
+                  ? variantValue
+                  : "";
+                setModelValue(next);
+                setVariantValue(nextVariant);
+                void applySelection({
+                  model: composeModel(next, nextVariant),
+                });
+              }}
+            >
+              <ModelSelectOptions models={modelChoices} />
+            </select>
+          </label>
+        ) : null}
+        {variantChoices.length > 0 ? (
+          <label className={fieldClass}>
+            <span>{variantSelectLabel}</span>
+            <select
+              value={variantValue}
+              disabled={selectionDisabled}
+              aria-label={variantSelectLabel}
+              onChange={(event) => {
+                const next = event.currentTarget.value;
+                setVariantValue(next);
+                void applySelection({
+                  model: composeModel(modelValue, next),
+                });
+              }}
+            >
+              <option value="">Default</option>
+              {variantChoices.map((variant) => (
+                <option value={variant.id} key={variant.id}>
+                  {variant.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {selectionSaving ? (
+          <span
+            className={`composer-option-status ${layout === "sheet" ? "composer-sheet-status" : ""}`}
+          >
+            Saving…
+          </span>
+        ) : null}
+        {selectionError ? (
+          <span
+            className={`composer-option-status error ${layout === "sheet" ? "composer-sheet-status" : ""}`}
+          >
+            {selectionError}
+          </span>
+        ) : null}
+      </>
+    );
+  };
+  useEffect(() => {
+    if (!showSelection) setContextOpen(false);
+  }, [showSelection]);
   const errorAttention = inlineAttention.find((item) => item.type === "error");
   const errorMessage = [...messages]
     .reverse()
@@ -5450,9 +5623,10 @@ function SessionDetail(props: {
                   </div>
                 ) : null}
                 <textarea
+                  ref={composerInputRef}
                   id="chat-composer-input"
                   name="message"
-                  rows={2}
+                  rows={1}
                   value={draft}
                   aria-label={`Reply to ${session.title}`}
                   aria-describedby="chat-composer-hint"
@@ -5501,7 +5675,32 @@ function SessionDetail(props: {
                     </div>
                   </>
                 ) : null}
-                <div className="chat-composer-bar">
+                <div className={`chat-composer-bar ${running ? "running" : ""}`}>
+                  {showSelection ? (
+                    <button
+                      ref={contextChipRef}
+                      className={`composer-context-chip ${selectionError ? "error" : ""}`}
+                      type="button"
+                      aria-haspopup="dialog"
+                      aria-expanded={contextOpen}
+                      aria-controls="composer-context-sheet"
+                      aria-label={`Model and agent: ${contextChipTitle || contextChipLabel}`}
+                      title={contextChipTitle || undefined}
+                      onClick={() => {
+                        setToolsOpen(false);
+                        setContextOpen(true);
+                      }}
+                    >
+                      <span className="composer-context-label">
+                        {contextChipLabel}
+                      </span>
+                      <Icon
+                        name="chevron-right"
+                        size={12}
+                        className="composer-context-chevron"
+                      />
+                    </button>
+                  ) : null}
                   {showSelection ? (
                     <div
                       className="composer-options"
@@ -5511,85 +5710,7 @@ function SessionDetail(props: {
                           : undefined
                       }
                     >
-                      {agentChoices.length > 0 ? (
-                        <label className="composer-option">
-                          <span>Agent</span>
-                          <select
-                            value={agentValue}
-                            disabled={selectionDisabled}
-                            aria-label="Agent"
-                            onChange={(event) => {
-                              const next = event.currentTarget.value;
-                              setAgentValue(next);
-                              void applySelection({ agent: next });
-                            }}
-                          >
-                            {agentChoices.map((agent) => (
-                              <option value={agent.id} key={agent.id}>
-                                {agent.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                      {modelChoices.length > 0 ? (
-                        <label className="composer-option">
-                          <span>Model</span>
-                          <select
-                            value={modelValue}
-                            disabled={selectionDisabled}
-                            aria-label="Model"
-                            title={modelValue || undefined}
-                            onChange={(event) => {
-                              const next = event.currentTarget.value;
-                              const nextVariants =
-                                models.find((model) => model.id === next)?.variants ?? [];
-                              const nextVariant = nextVariants.some(
-                                (variant) => variant.id === variantValue,
-                              )
-                                ? variantValue
-                                : "";
-                              setModelValue(next);
-                              setVariantValue(nextVariant);
-                              void applySelection({
-                                model: composeModel(next, nextVariant),
-                              });
-                            }}
-                          >
-                            <ModelSelectOptions models={modelChoices} />
-                          </select>
-                        </label>
-                      ) : null}
-                      {variantChoices.length > 0 ? (
-                        <label className="composer-option">
-                          <span>{variantSelectLabel}</span>
-                          <select
-                            value={variantValue}
-                            disabled={selectionDisabled}
-                            aria-label={variantSelectLabel}
-                            onChange={(event) => {
-                              const next = event.currentTarget.value;
-                              setVariantValue(next);
-                              void applySelection({
-                                model: composeModel(modelValue, next),
-                              });
-                            }}
-                          >
-                            <option value="">Default</option>
-                            {variantChoices.map((variant) => (
-                              <option value={variant.id} key={variant.id}>
-                                {variant.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                      {selectionSaving ? (
-                        <span className="composer-option-status">Saving…</span>
-                      ) : null}
-                      {selectionError ? (
-                        <span className="composer-option-status error">{selectionError}</span>
-                      ) : null}
+                      {renderSelection("inline")}
                     </div>
                   ) : null}
                   <span
@@ -5601,7 +5722,7 @@ function SessionDetail(props: {
                   <div className="composer-actions">
                     {suggestEnabled ? (
                       <button
-                        className="composer-voice composer-desktop-tool"
+                        className="composer-voice"
                         type="button"
                         disabled={
                           suggestState === "loading" ||
@@ -5613,9 +5734,9 @@ function SessionDetail(props: {
                         {suggestState === "loading" ? "Reading…" : "Suggest"}
                       </button>
                     ) : null}
-                    {attachSupported ? (
+                    {attachSupported && !attachInTools ? (
                       <button
-                        className="composer-voice"
+                        className="composer-voice composer-attach"
                         type="button"
                         disabled={uploadingAttachments > 0}
                         onClick={() => attachmentInputRef.current?.click()}
@@ -5650,7 +5771,7 @@ function SessionDetail(props: {
                               : "Dictate"}
                       </button>
                     ) : null}
-                    {suggestEnabled || dictationSupported ? (
+                    {hasComposerTools ? (
                       <div className="composer-tools" ref={toolsRef}>
                         <button
                           ref={toolsToggleRef}
@@ -5670,19 +5791,32 @@ function SessionDetail(props: {
                             role="group"
                             aria-label="Composer tools"
                           >
-                            {suggestEnabled ? (
+                            {running && canSteer && canQueue ? (
                               <button
                                 type="button"
                                 disabled={
-                                  suggestState === "loading" ||
+                                  sending ||
+                                  (!draft.trim() && attachments.length === 0) ||
                                   dictationBusy ||
-                                  sending
+                                  uploadingAttachments > 0
                                 }
-                                onClick={runSuggest}
+                                onClick={() => void send("queue")}
                               >
-                                {suggestState === "loading"
-                                  ? "Reading…"
-                                  : "Suggest"}
+                                Queue
+                              </button>
+                            ) : null}
+                            {attachInTools ? (
+                              <button
+                                type="button"
+                                disabled={uploadingAttachments > 0}
+                                onClick={() => {
+                                  setToolsOpen(false);
+                                  attachmentInputRef.current?.click();
+                                }}
+                              >
+                                {uploadingAttachments > 0
+                                  ? "Uploading…"
+                                  : "Attach"}
                               </button>
                             ) : null}
                             {dictationSupported ? (
@@ -5735,7 +5869,7 @@ function SessionDetail(props: {
                     ) : null}
                     {running && canSteer && canQueue ? (
                       <button
-                        className="composer-voice composer-queue"
+                        className="composer-voice composer-queue composer-desktop-tool"
                         type="button"
                         aria-label="Queue message for the running agent"
                         disabled={
@@ -5835,6 +5969,56 @@ function SessionDetail(props: {
           }}
           onPreviewFile={(path) => setPreviewPath(path)}
         />
+      ) : null}
+
+      {contextOpen && showSelection ? (
+        <>
+          <div
+            className="composer-sheet-scrim"
+            aria-hidden="true"
+            onClick={() => setContextOpen(false)}
+          />
+          <section
+            ref={contextSheetRef}
+            className="composer-sheet"
+            id="composer-context-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="composer-context-title"
+          >
+            <header className="composer-sheet-head">
+              <h2 className="composer-sheet-title" id="composer-context-title">
+                Model &amp; agent
+              </h2>
+              <button
+                ref={contextCloseRef}
+                className="icon-btn"
+                type="button"
+                aria-label="Close model and agent"
+                onClick={() => setContextOpen(false)}
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </header>
+            <div className="composer-sheet-body">
+              {renderSelection("sheet")}
+            </div>
+            <footer className="composer-sheet-foot">
+              <span className="composer-sheet-note">
+                {running
+                  ? "Changes wait for the current run to finish."
+                  : "Applies to this session."}
+              </span>
+              <button
+                className="btn small"
+                type="button"
+                onClick={() => setContextOpen(false)}
+              >
+                Done
+              </button>
+            </footer>
+          </section>
+        </>
       ) : null}
     </div>
   );

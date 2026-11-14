@@ -360,28 +360,28 @@ describe("chat sending", () => {
     ).toBe(0);
   });
 
-  it("keeps the mobile composer tools behind a disclosure", async () => {
+  it("opens the mobile model sheet and keeps Suggest inline", async () => {
     await openSession("Fix auth race in gateway");
     await page!.setViewportSize({ width: 390, height: 844 });
 
-    const more = page!.getByRole("button", { name: "More composer actions" });
-    await more.waitFor({ state: "visible", timeout: 5_000 });
-    expect(
-      await page!.getByRole("button", { name: "Suggest", exact: true }).count(),
-    ).toBe(0);
+    const suggest = page!.getByRole("button", { name: "Suggest", exact: true });
+    await suggest.waitFor({ state: "visible", timeout: 5_000 });
 
-    await more.click();
-    const menu = page!.getByRole("group", { name: "Composer tools" });
-    await menu.waitFor({ state: "visible", timeout: 3_000 });
-    await menu.getByRole("button", { name: "Suggest" }).waitFor();
+    const chip = page!.getByRole("button", { name: /Model and agent/ });
+    await chip.waitFor({ state: "visible", timeout: 5_000 });
+    await chip.click();
+
+    const sheet = page!.getByRole("dialog", { name: "Model & agent" });
+    await sheet.waitFor({ state: "visible", timeout: 3_000 });
+    await sheet.getByRole("combobox", { name: "Agent" }).waitFor();
 
     await page!.keyboard.press("Escape");
-    await menu.waitFor({ state: "hidden", timeout: 3_000 });
+    await sheet.waitFor({ state: "hidden", timeout: 3_000 });
     expect(
       await page!.evaluate(() =>
-        document.activeElement?.getAttribute("aria-label"),
+        document.activeElement?.classList.contains("composer-context-chip"),
       ),
-    ).toBe("More composer actions");
+    ).toBe(true);
   });
 
   it("shows Open WebUI folders and sends an attachment", async () => {

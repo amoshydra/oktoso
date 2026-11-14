@@ -1,11 +1,11 @@
-# Design Lock — v1.8
+# Design Lock — v1.9
 
 Status: **frozen**.
 
-- Version: `design-v1.8`
-- Parent: `design-v1.7`
+- Version: `design-v1.9`
+- Parent: `design-v1.8`
 - Date: 2026-11-15
-- Git tag: `design-v1.8`
+- Git tag: `design-v1.9`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -15,6 +15,7 @@ Status: **frozen**.
 - v1.6 scope: question choice detail, option descriptions, and custom answers.
 - v1.7 scope: the composer delivery toggle and the queued-message tray.
 - v1.8 scope: the steer-default send action and the collapsed queue summary.
+- v1.9 scope: the one-row mobile composer, context sheet, and one-line draft.
 
 ## What is frozen
 
@@ -287,6 +288,34 @@ removes the mode entirely and supersedes that part of v1.7.
   to its toggle. Selects grow to 200px so the current model is readable.
 - **No new tokens.** The revision reuses the type scale, spacing steps, 8px
   control radius, accent focus outline, and existing borders.
+
+## Composer one-row revision (2026-11-15)
+
+The v1.8 mobile composer used two rows for context and actions, then hid
+`Suggest` in the overflow. That made the composer taller than the transcript
+could afford and buried one of the most-used actions. This revision supersedes
+the v1.8 mobile bar.
+
+- **One row.** On mobile, the context chip and actions share one 44px row:
+  `[Build · DeepSeek…] [Suggest] [Attach] [⋯] [Stop] [↑]`. `Suggest` and
+  `Attach` stay visible. `Dictate` and `Queue` live in the `⋯` menu. Interrupt
+  reads `Stop`. At 360px and below, `Attach` also moves into `⋯` while the run
+  is active; the idle row keeps it inline.
+- **Context chip + sheet.** The chip shows the selected agent, or the model
+  when no agent is set, truncated at 60px. It opens a bottom sheet with the
+  native Agent, Model, and Reasoning selects,
+  a close control, a scrolling body, and a pinned footer with a session note
+  and `Done`. The sheet traps Tab, closes on Escape or the scrim, and returns
+  focus to the chip. Selects are disabled while the run is active.
+- **One-line draft.** The textarea starts at one line on mobile (44px) and
+  grows with the draft to 180px. Desktop keeps the two-line starting height.
+  Composer padding is 8px on mobile and the bar gap is 4px.
+- **Height.** The collapsed mobile composer is about 108px, down from about
+  172px. The status row and queue summary stay conditional and unchanged.
+- **Desktop.** The inline Agent/Model/Reasoning selects, visible `Suggest`,
+  `Attach`, `Dictate`, `Queue`, and two-line textarea are unchanged.
+- **No new tokens.** The chip uses the pill radius; the sheet uses the existing
+  surface, border, 8px controls, 10px labels, and 16px sheet radius.
 
 ## Change policy
 
