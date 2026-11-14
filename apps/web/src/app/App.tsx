@@ -2453,6 +2453,18 @@ function SessionsView(props: {
   const [loading, setLoading] = useState(!cached.current);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
+  const [scope, setScope] = useState<"all" | "root" | "subagent">("all");
+  const visibleSessions = useMemo(
+    () =>
+      sessions.filter((session) =>
+        scope === "all"
+          ? true
+          : scope === "root"
+            ? !session.parentRef
+            : Boolean(session.parentRef),
+      ),
+    [scope, sessions],
+  );
 
   const load = async (next?: string) => {
     if (next) setLoadingMore(true);
@@ -2546,17 +2558,39 @@ function SessionsView(props: {
         <div className="panel-head">
           <div>
             <h2>All sessions</h2>
-            <p>{sessions.length} sessions · newest first</p>
+            <p>
+              {scope === "all"
+                ? `${sessions.length} sessions`
+                : `${visibleSessions.length} of ${sessions.length} sessions`}{" "}
+              · newest first
+            </p>
           </div>
-          <span className="mode-badge">Read + write</span>
+          <div className="session-scope" role="group" aria-label="Session scope">
+            {(["all", "root", "subagent"] as const).map((value) => (
+              <button
+                key={value}
+                className={`chip ${scope === value ? "active" : ""}`}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => setScope(value)}
+              >
+                {value === "all" ? "All" : value === "root" ? "Root" : "Subagents"}
+              </button>
+            ))}
+          </div>
         </div>
         {loading && sessions.length === 0 ? (
           <div className="empty">Loading sessions…</div>
         ) : sessions.length === 0 ? (
           <div className="empty">No sessions returned by the provider.</div>
+        ) : visibleSessions.length === 0 ? (
+          <div className="empty">
+            No {scope === "subagent" ? "subagent" : "root"} sessions in the
+            loaded page.
+          </div>
         ) : (
           <div className="session-list">
-            {sessions.map((session) => (
+            {visibleSessions.map((session) => (
               <button
                 className={`session-list-item ${session.unread ? "unread" : ""}`}
                 type="button"
@@ -2567,6 +2601,9 @@ function SessionsView(props: {
                 <span className="session-list-main">
                   <strong>{session.title}</strong>
                   <span className="session-list-meta">
+                    {session.parentRef ? (
+                      <span className="session-subagent-tag">Subagent</span>
+                    ) : null}
                     {providerLabel(session.providerID)}
                     {session.project || session.directory ? (
                       <> · {session.project ?? session.directory}</>
