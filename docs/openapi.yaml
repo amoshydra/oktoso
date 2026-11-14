@@ -21,6 +21,7 @@ tags:
   - name: events
   - name: search
   - name: notifications
+  - name: automation
   - name: diagnostics
 security:
   - bearerAuth: []
@@ -2920,6 +2921,8 @@ components:
             - attention.created
             - attention.updated
             - attention.resolved
+            - automation.run
+            - automation.approval
             - provider.status
             - error
             - resync
@@ -3421,6 +3424,664 @@ components:
                 timezone:
                   type: string
                   minLength: 1
+    AutomationTrigger:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - attention
+        types:
+          type: array
+          items:
+            type: string
+            enum:
+              - permission
+              - approval
+              - question
+              - unread
+              - error
+          minItems: 1
+          default:
+            - question
+      required:
+        - kind
+    AutomationCondition:
+      type: object
+      properties:
+        providerID:
+          type: string
+          minLength: 1
+        sessionRef:
+          type: string
+          minLength: 1
+        titleContains:
+          type: string
+          minLength: 1
+          maxLength: 120
+    AutomationAction:
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - answer
+            choice:
+              type: string
+              enum:
+                - first-safe
+                - id
+                - label
+              default: first-safe
+            value:
+              type: string
+              minLength: 1
+          required:
+            - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - escalate
+          required:
+            - kind
+    AutomationLimits:
+      type: object
+      properties:
+        maxActionsPerHour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 6
+        maxActionsPerDay:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 24
+    AutomationWatcher:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-zA-Z0-9._-]+$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        enabled:
+          type: boolean
+          default: true
+        trigger:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - attention
+            types:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+              minItems: 1
+              default:
+                - question
+          required:
+            - kind
+        condition:
+          type: object
+          properties:
+            providerID:
+              type: string
+              minLength: 1
+            sessionRef:
+              type: string
+              minLength: 1
+            titleContains:
+              type: string
+              minLength: 1
+              maxLength: 120
+        action:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - answer
+                choice:
+                  type: string
+                  enum:
+                    - first-safe
+                    - id
+                    - label
+                  default: first-safe
+                value:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - escalate
+              required:
+                - kind
+        dryRun:
+          type: boolean
+          default: true
+        limits:
+          type: object
+          properties:
+            maxActionsPerHour:
+              type: integer
+              minimum: 1
+              maximum: 1000
+              default: 6
+            maxActionsPerDay:
+              type: integer
+              minimum: 1
+              maximum: 10000
+              default: 24
+          default:
+            maxActionsPerHour: 6
+            maxActionsPerDay: 24
+      required:
+        - id
+        - trigger
+        - action
+    AutomationRun:
+      type: object
+      properties:
+        id:
+          type: string
+        watcherID:
+          type: string
+        trigger:
+          type: string
+        decision:
+          type: string
+          enum:
+            - acted
+            - escalated
+            - dry_run
+            - skipped
+            - failed
+        reason:
+          type: string
+        sessionRef:
+          type: string
+        attentionID:
+          type: string
+        action:
+          type: string
+        detail:
+          type: string
+        at:
+          type: integer
+        approved:
+          type: boolean
+      required:
+        - id
+        - watcherID
+        - trigger
+        - decision
+        - reason
+        - at
+    AutomationRunPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              watcherID:
+                type: string
+              trigger:
+                type: string
+              decision:
+                type: string
+                enum:
+                  - acted
+                  - escalated
+                  - dry_run
+                  - skipped
+                  - failed
+              reason:
+                type: string
+              sessionRef:
+                type: string
+              attentionID:
+                type: string
+              action:
+                type: string
+              detail:
+                type: string
+              at:
+                type: integer
+              approved:
+                type: boolean
+            required:
+              - id
+              - watcherID
+              - trigger
+              - decision
+              - reason
+              - at
+      required:
+        - data
+    AutomationApproval:
+      type: object
+      properties:
+        id:
+          type: string
+        watcherID:
+          type: string
+        attentionID:
+          type: string
+        sessionRef:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        action:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - answer
+                choice:
+                  type: string
+                  enum:
+                    - first-safe
+                    - id
+                    - label
+                  default: first-safe
+                value:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - escalate
+              required:
+                - kind
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - denied
+            - expired
+        createdAt:
+          type: integer
+        expiresAt:
+          type: integer
+        decidedAt:
+          type: integer
+        plan: {}
+      required:
+        - id
+        - watcherID
+        - attentionID
+        - sessionRef
+        - title
+        - summary
+        - action
+        - reason
+        - status
+        - createdAt
+        - expiresAt
+    AutomationApprovalPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              watcherID:
+                type: string
+              attentionID:
+                type: string
+              sessionRef:
+                type: string
+              title:
+                type: string
+              summary:
+                type: string
+              action:
+                oneOf:
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - answer
+                      choice:
+                        type: string
+                        enum:
+                          - first-safe
+                          - id
+                          - label
+                        default: first-safe
+                      value:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - escalate
+                    required:
+                      - kind
+              reason:
+                type: string
+              status:
+                type: string
+                enum:
+                  - pending
+                  - approved
+                  - denied
+                  - expired
+              createdAt:
+                type: integer
+              expiresAt:
+                type: integer
+              decidedAt:
+                type: integer
+              plan: {}
+            required:
+              - id
+              - watcherID
+              - attentionID
+              - sessionRef
+              - title
+              - summary
+              - action
+              - reason
+              - status
+              - createdAt
+              - expiresAt
+      required:
+        - data
+    AutomationView:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        paused:
+          type: boolean
+        dryRun:
+          type: boolean
+        watchers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                minLength: 1
+                maxLength: 64
+                pattern: ^[a-zA-Z0-9._-]+$
+              name:
+                type: string
+                minLength: 1
+                maxLength: 80
+              enabled:
+                type: boolean
+                default: true
+              trigger:
+                type: object
+                properties:
+                  kind:
+                    type: string
+                    enum:
+                      - attention
+                  types:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - permission
+                        - approval
+                        - question
+                        - unread
+                        - error
+                    minItems: 1
+                    default:
+                      - question
+                required:
+                  - kind
+              condition:
+                type: object
+                properties:
+                  providerID:
+                    type: string
+                    minLength: 1
+                  sessionRef:
+                    type: string
+                    minLength: 1
+                  titleContains:
+                    type: string
+                    minLength: 1
+                    maxLength: 120
+              action:
+                oneOf:
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - answer
+                      choice:
+                        type: string
+                        enum:
+                          - first-safe
+                          - id
+                          - label
+                        default: first-safe
+                      value:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - escalate
+                    required:
+                      - kind
+              dryRun:
+                type: boolean
+                default: true
+              limits:
+                type: object
+                properties:
+                  maxActionsPerHour:
+                    type: integer
+                    minimum: 1
+                    maximum: 1000
+                    default: 6
+                  maxActionsPerDay:
+                    type: integer
+                    minimum: 1
+                    maximum: 10000
+                    default: 24
+                default:
+                  maxActionsPerHour: 6
+                  maxActionsPerDay: 24
+            required:
+              - id
+              - trigger
+              - action
+        pausedWatchers:
+          type: array
+          items:
+            type: string
+        runs:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              watcherID:
+                type: string
+              trigger:
+                type: string
+              decision:
+                type: string
+                enum:
+                  - acted
+                  - escalated
+                  - dry_run
+                  - skipped
+                  - failed
+              reason:
+                type: string
+              sessionRef:
+                type: string
+              attentionID:
+                type: string
+              action:
+                type: string
+              detail:
+                type: string
+              at:
+                type: integer
+              approved:
+                type: boolean
+            required:
+              - id
+              - watcherID
+              - trigger
+              - decision
+              - reason
+              - at
+        approvals:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              watcherID:
+                type: string
+              attentionID:
+                type: string
+              sessionRef:
+                type: string
+              title:
+                type: string
+              summary:
+                type: string
+              action:
+                oneOf:
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - answer
+                      choice:
+                        type: string
+                        enum:
+                          - first-safe
+                          - id
+                          - label
+                        default: first-safe
+                      value:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - escalate
+                    required:
+                      - kind
+              reason:
+                type: string
+              status:
+                type: string
+                enum:
+                  - pending
+                  - approved
+                  - denied
+                  - expired
+              createdAt:
+                type: integer
+              expiresAt:
+                type: integer
+              decidedAt:
+                type: integer
+              plan: {}
+            required:
+              - id
+              - watcherID
+              - attentionID
+              - sessionRef
+              - title
+              - summary
+              - action
+              - reason
+              - status
+              - createdAt
+              - expiresAt
+      required:
+        - enabled
+        - paused
+        - dryRun
+        - watchers
+        - pausedWatchers
+        - runs
+        - approvals
+    AutomationSettingsInput:
+      type: object
+      properties:
+        paused:
+          type: boolean
+        dryRun:
+          type: boolean
+    AutomationApprovalAction:
+      type: string
+      enum:
+        - approve
+        - deny
   parameters: {}
 paths:
   /api/v1/health:
@@ -5106,4 +5767,152 @@ paths:
                     $ref: "#/components/schemas/NotificationTestResult"
                 required:
                   - data
+  /api/v1/automation:
+    get:
+      tags:
+        - automation
+      summary: Read automation watchers, runs, and approvals
+      responses:
+        "200":
+          description: Automation view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AutomationView"
+                required:
+                  - data
+    put:
+      tags:
+        - automation
+      summary: Pause, resume, or toggle dry-run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationSettingsInput"
+      responses:
+        "200":
+          description: Updated automation view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AutomationView"
+                required:
+                  - data
+        "400":
+          description: Invalid automation settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/automation/watchers/{id}/pause:
+    post:
+      tags:
+        - automation
+      summary: Pause or resume one watcher
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paused:
+                  type: boolean
+              required:
+                - paused
+      responses:
+        "200":
+          description: Updated automation view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AutomationView"
+                required:
+                  - data
+        "404":
+          description: Watcher not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/automation/runs:
+    get:
+      tags:
+        - automation
+      summary: Read recent automation runs
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Automation runs, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunPage"
+  /api/v1/automation/approvals:
+    get:
+      tags:
+        - automation
+      summary: List pending approvals
+      responses:
+        "200":
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationApprovalPage"
+  /api/v1/automation/approvals/{id}/{action}:
+    post:
+      tags:
+        - automation
+      summary: Approve or deny a queued automation action
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+        - schema:
+            $ref: "#/components/schemas/AutomationApprovalAction"
+          required: true
+          name: action
+          in: path
+      responses:
+        "204":
+          description: Approval decided
+        "404":
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Approval expired, already decided, or the question changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 webhooks: {}

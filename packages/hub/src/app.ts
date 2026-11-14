@@ -19,6 +19,7 @@ import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import type { NotificationService } from "./services/notification-service";
+import type { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import { ProviderError } from "@amoshydra/oktoso-providers";
@@ -46,6 +47,7 @@ import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 import { registerNotificationRoutes } from "./http/routes/notifications";
+import { registerAutomationRoutes } from "./http/routes/automation";
 import { registerMcpRoutes } from "./mcp/http";
 import { createServiceMcpApi } from "./mcp/api";
 import { SessionActions } from "./services/session-actions";
@@ -66,6 +68,8 @@ export interface AppDependencies {
   transcription: TranscriptionService;
   questions: QuestionService;
   notifications?: NotificationService;
+  actions?: SessionActions;
+  automation?: AutomationService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -118,11 +122,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerAttachmentRoutes(app, deps.registry, deps.attachments);
   registerFileRoutes(app, deps.sessions);
   const idempotency = new IdempotencyService(deps.store);
-  const actions = new SessionActions(
-    deps.sessions,
-    deps.questions,
-    idempotency,
-  );
+  const actions =
+    deps.actions ??
+    new SessionActions(deps.sessions, deps.questions, idempotency);
   registerSessionRoutes(app, deps.sessions, deps.replies, actions);
   registerReplyAuditRoutes(app, deps.replies, deps.replyFeedback);
   registerQuestionRoutes(app, deps.questions, deps.attention);
@@ -132,6 +134,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerAttentionRoutes(app, deps.attention);
   if (deps.notifications) {
     registerNotificationRoutes(app, deps.notifications);
+  }
+  if (deps.automation) {
+    registerAutomationRoutes(app, deps.automation);
   }
   registerEventRoutes(app, deps.eventBus);
   registerMcpRoutes(app, {

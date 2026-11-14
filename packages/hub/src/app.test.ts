@@ -19,6 +19,9 @@ import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
+import { AutomationService } from "./services/automation-service";
+import { IdempotencyService } from "./services/idempotency";
+import { SessionActions } from "./services/session-actions";
 import { NotificationService } from "./services/notification-service";
 import { VERSION } from "./version";
 import {
@@ -121,6 +124,34 @@ async function createTestApp(options: {
     options.transcriptionFetch,
   );
   const questions = new QuestionService(sessions);
+  const idempotency = new IdempotencyService(store);
+  const actions = new SessionActions(sessions, questions, idempotency);
+  const automation = new AutomationService({
+    config: {
+      enabled: true,
+      dryRun: false,
+      watchers: [
+        {
+          id: "w1",
+          enabled: true,
+          trigger: { kind: "attention", types: ["question"] },
+          action: { kind: "escalate" },
+          dryRun: false,
+          limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+        },
+      ],
+      maxActionsPerHour: 6,
+      maxActionsPerDay: 24,
+      approvalTtlMs: 24 * 60 * 60 * 1_000,
+      audit: { maxRuns: 100 },
+    },
+    store,
+    eventBus,
+    logger,
+    questions,
+    actions,
+  });
+  automation.start();
   const notifications = new NotificationService({
     config: config.notifications,
     store,
@@ -158,6 +189,8 @@ async function createTestApp(options: {
     transcription,
     questions,
     notifications,
+    actions,
+    automation,
     logger,
     startedAt: Date.now(),
     appsRoot: options.appsRoot,
@@ -178,6 +211,7 @@ async function createTestApp(options: {
     transcription,
     questions,
     notifications,
+    automation,
     fake,
     openwebui,
   };
@@ -2263,5 +2297,91 @@ describe("notification routes", () => {
     expect(response.status).toBe(200);
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toMatchObject({ status: "sent" });
+  });
+});
+
+describe("automation routes", () => {
+  const auth = { Authorization: `Bearer ${token}` };
+  const jsonHeaders = { ...auth, "Content-Type": "application/json" };
+
+  it("returns the automation view and toggles pause", async () => {
+    const { app } = await createTestApp();
+
+    const view = await app.request("/api/v1/automation", { headers: auth });
+    const body = (await view.json()) as {
+      data: { enabled: boolean; paused: boolean; watchers: Array<{ id: string }> };
+    };
+    expect(view.status).toBe(200);
+    expect(body.data.enabled).toBe(true);
+    expect(body.data.paused).toBe(false);
+    expect(body.data.watchers[0]?.id).toBe("w1");
+
+    const paused = await app.request("/api/v1/automation", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({ paused: true }),
+    });
+    expect(
+      ((await paused.json()) as { data: { paused: boolean } }).data.paused,
+    ).toBe(true);
+
+    const resumed = await app.request("/api/v1/automation", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({ paused: false }),
+    });
+    expect(
+      ((await resumed.json()) as { data: { paused: boolean } }).data.paused,
+    ).toBe(false);
+  });
+
+  it("escalates an attention item and lets a human deny it", async () => {
+    const { app, eventBus, automation } = await createTestApp();
+    const item = {
+      id: "att_route_1",
+      sessionRef: "desktop-opencode:ses_auth",
+      type: "question",
+      priority: "blocking",
+      title: "Approve the change?",
+      summary: "Proceed?",
+      createdAt: Date.now(),
+      actions: [],
+    };
+    await eventBus.publish("attention.created", item, {
+      sessionRef: item.sessionRef,
+      attentionID: item.id,
+    });
+    await automation.whenIdle();
+
+    const approvals = await app.request("/api/v1/automation/approvals", {
+      headers: auth,
+    });
+    const body = (await approvals.json()) as {
+      data: Array<{ id: string; attentionID: string }>;
+    };
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]?.attentionID).toBe("att_route_1");
+
+    const deny = await app.request(
+      `/api/v1/automation/approvals/${body.data[0]!.id}/deny`,
+      { method: "POST", headers: auth },
+    );
+    expect(deny.status).toBe(204);
+
+    const after = await app.request("/api/v1/automation/approvals", {
+      headers: auth,
+    });
+    expect(((await after.json()) as { data: unknown[] }).data).toHaveLength(0);
+
+    const runs = await app.request("/api/v1/automation/runs", {
+      headers: auth,
+    });
+    const runBody = (await runs.json()) as {
+      data: Array<{ decision: string; reason: string }>;
+    };
+    expect(runBody.data[0]).toMatchObject({
+      decision: "skipped",
+      reason: "denied",
+    });
   });
 });

@@ -250,48 +250,64 @@ the branch merges; nothing is published from the worktree.
 
 Target: 4–6 weeks. Release: `v0.3.0`.
 
+Status: the first supervisor slice is implemented. Attention watchers, the
+low-risk answer policy, dry-run, budgets, leases, approvals, runs, pause, the
+HTTP/client surface, and a Settings panel are in place. Session-idle and
+schedule triggers, token/quiet-hour budgets, notify/retry/start actions, MCP,
+CLI, and G2 approvals remain for the next slices.
+
 ### B1. Contracts
 
-- [ ] `zWatcher` (id, trigger, condition, action, dryRun, enabled, limits).
-- [ ] `zAutomationRun` (id, watcherID, sessionRef, decision, result, at).
-- [ ] `zApproval` (attention-shaped, with the proposed action and diff).
-- [ ] `automation.*` event types.
+- [x] `zAutomationWatcher` (id, trigger, condition, action, dryRun, enabled,
+  limits).
+- [x] `zAutomationRun` (id, watcherID, trigger, decision, reason, sessionRef,
+  attentionID, action, at).
+- [x] `zAutomationApproval` (attention identity, action, reason, plan, status,
+  expiry).
+- [x] `automation.run` and `automation.approval` event types.
 
 ### B2. Watcher runtime
 
-- [ ] `watcher-service.ts` subscribing to `question.arrived`, `session.error`,
-  `session.idle`, and a schedule tick.
-- [ ] Match conditions without fetching every session on every event.
-- [ ] Lease through the existing idempotency store so two watchers cannot claim
-  one question.
-- [ ] Debounce bursts; a session flapping idle/running must not spawn runs.
+- [x] `automation-service.ts` subscribing to `attention.created`; questions,
+  permissions, approvals, and errors arrive through that event.
+- [x] Match conditions without fetching every session on every event.
+- [x] Lease per watcher + attention id so duplicate events cannot act twice.
+- [ ] Debounce session idle/running flaps (needs the session trigger).
+- [ ] Session-idle and schedule triggers.
 
 ### B3. Policy and risk
 
-- [ ] Allowlist low-risk shapes: boolean and single-select with explicit safe
-  options. Never destructive, never free text.
-- [ ] Escalate everything else to the approval queue.
-- [ ] Enforce actions/hour, tokens/day, and quiet hours.
-- [ ] Record the policy decision on every run.
+- [x] Allowlist low-risk shapes: boolean and single-select with explicit,
+  non-destructive, non-sensitive options. Never free text, never multi-select.
+- [x] Escalate everything else to the approval queue, with a concrete proposed
+  choice when the watcher names one.
+- [x] Enforce actions/hour and actions/day, globally and per watcher.
+- [x] Record the policy decision on every run.
+- [ ] Token/day budget and quiet hours.
 
 ### B4. Actions
 
-- [ ] notify, auto-answer, escalate, retry, start-from-template.
-- [ ] Every action goes through the same session-action path the UI uses.
-- [ ] A failed action is retried once, then recorded as failed.
+- [x] Auto-answer and escalate.
+- [x] Every action goes through `SessionActions`, the same path the UI and MCP
+  use.
+- [ ] notify, retry, and start-from-template.
+- [ ] Retry a failed action once before recording it as failed.
 
 ### B5. Approval queue
 
-- [ ] Reuse the inbox grammar and the existing attention actions.
-- [ ] Show the proposed action, the session, the watcher, and the policy reason.
-- [ ] Approve, deny, and "always allow this shape" (with a confirmation).
-- [ ] Works on web and G2.
+- [x] Pending approvals with the session, watcher, policy reason, and proposed
+  answer.
+- [x] Approve and deny from the API and the Settings panel.
+- [ ] Reuse the inbox card grammar and surface approvals in the Inbox.
+- [ ] "Always allow this shape".
+- [ ] G2 approvals.
 
 ### B6. Audit and kill switch
 
-- [ ] Append every run to an audit log with watcher, policy, action, result.
-- [ ] Global pause and per-watcher pause.
-- [ ] A paused watcher drops queued work instead of executing late.
+- [x] Append every run with watcher, decision, reason, action, and result.
+- [x] Global pause and per-watcher pause.
+- [x] A paused hub or watcher drops new work.
+- [ ] Interrupt an action already in flight.
 
 ### B7. MCP and CLI
 
@@ -301,11 +317,13 @@ Target: 4–6 weeks. Release: `v0.3.0`.
 
 ### B8. Safety tests
 
-- [ ] Duplicate events never double-act.
-- [ ] Dry-run sends nothing.
-- [ ] Kill switch stops mid-flight.
-- [ ] A destructive question always escalates.
-- [ ] Budget exhaustion stops the watcher cleanly.
+- [x] Duplicate events never double-act (lease).
+- [x] Dry-run sends nothing.
+- [x] A destructive question always escalates.
+- [x] Budget exhaustion stops the watcher cleanly.
+- [x] Pause stops new work.
+- [ ] Kill switch stops an action mid-flight.
+- [ ] Approval execution is covered end to end on a real provider.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
 real session.

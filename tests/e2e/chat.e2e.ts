@@ -730,3 +730,22 @@ describe("service worker push", () => {
     ]);
   }, 30_000);
 });
+
+describe("automation settings", () => {
+  it("pauses and resumes from the settings panel", async () => {
+    await page!.goto(`${BASE_URL}/settings`);
+    await page!
+      .getByRole("heading", { name: "Automation" })
+      .waitFor({ timeout: 5_000 });
+
+    await page!.getByRole("button", { name: "Pause all" }).click();
+    await page!
+      .getByRole("button", { name: "Resume" })
+      .waitFor({ state: "visible", timeout: 5_000 });
+
+    await page!.getByRole("button", { name: "Resume" }).click();
+    await page!
+      .getByRole("button", { name: "Pause all" })
+      .waitFor({ state: "visible", timeout: 5_000 });
+  });
+});

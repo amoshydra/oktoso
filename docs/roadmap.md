@@ -268,7 +268,7 @@ Acceptance:
 - A revoked or expired subscription is removed and never retried forever.
 - The app installs to a home screen and opens the last screen offline.
 
-### Phase 4 — Supervisor (planned)
+### Phase 4 — Supervisor (in progress)
 
 Goal: the hub handles the safe cases and escalates the rest. This is the
 continuous-control layer, reduced to something shippable: declarative watchers,

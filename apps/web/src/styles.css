@@ -4920,3 +4920,79 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     padding-left: 8px;
   }
 }
+
+.settings-automation {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.automation-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.automation-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.automation-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.automation-list li:last-child {
+  padding-bottom: 0;
+}
+
+.automation-list .settings-device-meta {
+  flex: 1;
+}
+
+.automation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.run-decision {
+  flex: 0 0 auto;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.run-decision.acted {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  color: var(--success);
+}
+
+.run-decision.escalated {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+  color: var(--warning);
+}
+
+.run-decision.failed {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .automation-list li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

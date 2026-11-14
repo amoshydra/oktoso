@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DEFAULT_NOTIFICATION_ROUTING,
+  zAutomationWatcher,
   zNotificationRouting,
 } from "@amoshydra/oktoso-contracts";
 
@@ -175,6 +176,39 @@ export const zNotificationConfig = z
     }
   });
 
+export const zAutomationConfig = z
+  .object({
+    enabled: z.boolean().default(false),
+    dryRun: z.boolean().default(true),
+    watchers: z.array(zAutomationWatcher).default([]),
+    maxActionsPerHour: z.number().int().min(1).max(1_000).default(6),
+    maxActionsPerDay: z.number().int().min(1).max(10_000).default(24),
+    approvalTtlMs: z
+      .number()
+      .int()
+      .min(60_000)
+      .max(7 * 24 * 60 * 60 * 1_000)
+      .default(24 * 60 * 60 * 1_000),
+    audit: z
+      .object({
+        maxRuns: z.number().int().min(10).max(5_000).default(500),
+      })
+      .default({ maxRuns: 500 }),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    value.watchers.forEach((watcher, index) => {
+      if (seen.has(watcher.id)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Duplicate watcher ID: ${watcher.id}`,
+          path: ["watchers", index, "id"],
+        });
+      }
+      seen.add(watcher.id);
+    });
+  });
+
 export const zHubConfig = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
@@ -197,6 +231,15 @@ export const zHubConfig = z.object({
     .max(3_600_000)
     .default(30_000),
   providers: z.array(zProviderConfig).default([]),
+  automation: zAutomationConfig.default({
+    enabled: false,
+    dryRun: true,
+    watchers: [],
+    maxActionsPerHour: 6,
+    maxActionsPerDay: 24,
+    approvalTtlMs: 24 * 60 * 60 * 1_000,
+    audit: { maxRuns: 500 },
+  }),
   notifications: zNotificationConfig.default({
     enabled: false,
     channels: [],
@@ -235,3 +278,4 @@ export type NotificationConfig = z.infer<typeof zNotificationConfig>;
 export type NotificationChannelConfig = z.infer<
   typeof zNotificationChannelConfig
 >;
+export type AutomationConfig = z.infer<typeof zAutomationConfig>;
