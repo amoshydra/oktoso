@@ -499,6 +499,9 @@ discovery surface.
   ticket is scoped to the file's directory and cannot reach the hub API.
 - The hub rejects escaping and absolute paths and never returns provider
   credentials or a provider URL to the browser.
+- An image read renders the bytes embedded in the tool result, so the image is
+  visible even when the path is outside the session directory. The path preview
+  itself remains jailed to the session directory.
 - A provider without `files` still renders the transcript body.
 
 ## 12. Open questions
