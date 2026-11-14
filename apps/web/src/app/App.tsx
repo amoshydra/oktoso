@@ -100,6 +100,8 @@ import {
   shellPart,
   stepsFromMessages,
   stepsFromParts,
+  subagentRef,
+  toolKind,
   type ActivityStep,
   type StepKind,
   type StepStatus,
@@ -2453,7 +2455,7 @@ function SessionsView(props: {
   const [loading, setLoading] = useState(!cached.current);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
-  const [scope, setScope] = useState<"all" | "root" | "subagent">("all");
+  const [scope, setScope] = useState<"all" | "root" | "subagent">("root");
   const visibleSessions = useMemo(
     () =>
       sessions.filter((session) =>
@@ -4360,6 +4362,66 @@ function SessionDetail(props: {
     sessionRef: session?.ref,
     fileRead: Boolean(sessionProvider?.capabilities.files),
   };
+  // A background subagent's launch call completes immediately, so the tool
+  // part keeps a stale `running` status. Liveness comes from the child session.
+  const subagentRefs = useMemo(() => {
+    const refs = new Set<string>();
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (part.type !== "tool" || toolKind(part.name) !== "subagent") continue;
+        const ref = subagentRef(part, session?.providerID);
+        if (ref) refs.add(ref);
+      }
+    }
+    return [...refs].sort();
+  }, [messages, session?.providerID]);
+
+  const [childStatus, setChildStatus] = useState<
+    Record<string, Session["status"] | "unknown">
+  >({});
+
+  const refreshChildren = useCallback(async () => {
+    if (subagentRefs.length === 0) return;
+    const results = await Promise.allSettled(
+      subagentRefs.map(async (ref) => {
+        const child = await props.client.session(ref);
+        return [ref, child.status] as const;
+      }),
+    );
+    setChildStatus((current) => {
+      const next = { ...current };
+      subagentRefs.forEach((ref, index) => {
+        const result = results[index];
+        next[ref] =
+          result && result.status === "fulfilled"
+            ? result.value[1]
+            : "unknown";
+      });
+      return next;
+    });
+  }, [props.client, subagentRefs]);
+
+  useEffect(() => {
+    void refreshChildren().catch(() => undefined);
+  }, [refreshChildren]);
+
+  useEffect(() => {
+    const live = subagentRefs.some((ref) => childStatus[ref] === "running");
+    if (!live) return;
+    const timer = setInterval(() => void refreshChildren().catch(() => undefined), 15_000);
+    return () => clearInterval(timer);
+  }, [childStatus, refreshChildren, subagentRefs]);
+
+  useEffect(() => {
+    const touched = props.events.some(
+      (event) =>
+        event.type.startsWith("session.") &&
+        typeof event.sessionRef === "string" &&
+        subagentRefs.includes(event.sessionRef),
+    );
+    if (touched) void refreshChildren().catch(() => undefined);
+  }, [props.events, refreshChildren, subagentRefs]);
+
   const backgroundItems = useMemo<BackgroundItem[]>(() => {
     const items: BackgroundItem[] = [];
     for (const message of messages) {
@@ -4377,35 +4439,30 @@ function SessionDetail(props: {
             : "running",
       });
     }
-    for (const step of stepsFromMessages(messages)) {
-      if (step.kind !== "subagent" || step.status !== "running") continue;
-      const part = step.part;
-      const metadata = part.type === "tool" ? part.metadata ?? {} : {};
-      const sessionID =
-        typeof metadata.sessionID === "string" ? metadata.sessionID : undefined;
-      const detail =
-        part.type === "tool"
-          ? [inputText(part.input, ["agent"]), inputText(part.input, ["description"])]
-              .filter(Boolean)
-              .join(" · ")
-          : "";
-      items.push({
-        key: step.key,
-        kind: "subagent",
-        label: "Subagent",
-        detail: detail || "child session",
-        status: "running",
-        meta:
-          step.startedAt !== undefined
-            ? `${formatDuration(Date.now() - step.startedAt)} elapsed`
-            : "running",
-        ...(sessionID && session?.providerID
-          ? { childRef: `${session.providerID}:${sessionID}` }
-          : {}),
-      });
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (part.type !== "tool" || toolKind(part.name) !== "subagent") continue;
+        const ref = subagentRef(part, session?.providerID);
+        if (!ref || childStatus[ref] !== "running") continue;
+        const detail = [
+          inputText(part.input, ["agent"]),
+          inputText(part.input, ["description"]),
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        items.push({
+          key: `subagent:${part.id}`,
+          kind: "subagent",
+          label: "Subagent",
+          detail: detail || "child session",
+          status: "running",
+          meta: "running",
+          childRef: ref,
+        });
+      }
     }
     return items;
-  }, [messages, session?.providerID]);
+  }, [messages, session?.providerID, childStatus]);
 
   return (
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
@@ -4516,6 +4573,7 @@ function SessionDetail(props: {
                         setStepPanelOpen(open);
                         if (open) setAtBottom(false);
                       }}
+                      subagentStatus={childStatus}
                     />
                   ) : item.kind === "compaction" ? (
                     <CompactionRow
@@ -4538,6 +4596,7 @@ function SessionDetail(props: {
                         setStepPanelOpen(open);
                         if (open) setAtBottom(false);
                       }}
+                      subagentStatus={childStatus}
                       header={{ label: "Agent activity", at: item.messages[0]?.createdAt ?? 0 }}
                     />
                   ),
@@ -4628,6 +4687,17 @@ function SessionDetail(props: {
             ) : null}
 
             <div className="chat-composer-wrap">
+              {backgroundItems.length > 0 ? (
+                <button
+                  className="chat-background-chip"
+                  type="button"
+                  aria-label={`${backgroundItems.length} running in background. Open details.`}
+                  onClick={() => props.onDetailsOpenChange(true)}
+                >
+                  <span className="chat-background-dot" aria-hidden="true" />
+                  {backgroundItems.length} running in background
+                </button>
+              ) : null}
               {!atBottom ? (
                 <button className="chat-jump" type="button" onClick={jumpToLatest}>
                   {hasBlockingAttention ? "Input needed" : "Jump to latest"}
@@ -5216,6 +5286,7 @@ function TranscriptMessage(props: {
   onPreviewFile?: (path: string) => void;
   onOpenSession?: (ref: string) => void;
   onStepOpenChange?: (open: boolean) => void;
+  subagentStatus?: Record<string, Session["status"] | "unknown">;
 }) {
   const message = props.message;
   const contentParts = message.parts.filter(
@@ -5459,6 +5530,7 @@ function ActivityTiles(props: {
   onPreviewFile?: (path: string) => void;
   onOpenSession?: (ref: string) => void;
   onStepOpenChange?: (open: boolean) => void;
+  subagentStatus?: Record<string, Session["status"] | "unknown">;
   header?: { label: string; at?: number };
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -5466,8 +5538,26 @@ function ActivityTiles(props: {
   const [perRow, setPerRow] = useState(Math.max(1, props.steps.length));
   const gridRef = useRef<HTMLDivElement | null>(null);
   const openIndex = props.steps.findIndex((step) => step.key === openKey);
-  const errors = props.steps.filter((step) => step.status === "error").length;
-  const running = props.steps.some((step) => step.status === "running");
+  const resolved = useMemo(
+    () =>
+      props.steps.map((step) => {
+        if (step.kind !== "subagent" || step.part.type !== "tool") return step;
+        const ref = subagentRef(step.part, props.resource.providerID);
+        const status = ref ? props.subagentStatus?.[ref] : undefined;
+        return {
+          ...step,
+          status:
+            status === "running"
+              ? ("running" as const)
+              : status === "error"
+                ? ("error" as const)
+                : ("completed" as const),
+        };
+      }),
+    [props.steps, props.subagentStatus, props.resource.providerID],
+  );
+  const errors = resolved.filter((step) => step.status === "error").length;
+  const running = resolved.some((step) => step.status === "running");
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -5556,7 +5646,7 @@ function ActivityTiles(props: {
       </button>
       {expanded ? null : (
         <div className="agent-activity-dots" aria-hidden="true">
-          {props.steps.map((step) => (
+          {resolved.map((step) => (
             <span
               className="activity-dot"
               key={step.key}
@@ -5574,7 +5664,7 @@ function ActivityTiles(props: {
         ref={gridRef}
         onKeyDown={onKeyDown}
       >
-        {props.steps.map((step, index) => {
+        {resolved.map((step, index) => {
           const open = step.key === openKey;
           return (
             <Fragment key={step.key}>
@@ -5605,7 +5695,7 @@ function ActivityTiles(props: {
               </button>
               {openIndex >= 0 && index === insertAt ? (
                 <StepPanel
-                  step={props.steps[openIndex]!}
+                  step={resolved[openIndex]!}
                   index={openIndex}
                   total={props.steps.length}
                   client={props.client}

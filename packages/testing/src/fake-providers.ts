@@ -381,6 +381,8 @@ const FAKE_FILES: Record<string, { type: string; body: string | Buffer }> = {
   },
 };
 
+OPENCODE_MESSAGES["ses_child_demo"] = [];
+
 const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
 const INITIAL_PERMISSION = structuredClone(fakePermission);
 const INITIAL_FORM = structuredClone(fakeForm);
@@ -933,7 +935,31 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     return;
   }
   if (sessionMatch && request.method === "GET") {
-    const session = OPENCODE_SESSIONS.find((item) => item.id === sessionMatch[1]);
+    // A child session that is not in the list, so the subagent tile can show a
+    // live child without changing the session-list fixtures.
+    const session =
+      sessionMatch[1] === "ses_child_demo"
+        ? {
+            id: "ses_child_demo",
+            projectID: "project-oktoso",
+            agent: "general",
+            model: { id: "claude-sonnet", providerID: "commandcode" },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            time: {
+              created: 1_792_970_000_000,
+              updated: 1_792_970_000_000,
+              busy: 1_792_970_000_000,
+            },
+            title: "Check the refresh fix",
+            location: { directory: "/home/me/oktoso" },
+          }
+        : OPENCODE_SESSIONS.find((item) => item.id === sessionMatch[1]);
     if (!session) {
       sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
       return;

@@ -3,6 +3,7 @@ import {
   compactionPart,
   stepStatus,
   stepsFromParts,
+  subagentRef,
   toolKind,
 } from "./activity";
 import type { MessagePart } from "@amoshydra/oktoso-contracts";
@@ -110,19 +111,31 @@ describe("stepsFromParts", () => {
     expect(read?.metric).toBe("3 ln");
   });
 
-  it("marks subagents as launched", () => {
+  it("marks subagents as launched without trusting stale metadata", () => {
     const [step] = stepsFromParts([
       tool("subagent", {
-        status: "running",
+        status: "completed",
         metadata: { sessionID: "ses_child", status: "running" },
       }),
     ]);
+    // The child session's status decides liveness; the tool metadata keeps the
+    // launch-time value forever, so it must not drive the tile.
     expect(step).toMatchObject({
       kind: "subagent",
-      status: "running",
+      status: "completed",
       metric: "launched",
-      running: true,
     });
+    expect(step?.running).toBeUndefined();
+  });
+
+  it("builds the child session reference for a subagent", () => {
+    const part = tool("subagent", {
+      metadata: { sessionID: "ses_child" },
+    }) as Extract<MessagePart, { type: "tool" }>;
+    expect(subagentRef(part, "desktop-opencode")).toBe(
+      "desktop-opencode:ses_child",
+    );
+    expect(subagentRef(part, undefined)).toBeUndefined();
   });
 
   it("keeps reading order across mixed parts", () => {

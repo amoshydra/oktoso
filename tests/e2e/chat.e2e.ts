@@ -403,7 +403,7 @@ describe("navigation history", () => {
     await page!.setViewportSize({ width: 390, height: 844 });
     await openSession("Fix auth race in gateway");
 
-    await page!.getByRole("button", { name: "Details" }).click();
+    await page!.getByRole("button", { name: "Details", exact: true }).click();
     await page!.locator("#session-details").waitFor();
     expect(currentPath()).toContain("details=1");
 
