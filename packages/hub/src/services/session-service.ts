@@ -12,7 +12,12 @@ import type {
   SessionPage,
   SessionSelectionInput,
 } from "@amoshydra/oktoso-contracts";
-import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
+import {
+  isAbsoluteSessionPath,
+  relativeSessionPath,
+  type ProviderAdapter,
+  type ProviderResource,
+} from "@amoshydra/oktoso-providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -312,6 +317,41 @@ export class SessionService {
       ref,
       query,
       operationSignal(this.registry, adapter.id, 15_000),
+    );
+  }
+
+  /**
+   * Read a file from a session's working directory.
+   *
+   * The provider owns the filesystem, so the hub asks it to resolve the path
+   * instead of reading the host disk. `path` is jailed to the session directory
+   * before it reaches the adapter.
+   */
+  async readFile(ref: string, path: string): Promise<ProviderResource> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.files || !adapter.readFile) {
+      throw notImplemented("This provider does not expose session files");
+    }
+    this.assertProviderAvailable(adapter.id);
+
+    let directory = this.sessions.get(ref)?.directory;
+    if (!directory && isAbsoluteSessionPath(path)) {
+      directory = (
+        await adapter.getSession(
+          ref,
+          operationSignal(this.registry, adapter.id, 15_000),
+        )
+      ).directory;
+    }
+
+    return adapter.readFile(
+      {
+        ref,
+        directory,
+        path: relativeSessionPath(path, directory),
+      },
+      operationSignal(this.registry, adapter.id, 20_000),
     );
   }
 

@@ -116,8 +116,81 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
             status: "completed",
             input: { path: "auth.ts" },
             content: [{ type: "text", text: "refresh token rotation" }],
+            metadata: { truncated: false },
           },
-          time: { created: 1_792_970_025_000, completed: 1_792_970_040_000 },
+          time: { created: 1_792_970_025_000, completed: 1_792_970_026_000 },
+        },
+        {
+          type: "tool",
+          id: "tool_auth_2",
+          name: "shell",
+          executed: true,
+          state: {
+            status: "error",
+            input: { command: "pnpm test auth" },
+            content: [
+              {
+                type: "text",
+                text: "> vitest run auth\n\n ✓ auth.test.ts (34 tests)\n × rotates the token once\n\nAssertionError: expected 2 to be 1\n  at auth.test.ts:84:24",
+              },
+            ],
+            metadata: { exit: 1, truncated: false },
+          },
+          time: { created: 1_792_970_027_000, completed: 1_792_970_028_400 },
+        },
+        {
+          type: "tool",
+          id: "tool_auth_3",
+          name: "write",
+          executed: true,
+          state: {
+            status: "completed",
+            input: {
+              filePath: "notes/plan.md",
+              content:
+                "# Auth race plan\n\n- narrow the double refresh\n- rotate once per request window\n- keep the old token until both writers finish\n",
+            },
+            content: [{ type: "text", text: "Wrote 126 bytes to notes/plan.md" }],
+            metadata: { truncated: false },
+          },
+          time: { created: 1_792_970_030_000, completed: 1_792_970_031_000 },
+        },
+        {
+          type: "tool",
+          id: "tool_auth_4",
+          name: "execute",
+          executed: true,
+          state: {
+            status: "completed",
+            input: {
+              code: 'const page = await tools["browser"].new_page({ url: "http://127.0.0.1:5175/" });\nreturn page;',
+            },
+            content: [
+              {
+                type: "text",
+                text: "## Pages\n1: about:blank\n2: Oktoso (http://127.0.0.1:5175/) [selected]",
+              },
+            ],
+            metadata: { toolCalls: [{ tool: "browser.new_page", status: "completed" }] },
+          },
+          time: { created: 1_792_970_032_000, completed: 1_792_970_032_576 },
+        },
+        {
+          type: "tool",
+          id: "tool_auth_5",
+          name: "subagent",
+          executed: true,
+          state: {
+            status: "running",
+            input: {
+              agent: "general",
+              description: "Check the refresh fix",
+              background: true,
+              prompt: "Review the token rotation change and report regressions.",
+            },
+            metadata: { sessionID: "ses_child_demo", status: "running" },
+          },
+          time: { created: 1_792_970_033_000 },
         },
       ],
     },
@@ -130,7 +203,7 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
       content: [
         {
           type: "text",
-          text: "The failing test is in auth.test.ts. I am narrowing it to the double-refresh case. Should I continue with the double-refresh case?",
+          text: "The failing test is in auth.test.ts. I am narrowing it to the double-refresh case. I sketched the race in `plots/chart.png`, wrote the write-up to `reports/report.html`, and recorded it in `clips/race.mp4`. Should I continue with the double-refresh case?",
         },
         {
           type: "file",
@@ -161,6 +234,18 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
       text: "Refactor the session index to reconcile by native session ID.",
       files: [],
       agents: [],
+    },
+    {
+      id: "msg_index_compaction",
+      type: "compaction",
+      time: { created: 1_792_968_015_000 },
+      reason: "auto",
+      status: "completed",
+      summary:
+        "## Objective\n\nReconcile sessions by native ID.\n\n- keep the cache key stable\n- drop the legacy cursor\n- keep forks addressable",
+      tokens: { input: 853_721, output: 1829, reasoning: 1497 },
+      cost: 0.13,
+      model: { id: "deepseek-v4.1-flash", providerID: "commandcode" },
     },
     {
       id: "msg_index_answer",
@@ -233,6 +318,36 @@ const FAKE_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
+
+/** One second of generated test video, so media previews have real bytes. */
+const FAKE_MP4 = Buffer.from(
+  "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAOybW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAt10cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAKAAAABaAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAIAAABAAAAAAJVbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAACAG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAcBzdGJsAAAAwHN0c2QAAAAAAAAAAQAAALBhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAKAAWgBIAAAASAAAAAAAAAABFExhdmM2My4xLjEwMiBsaWJ4MjY0AAAAAAAAAAAAAAAAGP//AAAANmF2Y0MBZAAK/+EAGWdkAAqs2UKN+TARAAADAAEAAAMAFA8SJZYBAAZo6+PLIsD9+PgAAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAAbmAAAAAAAAAAGHN0dHMAAAAAAAAAAQAAAAoAAAQAAAAAFHN0c3MAAAAAAAAAAQAAAAEAAABgY3R0cwAAAAAAAAAKAAAAAQAACAAAAAABAAAUAAAAAAEAAAgAAAAAAQAAAAAAAAABAAAEAAAAAAEAABQAAAAAAQAACAAAAAABAAAAAAAAAAEAAAQAAAAAAQAACAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAoAAAABAAAAPHN0c3oAAAAAAAAAAAAAAAoAAAkrAAABvwAAAD0AAAAXAAAAGQAAAYgAAABTAAAAGwAAABsAAABkAAAAFHN0Y28AAAAAAAAAAQAAA+IAAABhdWR0YQAAAFltZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAACxpbHN0AAAAJKl0b28AAAAcZGF0YQAAAAEAAAAATGF2ZjYzLjEuMTAyAAAACGZyZWUAAA3UbWRhdAAAAq4GBf//qtxF6b3m2Ui3lizYINkj7u94MjY0IC0gY29yZSAxNjUgcjMyMjIgYjM1NjA1YSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjUgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0xIHJlZj0zIGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMTMgbWU9aGV4IHN1Ym1lPTcgcHN5PTEgcHN5X3JkPTEuMDA6MC4wMCBtaXhlZF9yZWY9MSBtZV9yYW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTEgOHg4ZGN0PTEgY3FtPTAgZGVhZHpvbmU9MjEsMTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9LTIgdGhyZWFkcz0zIGxvb2thaGVhZF90aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MyBiX3B5cmFtaWQ9MiBiX2FkYXB0PTEgYl9iaWFzPTAgZGlyZWN0PTEgd2VpZ2h0Yj0xIG9wZW5fZ29wPTAgd2VpZ2h0cD0yIGtleWludD0yNTAga2V5aW50X21pbj0xMCBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAABnVliIQAEf/+94gfMstvmCsfGVuCcQA4xJm6RyG0k5oqRdM/esR6ywOBzmjGTfQwaZKxVUCQhTWLZaQ3MkRx/5TVwoeXYx/WFSPE7BwNr2R2z8GcvijkQ4yxg2lszO2Hy8WX6zzm56bkj0+pCfllLeBi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",
+  "base64",
+);
+
+/** Session-directory files served by the fake `/api/fs/read/` endpoint. */
+const FAKE_FILES: Record<string, { type: string; body: string | Buffer }> = {
+  "/home/me/oktoso/notes/plan.md": {
+    type: "text/markdown",
+    body: "# Plan\n\n- book the train\n- pack layers\n",
+  },
+  "/home/me/oktoso/auth.ts": {
+    type: "text/plain",
+    body: "export const token = 'fake';\n",
+  },
+  "/home/me/oktoso/plots/chart.png": {
+    type: "image/png",
+    body: FAKE_PNG,
+  },
+  "/home/me/oktoso/reports/report.html": {
+    type: "text/html",
+    body: "<!doctype html><title>Report</title><h1>Fake report</h1>",
+  },
+  "/home/me/oktoso/clips/race.mp4": {
+    type: "video/mp4",
+    body: FAKE_MP4,
+  },
+};
 
 const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
 const INITIAL_PERMISSION = structuredClone(fakePermission);
@@ -662,6 +777,28 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     OPENCODE_MESSAGES[session.id] = [];
     broadcastEvent("session.created", { sessionID: session.id });
     sendJson(response, 200, { data: session });
+    return;
+  }
+  if (path.startsWith("/api/fs/read/")) {
+    const requested = decodeURIComponent(path.slice("/api/fs/read/".length));
+    const directory = url.searchParams.get("location[directory]") ?? "";
+    const segments = requested.split("/").filter((segment) => segment && segment !== ".");
+    if (!directory || segments.length === 0 || segments.includes("..")) {
+      response.writeHead(404, { "content-type": "text/plain" });
+      response.end("Not found");
+      return;
+    }
+    const file = FAKE_FILES[`${directory}/${segments.join("/")}`];
+    if (!file) {
+      response.writeHead(404, { "content-type": "text/plain" });
+      response.end("Not found");
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": file.type,
+      "content-disposition": `attachment; filename="${segments.at(-1)}"`,
+    });
+    response.end(file.body);
     return;
   }
   if (path.startsWith("/api/files/")) {

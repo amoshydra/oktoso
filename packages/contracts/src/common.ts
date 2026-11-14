@@ -86,6 +86,7 @@ export const zProviderCapabilities = z.object({
   forms: z.boolean(),
   attachments: z.boolean(),
   attach: z.boolean(),
+  files: z.boolean(),
   branches: z.boolean(),
   fork: z.boolean(),
   retry: z.boolean(),

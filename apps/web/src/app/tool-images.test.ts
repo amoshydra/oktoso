@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { collectToolImages, sanitizeToolOutput } from "./tool-images";
+import {
+  collectToolImages,
+  sanitizeToolOutput,
+  toolOutputText,
+} from "./tool-images";
 
 describe("collectToolImages", () => {
   it("collects the file part shape returned by image-aware tools", () => {
@@ -91,5 +95,26 @@ describe("sanitizeToolOutput", () => {
       media_type: "image/png",
       data: "[image]",
     });
+  });
+});
+
+describe("toolOutputText", () => {
+  it("reads a text-only content array", () => {
+    expect(
+      toolOutputText([{ type: "text", text: "Wrote notes/plan.md" }]),
+    ).toBe("Wrote notes/plan.md");
+    expect(toolOutputText("done")).toBe("done");
+  });
+
+  it("returns undefined for structured or mixed output", () => {
+    expect(
+      toolOutputText([
+        { type: "text", text: "Image read successfully" },
+        { type: "file", uri: "data:image/jpeg;base64,/9j/AAAA" },
+      ]),
+    ).toBeUndefined();
+    expect(toolOutputText({ exitCode: 0, output: "" })).toBeUndefined();
+    expect(toolOutputText([])).toBeUndefined();
+    expect(toolOutputText(undefined)).toBeUndefined();
   });
 });

@@ -112,8 +112,7 @@ export function collectToolImages(output: unknown): ToolImage[] {
  * Keep tool input/output readable in the transcript: a base64 image would
  * otherwise dump megabytes of text into the expanded tool row.
  */
-export function sanitizeToolOutput(output: unknown, depth = 0): unknown {
-  if (depth > 8) return "[…]";
+export function sanitizeToolOutput(output: unknown, depth = 0): unknown {  if (depth > 8) return "[…]";
   if (typeof output === "string") {
     return output.startsWith("data:image/") ? "[image]" : output;
   }
@@ -138,4 +137,35 @@ export function sanitizeToolOutput(output: unknown, depth = 0): unknown {
     result[key] = sanitizeToolOutput(value, depth + 1);
   }
   return result;
+}
+
+/**
+ * Return a plain-text tool result when every part is text.
+ *
+ * Providers wrap a simple confirmation in a content array
+ * (`[{ type: "text", text: "..." }]`). Rendering that as JSON adds noise, so the
+ * transcript shows the sentence instead. Mixed or structured results fall back
+ * to JSON.
+ */
+export function toolOutputText(output: unknown): string | undefined {
+  if (typeof output === "string") return output.trim() || undefined;
+  if (Array.isArray(output)) {
+    const texts: string[] = [];
+    for (const item of output) {
+      const text = toolOutputText(item);
+      if (!text) return undefined;
+      texts.push(text);
+    }
+    return texts.length > 0 ? texts.join("\n") : undefined;
+  }
+  if (!output || typeof output !== "object") return undefined;
+
+  const record = output as Record<string, unknown>;
+  if (typeof record.type === "string" && record.type !== "text") {
+    return undefined;
+  }
+  if (typeof record.text === "string" && record.text.trim()) {
+    return record.text.trim();
+  }
+  return undefined;
 }

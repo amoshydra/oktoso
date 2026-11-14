@@ -34,6 +34,7 @@ import { registerAuthRoutes } from "./http/routes/auth";
 import { registerPairRoutes } from "./http/routes/pair";
 import { registerProviderRoutes } from "./http/routes/providers";
 import { registerAttachmentRoutes } from "./http/routes/attachments";
+import { registerFileRoutes } from "./http/routes/files";
 import { registerSessionRoutes } from "./http/routes/sessions";
 import { registerReplyAuditRoutes } from "./http/routes/reply-audit";
 import { registerQuestionRoutes } from "./http/routes/questions";
@@ -112,6 +113,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerPairRoutes(app, { auth });
   registerProviderRoutes(app, deps.registry, deps.providerAdmin);
   registerAttachmentRoutes(app, deps.registry, deps.attachments);
+  registerFileRoutes(app, deps.sessions);
   const idempotency = new IdempotencyService(deps.store);
   const actions = new SessionActions(
     deps.sessions,

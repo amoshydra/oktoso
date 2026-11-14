@@ -13,6 +13,26 @@ export const zMessagePart = z.discriminatedUnion("type", [
     status: z.string(),
     input: z.unknown().optional(),
     output: z.unknown().optional(),
+    /** Provider tool metadata: exit code, match counts, child session, patch stats. */
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    startedAt: z.number().int().optional(),
+    completedAt: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal("compaction"),
+    /** Why the history was compacted: "auto" or "manual". */
+    reason: z.string(),
+    status: z.string(),
+    summary: z.string(),
+    model: z.string().optional(),
+    cost: z.number().optional(),
+    tokens: z
+      .object({
+        input: z.number().int(),
+        output: z.number().int(),
+        reasoning: z.number().int(),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal("file"),

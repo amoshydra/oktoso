@@ -606,6 +606,31 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/files",
+  tags: ["sessions"],
+  summary: "Read a file from a session's working directory",
+  description:
+    "Resolves a path inside the session directory and returns the bytes. Relative paths and absolute paths inside that directory are both accepted; paths that escape it, Windows paths, and parent segments are rejected.",
+  request: {
+    params,
+    query: z.object({
+      path: z
+        .string()
+        .min(1)
+        .openapi({ description: "Path relative to the session directory" }),
+    }),
+  },
+  responses: {
+    200: { description: "File bytes" },
+    400: errorResponse("Invalid or escaping path"),
+    404: errorResponse("Session or file not found"),
+    501: errorResponse("Provider does not expose session files"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
   method: "post",
   path: "/api/v1/sessions/{ref}/interrupt",
   tags: ["sessions"],

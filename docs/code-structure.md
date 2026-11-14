@@ -669,6 +669,7 @@ Keep the existing `/api/v1` contract and add:
 | `POST` | `/api/v1/sessions/{ref}/read` | Mark a session read and sync the marker |
 | `POST` | `/api/v1/sessions/{ref}/selection` | Change the session model, model variant, or agent |
 | `GET` | `/api/v1/attachments?provider=&url=` | Authenticated binary proxy for provider-hosted images and files |
+| `GET` | `/api/v1/sessions/:ref/files?path=` | Authenticated read of a file inside the session directory, jailed and provider-resolved |
 | `GET` | `/api/v1/diagnostics` | Authenticated operational state |
 
 Contract changes:
