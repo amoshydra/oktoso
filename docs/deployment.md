@@ -131,6 +131,14 @@ schedule triggers under a policy.
     "dryRun": true,
     "maxActionsPerHour": 6,
     "maxActionsPerDay": 24,
+    "templates": [
+      {
+        "id": "nightly-review",
+        "providerID": "desktop-opencode",
+        "title": "Nightly review",
+        "text": "Review the repository and report the risks."
+      }
+    ],
     "watchers": [
       {
         "id": "answer-safe-questions",
@@ -141,6 +149,15 @@ schedule triggers under a policy.
         "action": { "kind": "answer", "choice": "first-safe" },
         "dryRun": true,
         "limits": { "maxActionsPerHour": 3, "maxActionsPerDay": 12 }
+      },
+      {
+        "id": "nightly",
+        "name": "Nightly review",
+        "enabled": true,
+        "trigger": { "kind": "schedule", "everyMs": 86400000 },
+        "action": { "kind": "start", "template": "nightly-review" },
+        "dryRun": true,
+        "limits": { "maxActionsPerHour": 1, "maxActionsPerDay": 1 }
       }
     ]
   }
@@ -162,7 +179,10 @@ schedule triggers under a policy.
   a status change resets the timer. Schedule triggers require
   `condition.sessionRef` and fire every `everyMs`.
 - Quiet hours escalate answer and retry actions instead of acting.
-- Actions: `answer`, `escalate`, `notify`, `retry`.
+- Actions: `answer`, `escalate`, `notify`, `retry`, and `start`. A `start`
+  action references a template (`providerID`, `title`, optional directory,
+  agent, model, and prompt text) and creates a new session. A schedule `start`
+  watcher does not need `condition.sessionRef`; other schedule actions do.
 - Not implemented yet: token budgets, `start`, always-allow, and G2 approvals.
 
 Control it from the CLI:
