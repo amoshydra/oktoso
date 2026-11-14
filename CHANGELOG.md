@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.30](https://github.com/amoshydra/oktoso/compare/v0.1.29...v0.1.30) (2026-11-14)
+
+
+### Features
+
+* **chat:** collapse the mobile composer to one row ([360cb27](https://github.com/amoshydra/oktoso/commit/360cb27ed5b0cf1f1c3df568bf433a46b23535c6))
+* **chat:** keep steer as the send default and disclose queue ([cd1788a](https://github.com/amoshydra/oktoso/commit/cd1788af009e93af30923df1c3d0d2d4e7e92a39))
+* **reply:** warm suggestions for the visible session ([4fe80de](https://github.com/amoshydra/oktoso/commit/4fe80deb72faa4d15d13aedf649e969e757335df))
+
+
+### Bug Fixes
+
+* **reply:** ground suggestions in the current request ([d6bb7ba](https://github.com/amoshydra/oktoso/commit/d6bb7bacfdc7a14d9c9be800022e005e90de9d3a))
+* **web:** align the mobile composer controls ([44eba19](https://github.com/amoshydra/oktoso/commit/44eba19e2f3bacb5238844e5a57829f833c17218))
+
+
+### Performance Improvements
+
+* **reply:** share in-flight generations and unblock the G2 reply screen ([805733c](https://github.com/amoshydra/oktoso/commit/805733cf7118183cc7f49f30d31bba7b8f505153))
+
 ## [0.1.29](https://github.com/amoshydra/oktoso/compare/v0.1.28...v0.1.29) (2026-11-14)
 
 
