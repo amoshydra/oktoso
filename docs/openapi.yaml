@@ -249,6 +249,10 @@ components:
           type: boolean
         send:
           type: boolean
+        steer:
+          type: boolean
+        queue:
+          type: boolean
         create:
           type: boolean
         stream:
@@ -281,6 +285,8 @@ components:
         - list
         - read
         - send
+        - steer
+        - queue
         - create
         - stream
         - interrupt
@@ -337,6 +343,10 @@ components:
               type: boolean
             send:
               type: boolean
+            steer:
+              type: boolean
+            queue:
+              type: boolean
             create:
               type: boolean
             stream:
@@ -369,6 +379,8 @@ components:
             - list
             - read
             - send
+            - steer
+            - queue
             - create
             - stream
             - interrupt
@@ -2369,6 +2381,11 @@ components:
               - revision
           minItems: 1
           maxItems: 20
+        delivery:
+          type: string
+          enum:
+            - steer
+            - queue
       required:
         - text
     SendResult:
@@ -2378,8 +2395,74 @@ components:
           type: boolean
         messageID:
           type: string
+        delivery:
+          type: string
+          enum:
+            - steer
+            - queue
       required:
         - accepted
+    InboxItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        delivery:
+          type: string
+          enum:
+            - steer
+            - queue
+        text:
+          type: string
+        createdAt:
+          type: integer
+      required:
+        - id
+        - type
+        - delivery
+        - text
+        - createdAt
+    InboxPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+              delivery:
+                type: string
+                enum:
+                  - steer
+                  - queue
+              text:
+                type: string
+              createdAt:
+                type: integer
+            required:
+              - id
+              - type
+              - delivery
+              - text
+              - createdAt
+      required:
+        - data
+    InboxDeliveryInput:
+      type: object
+      properties:
+        delivery:
+          type: string
+          enum:
+            - steer
+            - queue
+      required:
+        - delivery
     Attachment:
       type: object
       properties:
@@ -3406,6 +3489,127 @@ paths:
                 $ref: "#/components/schemas/Error"
         "409":
           description: Question changed or already answered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/inbox:
+    get:
+      tags:
+        - sessions
+      summary: List queued provider messages
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Queued messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxPage"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not expose an inbox
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/inbox/{itemId}:
+    patch:
+      tags:
+        - sessions
+      summary: Change the delivery mode of a queued message
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+          required: true
+          name: itemId
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxDeliveryInput"
+      responses:
+        "204":
+          description: Delivery updated
+        "400":
+          description: Invalid delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or queued message not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider cannot change queued delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - sessions
+      summary: Cancel a queued message
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+          required: true
+          name: itemId
+          in: path
+      responses:
+        "204":
+          description: Queued message removed
+        "404":
+          description: Session or queued message not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider cannot cancel queued messages
           content:
             application/json:
               schema:

@@ -1641,6 +1641,84 @@ describe("hub app", () => {
     expect(interruptResponse.status).toBe(204);
   });
 
+  it("queues a prompt in the provider inbox and promotes or removes it", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    const path = `/api/v1/sessions/${encodeURIComponent("desktop-opencode:ses_auth")}`;
+
+    const sendResponse = await app.request(`${path}/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: "Queued follow-up", delivery: "queue" }),
+    });
+    expect(sendResponse.status).toBe(202);
+    expect(await sendResponse.json()).toMatchObject({
+      accepted: true,
+      delivery: "queue",
+    });
+
+    const messagesResponse = await app.request(`${path}/messages?order=asc`, {
+      headers,
+    });
+    const messages = (await messagesResponse.json()) as {
+      data: Array<{ role: string; parts: Array<{ type: string; text?: string }> }>;
+    };
+    expect(
+      messages.data.some((message) =>
+        message.parts.some((part) => part.text === "Queued follow-up"),
+      ),
+    ).toBe(false);
+
+    const inboxResponse = await app.request(`${path}/inbox`, { headers });
+    expect(inboxResponse.status).toBe(200);
+    const inbox = (await inboxResponse.json()) as {
+      data: Array<{
+        id: string;
+        type: string;
+        delivery: string;
+        text: string;
+      }>;
+    };
+    expect(inbox.data).toHaveLength(1);
+    expect(inbox.data[0]).toMatchObject({
+      type: "user",
+      delivery: "queue",
+      text: "Queued follow-up",
+    });
+    const itemID = inbox.data[0]!.id;
+
+    const promoted = await app.request(`${path}/inbox/${itemID}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ delivery: "steer" }),
+    });
+    expect(promoted.status).toBe(204);
+    const afterPromote = (await (
+      await app.request(`${path}/inbox`, { headers })
+    ).json()) as { data: Array<{ delivery: string }> };
+    expect(afterPromote.data[0]?.delivery).toBe("steer");
+
+    const invalid = await app.request(`${path}/inbox/${itemID}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ delivery: "later" }),
+    });
+    expect(invalid.status).toBe(400);
+
+    const removed = await app.request(`${path}/inbox/${itemID}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(removed.status).toBe(204);
+    const afterRemove = (await (
+      await app.request(`${path}/inbox`, { headers })
+    ).json()) as { data: unknown[] };
+    expect(afterRemove.data).toEqual([]);
+  });
+
   it("lists and resolves provider attention", async () => {
     const { app, eventBus } = await createTestApp();
     const headers = { Authorization: `Bearer ${token}` };

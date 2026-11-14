@@ -490,10 +490,23 @@ discovery surface.
   default: it lands at the next safe step boundary, lets running tools finish,
   and is kept in the transcript. Queue waits for an idle boundary and is not in
   the provider transcript until delivered.
-- The hub does not pass `delivery`; OpenCode uses its default steer. The web
-  reflects that with **Steer** and the steer hint. Queue is not exposed.
+- OpenCode advertises both `steer` and `queue`. While a turn runs, the composer
+  status row carries a `Steer | Queue` toggle. The send action reads **Steer**
+  or **Queue** and the hint reads `Agent running · Ctrl/⌘ Enter to steer` or
+  `… to queue`.
+- The hub passes `delivery` through to the provider. `SendResult.delivery`
+  reports the admitted mode.
+- Queued sends are not optimistic transcript rows. They render in a composer
+  queue tray above the input, fed by `GET /api/v1/sessions/:ref/inbox`, until
+  the provider delivers them. Each tray row offers **Steer now**
+  (`PATCH …/inbox/:id` with `{ delivery: "steer" }`) and Remove
+  (`DELETE …/inbox/:id`).
+- The tray polls while the turn runs or items are queued, and refreshes on
+  session events. A delivered item leaves the tray and arrives through the
+  normal transcript.
 - Open WebUI rejects a send while the current assistant message is not done
   with a conflict. The web disables Send while running and points to Interrupt.
+  Open WebUI advertises `steer: false` and `queue: false`.
 - Providers without steer/queue semantics keep the plain Send action. A hub-side
   queue would need a durable queued state and is not part of this slice.
 

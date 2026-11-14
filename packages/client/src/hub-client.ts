@@ -14,6 +14,7 @@ import type {
   CreateSessionInput,
   Draft,
   Health,
+  InboxPage,
   MessagePage,
   MessagesQuery,
   PairingCode,
@@ -31,6 +32,7 @@ import type {
   ReplyFeedbackInput,
   ReplyFeedbackPage,
   ReplyOptions,
+  SendDelivery,
   SendInput,
   SendResult,
   Session,
@@ -417,6 +419,30 @@ export class HubClient {
     return this.request<SendResult>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/retry`,
       { method: "POST", body: { messageId } },
+    );
+  }
+
+  async inbox(ref: string): Promise<InboxPage> {
+    return this.request<InboxPage>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/inbox`,
+    );
+  }
+
+  async updateInboxDelivery(
+    ref: string,
+    itemId: string,
+    delivery: SendDelivery,
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/inbox/${encodeURIComponent(itemId)}`,
+      { method: "PATCH", body: { delivery } },
+    );
+  }
+
+  async deleteInbox(ref: string, itemId: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/inbox/${encodeURIComponent(itemId)}`,
+      { method: "DELETE" },
     );
   }
 

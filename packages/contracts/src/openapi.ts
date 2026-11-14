@@ -26,6 +26,9 @@ import {
   zError,
   zHealth,
   zHubEvent,
+  zInboxDeliveryInput,
+  zInboxItem,
+  zInboxPage,
   zMessage,
   zMessagePage,
   zMessagePart,
@@ -162,6 +165,12 @@ const MessageSchema = registry.register("Message", zMessage);
 const MessagePageSchema = registry.register("MessagePage", zMessagePage);
 const SendInputSchema = registry.register("SendInput", zSendInput);
 const SendResultSchema = registry.register("SendResult", zSendResult);
+const InboxItemSchema = registry.register("InboxItem", zInboxItem);
+const InboxPageSchema = registry.register("InboxPage", zInboxPage);
+const InboxDeliveryInputSchema = registry.register(
+  "InboxDeliveryInput",
+  zInboxDeliveryInput,
+);
 const AttachmentSchema = registry.register("Attachment", zAttachment);
 const BranchPointSchema = registry.register("BranchPoint", zBranchPoint);
 const BranchPageSchema = registry.register("BranchPage", zBranchPage);
@@ -495,6 +504,52 @@ registry.registerPath({
     202: { description: "Prompt accepted", content: json(SendResultSchema) },
     404: errorResponse("Session not found"),
     409: errorResponse("Question changed or already answered"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/inbox",
+  tags: ["sessions"],
+  summary: "List queued provider messages",
+  request: { params },
+  responses: {
+    200: { description: "Queued messages", content: json(InboxPageSchema) },
+    404: errorResponse("Session not found"),
+    501: errorResponse("Provider does not expose an inbox"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/sessions/{ref}/inbox/{itemId}",
+  tags: ["sessions"],
+  summary: "Change the delivery mode of a queued message",
+  request: {
+    params: z.object({ ref: z.string(), itemId: z.string() }),
+    body: { content: json(InboxDeliveryInputSchema), required: true },
+  },
+  responses: {
+    204: { description: "Delivery updated" },
+    400: errorResponse("Invalid delivery"),
+    404: errorResponse("Session or queued message not found"),
+    501: errorResponse("Provider cannot change queued delivery"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/sessions/{ref}/inbox/{itemId}",
+  tags: ["sessions"],
+  summary: "Cancel a queued message",
+  request: { params: z.object({ ref: z.string(), itemId: z.string() }) },
+  responses: {
+    204: { description: "Queued message removed" },
+    404: errorResponse("Session or queued message not found"),
+    501: errorResponse("Provider cannot cancel queued messages"),
     502: errorResponse("Provider failure"),
   },
 });

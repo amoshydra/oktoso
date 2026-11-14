@@ -53,6 +53,8 @@ function provider(config: ProviderConfig): Provider {
       list: true,
       read: true,
       send: false,
+      steer: false,
+      queue: false,
       create: false,
       stream: true,
       interrupt: false,

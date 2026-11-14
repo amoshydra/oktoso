@@ -98,6 +98,8 @@ interface ProviderCapabilities {
   list: boolean
   read: boolean
   send: boolean
+  steer: boolean
+  queue: boolean
   create: boolean
   stream: boolean
   interrupt: boolean
@@ -385,6 +387,9 @@ GET    /api/v1/sessions/:ref
 GET    /api/v1/sessions/:ref/messages?cursor=&limit=&order=
 GET    /api/v1/sessions/:ref/question
 POST   /api/v1/sessions/:ref/messages
+GET    /api/v1/sessions/:ref/inbox
+PATCH  /api/v1/sessions/:ref/inbox/:id
+DELETE /api/v1/sessions/:ref/inbox/:id
 POST   /api/v1/sessions
 POST   /api/v1/sessions/:ref/selection
 POST   /api/v1/sessions/:ref/interrupt

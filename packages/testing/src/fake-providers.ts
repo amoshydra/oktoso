@@ -383,6 +383,16 @@ const FAKE_FILES: Record<string, { type: string; body: string | Buffer }> = {
 
 OPENCODE_MESSAGES["ses_child_demo"] = [];
 
+interface FakeOpenCodeInboxItem {
+  id: string;
+  type: string;
+  delivery: "steer" | "queue";
+  time: { created: number };
+  payload: { text: string };
+}
+
+const OPENCODE_INBOX: Record<string, FakeOpenCodeInboxItem[]> = {};
+
 const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
 const INITIAL_PERMISSION = structuredClone(fakePermission);
 const INITIAL_FORM = structuredClone(fakeForm);
@@ -393,6 +403,9 @@ export function resetFakeProviderState(): void {
   }
   for (const [key, messages] of Object.entries(INITIAL_OPENCODE_MESSAGES)) {
     OPENCODE_MESSAGES[key] = structuredClone(messages);
+  }
+  for (const key of Object.keys(OPENCODE_INBOX)) {
+    delete OPENCODE_INBOX[key];
   }
   fakePermission = structuredClone(INITIAL_PERMISSION);
   fakeForm = structuredClone(INITIAL_FORM);
@@ -977,6 +990,43 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     sendJson(response, 200, page(messages, url));
     return;
   }
+  const inboxMatch = path.match(/^\/api\/session\/([^/]+)\/inbox$/);
+  if (inboxMatch && request.method === "GET") {
+    const sessionID = inboxMatch[1] ?? "";
+    if (!OPENCODE_MESSAGES[sessionID]) {
+      sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
+      return;
+    }
+    sendJson(response, 200, { data: OPENCODE_INBOX[sessionID] ?? [] });
+    return;
+  }
+  const inboxItemMatch = path.match(/^\/api\/session\/([^/]+)\/inbox\/([^/]+)$/);
+  if (inboxItemMatch) {
+    const sessionID = inboxItemMatch[1] ?? "";
+    const itemID = inboxItemMatch[2] ?? "";
+    const items = OPENCODE_INBOX[sessionID] ?? [];
+    const index = items.findIndex((item) => item.id === itemID);
+    if (index < 0) {
+      sendJson(response, 404, { _tag: "NotFoundError", message: "Inbox item not found" });
+      return;
+    }
+    if (request.method === "PATCH") {
+      const body = await readBody(request);
+      items[index] = {
+        ...items[index]!,
+        delivery: body.delivery === "queue" ? "queue" : "steer",
+      };
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (request.method === "DELETE") {
+      items.splice(index, 1);
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+  }
   const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/);
   if (promptMatch && request.method === "POST") {
     const sessionID = promptMatch[1] ?? "";
@@ -987,6 +1037,18 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       return;
     }
     const text = typeof body.text === "string" ? body.text : "";
+    if (body.delivery === "queue") {
+      const item: FakeOpenCodeInboxItem = {
+        id: `msg_inb_fake_${Date.now().toString(36)}`,
+        type: "user",
+        delivery: "queue",
+        time: { created: Date.now() },
+        payload: { text },
+      };
+      (OPENCODE_INBOX[sessionID] ??= []).push(item);
+      sendJson(response, 200, { data: { id: item.id, delivery: "queue" } });
+      return;
+    }
     const files = Array.isArray(body.files)
       ? body.files.map((entry) => {
           const file =
@@ -1024,9 +1086,15 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       content: [{ type: "text", text: replyText }],
     });
     const session = OPENCODE_SESSIONS.find((item) => item.id === sessionID);
+    const slow = text.startsWith("Slow ");
     if (session) {
       session.time.busy = now;
       session.time.updated = now;
+      if (slow) {
+        session.time.idle = undefined;
+        session.outcome = undefined;
+        broadcastEvent("session.updated", { sessionID });
+      }
     }
     const replyPartID = `part_${replyID}_text`;
     broadcastEvent("message.updated", {
@@ -1093,7 +1161,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         session.outcome = "succeeded";
       }
       broadcastEvent("session.updated", { sessionID });
-    }, 100);
+    }, slow ? 5_000 : 100);
     sendJson(response, 200, { data: { id: userID } });
     return;
   }

@@ -23,6 +23,7 @@ import type {
   Diagnostics,
   Health,
   HubEvent,
+  InboxItem,
   Message,
   MessagePart,
   ModelOption,
@@ -32,6 +33,7 @@ import type {
   ProviderOptions,
   ProviderUpdateInput,
   ReplyOption,
+  SendDelivery,
   Session,
   SessionSelectionInput,
   SessionStatus,
@@ -3585,6 +3587,10 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
+  const [deliveryMode, setDeliveryMode] = useState<SendDelivery>("steer");
+  const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [inboxBusy, setInboxBusy] = useState<string>();
+  const [inboxError, setInboxError] = useState<string>();
   const [previewPath, setPreviewPath] = useState<string | undefined>(
     props.previewPath,
   );
@@ -3646,6 +3652,74 @@ function SessionDetail(props: {
   const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
   const canEdit = Boolean(sessionProvider?.capabilities.fork);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const canSteer = Boolean(sessionProvider?.capabilities.steer);
+  const canQueue = Boolean(sessionProvider?.capabilities.queue);
+  const running = session?.status === "running";
+  const queuedItems = useMemo(
+    () =>
+      inbox.filter(
+        (item) =>
+          item.delivery === "queue" &&
+          item.type === "user" &&
+          item.text.trim().length > 0,
+      ),
+    [inbox],
+  );
+
+  const refreshInbox = useCallback(async () => {
+    if (!canQueue) {
+      setInbox([]);
+      setInboxError(undefined);
+      return;
+    }
+    try {
+      const page = await props.client.inbox(props.sessionRef);
+      setInbox(page.data);
+      setInboxError(undefined);
+    } catch (reason) {
+      setInboxError(
+        reason instanceof Error ? reason.message : "Unable to read the queue",
+      );
+    }
+  }, [canQueue, props.client, props.sessionRef]);
+
+  useEffect(() => {
+    void refreshInbox();
+  }, [refreshInbox]);
+
+  useEffect(() => {
+    if (!canQueue) return;
+    if (!running && queuedItems.length === 0) return;
+    const timer = window.setInterval(() => {
+      void refreshInbox();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [canQueue, queuedItems.length, refreshInbox, running]);
+
+  const inboxLiveSeq =
+    props.events.find(
+      (event) =>
+        (event.sessionRef === undefined ||
+          event.sessionRef === props.sessionRef) &&
+        (event.type === "session.updated" ||
+          event.type === "message.created" ||
+          event.type === "resync"),
+    )?.seq ?? 0;
+  useEffect(() => {
+    if (!canQueue || !inboxLiveSeq) return;
+    const timer = window.setTimeout(() => {
+      void refreshInbox();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [canQueue, inboxLiveSeq, refreshInbox]);
+
+  useEffect(() => {
+    if (!canQueue && deliveryMode === "queue") setDeliveryMode("steer");
+  }, [canQueue, deliveryMode]);
+
+  useEffect(() => {
+    if (!canSteer && canQueue) setDeliveryMode("queue");
+  }, [canQueue, canSteer]);
 
   const getScroller = () => transcriptRef.current;
 
@@ -4068,39 +4142,57 @@ function SessionDetail(props: {
       sending ||
       dictationBusy ||
       uploadingAttachments > 0 ||
-      (session?.status === "running" && sessionProvider?.type !== "opencode")
+      (running && !canSteer && !canQueue)
     ) {
       return;
     }
+    const queueDelivery = running && canQueue && deliveryMode === "queue";
+    const delivery: SendDelivery | undefined = queueDelivery
+      ? "queue"
+      : running && canSteer
+        ? "steer"
+        : undefined;
+    const previousAttachments = attachments;
     setSending(true);
     setSendError(undefined);
     let optimistic: Message | undefined;
     try {
       const idempotencyKey = createID();
-      const created = createOptimisticMessage({
-        sessionRef: props.sessionRef,
-        text,
-        attachments,
-        idempotencyKey,
-      });
-      optimistic = created;
-      setMessages((current) => [...current, created]);
-      setAttachments([]);
-      pendingScroll.current = { mode: "bottom" };
+      if (!queueDelivery) {
+        const created = createOptimisticMessage({
+          sessionRef: props.sessionRef,
+          text,
+          attachments,
+          idempotencyKey,
+        });
+        optimistic = created;
+        setMessages((current) => [...current, created]);
+        pendingScroll.current = { mode: "bottom" };
+      }
       await discardDraft();
       dismissSuggestions();
       await props.client.sendMessage(
         props.sessionRef,
-        { text, ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}) },
+        {
+          text,
+          ...(attachmentIDs.length > 0 ? { attachments: attachmentIDs } : {}),
+          ...(delivery ? { delivery } : {}),
+        },
         { idempotencyKey },
       );
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === created.id
-            ? updateOptimisticStatus(message, "sent")
-            : message,
-        ),
-      );
+      setAttachments([]);
+      if (queueDelivery) {
+        await refreshInbox();
+      } else if (optimistic) {
+        const sentID = optimistic.id;
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === sentID
+              ? updateOptimisticStatus(message, "sent")
+              : message,
+          ),
+        );
+      }
       setSession((current) => (current ? { ...current, status: "running" } : current));
       window.setTimeout(() => {
         void refreshLatest(true).catch(() => undefined);
@@ -4114,6 +4206,7 @@ function SessionDetail(props: {
         // new draft.
         void props.client.saveDraft(props.sessionRef, text).catch(() => undefined);
       }
+      if (queueDelivery) setAttachments(previousAttachments);
       if (optimistic) {
         const failedID = optimistic.id;
         setMessages((current) =>
@@ -4185,6 +4278,48 @@ function SessionDetail(props: {
     }
     if (!draftRef.current.trim()) {
       void props.client.deleteDraft(props.sessionRef).catch(() => undefined);
+    }
+  };
+
+  const promoteQueued = async (item: InboxItem) => {
+    if (inboxBusy) return;
+    setInboxBusy(item.id);
+    setSendError(undefined);
+    try {
+      await props.client.updateInboxDelivery(
+        props.sessionRef,
+        item.id,
+        "steer",
+      );
+      await refreshInbox();
+      await refreshLatest(true);
+      setAtBottom(true);
+    } catch (reason) {
+      setSendError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to steer the queued message.",
+      );
+    } finally {
+      setInboxBusy(undefined);
+    }
+  };
+
+  const removeQueued = async (item: InboxItem) => {
+    if (inboxBusy) return;
+    setInboxBusy(item.id);
+    setSendError(undefined);
+    try {
+      await props.client.deleteInbox(props.sessionRef, item.id);
+      await refreshInbox();
+    } catch (reason) {
+      setSendError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to remove the queued message.",
+      );
+    } finally {
+      setInboxBusy(undefined);
     }
   };
 
@@ -4644,10 +4779,12 @@ function SessionDetail(props: {
         ? "Recording…"
         : dictation.phase === "transcribing"
           ? "Transcribing…"
-          : draftStatus === "idle" && session?.status === "running"
-            ? sessionProvider?.type === "opencode"
-              ? "Agent running · Ctrl/⌘ Enter to steer"
-              : "Agent running · interrupt to send"
+          : draftStatus === "idle" && running
+            ? canQueue && deliveryMode === "queue"
+              ? "Agent running · Ctrl/⌘ Enter to queue"
+              : canSteer
+                ? "Agent running · Ctrl/⌘ Enter to steer"
+                : "Agent running · interrupt to send"
             : draftStatusLabel(draftStatus);
   const resource: ResourceContext = {
     baseUrl: sessionProvider?.baseUrl,
@@ -5020,8 +5157,38 @@ function SessionDetail(props: {
             ) : null}
 
             <div className="chat-composer-wrap">
-              {backgroundItems.length > 0 || !atBottom ? (
+              {backgroundItems.length > 0 ||
+              !atBottom ||
+              (running && canSteer && canQueue) ? (
                 <div className="composer-status">
+                  {running && canSteer && canQueue ? (
+                    <div
+                      className="composer-delivery"
+                      role="group"
+                      aria-label="Message delivery"
+                    >
+                      <button
+                        className={`composer-delivery-option ${
+                          deliveryMode === "steer" ? "active" : ""
+                        }`}
+                        type="button"
+                        aria-pressed={deliveryMode === "steer"}
+                        onClick={() => setDeliveryMode("steer")}
+                      >
+                        Steer
+                      </button>
+                      <button
+                        className={`composer-delivery-option ${
+                          deliveryMode === "queue" ? "active" : ""
+                        }`}
+                        type="button"
+                        aria-pressed={deliveryMode === "queue"}
+                        onClick={() => setDeliveryMode("queue")}
+                      >
+                        Queue
+                      </button>
+                    </div>
+                  ) : null}
                   {backgroundItems.length > 0 ? (
                     <button
                       className="chat-background-chip"
@@ -5045,6 +5212,50 @@ function SessionDetail(props: {
                       <span aria-hidden="true">↓</span>
                     </button>
                   ) : null}
+                </div>
+              ) : null}
+              {queuedItems.length > 0 ? (
+                <div
+                  className="composer-queued"
+                  role="region"
+                  aria-label="Queued messages"
+                >
+                  <div className="composer-queued-head" role="status">
+                    <span>Queued</span>
+                    <span className="composer-queued-count">
+                      {queuedItems.length}
+                    </span>
+                  </div>
+                  {inboxError ? (
+                    <div className="composer-queued-error" role="status">
+                      {inboxError}
+                    </div>
+                  ) : null}
+                  <div className="composer-queued-list">
+                    {queuedItems.map((item) => (
+                      <div className="composer-queued-item" key={item.id}>
+                        <span className="composer-queued-text">{item.text}</span>
+                        <div className="composer-queued-actions">
+                          <button
+                            type="button"
+                            disabled={inboxBusy === item.id}
+                            onClick={() => void promoteQueued(item)}
+                          >
+                            Steer now
+                          </button>
+                          <button
+                            className="composer-queued-remove"
+                            type="button"
+                            aria-label="Remove queued message"
+                            disabled={inboxBusy === item.id}
+                            onClick={() => void removeQueued(item)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
               <form
@@ -5365,29 +5576,30 @@ function SessionDetail(props: {
                       className="btn primary small composer-send"
                       type="submit"
                       aria-label={
-                        session.status === "running" &&
-                        sessionProvider?.type === "opencode"
-                          ? "Steer the running agent"
-                          : sending
-                            ? "Sending message"
-                            : "Send message"
+                        running && canQueue && deliveryMode === "queue"
+                          ? "Queue message for the running agent"
+                          : running && canSteer
+                            ? "Steer the running agent"
+                            : sending
+                              ? "Sending message"
+                              : "Send message"
                       }
                       disabled={
                         sending ||
                         (!draft.trim() && attachments.length === 0) ||
                         dictationBusy ||
                         uploadingAttachments > 0 ||
-                        (session.status === "running" &&
-                          sessionProvider?.type !== "opencode")
+                        (running && !canSteer && !canQueue)
                       }
                     >
                       <span className="composer-send-label">
-                        {session.status === "running" &&
-                        sessionProvider?.type === "opencode"
-                          ? "Steer"
-                          : sending
-                            ? "Sending…"
-                            : "Send"}
+                        {running && canQueue && deliveryMode === "queue"
+                          ? "Queue"
+                          : running && canSteer
+                            ? "Steer"
+                            : sending
+                              ? "Sending…"
+                              : "Send"}
                       </span>
                       <svg
                         className="composer-send-icon"

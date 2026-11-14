@@ -221,6 +221,132 @@ describe("OpenCodeAdapter.retryMessage", () => {
   });
 });
 
+async function promptServer(): Promise<{
+  adapter: OpenCodeAdapter;
+  calls: RecordedCall[];
+}> {
+  const calls: RecordedCall[] = [];
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    let raw = "";
+    request.on("data", (chunk) => {
+      raw += chunk;
+    });
+    request.on("end", () => {
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({ method: request.method ?? "GET", path: url.pathname, body });
+      if (url.pathname.endsWith("/prompt")) {
+        json(response, 200, { data: { id: "msg_new" } });
+        return;
+      }
+      if (url.pathname.endsWith("/inbox")) {
+        if (request.method === "GET") {
+          json(response, 200, {
+            data: [
+              {
+                id: "inb_1",
+                type: "user",
+                delivery: "queue",
+                time: { created: 1_500 },
+                payload: { text: "queued note" },
+              },
+            ],
+          });
+          return;
+        }
+      }
+      if (url.pathname.includes("/inbox/")) {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return {
+    adapter: new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    }),
+    calls,
+  };
+}
+
+describe("OpenCodeAdapter delivery and inbox", () => {
+  it("sends queued prompts with delivery queue", async () => {
+    const { adapter, calls } = await promptServer();
+    const result = await adapter.sendMessage(
+      "desktop-opencode:ses_test",
+      { text: "later", delivery: "queue" },
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(result).toEqual({
+      accepted: true,
+      messageID: "msg_new",
+      delivery: "queue",
+    });
+    expect(calls[0]?.body).toEqual({ text: "later", delivery: "queue" });
+  });
+
+  it("defaults delivery to steer", async () => {
+    const { adapter } = await promptServer();
+    const result = await adapter.sendMessage(
+      "desktop-opencode:ses_test",
+      { text: "now" },
+      AbortSignal.timeout(5_000),
+    );
+    expect(result.delivery).toBe("steer");
+  });
+
+  it("lists queued inbox items", async () => {
+    const { adapter, calls } = await promptServer();
+    const items = await adapter.listInbox(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(items).toEqual([
+      {
+        id: "inb_1",
+        type: "user",
+        delivery: "queue",
+        text: "queued note",
+        createdAt: 1_500,
+      },
+    ]);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/session/ses_test/inbox",
+    ]);
+  });
+
+  it("promotes and removes inbox items", async () => {
+    const { adapter, calls } = await promptServer();
+    await adapter.updateInbox(
+      "desktop-opencode:ses_test",
+      "inb_1",
+      "steer",
+      AbortSignal.timeout(5_000),
+    );
+    await adapter.deleteInbox(
+      "desktop-opencode:ses_test",
+      "inb_1",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "PATCH /api/session/ses_test/inbox/inb_1",
+      "DELETE /api/session/ses_test/inbox/inb_1",
+    ]);
+    expect(calls[0]?.body).toEqual({ delivery: "steer" });
+  });
+});
+
 describe("openCodeSessionStatus", () => {
   it("stays idle after a completed run", () => {
     expect(

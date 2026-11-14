@@ -9,6 +9,7 @@ import type {
   ProviderHealth,
   ProviderOptions,
   SendInput,
+  SendDelivery,
   SendResult,
   Session,
   SessionListQuery,
@@ -66,6 +67,14 @@ export interface ProviderSendInput extends SendInput {
   files?: ProviderAttachment[];
 }
 
+export interface ProviderInboxItem {
+  id: string;
+  type: string;
+  delivery: SendDelivery;
+  text: string;
+  createdAt: number;
+}
+
 export interface ProviderAdapter {
   readonly id: string;
   readonly type: string;
@@ -103,6 +112,14 @@ export interface ProviderAdapter {
     messageId: string,
     signal: AbortSignal,
   ): Promise<SendResult>;
+  listInbox?(ref: string, signal: AbortSignal): Promise<ProviderInboxItem[]>;
+  updateInbox?(
+    ref: string,
+    inboxID: string,
+    delivery: SendDelivery,
+    signal: AbortSignal,
+  ): Promise<void>;
+  deleteInbox?(ref: string, inboxID: string, signal: AbortSignal): Promise<void>;
   listAttention?(directories: string[], signal: AbortSignal): Promise<Attention[]>;
   actOnAttention?(
     id: string,
@@ -132,6 +149,8 @@ export const emptyCapabilities: ProviderCapabilities = {
   list: false,
   read: false,
   send: false,
+  steer: false,
+  queue: false,
   create: false,
   stream: false,
   interrupt: false,

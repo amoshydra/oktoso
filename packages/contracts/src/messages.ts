@@ -99,6 +99,8 @@ export const zSendAnswer = z.object({
   source: zSendAnswerSource.default("choice"),
 });
 
+export const zSendDelivery = z.enum(["steer", "queue"]);
+
 export const zSendInput = z.object({
   text: z.string(),
   attachments: z
@@ -107,6 +109,8 @@ export const zSendInput = z.object({
     .optional(),
   answer: zSendAnswer.optional(),
   answers: z.array(zSendAnswer).min(1).max(20).optional(),
+  /** Delivery while the agent is running. Providers may support one or both. */
+  delivery: zSendDelivery.optional(),
 });
 
 export const zBranchPoint = z.object({
@@ -137,6 +141,23 @@ export const zRetryInput = z.object({
 export const zSendResult = z.object({
   accepted: z.boolean(),
   messageID: z.string().optional(),
+  delivery: zSendDelivery.optional(),
+});
+
+export const zInboxItem = z.object({
+  id: z.string(),
+  type: z.string(),
+  delivery: zSendDelivery,
+  text: z.string(),
+  createdAt: z.number().int(),
+});
+
+export const zInboxPage = z.object({
+  data: z.array(zInboxItem),
+});
+
+export const zInboxDeliveryInput = z.object({
+  delivery: zSendDelivery,
 });
 
 export const zMessagesQuery = z.object({
@@ -158,5 +179,9 @@ export type MessagePage = z.infer<typeof zMessagePage>;
 export type SendAnswerSource = z.infer<typeof zSendAnswerSource>;
 export type SendAnswer = z.infer<typeof zSendAnswer>;
 export type SendInput = z.infer<typeof zSendInput>;
+export type SendDelivery = z.infer<typeof zSendDelivery>;
 export type SendResult = z.infer<typeof zSendResult>;
+export type InboxItem = z.infer<typeof zInboxItem>;
+export type InboxPage = z.infer<typeof zInboxPage>;
+export type InboxDeliveryInput = z.infer<typeof zInboxDeliveryInput>;
 export type MessagesQuery = z.infer<typeof zMessagesQuery>;

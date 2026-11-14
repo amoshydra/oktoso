@@ -3,6 +3,7 @@ import {
   zBranchSwitchInput,
   zCreateSessionInput,
   zForkInput,
+  zInboxDeliveryInput,
   zMessagesQuery,
   zReplyMode,
   zRetryInput,
@@ -84,6 +85,29 @@ export function registerSessionRoutes(
       parsed.data.messageId,
     );
     return c.json(result, 202);
+  });
+
+  app.get("/api/v1/sessions/:ref/inbox", async (c) => {
+    return c.json({ data: await sessions.listInbox(c.req.param("ref")) });
+  });
+
+  app.patch("/api/v1/sessions/:ref/inbox/:itemId", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zInboxDeliveryInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid inbox delivery", { issues: parsed.error.issues });
+    }
+    await sessions.updateInbox(
+      c.req.param("ref"),
+      c.req.param("itemId"),
+      parsed.data.delivery,
+    );
+    return c.body(null, 204);
+  });
+
+  app.delete("/api/v1/sessions/:ref/inbox/:itemId", async (c) => {
+    await sessions.deleteInbox(c.req.param("ref"), c.req.param("itemId"));
+    return c.body(null, 204);
   });
 
   app.post("/api/v1/sessions/:ref/fork", async (c) => {
