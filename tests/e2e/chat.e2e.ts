@@ -317,19 +317,19 @@ describe("chat sending", () => {
     await openSession("Refactor session index");
     await sendPrompt(`Slow queue check ${Date.now()}`);
 
-    const toggle = page!.getByRole("group", { name: "Message delivery" });
-    await toggle.waitFor({ state: "visible", timeout: 5_000 });
-    await toggle.getByRole("button", { name: "Queue", exact: true }).click();
+    const queueAction = page!.getByRole("button", {
+      name: "Queue message for the running agent",
+    });
+    await queueAction.waitFor({ state: "visible", timeout: 5_000 });
 
     const text = `Queued ${Date.now()}`;
     await page!.locator(".chat-composer textarea").fill(text);
-    await page!
-      .getByRole("button", { name: "Queue message for the running agent" })
-      .click();
+    await queueAction.click();
 
     const tray = page!.locator(".composer-queued");
     await tray.waitFor({ state: "visible", timeout: 5_000 });
     expect(await tray.textContent()).toContain(text);
+    expect(await page!.locator(".composer-queued-list").count()).toBe(0);
     expect(
       await page!.locator(".chat-message.user", { hasText: text }).count(),
     ).toBe(0);
@@ -343,20 +343,45 @@ describe("chat sending", () => {
     ).toBeLessThanOrEqual(0);
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    await tray.getByRole("button", { name: "Steer now" }).click();
+    await page!.locator(".composer-queued-summary").click();
+    await page!.locator(".composer-queued-list").waitFor({ timeout: 5_000 });
+    await tray.getByRole("button", { name: "Send now" }).click();
     await tray.waitFor({ state: "hidden", timeout: 5_000 });
 
     const second = `Queued again ${Date.now()}`;
     await page!.locator(".chat-composer textarea").fill(second);
-    await page!
-      .getByRole("button", { name: "Queue message for the running agent" })
-      .click();
+    await queueAction.click();
     await tray.waitFor({ state: "visible", timeout: 5_000 });
+    await page!.locator(".composer-queued-summary").click();
     await tray.getByRole("button", { name: "Remove queued message" }).click();
     await tray.waitFor({ state: "hidden", timeout: 5_000 });
     expect(
       await page!.locator(".chat-message.user", { hasText: second }).count(),
     ).toBe(0);
+  });
+
+  it("keeps the mobile composer tools behind a disclosure", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.setViewportSize({ width: 390, height: 844 });
+
+    const more = page!.getByRole("button", { name: "More composer actions" });
+    await more.waitFor({ state: "visible", timeout: 5_000 });
+    expect(
+      await page!.getByRole("button", { name: "Suggest", exact: true }).count(),
+    ).toBe(0);
+
+    await more.click();
+    const menu = page!.getByRole("group", { name: "Composer tools" });
+    await menu.waitFor({ state: "visible", timeout: 3_000 });
+    await menu.getByRole("button", { name: "Suggest" }).waitFor();
+
+    await page!.keyboard.press("Escape");
+    await menu.waitFor({ state: "hidden", timeout: 3_000 });
+    expect(
+      await page!.evaluate(() =>
+        document.activeElement?.getAttribute("aria-label"),
+      ),
+    ).toBe("More composer actions");
   });
 
   it("shows Open WebUI folders and sends an attachment", async () => {

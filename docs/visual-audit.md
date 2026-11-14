@@ -813,3 +813,42 @@ messages that the provider has not delivered yet.
   to read the tray shows inline `--danger` text without replacing the list.
 - **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
   `docs/ui-ia.md`, `docs/interaction-contract.md`.
+
+## Composer delivery revision (2026-11-15)
+
+The v1.7 delivery toggle sat in the status row, up to the full composer width
+away from the send action it changed, and the tray's `Steer now` collided with
+the toggle's `Steer`. This revision supersedes that control.
+
+- **One send meaning.** `Steer | Queue` is removed. While a turn runs, Send is
+  always **Steer**, and the hint names steer. Delivery is no longer a mode the
+  user has to read before every send.
+- **Adjacent queue action.** A quiet `Queue` text action sits directly left of
+  Send, between Interrupt and the primary button. It only renders while the
+  turn runs, only when both deliveries are supported, and disables with an
+  empty draft. It is 28px on desktop and 44px on mobile like the other quiet
+  composer actions.
+- **One-line queue summary.** The tray collapses to a 32px row (44px on
+  mobile): a 10px uppercase `QUEUED`, a tabular count, the first message at
+  11px with an ellipsis, and a 14px chevron that rotates when expanded. The
+  expanded list sits under a 1px divider, caps at 24vh, and carries `Send now`
+  and Remove at 28px desktop / 44px mobile. The summary hover uses
+  `surface-3`; the focus outline is inset so it stays inside the border.
+- **Feedback and naming.** `Send now` replaces the ambiguous `Steer now`, so
+  only the send action is called Steer. A polite status region announces the
+  queued count when it changes. Remove keeps the accessible name `Remove
+  queued message`.
+- **Mobile bar.** At 760px and below the bar stacks into a context row and an
+  actions row. `Attach` stays visible; `Suggest` and `Dictate` move to a `⋯`
+  disclosure anchored to the actions row; Interrupt reads `Stop`; Send remains
+  the 32px icon. At 320px this removes the clipped send action and lets both
+  selects show their values on the full-width row. The 200px select cap keeps
+  the model readable at 390px.
+- **Disclosure behavior.** The `⋯` menu closes on Escape, outside pointer, or
+  selection. Escape returns focus to the toggle. The queue summary expands in
+  place and drops its preview while open so the first message is not repeated.
+- **Contrast.** Summary preview and count use `--muted` at 11px on
+  `--surface-2`; the label uses `--faint` at 10px/700. Both clear 4.5:1 in dark
+  and light. The chevron is decorative.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`, `docs/interaction-contract.md`.

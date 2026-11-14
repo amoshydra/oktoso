@@ -1161,7 +1161,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         session.outcome = "succeeded";
       }
       broadcastEvent("session.updated", { sessionID });
-    }, slow ? 5_000 : 100);
+    }, slow ? 10_000 : 100);
     sendJson(response, 200, { data: { id: userID } });
     return;
   }

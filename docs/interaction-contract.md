@@ -490,20 +490,21 @@ discovery surface.
   default: it lands at the next safe step boundary, lets running tools finish,
   and is kept in the transcript. Queue waits for an idle boundary and is not in
   the provider transcript until delivered.
-- OpenCode advertises both `steer` and `queue`. While a turn runs, the composer
-  status row carries a `Steer | Queue` toggle. The send action reads **Steer**
-  or **Queue** and the hint reads `Agent running · Ctrl/⌘ Enter to steer` or
-  `… to queue`.
+- OpenCode advertises both `steer` and `queue`. Send always means steer while a
+  steer-capable turn runs, and the hint reads `Agent running · Ctrl/⌘ Enter to
+  steer`. Queue is a separate quiet action beside Send: it applies to the
+  current draft and never changes what Send does, so there is no mode to
+  remember.
 - The hub passes `delivery` through to the provider. `SendResult.delivery`
   reports the admitted mode.
-- Queued sends are not optimistic transcript rows. They render in a composer
-  queue tray above the input, fed by `GET /api/v1/sessions/:ref/inbox`, until
-  the provider delivers them. Each tray row offers **Steer now**
-  (`PATCH …/inbox/:id` with `{ delivery: "steer" }`) and Remove
-  (`DELETE …/inbox/:id`).
-- The tray polls while the turn runs or items are queued, and refreshes on
-  session events. A delivered item leaves the tray and arrives through the
-  normal transcript.
+- Queued sends are not optimistic transcript rows. They render in a one-line
+  composer summary (`Queued · N · first message…`, `GET
+  /api/v1/sessions/:ref/inbox`) that expands to the list. Each expanded row
+  offers **Send now** (`PATCH …/inbox/:id` with `{ delivery: "steer" }`, only
+  while the turn runs) and Remove (`DELETE …/inbox/:id`).
+- The summary polls while the turn runs or items are queued, and refreshes on
+  session events. A delivered item leaves the summary and arrives through the
+  normal transcript. The count change is announced to screen readers.
 - Open WebUI rejects a send while the current assistant message is not done
   with a conflict. The web disables Send while running and points to Interrupt.
   Open WebUI advertises `steer: false` and `queue: false`.

@@ -1,11 +1,11 @@
-# Design Lock — v1.7
+# Design Lock — v1.8
 
 Status: **frozen**.
 
-- Version: `design-v1.7`
-- Parent: `design-v1.6`
+- Version: `design-v1.8`
+- Parent: `design-v1.7`
 - Date: 2026-11-15
-- Git tag: `design-v1.7`
+- Git tag: `design-v1.8`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -14,6 +14,7 @@ Status: **frozen**.
 - v1.5 scope: the parent/subagent session tree and the in-flow composer status row.
 - v1.6 scope: question choice detail, option descriptions, and custom answers.
 - v1.7 scope: the composer delivery toggle and the queued-message tray.
+- v1.8 scope: the steer-default send action and the collapsed queue summary.
 
 ## What is frozen
 
@@ -251,6 +252,41 @@ exposes both without adding a route, screen, or navigation model.
   Queue. No state relies on colour alone.
 - **No new tokens.** The revision reuses the type scale, spacing steps, 8px
   control radius, pill radius, accent fill, and `--on-accent`.
+
+## Composer delivery revision (2026-11-15)
+
+The v1.7 toggle put delivery mode in the status row, far from the send action it
+changed, and put `Steer` next to a tray action named `Steer now`. This revision
+removes the mode entirely and supersedes that part of v1.7.
+
+- **Send keeps one meaning.** While a steer-capable agent runs, Send reads
+  **Steer** and the hint reads `Agent running · Ctrl/⌘ Enter to steer`. The
+  delivery default never changes under the user.
+- **Queue is an action, not a mode.** A quiet **Queue** action sits immediately
+  before Send and only renders while the turn runs and the provider supports
+  both deliveries. It applies to the current draft, disables with an empty
+  draft, and never relabels Send. Providers with queue but no steer keep the
+  `Queue` send label.
+- **Queue summary.** Queued messages collapse to one line above the composer:
+  `Queued · N · first message…` with a chevron. Expanding reveals each message
+  with **Send now** (running only) and Remove. The collapsed line uses the 8px
+  control radius, 10px uppercase label, 11px preview, and the existing border
+  and surface. The list caps at 24vh.
+- **Feedback.** The tray count updates live and is announced through a polite
+  status region. `Send now` replaces `Steer now` so the two steer actions no
+  longer collide.
+- **Responsive.** At 760px and below the summary is a 44px row and the expanded
+  actions are 44px targets. The summary truncates the preview with an ellipsis
+  instead of wrapping; the expanded list breaks long text. No horizontal
+  overflow at 320px.
+- **Mobile composer.** At 760px and below the composer bar stacks into two
+  rows: the context selects first, then the actions, right-aligned. `Attach`
+  stays inline; `Suggest` and `Dictate` move into a `⋯` disclosure anchored to
+  the actions row; Interrupt reads `Stop`; Send stays the 32px icon. The menu
+  closes on Escape, an outside pointer, or selection, and Escape returns focus
+  to its toggle. Selects grow to 200px so the current model is readable.
+- **No new tokens.** The revision reuses the type scale, spacing steps, 8px
+  control radius, accent focus outline, and existing borders.
 
 ## Change policy
 

@@ -3587,8 +3587,8 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
-  const [deliveryMode, setDeliveryMode] = useState<SendDelivery>("steer");
   const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [queuedOpen, setQueuedOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState<string>();
   const [inboxError, setInboxError] = useState<string>();
   const [previewPath, setPreviewPath] = useState<string | undefined>(
@@ -3652,6 +3652,9 @@ function SessionDetail(props: {
   const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
   const canEdit = Boolean(sessionProvider?.capabilities.fork);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
+  const toolsToggleRef = useRef<HTMLButtonElement | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const canSteer = Boolean(sessionProvider?.capabilities.steer);
   const canQueue = Boolean(sessionProvider?.capabilities.queue);
   const running = session?.status === "running";
@@ -3714,12 +3717,32 @@ function SessionDetail(props: {
   }, [canQueue, inboxLiveSeq, refreshInbox]);
 
   useEffect(() => {
-    if (!canQueue && deliveryMode === "queue") setDeliveryMode("steer");
-  }, [canQueue, deliveryMode]);
+    if (queuedItems.length === 0) setQueuedOpen(false);
+  }, [queuedItems.length]);
 
   useEffect(() => {
-    if (!canSteer && canQueue) setDeliveryMode("queue");
-  }, [canQueue, canSteer]);
+    if (!toolsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!toolsRef.current?.contains(event.target as Node)) {
+        setToolsOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setToolsOpen(false);
+      toolsToggleRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [toolsOpen]);
+
+  useEffect(() => {
+    setToolsOpen(false);
+  }, [props.sessionRef]);
 
   const getScroller = () => transcriptRef.current;
 
@@ -4134,7 +4157,19 @@ function SessionDetail(props: {
     setSuggestError(undefined);
   };
 
-  const send = async () => {
+  const runSuggest = () => {
+    setToolsOpen(false);
+    void suggestReplies();
+  };
+
+  const toggleDictation = () => {
+    setToolsOpen(false);
+    if (dictation.phase === "recording") stopDictation();
+    else void startDictation();
+  };
+
+  const send = async (override?: SendDelivery) => {
+    setToolsOpen(false);
     const text = draft.trim();
     const attachmentIDs = attachments.map((attachment) => attachment.id);
     if (
@@ -4146,12 +4181,13 @@ function SessionDetail(props: {
     ) {
       return;
     }
-    const queueDelivery = running && canQueue && deliveryMode === "queue";
-    const delivery: SendDelivery | undefined = queueDelivery
-      ? "queue"
-      : running && canSteer
-        ? "steer"
-        : undefined;
+    // Send always means steer while a steer-capable agent runs. Queue is an
+    // explicit secondary action, never a mode that changes Send's meaning.
+    const delivery: SendDelivery | undefined = running
+      ? (override ?? (canSteer ? "steer" : canQueue ? "queue" : undefined))
+      : undefined;
+    const queueDelivery =
+      delivery === "queue" && running && canQueue;
     const previousAttachments = attachments;
     setSending(true);
     setSendError(undefined);
@@ -4780,10 +4816,10 @@ function SessionDetail(props: {
         : dictation.phase === "transcribing"
           ? "Transcribing…"
           : draftStatus === "idle" && running
-            ? canQueue && deliveryMode === "queue"
-              ? "Agent running · Ctrl/⌘ Enter to queue"
-              : canSteer
-                ? "Agent running · Ctrl/⌘ Enter to steer"
+            ? canSteer
+              ? "Agent running · Ctrl/⌘ Enter to steer"
+              : canQueue
+                ? "Agent running · Ctrl/⌘ Enter to queue"
                 : "Agent running · interrupt to send"
             : draftStatusLabel(draftStatus);
   const resource: ResourceContext = {
@@ -5157,38 +5193,15 @@ function SessionDetail(props: {
             ) : null}
 
             <div className="chat-composer-wrap">
-              {backgroundItems.length > 0 ||
-              !atBottom ||
-              (running && canSteer && canQueue) ? (
+              <span className="sr-only" role="status" aria-live="polite">
+                {queuedItems.length > 0
+                  ? `${queuedItems.length} queued message${
+                      queuedItems.length === 1 ? "" : "s"
+                    }`
+                  : ""}
+              </span>
+              {backgroundItems.length > 0 || !atBottom ? (
                 <div className="composer-status">
-                  {running && canSteer && canQueue ? (
-                    <div
-                      className="composer-delivery"
-                      role="group"
-                      aria-label="Message delivery"
-                    >
-                      <button
-                        className={`composer-delivery-option ${
-                          deliveryMode === "steer" ? "active" : ""
-                        }`}
-                        type="button"
-                        aria-pressed={deliveryMode === "steer"}
-                        onClick={() => setDeliveryMode("steer")}
-                      >
-                        Steer
-                      </button>
-                      <button
-                        className={`composer-delivery-option ${
-                          deliveryMode === "queue" ? "active" : ""
-                        }`}
-                        type="button"
-                        aria-pressed={deliveryMode === "queue"}
-                        onClick={() => setDeliveryMode("queue")}
-                      >
-                        Queue
-                      </button>
-                    </div>
-                  ) : null}
                   {backgroundItems.length > 0 ? (
                     <button
                       className="chat-background-chip"
@@ -5220,42 +5233,65 @@ function SessionDetail(props: {
                   role="region"
                   aria-label="Queued messages"
                 >
-                  <div className="composer-queued-head" role="status">
-                    <span>Queued</span>
+                  <button
+                    className="composer-queued-summary"
+                    type="button"
+                    aria-expanded={queuedOpen}
+                    aria-controls="composer-queued-list"
+                    onClick={() => setQueuedOpen((open) => !open)}
+                  >
+                    <span className="composer-queued-label">Queued</span>
                     <span className="composer-queued-count">
                       {queuedItems.length}
                     </span>
-                  </div>
+                    {!queuedOpen ? (
+                      <span className="composer-queued-preview">
+                        {queuedItems[0]?.text}
+                      </span>
+                    ) : null}
+                    <Icon
+                      name="chevron-right"
+                      size={14}
+                      className="composer-queued-chevron"
+                    />
+                  </button>
                   {inboxError ? (
                     <div className="composer-queued-error" role="status">
                       {inboxError}
                     </div>
                   ) : null}
-                  <div className="composer-queued-list">
-                    {queuedItems.map((item) => (
-                      <div className="composer-queued-item" key={item.id}>
-                        <span className="composer-queued-text">{item.text}</span>
-                        <div className="composer-queued-actions">
-                          <button
-                            type="button"
-                            disabled={inboxBusy === item.id}
-                            onClick={() => void promoteQueued(item)}
-                          >
-                            Steer now
-                          </button>
-                          <button
-                            className="composer-queued-remove"
-                            type="button"
-                            aria-label="Remove queued message"
-                            disabled={inboxBusy === item.id}
-                            onClick={() => void removeQueued(item)}
-                          >
-                            ×
-                          </button>
+                  {queuedOpen ? (
+                    <div
+                      className="composer-queued-list"
+                      id="composer-queued-list"
+                    >
+                      {queuedItems.map((item) => (
+                        <div className="composer-queued-item" key={item.id}>
+                          <span className="composer-queued-text">{item.text}</span>
+                          <div className="composer-queued-actions">
+                            {running ? (
+                              <button
+                                type="button"
+                                disabled={inboxBusy === item.id}
+                                onClick={() => void promoteQueued(item)}
+                              >
+                                Send now
+                              </button>
+                            ) : null}
+                            <button
+                              className="composer-queued-remove"
+                              type="button"
+                              aria-label="Remove queued message"
+                              disabled={inboxBusy === item.id}
+                              onClick={() => void removeQueued(item)}
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <form
@@ -5510,14 +5546,14 @@ function SessionDetail(props: {
                   <div className="composer-actions">
                     {suggestEnabled ? (
                       <button
-                        className="composer-voice"
+                        className="composer-voice composer-desktop-tool"
                         type="button"
                         disabled={
                           suggestState === "loading" ||
                           dictationBusy ||
                           sending
                         }
-                        onClick={() => void suggestReplies()}
+                        onClick={runSuggest}
                       >
                         {suggestState === "loading" ? "Reading…" : "Suggest"}
                       </button>
@@ -5534,7 +5570,7 @@ function SessionDetail(props: {
                     ) : null}
                     {dictationSupported ? (
                       <button
-                        className={`composer-voice ${dictation.phase === "recording" ? "recording" : ""}`}
+                        className={`composer-voice composer-desktop-tool ${dictation.phase === "recording" ? "recording" : ""}`}
                         type="button"
                         disabled={
                           dictation.phase === "starting" ||
@@ -5548,10 +5584,7 @@ function SessionDetail(props: {
                               ? "Transcribing"
                               : "Start dictation"
                         }
-                        onClick={() => {
-                          if (dictation.phase === "recording") stopDictation();
-                          else void startDictation();
-                        }}
+                        onClick={toggleDictation}
                       >
                         {dictation.phase === "starting"
                           ? "Starting…"
@@ -5562,24 +5595,113 @@ function SessionDetail(props: {
                               : "Dictate"}
                       </button>
                     ) : null}
-                    {session.status === "running" ? (
+                    {suggestEnabled || dictationSupported ? (
+                      <div className="composer-tools" ref={toolsRef}>
+                        <button
+                          ref={toolsToggleRef}
+                          className="composer-voice composer-tools-toggle"
+                          type="button"
+                          aria-label="More composer actions"
+                          aria-expanded={toolsOpen}
+                          aria-controls="composer-tools-menu"
+                          onClick={() => setToolsOpen((open) => !open)}
+                        >
+                          ⋯
+                        </button>
+                        {toolsOpen ? (
+                          <div
+                            className="composer-tools-menu"
+                            id="composer-tools-menu"
+                            role="group"
+                            aria-label="Composer tools"
+                          >
+                            {suggestEnabled ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  suggestState === "loading" ||
+                                  dictationBusy ||
+                                  sending
+                                }
+                                onClick={runSuggest}
+                              >
+                                {suggestState === "loading"
+                                  ? "Reading…"
+                                  : "Suggest"}
+                              </button>
+                            ) : null}
+                            {dictationSupported ? (
+                              <button
+                                type="button"
+                                className={
+                                  dictation.phase === "recording"
+                                    ? "recording"
+                                    : undefined
+                                }
+                                disabled={
+                                  dictation.phase === "starting" ||
+                                  dictation.phase === "transcribing"
+                                }
+                                aria-pressed={dictation.phase === "recording"}
+                                onClick={toggleDictation}
+                              >
+                                {dictation.phase === "starting"
+                                  ? "Starting…"
+                                  : dictation.phase === "recording"
+                                    ? "Stop dictation"
+                                    : dictation.phase === "transcribing"
+                                      ? "Transcribing…"
+                                      : "Dictate"}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {running ? (
                       <button
-                        className="btn small"
+                        className="btn small composer-interrupt"
                         type="button"
                         disabled={interrupting}
+                        aria-label={
+                          interrupting
+                            ? "Interrupting"
+                            : "Interrupt the running agent"
+                        }
                         onClick={() => void interrupt()}
                       >
-                        {interrupting ? "Interrupting…" : "Interrupt"}
+                        <span className="composer-interrupt-long">
+                          {interrupting ? "Interrupting…" : "Interrupt"}
+                        </span>
+                        <span className="composer-interrupt-short">
+                          {interrupting ? "Stopping…" : "Stop"}
+                        </span>
+                      </button>
+                    ) : null}
+                    {running && canSteer && canQueue ? (
+                      <button
+                        className="composer-voice composer-queue"
+                        type="button"
+                        aria-label="Queue message for the running agent"
+                        disabled={
+                          sending ||
+                          (!draft.trim() && attachments.length === 0) ||
+                          dictationBusy ||
+                          uploadingAttachments > 0
+                        }
+                        onClick={() => void send("queue")}
+                      >
+                        Queue
                       </button>
                     ) : null}
                     <button
                       className="btn primary small composer-send"
                       type="submit"
                       aria-label={
-                        running && canQueue && deliveryMode === "queue"
-                          ? "Queue message for the running agent"
-                          : running && canSteer
-                            ? "Steer the running agent"
+                        running && canSteer
+                          ? "Steer the running agent"
+                          : running && canQueue
+                            ? "Queue message for the running agent"
                             : sending
                               ? "Sending message"
                               : "Send message"
@@ -5593,10 +5715,10 @@ function SessionDetail(props: {
                       }
                     >
                       <span className="composer-send-label">
-                        {running && canQueue && deliveryMode === "queue"
-                          ? "Queue"
-                          : running && canSteer
-                            ? "Steer"
+                        {running && canSteer
+                          ? "Steer"
+                          : running && canQueue
+                            ? "Queue"
                             : sending
                               ? "Sending…"
                               : "Send"}
