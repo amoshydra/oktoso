@@ -236,7 +236,7 @@ sessions, reads a transcript, and acts on an attention item; writes to its own
 session are rejected, destructive actions require approval, and resource
 subscribers see attention updates.
 
-### Phase 3 — Always-on attention (next)
+### Phase 3 — Always-on attention (complete, A7 deferred)
 
 Goal: the hub reaches you. A blocking question, a failed run, or a finished
 long-running session arrives on the phone with the app closed, and tapping it
