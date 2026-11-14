@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   AttentionPage,
+  AutomationApproval,
+  AutomationRun,
+  AutomationView,
   Provider,
   SessionPage,
 } from "@amoshydra/oktoso-contracts";
@@ -26,6 +29,89 @@ const attention = {
   ],
 } as unknown as AttentionPage;
 
+const automationView: AutomationView = {
+  enabled: true,
+  paused: false,
+  dryRun: true,
+  watchers: [
+    {
+      id: "global",
+      enabled: true,
+      trigger: { kind: "attention", types: ["question"] },
+      action: { kind: "escalate" },
+      dryRun: true,
+      limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+    },
+    {
+      id: "open",
+      enabled: true,
+      trigger: { kind: "attention", types: ["question"] },
+      condition: { providerID: "opencode" },
+      action: { kind: "escalate" },
+      dryRun: true,
+      limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+    },
+    {
+      id: "web",
+      enabled: true,
+      trigger: { kind: "attention", types: ["question"] },
+      condition: { providerID: "openwebui" },
+      action: { kind: "escalate" },
+      dryRun: true,
+      limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+    },
+  ],
+  pausedWatchers: ["open", "web"],
+  runs: [
+    {
+      id: "run_open",
+      watcherID: "open",
+      trigger: "attention:question",
+      decision: "acted",
+      reason: "answered",
+      sessionRef: "opencode:ses_a",
+      at: 1,
+    },
+    {
+      id: "run_web",
+      watcherID: "web",
+      trigger: "attention:question",
+      decision: "acted",
+      reason: "answered",
+      sessionRef: "openwebui:chat_b",
+      at: 2,
+    },
+  ] as AutomationRun[],
+  approvals: [
+    {
+      id: "approval_open",
+      watcherID: "open",
+      attentionID: "att_open",
+      sessionRef: "opencode:ses_a",
+      title: "Open",
+      summary: "Open",
+      action: { kind: "escalate" },
+      reason: "not_low_risk",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: 2,
+    },
+    {
+      id: "approval_web",
+      watcherID: "web",
+      attentionID: "att_web",
+      sessionRef: "openwebui:chat_b",
+      title: "Web",
+      summary: "Web",
+      action: { kind: "escalate" },
+      reason: "not_low_risk",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: 2,
+    },
+  ] as AutomationApproval[],
+};
+
 function createApi() {
   return {
     providers: vi.fn(async () => providers),
@@ -40,6 +126,12 @@ function createApi() {
     interrupt: vi.fn(async () => undefined),
     markRead: vi.fn(async () => undefined),
     actOnAttention: vi.fn(async () => undefined),
+    automation: vi.fn(async () => automationView),
+    automationRuns: vi.fn(async () => automationView.runs),
+    approvals: vi.fn(async () => automationView.approvals),
+    setAutomation: vi.fn(async () => automationView),
+    setWatcherPaused: vi.fn(async () => automationView),
+    actOnApproval: vi.fn(async () => undefined),
   } as unknown as McpHubApi;
 }
 
@@ -88,6 +180,21 @@ describe("withProviderPolicy", () => {
     await expect(scoped.markRead("openwebui:chat_b")).rejects.toThrow(
       /not allowed/,
     );
+  });
+
+  it("filters automation watchers, runs, and approvals by provider", async () => {
+    const scoped = withProviderPolicy(createApi(), ["opencode"]);
+
+    const view = await scoped.automation();
+    expect(view.watchers.map((watcher) => watcher.id)).toEqual([
+      "global",
+      "open",
+    ]);
+    expect(view.pausedWatchers).toEqual(["open"]);
+    expect(view.runs.map((run) => run.id)).toEqual(["run_open"]);
+    expect(view.approvals.map((approval) => approval.id)).toEqual([
+      "approval_open",
+    ]);
   });
 
   it("filters attention and blocks actions on hidden items", async () => {

@@ -93,8 +93,17 @@ export function withProviderPolicy(
     },
     async automation() {
       const view = await api.automation();
+      const watchers = view.watchers.filter((watcher) => {
+        const providerID = watcher.condition?.providerID;
+        return !providerID || allowed.has(providerID);
+      });
+      const visibleWatchers = new Set(watchers.map((watcher) => watcher.id));
       return {
         ...view,
+        watchers,
+        pausedWatchers: view.pausedWatchers.filter((id) =>
+          visibleWatchers.has(id),
+        ),
         runs: view.runs.filter(
           (run) => !run.sessionRef || allowed.has(providerOf(run.sessionRef)),
         ),
