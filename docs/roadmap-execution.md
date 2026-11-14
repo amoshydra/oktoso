@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: A1–A5 complete. A6 (Settings UI) is next.
+Status: A1–A6 complete. A7 (outbound channels) is next.
 
 ### A1. Contracts and configuration
 
@@ -169,16 +169,21 @@ card. Push subscription helpers live in `apps/web/src/pwa.ts`.
 
 ### A6. Settings UI
 
-- [ ] Add `apps/web/src/app/settings-notifications.tsx` (new module).
-- [ ] Enable/disable per device, send a test, show permission state.
-- [ ] Quiet hours, per-type routing, digest window.
-- [ ] Device list with last seen and revoke.
-- [ ] Keep the existing type scale and one primary action per surface.
+- [x] Add `apps/web/src/app/settings-notifications.tsx` (new module).
+- [x] Enable/disable per device, send a test, show permission state.
+- [x] Quiet hours, per-type routing, digest window.
+- [x] Device list with last seen and revoke.
+- [x] Keep the existing type scale and one primary action per surface.
 
 **Touch:** `apps/web/src/app/settings-notifications.tsx`,
 `apps/web/src/styles.css`, `docs/ui-ia.md`, `docs/visual-audit.md`.
 **Done:** works at 1440, 1024, 390, and 320; no horizontal overflow; reviewed in
 both themes.
+
+Status: implemented. The panel lives in
+`apps/web/src/app/settings-notifications.tsx`, loads from
+`/api/v1/notifications`, and uses the existing panel/form/button grammar.
+An e2e saves routing and verifies it survives a reload.
 
 ### A7. Outbound channels
 
