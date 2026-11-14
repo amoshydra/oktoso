@@ -20,6 +20,7 @@ tags:
   - name: transcription
   - name: events
   - name: search
+  - name: notifications
   - name: diagnostics
 security:
   - bearerAuth: []
@@ -2955,6 +2956,469 @@ components:
         - title
         - providerID
         - updatedAt
+    NotificationChannelKind:
+      type: string
+      enum:
+        - webpush
+        - ntfy
+        - telegram
+        - webhook
+    QuietHours:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        start:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          default: 22:00
+        end:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          default: 07:00
+        timezone:
+          type: string
+          minLength: 1
+          default: UTC
+    NotificationRouting:
+      type: object
+      properties:
+        immediate:
+          type: array
+          items:
+            type: string
+            enum:
+              - permission
+              - approval
+              - question
+              - unread
+              - error
+          default:
+            - permission
+            - approval
+        digest:
+          type: array
+          items:
+            type: string
+            enum:
+              - permission
+              - approval
+              - question
+              - unread
+              - error
+          default:
+            - question
+            - unread
+            - error
+        digestWindowMs:
+          type: integer
+          minimum: 60000
+          maximum: 86400000
+          default: 900000
+        quietHours:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: false
+            start:
+              type: string
+              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+              default: 22:00
+            end:
+              type: string
+              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+              default: 07:00
+            timezone:
+              type: string
+              minLength: 1
+              default: UTC
+          default:
+            enabled: false
+            start: 22:00
+            end: 07:00
+            timezone: UTC
+    NotificationChannelView:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - webpush
+            - ntfy
+            - telegram
+            - webhook
+        enabled:
+          type: boolean
+        configured:
+          type: boolean
+        label:
+          type: string
+      required:
+        - kind
+        - enabled
+        - configured
+    PushSubscriptionInput:
+      type: object
+      properties:
+        deviceID:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-zA-Z0-9._:-]+$
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        endpoint:
+          type: string
+          format: uri
+        keys:
+          type: object
+          properties:
+            p256dh:
+              type: string
+              minLength: 1
+            auth:
+              type: string
+              minLength: 1
+          required:
+            - p256dh
+            - auth
+        expirationTime:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+      required:
+        - deviceID
+        - endpoint
+        - keys
+    PushSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+        deviceID:
+          type: string
+        label:
+          type: string
+        createdAt:
+          type: integer
+        lastSeenAt:
+          type: integer
+        expirationTime:
+          type:
+            - integer
+            - "null"
+      required:
+        - id
+        - deviceID
+        - createdAt
+        - lastSeenAt
+    PushSubscriptionPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              deviceID:
+                type: string
+              label:
+                type: string
+              createdAt:
+                type: integer
+              lastSeenAt:
+                type: integer
+              expirationTime:
+                type:
+                  - integer
+                  - "null"
+            required:
+              - id
+              - deviceID
+              - createdAt
+              - lastSeenAt
+      required:
+        - data
+    NotificationDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        channel:
+          type: string
+          enum:
+            - webpush
+            - ntfy
+            - telegram
+            - webhook
+        attentionID:
+          type: string
+        sessionRef:
+          type: string
+        status:
+          type: string
+          enum:
+            - queued
+            - sent
+            - failed
+            - skipped
+        attempts:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: integer
+        sentAt:
+          type: integer
+        error:
+          type: string
+      required:
+        - id
+        - channel
+        - attentionID
+        - sessionRef
+        - status
+        - attempts
+        - createdAt
+    NotificationDeliveryPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              channel:
+                type: string
+                enum:
+                  - webpush
+                  - ntfy
+                  - telegram
+                  - webhook
+              attentionID:
+                type: string
+              sessionRef:
+                type: string
+              status:
+                type: string
+                enum:
+                  - queued
+                  - sent
+                  - failed
+                  - skipped
+              attempts:
+                type: integer
+                minimum: 0
+              createdAt:
+                type: integer
+              sentAt:
+                type: integer
+              error:
+                type: string
+            required:
+              - id
+              - channel
+              - attentionID
+              - sessionRef
+              - status
+              - attempts
+              - createdAt
+      required:
+        - data
+    NotificationTestInput:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum:
+            - webpush
+            - ntfy
+            - telegram
+            - webhook
+    NotificationTestResult:
+      type: object
+      properties:
+        attempted:
+          type: integer
+          minimum: 0
+        delivered:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+      required:
+        - attempted
+        - delivered
+        - failed
+    NotificationSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        channels:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - webpush
+                  - ntfy
+                  - telegram
+                  - webhook
+              enabled:
+                type: boolean
+              configured:
+                type: boolean
+              label:
+                type: string
+            required:
+              - kind
+              - enabled
+              - configured
+        routing:
+          type: object
+          properties:
+            immediate:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+              default:
+                - permission
+                - approval
+            digest:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+              default:
+                - question
+                - unread
+                - error
+            digestWindowMs:
+              type: integer
+              minimum: 60000
+              maximum: 86400000
+              default: 900000
+            quietHours:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                start:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                  default: 22:00
+                end:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                  default: 07:00
+                timezone:
+                  type: string
+                  minLength: 1
+                  default: UTC
+              default:
+                enabled: false
+                start: 22:00
+                end: 07:00
+                timezone: UTC
+        subscriptions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              deviceID:
+                type: string
+              label:
+                type: string
+              createdAt:
+                type: integer
+              lastSeenAt:
+                type: integer
+              expirationTime:
+                type:
+                  - integer
+                  - "null"
+            required:
+              - id
+              - deviceID
+              - createdAt
+              - lastSeenAt
+      required:
+        - enabled
+        - channels
+        - routing
+        - subscriptions
+    NotificationSettingsInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        routing:
+          type: object
+          properties:
+            immediate:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+            digest:
+              type: array
+              items:
+                type: string
+                enum:
+                  - permission
+                  - approval
+                  - question
+                  - unread
+                  - error
+            digestWindowMs:
+              type: integer
+              minimum: 60000
+              maximum: 86400000
+            quietHours:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                start:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                end:
+                  type: string
+                  pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                timezone:
+                  type: string
+                  minLength: 1
   parameters: {}
 paths:
   /api/v1/health:

@@ -282,3 +282,98 @@ describe("config file permissions", () => {
     }
   });
 });
+
+describe("notification config", () => {
+  it("defaults notifications off", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+    });
+    try {
+      const config = await loadConfig(filePath, {});
+
+      expect(config.notifications.enabled).toBe(false);
+      expect(config.notifications.channels).toEqual([]);
+      expect(config.notifications.routing.immediate).toEqual([
+        "permission",
+        "approval",
+      ]);
+      expect(config.notifications.maxAttempts).toBe(3);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("interpolates notification channel secrets", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      notifications: {
+        enabled: true,
+        channels: [
+          {
+            kind: "ntfy",
+            url: "https://ntfy.example.com",
+            topic: "oktoso",
+            token: "${NTFY_TOKEN}",
+          },
+          {
+            kind: "telegram",
+            botToken: "${TELEGRAM_BOT_TOKEN}",
+            chatID: "12345",
+          },
+        ],
+      },
+    });
+    try {
+      const config = await loadConfig(filePath, {
+        NTFY_TOKEN: "ntfy-secret",
+        TELEGRAM_BOT_TOKEN: "telegram-secret",
+      });
+
+      expect(config.notifications.channels[0]).toMatchObject({
+        kind: "ntfy",
+        token: "ntfy-secret",
+      });
+      expect(config.notifications.channels[1]).toMatchObject({
+        kind: "telegram",
+        botToken: "telegram-secret",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate notification channels", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      notifications: {
+        channels: [
+          { kind: "webhook", url: "https://one.example.com" },
+          { kind: "webhook", url: "https://two.example.com" },
+        ],
+      },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /Duplicate notification channel: webhook/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects half a VAPID key pair", async () => {
+    const { root, filePath } = await writeConfig({
+      token: "this-is-a-long-dev-token",
+      notifications: {
+        vapid: { publicKey: "only-public" },
+      },
+    });
+    try {
+      await expect(loadConfig(filePath, {})).rejects.toThrow(
+        /vapid.publicKey and vapid.privateKey must be set together/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
