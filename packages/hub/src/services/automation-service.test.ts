@@ -115,7 +115,7 @@ async function setup(
   options: {
     config?: Partial<AutomationConfig>;
     prompt?: QuestionPrompt | null;
-    send?: (input: SendInput) => Promise<void>;
+    send?: (input: SendInput, signal?: AbortSignal) => Promise<void>;
     clock?: { now: number };
     sessions?: Record<string, unknown>;
     notify?: (item: Attention) => Promise<void>;
@@ -133,8 +133,13 @@ async function setup(
     },
   } as unknown as QuestionService;
   const actions = {
-    async send(ref: string, input: SendInput, key?: string) {
-      if (options.send) await options.send(input);
+    async send(
+      ref: string,
+      input: SendInput,
+      key?: string,
+      signal?: AbortSignal,
+    ) {
+      if (options.send) await options.send(input, signal);
       sends.push({ ref, input, key });
       return { accepted: true };
     },
@@ -644,6 +649,82 @@ describe("AutomationService triggers and actions", () => {
     expect(service.runs()[0]).toMatchObject({
       decision: "acted",
       reason: "retried",
+    });
+  });
+
+  it("aborts an in-flight action when the hub is paused", async () => {
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    let aborted = false;
+    const { bus, service } = await setup({
+      send: async (_input, signal) => {
+        began();
+        await new Promise<void>((resolve, reject) => {
+          if (!signal) {
+            resolve();
+            return;
+          }
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+
+    await publish(bus, attention());
+    await started;
+    await service.updateSettings({ paused: true });
+    await service.whenIdle();
+
+    expect(aborted).toBe(true);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "skipped",
+      reason: "aborted",
+    });
+  });
+
+  it("aborts an in-flight action when its watcher is paused", async () => {
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    let aborted = false;
+    const { bus, service } = await setup({
+      send: async (_input, signal) => {
+        began();
+        await new Promise<void>((resolve, reject) => {
+          if (!signal) {
+            resolve();
+            return;
+          }
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+
+    await publish(bus, attention());
+    await started;
+    await service.setWatcherPaused("w1", true);
+    await service.whenIdle();
+
+    expect(aborted).toBe(true);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "skipped",
+      reason: "aborted",
     });
   });
 
