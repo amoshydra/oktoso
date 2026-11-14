@@ -27,7 +27,9 @@ Implementation phase. `v0.1.11` ships the chat interaction slice: message copy, 
 ## Documents
 
 - [`docs/design.md`](docs/design.md) - architecture, domain model, provider adapters, API, security, deployment
-- [`docs/plan.md`](docs/plan.md) - phased delivery plan and acceptance criteria
+- [`docs/roadmap.md`](docs/roadmap.md) - product audit, strategy, phases, and acceptance
+- [`docs/roadmap-execution.md`](docs/roadmap-execution.md) - ordered work breakdown, dependencies, and release map
+- [`docs/plan.md`](docs/plan.md) - milestone plan and acceptance criteria
 - [`docs/code-structure.md`](docs/code-structure.md) - implementation systems, repository layout, API additions, and task sequencing
 - [`docs/ui-ia.md`](docs/ui-ia.md) - information architecture, screens, flows, responsive and glasses/VR adaptations
 - [`docs/visual-audit.md`](docs/visual-audit.md) - contrast audit, visual tokens, and component rules

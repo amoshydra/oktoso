@@ -1,13 +1,15 @@
 # Oktoso — naming and roadmap
 
-Status: Phase 0, Phase 1, and Phase 2 complete; `v0.1.11` is published. MCP northbound is implemented and awaiting release. Updated 2026-11-03.
+Status: Phase 0, Phase 1, and Phase 2 complete; `v0.1.28` is published. This
+revision is the 2026-11-14 project audit and re-plan. The phase-level work
+breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
 
 ## Name
 
 **Final name: Oktoso**
 
-**Package:** `@amoshydra/oktoso`  
-**Binary:** `oktoso`  
+**Package:** `@amoshydra/oktoso`
+**Binary:** `oktoso`
 **Invocation:** `npx @amoshydra/oktoso`
 
 Tagline:
@@ -72,6 +74,111 @@ Publish a scoped package publicly with:
 }
 ```
 
+## Where the project is
+
+The 2026-11-14 audit read the repository at `199624a` plus the reply slice that
+followed it. It was static: source, tests, contracts, and docs. No load test and
+no real-hardware run.
+
+### Snapshot
+
+- 46k lines of TypeScript across `packages/` and `apps/`.
+- 54 HTTP endpoints in 16 route files, plus the hosted `/mcp` surface.
+- 63 test files, 459 unit tests, and 14 Playwright end-to-end tests against fake
+  providers.
+- Three live surfaces over one API: web, Even G2, and the terminal dashboard.
+- `v0.1.28`, published to npm with release-please and OIDC provenance.
+- 17 capability flags negotiated per provider.
+
+### Strengths
+
+| Strength | Why it matters |
+|---|---|
+| Contracts-first (`zod` → generated OpenAPI, CI-checked) | New fields stay safe; clients can version independently |
+| Capabilities over assumptions | A partially capable provider does not break the UI |
+| Thin clients, hub-owned credentials | Surfaces are replaceable; secrets live in one place |
+| Deterministic fake providers plus e2e | Rare regression safety for a project this size |
+| Three shipping surfaces | G2 is a real differentiator, not a mockup |
+| MCP northbound already done | Scopes, allowlists, rate limits, audit, and resource subscriptions |
+| Design-lock and interaction contract | Objective UI review and no silent redesign |
+
+### Gaps, ranked by user impact
+
+1. **No push notifications.** The only way to learn that a question is waiting is
+   to open the app or look at the glasses. This is the largest product hole for a
+   mobile-first user.
+2. **No installable offline PWA.** `design.md` calls the web client a PWA, but
+   there is a manifest and no service worker, offline shell, or queued send.
+3. **Hermes is health-only.** `provider-registry.ts` checks
+   `/v1/capabilities`, but only the OpenCode and Open WebUI adapters exist. The
+   README promise is ahead of the code.
+4. **Search is sessions-only.** `contracts/search.ts` advertises
+   `scope: "messages"`, and no route implements it. A dangling contract is worse
+   than no contract.
+5. **No session-family tree.** `parentRef` and subagent children exist, but no
+   lineage view. Still an open Milestone 1 item.
+6. **No cost or token rollups.** Every session carries cost and tokens; nothing
+   aggregates them.
+7. **`App.tsx` is 7,219 lines** and `styles.css` is 4,094. `reply-service.ts` is
+   1,740. Not urgent, but every UI change pays the tax.
+8. **No metrics endpoint.** `/api/v1/diagnostics` is not a substitute for
+   `/metrics`.
+9. **Local state grows without retention.** Drafts, read markers, and reply
+   feedback are JSON stores with no TTL or per-record delete. Reply feedback
+   has an export route; nothing else does.
+10. **No device-management screen.** Pairing exists, but token rotation revokes
+    every session and there is no per-device revoke.
+
+### Verdict
+
+Oktoso is a strong multi-provider **dashboard** with a genuine control-plane
+foundation. It observes a lot and acts on very little automatically. The next
+phase is not more read surfaces; it is closing the loop between "the hub saw
+something" and "the hub did something about it."
+
+## Strategy
+
+The product moves through three modes, in this order:
+
+1. **Dashboard** — see every session and what needs attention. Largely done.
+2. **Supervisor** — wake you only when it matters, and handle the safe cases.
+3. **Delegated operator** — act under explicit policy, with audit and a kill
+   switch.
+
+Four assets are under-exploited and determine the roadmap:
+
+- **Attention is the product.** The inbox is the only screen that creates a daily
+  habit. Notifications, dedupe, quiet hours, and one-tap answers beat new browse
+  views.
+- **The write path is half-built.** Send, fork, retry, edit, answer, and a reply
+  model with a feedback store already exist. What is missing is a policy layer.
+- **Data gravity is unexploited.** The hub sees every transcript and stores
+  almost none of it. A write-through cache (providers stay canonical) unlocks
+  message search, cost visibility, and export.
+- **The capability model is an SDK waiting to happen.** Extracting it turns
+  "supports three providers" into "anyone can add one."
+
+The strategic fork:
+
+- **A. Personal command center** (now): notifications, PWA, G2, automation,
+  recall. Deep and excellent for one operator.
+- **C. Agent infrastructure** (next): watchers, policy, MCP southbound, provider
+  SDK. This is where the "control plane" claim becomes true.
+- **B. Team control plane** (defer): multi-user, RBAC, shared provider pools.
+  It is a different product and breaks a deliberate non-goal.
+
+Sequence A → C. Defer B until there is demand.
+
+### Re-sequencing note
+
+This revision changes the earlier plan:
+
+- Old Phase 3 (MCP southbound) becomes **Phase 7**. The mobile loop comes first.
+- Old Phase 4 (continuous control) splits into **Phase 3 (notifications)** and
+  **Phase 4 (supervisor)**.
+- Old Phase 5 (surfaces and ecosystem) becomes **Phase 9**, with the provider SDK
+  promoted to **Phase 6** and Hermes folded into it.
+
 ## Roadmap
 
 ### Phase 0 — Foundation (done)
@@ -106,17 +213,14 @@ npx @amoshydra/oktoso pair
 Starts without native modules, prints the dashboard, and serves the web/G2 apps
 from the package.
 
-### Phase 2 — MCP northbound: agents control Oktoso (complete)
+### Phase 2 — MCP northbound: agents control Oktoso (done)
 
-Status: complete. The `oktoso mcp` stdio bridge and the hub-hosted `/mcp`
-Streamable HTTP endpoint are implemented. Read-only is the default; `--allow-write`
-and hosted token scopes gate writes. Hosted tokens also carry provider and tool
-allowlists, per-client rate limits, and call timeouts. Every hosted tool call is
-audited without logging prompts or message text. `oktoso://attention` and
-`oktoso://sessions` resources support subscriptions, so clients can react to
-attention and session events instead of polling. OAuth remains a follow-up.
-
-Expose Oktoso as an MCP server so external LLM agents can use it.
+The `oktoso mcp` stdio bridge and the hub-hosted `/mcp` Streamable HTTP endpoint
+are implemented. Read-only is the default; `--allow-write` and hosted token
+scopes gate writes. Hosted tokens carry provider and tool allowlists, per-client
+rate limits, and call timeouts. Every hosted tool call is audited without
+logging prompts or message text. `oktoso://attention` and `oktoso://sessions`
+resources support subscriptions. OAuth remains a follow-up.
 
 Tools/resources:
 
@@ -127,72 +231,169 @@ Tools/resources:
 - `questions_get`
 - `oktoso://attention` and `oktoso://sessions` resources with subscriptions
 
-Security:
+Acceptance (met): an external agent connects over stdio or hosted `/mcp`, lists
+sessions, reads a transcript, and acts on an attention item; writes to its own
+session are rejected, destructive actions require approval, and resource
+subscribers see attention updates.
 
-- Scoped MCP tokens, not the owner token.
-- Per-tool and per-provider allowlists.
-- Human approval for destructive actions.
-- Audit every tool call with client identity and result.
-- Rate limits and timeouts.
+### Phase 3 — Always-on attention (next)
+
+Goal: the hub reaches you. A blocking question, a failed run, or a finished
+long-running session arrives on the phone with the app closed, and tapping it
+opens the exact item.
+
+This is the highest-leverage phase because the product's daily habit is the
+inbox, and the current loop requires opening the app.
+
+Deliverables:
+
+- Web Push (VAPID) from the hub, with a service worker, subscription lifecycle,
+  and `410 Gone` cleanup.
+- Outbound channels: ntfy, Telegram, and a generic webhook. Config only, plain
+  HTTP, no new runtime dependency.
+- Routing rules: blocking immediate, unread/error digest, quiet hours, and
+  coalescing ("3 questions from 2 sessions").
+- Installable PWA: offline shell, cached session list, queued sends, and a
+  visible connection state.
+- Deep links into the exact attention item from a notification.
+- Settings → Notifications: enable, test, per-type routing, quiet hours, devices.
+- An `oktoso notify test` CLI path for operators.
 
 Acceptance:
 
-An external agent connects over stdio or hosted `/mcp`, lists sessions, reads a
-transcript, and acts on an attention item; writes to its own session are
-rejected, destructive actions require approval, and resource subscribers see
-attention updates.
+- A blocking question reaches a phone with the app closed in under five seconds.
+- Four events from one session produce one notification.
+- Quiet hours suppress non-blocking notifications and queue a digest.
+- Tapping a notification opens the exact item, not the inbox root.
+- A revoked or expired subscription is removed and never retried forever.
+- The app installs to a home screen and opens the last screen offline.
 
-### Phase 3 — MCP southbound: providers and tools as patch points (planned)
+### Phase 4 — Supervisor (planned)
 
-Oktoso also acts as an MCP client:
+Goal: the hub handles the safe cases and escalates the rest. This is the
+continuous-control layer, reduced to something shippable: declarative watchers,
+a risk policy, an approval queue, and a kill switch.
 
-- Connect to provider-exposed MCP servers.
-- Discover tools and capabilities.
-- Route tool calls through one policy layer.
+Deliverables:
+
+- Watchers on the event bus: `question.arrived`, `session.error`,
+  `session.idle`, and schedule.
+- Actions: notify, auto-answer, escalate, retry, and start-from-template.
+- Risk policy: allowlist of low-risk question shapes, destructive and sensitive
+  escalation, quiet hours, actions per hour, and token budget per day.
+- Approval queue reusing the inbox grammar, with an audit trail per run.
+- Dry-run mode on by default for every new watcher.
+- Global and per-watcher pause.
+- MCP tools for automations and approvals for northbound agents.
+
+Acceptance:
+
+- A watcher answers a safe yes/no question and escalates a destructive one.
+- Two watchers never answer the same question twice.
+- Dry-run records the intended action and sends nothing.
+- The kill switch stops a watcher mid-flight.
+- Every autonomous action is attributable to a watcher, a policy, and a run.
+
+### Phase 5 — Recall and lineage (planned)
+
+Goal: the sessions the hub has already seen become usable memory.
+
+Deliverables:
+
+- Write-through transcript cache. Providers stay canonical; the cache is
+  invalidated by provider `updatedAt` and a TTL.
+- Message search implementing the existing `scope: "messages"` contract, with
+  snippets and filters.
+- Session-family tree: forks, branches, subagent lineage, and "open in tree".
+- Cost and token visibility computed from the session list. No new aggregation
+  endpoint.
+- Retention and export: Markdown/JSON per session, configurable TTL for drafts,
+  read markers, and reply feedback.
+
+Acceptance:
+
+- Search finds a phrase from three weeks ago in under 200 ms.
+- A fork tree shows ancestry and opens any node.
+- Export round-trips a transcript without losing roles or timestamps.
+- Deleting local state does not touch the provider.
+
+### Phase 6 — Provider platform (planned)
+
+Goal: make the multi-provider claim true and make adding a provider a solved
+problem.
+
+Deliverables:
+
+- Hermes adapter: health, sessions, messages, runs, streaming, approvals,
+  clarify questions, and the TUI gateway for existing sessions.
+- Provider adapter SDK and a conformance suite covering the 17 capability flags.
+- One community adapter as proof, chosen for the lowest integration cost.
+- Capability and health badges in the Providers screen.
+- `docs/provider-adapters.md` with a worked example.
+
+Acceptance:
+
+- The hub lists Hermes sessions, streams a reply, and answers an approval.
+- A Hermes restart does not lose session references.
+- A third-party adapter passes the conformance suite with no hub changes.
+
+### Phase 7 — MCP southbound: providers and tools as patch points (planned)
+
+Goal: Oktoso also acts as an MCP client, so provider tools pass through one
+policy layer.
+
+Deliverables:
+
+- Connect to provider-exposed MCP servers and discover tools and capabilities.
+- Route tool calls through the Phase 4 policy layer.
 - Normalize timeouts, retries, idempotency, and error mapping.
 - Surface provider tools to northbound agents without exposing raw credentials.
+- Deny-by-default policy, per-tool allowlists, and audit.
 
 Acceptance:
 
-An agent can call a provider tool through Oktoso. A denied tool never reaches
-the provider and appears in the audit log.
+- An agent can call a provider tool through Oktoso.
+- A denied tool never reaches the provider and appears in the audit log.
 
-### Phase 4 — Continuous control (planned)
+### Phase 8 — Hardening and observability (planned)
 
-This is the “LLM agent continuously controls providers” layer.
+Goal: production confidence, not new surface area.
 
-- Watchers and triggers:
-  - new attention item
-  - pending question
-  - error session
-  - schedule/cron
-  - session idle/running transitions
-- Policies:
-  - auto-answer only low-risk questions
-  - escalate destructive or sensitive actions
-  - quiet hours
-  - max actions per session/hour
-  - budget and iteration limits
-- Multi-agent coordination:
-  - leases so two agents do not answer the same question
-  - queues and handoffs
-  - explicit ownership
-- Human-in-the-loop:
-  - approve/deny from web, CLI, or G2
-  - pause all automation with one control
+Deliverables:
+
+- `/metrics` in Prometheus text format, structured logs with redaction, and
+  automation run history.
+- Backup and restore for `dataDir`.
+- Docker image, Termux archive, and systemd unit.
+- The real Termux/cross-host acceptance run and TLS/VPN validation.
+- Load test for SSE fan-out and event bursts.
+- Security review: token handling, pairing codes, CSRF, CORS, rate limits,
+  redaction.
+- A Rust-port decision record.
 
 Acceptance:
 
-A watcher answers a safe question, escalates a destructive one, and never sends
-duplicate actions when two agents are connected.
+- The hub survives provider restarts and client reconnects.
+- No secret appears in logs.
+- The bundle runs on a clean Node 24 install.
+- Metrics expose provider health, event lag, notification delivery, and action
+  counts.
 
-### Phase 5 — Surfaces and ecosystem (planned)
+### Phase 9 — Surfaces and bets (planned)
 
-- Web control plane: MCP connections, policies, audit, automation status.
-- G2: voice answers, suggested answers, and hardware acceptance (question discovery, pairing, and multi-question batches are implemented).
-- Provider adapter SDK and MCP tool packs.
-- Templates for common control loops.
-- Hardware validation and packaging.
+Goal: extend the surfaces only after the loop is closed.
+
+- Cross-provider handoff: continue a conversation on another provider.
+- Templates and recipes: saved agent/model/directory/prompt, one-tap start, and
+  recurring schedules.
+- G2 ambient mode: glanceable background count, haptic or voice alert on
+  blocking attention, and an offline queue.
+- Local reply drafting through Ollama behind the hub, feeding the existing
+  feedback loop.
+- VR client, only after G2 hardware acceptance.
+- Multi-user and teams, only with demonstrated demand.
+
+Acceptance is defined per bet when it is scheduled, not now.
 
 ## Architecture rule
 
@@ -203,6 +404,32 @@ Oktoso is a **control plane**, not an agent runtime and not a model host.
 - Providers remain authoritative for their sessions and tools.
 - Every autonomous action must be attributable, bounded, and reversible where
   possible.
+
+## Explicit non-goals
+
+- Running agent CLIs, ACP servers, or model weights inside the hub.
+- Tunnels, DNS, TLS termination, or provider discovery.
+- Replacing OpenCode, Open WebUI, or Hermes as a runtime.
+- Multi-user identity before single-owner is excellent.
+- A native mobile app before the PWA is solid.
+- VR before G2 hardware acceptance.
+- A background aggregation endpoint. Summaries are computed from data the
+  client already fetches.
+
+## Execution
+
+[`roadmap-execution.md`](roadmap-execution.md) holds the ordered work breakdown,
+dependencies, phase acceptance, release map, and the first sprint. Every phase
+follows the same definition of done:
+
+- Contracts first, with generated OpenAPI and a schema test.
+- Hub behavior covered by unit tests; user flows covered by e2e with fake
+  providers.
+- Docs updated in the same change (`design.md`, `ui-ia.md`,
+  `interaction-contract.md`, `visual-audit.md`, `deployment.md` as applicable).
+- No regression in `pnpm test`, `pnpm test:e2e`, `pnpm brand:check`, or
+  `pnpm openapi:check`.
+- The change is releasable on its own.
 
 ## Name decision
 

@@ -1,0 +1,544 @@
+# Oktoso execution plan
+
+Companion to [`roadmap.md`](roadmap.md). The roadmap holds strategy, phase
+goals, and acceptance. This document holds the ordered work breakdown, the
+dependencies, the release map, and the open decisions that block implementation.
+
+Update the checkboxes in place as work lands. Do not create a parallel plan.
+
+## How to read this
+
+- **Phase** matches `roadmap.md`.
+- **Task IDs** (`A1`, `B3`, ...) are stable. Reference them in commits and PRs.
+- **Touch** lists the expected files or packages. It is a guide, not a fence.
+- **Done** is the task-level finish line. The phase acceptance lives in
+  `roadmap.md`.
+- Effort is t-shirt sized for one primary developer. Split a task if it grows
+  past its size.
+
+## Constraints that shape the plan
+
+- Mobile-first. The phone loop ships before any new desktop surface.
+- Single owner. No multi-user work until a phase explicitly schedules it.
+- Providers stay canonical. A cache is derived, invalidatable, and never written
+  back to a provider.
+- Pure JavaScript. No native modules, including for search or push.
+- Thin clients. Credentials and provider calls stay in the hub.
+- Contracts first. Every endpoint starts in `packages/contracts` and regenerates
+  `docs/openapi.yaml`.
+- No background aggregation endpoint. Rollups are computed from data the client
+  already fetches.
+- `App.tsx` is already 7,219 lines. New UI lands in its own module and mounts
+  from `App.tsx`; do not grow the monolith.
+
+## Workstreams and dependencies
+
+```text
+W1 Mobile loop      Phase 3 (notifications/PWA) ──> Phase 4 (supervisor) ──> Phase 9 (G2 ambient)
+W2 Memory           Phase 5 (recall/lineage) ─────────────────────────────> Phase 8 (hardening)
+W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ─────> Phase 8
+```
+
+- Phase 3 is independent. Start there.
+- Phase 4 depends on the attention events (already shipped) and optionally the
+  Phase 3 notification channel.
+- Phase 5 is independent and can run in parallel with Phase 3/4 if there is
+  capacity.
+- Phase 6 is independent. Hermes is the first task because it closes a
+  documented gap.
+- Phase 7 depends on the Phase 4 policy layer and the Phase 6 capability model.
+- Phase 8 lands last, but `/metrics` can be pulled forward at any time.
+- Phase 9 depends on all of the above.
+
+## Phase 3 — Always-on attention
+
+Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
+
+### A1. Contracts and configuration
+
+- [ ] Add `packages/contracts/src/notifications.ts`:
+  - `zNotificationChannel` (`webpush`, `ntfy`, `telegram`, `webhook`)
+  - `zNotificationRule` (types, priority floor, quiet hours, digest window)
+  - `zPushSubscription` (endpoint, keys, device label, createdAt, lastSeenAt)
+  - `zNotificationDelivery` (id, channel, attentionID, status, attempts, error)
+- [ ] Export from `packages/contracts/src/index.ts`.
+- [ ] Extend the hub config schema with a `notifications` block, including
+  `${ENV}` substitution for channel tokens.
+- [ ] Regenerate `docs/openapi.yaml` and add a schema round-trip test.
+
+**Touch:** `packages/contracts/src/notifications.ts`,
+`packages/contracts/src/index.ts`, `packages/hub/src/config.ts`,
+`scripts/generate-openapi.ts`, `docs/openapi.yaml`.
+**Done:** `pnpm typecheck` and `pnpm openapi:check` pass; a unit test parses a
+minimal and a full notification config.
+
+### A2. Notification service core
+
+- [ ] Add `packages/hub/src/services/notification-service.ts`.
+- [ ] Subscribe to the event bus and select attention events only.
+- [ ] Implement routing: blocking immediate, high/normal per rule, unread/error
+  digest.
+- [ ] Implement coalescing by session and type inside a window. Four events from
+  one session produce one delivery.
+- [ ] Implement quiet hours in the hub's configured timezone.
+- [ ] Persist subscription and delivery state under `dataDir` with the existing
+  JSON store.
+- [ ] Add a `notify test` path callable from the CLI and the settings screen.
+
+**Touch:** `packages/hub/src/services/notification-service.ts`,
+`packages/hub/src/services/event-bus.ts`, `packages/hub/src/storage/*`,
+`packages/hub/src/app.ts`.
+**Done:** unit tests cover routing, coalescing, quiet hours, and an empty
+attention payload; no message body is logged.
+
+### A3. Web Push transport
+
+- [ ] Choose and pin the push implementation. Prefer a pure-JS package over a
+  hand-rolled VAPID + `aes128gcm` path.
+- [ ] Generate VAPID keys on first enable; store the private key in `dataDir`
+  with `0600`; never log it.
+- [ ] Send with a bounded payload (title, attention type, session ref, deep
+  link, one line of summary). No transcript content.
+- [ ] Handle `404`/`410` by deleting the subscription; handle `429` and `5xx`
+  with capped exponential backoff.
+- [ ] Record every attempt in the delivery log.
+
+**Touch:** `packages/hub/src/services/push-service.ts`,
+`packages/hub/src/services/notification-service.ts`, `dataDir`.
+**Done:** a fake push endpoint receives a valid encrypted request; expired
+subscriptions are removed; retries stop after the cap.
+
+### A4. Subscription and settings routes
+
+- [ ] `GET /api/v1/notifications/subscriptions` for the current owner.
+- [ ] `POST /api/v1/notifications/subscriptions` (register a browser
+  subscription).
+- [ ] `DELETE /api/v1/notifications/subscriptions/:id`.
+- [ ] `POST /api/v1/notifications/test`.
+- [ ] `GET`/`PUT /api/v1/notifications/rules`.
+- [ ] Gate all writes behind the owner session; subscriptions are tied to the
+  paired device, not to an arbitrary client.
+- [ ] Add a stable device identity. The current pairing is stateless, so accept
+  a client-generated `deviceID` plus a label with the subscription, and allow a
+  per-subscription revoke without rotating the owner token.
+
+**Touch:** `packages/hub/src/http/routes/notifications.ts`,
+`packages/hub/src/app.ts`, `packages/client/src/hub-client.ts`.
+**Done:** route tests cover auth, validation, and device revocation; the client
+has typed methods.
+
+### A5. Service worker and deep links
+
+- [ ] Add `apps/web/public/sw.js`:
+  - `push` handler with a safe fallback payload
+  - `notificationclick` that focuses an existing tab or opens the deep link
+  - shell precache and cache-first static assets
+- [ ] Register the worker from a small `apps/web/src/pwa.ts` module.
+- [ ] Add `mobile-web-app-capable` alongside the deprecated Apple meta.
+- [ ] Deep link format: `/sessions/<ref>?attention=<id>`; the chat opens the
+  attention panel and scrolls it into view.
+- [ ] Add a "notifications" permission prompt only from a user gesture in
+  Settings.
+
+**Touch:** `apps/web/public/sw.js`, `apps/web/src/pwa.ts`,
+`apps/web/src/app/App.tsx` (mount only), `apps/web/index.html`.
+**Done:** a synthetic push opens the exact item; a second tab is focused, not
+duplicated.
+
+### A6. Settings UI
+
+- [ ] Add `apps/web/src/app/settings-notifications.tsx` (new module).
+- [ ] Enable/disable per device, send a test, show permission state.
+- [ ] Quiet hours, per-type routing, digest window.
+- [ ] Device list with last seen and revoke.
+- [ ] Keep the existing type scale and one primary action per surface.
+
+**Touch:** `apps/web/src/app/settings-notifications.tsx`,
+`apps/web/src/styles.css`, `docs/ui-ia.md`, `docs/visual-audit.md`.
+**Done:** works at 1440, 1024, 390, and 320; no horizontal overflow; reviewed in
+both themes.
+
+### A7. Outbound channels
+
+- [ ] `packages/hub/src/services/channels/ntfy.ts`, `telegram.ts`,
+  `webhook.ts`.
+- [ ] Plain `fetch`, no new runtime dependency, bounded timeout.
+- [ ] Redact tokens in errors; respect the same routing and quiet hours.
+- [ ] Document the payload shape for the generic webhook.
+
+**Touch:** `packages/hub/src/services/channels/*`,
+`docs/deployment.md`.
+**Done:** each channel has a unit test against a local fake server; a failed
+channel does not block Web Push.
+
+### A8. Offline shell and queued sends
+
+- [ ] Cache the shell and the last session list.
+- [ ] Queue composer sends while offline and replay in order on reconnect.
+- [ ] Show a clear offline/queued state; never silently drop a send.
+- [ ] Reuse the existing optimistic-send and retry path.
+
+**Touch:** `apps/web/src/app/App.tsx` (thin), `apps/web/src/pwa.ts`,
+`apps/web/public/sw.js`.
+**Done:** a send made offline appears queued, survives a reload, and lands once.
+
+### A9. Tests and docs
+
+- [ ] e2e: subscribe with a fake push receiver, trigger a blocking attention,
+  assert one delivery, click through to the item.
+- [ ] e2e: quiet hours suppress and digest.
+- [ ] Unit: coalescing, retry cap, subscription cleanup, payload size.
+- [ ] Docs: `deployment.md` (VAPID, channels, firewall), `ui-ia.md`,
+  `interaction-contract.md`, `visual-audit.md`.
+
+**Done:** `pnpm test`, `pnpm test:e2e`, `pnpm brand:check`, and
+`pnpm openapi:check` pass.
+
+## Phase 4 — Supervisor
+
+Target: 4–6 weeks. Release: `v0.3.0`.
+
+### B1. Contracts
+
+- [ ] `zWatcher` (id, trigger, condition, action, dryRun, enabled, limits).
+- [ ] `zAutomationRun` (id, watcherID, sessionRef, decision, result, at).
+- [ ] `zApproval` (attention-shaped, with the proposed action and diff).
+- [ ] `automation.*` event types.
+
+### B2. Watcher runtime
+
+- [ ] `watcher-service.ts` subscribing to `question.arrived`, `session.error`,
+  `session.idle`, and a schedule tick.
+- [ ] Match conditions without fetching every session on every event.
+- [ ] Lease through the existing idempotency store so two watchers cannot claim
+  one question.
+- [ ] Debounce bursts; a session flapping idle/running must not spawn runs.
+
+### B3. Policy and risk
+
+- [ ] Allowlist low-risk shapes: boolean and single-select with explicit safe
+  options. Never destructive, never free text.
+- [ ] Escalate everything else to the approval queue.
+- [ ] Enforce actions/hour, tokens/day, and quiet hours.
+- [ ] Record the policy decision on every run.
+
+### B4. Actions
+
+- [ ] notify, auto-answer, escalate, retry, start-from-template.
+- [ ] Every action goes through the same session-action path the UI uses.
+- [ ] A failed action is retried once, then recorded as failed.
+
+### B5. Approval queue
+
+- [ ] Reuse the inbox grammar and the existing attention actions.
+- [ ] Show the proposed action, the session, the watcher, and the policy reason.
+- [ ] Approve, deny, and "always allow this shape" (with a confirmation).
+- [ ] Works on web and G2.
+
+### B6. Audit and kill switch
+
+- [ ] Append every run to an audit log with watcher, policy, action, result.
+- [ ] Global pause and per-watcher pause.
+- [ ] A paused watcher drops queued work instead of executing late.
+
+### B7. MCP and CLI
+
+- [ ] `automation_list`, `automation_pause`, `approvals_list`,
+  `approvals_act`.
+- [ ] `oktoso automation status|pause|resume`.
+
+### B8. Safety tests
+
+- [ ] Duplicate events never double-act.
+- [ ] Dry-run sends nothing.
+- [ ] Kill switch stops mid-flight.
+- [ ] A destructive question always escalates.
+- [ ] Budget exhaustion stops the watcher cleanly.
+
+**Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
+real session.
+
+## Phase 5 — Recall and lineage
+
+Target: 3–4 weeks. Release: `v0.4.0`.
+
+### C1. Transcript cache
+
+- [ ] Write-through on message reads; keyed by session ref and provider
+  `updatedAt`.
+- [ ] TTL and size cap; evict least recently used.
+- [ ] Opt-in in settings, with a clear privacy note.
+- [ ] Never serve cache as authoritative when the provider is reachable.
+
+### C2. Index
+
+- [ ] Choose the index: a pure-JS package or a small hand-rolled inverted
+  index. See open decisions.
+- [ ] Index message text, role, session title, and project.
+- [ ] Update incrementally; rebuild on schema change.
+- [ ] Persist under `dataDir`; bounded memory.
+
+### C3. Search route
+
+- [ ] Implement `GET /api/v1/search?q=&scope=&provider=&status=&cursor=`.
+- [ ] Return sessions and messages with snippets; keep the existing
+  `zSearchResult` shape and extend it only additively.
+- [ ] Rank title matches above body matches; dedupe sessions.
+- [ ] Cap result size and paginate.
+
+### C4. Search UI
+
+- [ ] Add the messages scope to `SearchView`.
+- [ ] Show snippets with the matched term highlighted.
+- [ ] Keep filters and the back stack intact.
+
+### C5. Lineage
+
+- [ ] `GET /api/v1/sessions/:ref/lineage` resolving `parentRef` chains with
+  cycle protection.
+- [ ] Show forks, branches, and subagent children.
+- [ ] Open any node from the tree.
+
+### C6. Cost view
+
+- [ ] Compute per-provider, project, model, and day from the sessions the client
+  already fetches.
+- [ ] No new aggregation endpoint.
+- [ ] Show tokens and cost with tabular figures.
+
+### C7. Retention and export
+
+- [ ] `GET /api/v1/sessions/:ref/export?format=md|json`.
+- [ ] TTL and delete for drafts, read markers, reply feedback, and cache.
+- [ ] Document what is local and what is provider-owned.
+
+**Phase done:** search finds an old phrase in under 200 ms on a 500-session
+fixture; export round-trips; deleting local state leaves the provider untouched.
+
+## Phase 6 — Provider platform
+
+Target: 6–8 weeks. Release: `v0.5.0`.
+
+### D1. Hermes adapter
+
+- [ ] Health, sessions, messages, runs, and streaming.
+- [ ] Approvals and clarify requests map to attention.
+- [ ] Fixtures and contract tests; live validation against a real instance.
+
+### D2. Hermes TUI gateway
+
+- [ ] WebSocket path for existing sessions the API server will not bind.
+- [ ] Reconnect and message ordering.
+- [ ] Document the split between API-created and existing sessions.
+
+### D3. SDK and conformance suite
+
+- [ ] Make the adapter contract a public entry point.
+- [ ] Conformance suite covering all 17 capability flags, pagination, error
+  mapping, and cancellation.
+- [ ] `docs/provider-adapters.md` with a worked example.
+
+### D4. Proof adapter
+
+- [ ] Add one community or OpenAI-compatible adapter using only the SDK and
+  docs.
+- [ ] Time the integration and fix the docs where it stalled.
+
+### D5. UI
+
+- [ ] Capability and health badges on the Providers screen.
+- [ ] Explain a missing capability in place, not as a dead control.
+
+**Phase done:** the Hermes acceptance in `roadmap.md` passes; the proof adapter
+passes the suite with no hub changes.
+
+## Phase 7 — MCP southbound
+
+Target: 6–8 weeks. Release: `v0.6.0`.
+
+### E1. Client registry
+
+- [ ] Persist MCP server configs, credentials, and health.
+- [ ] Support stdio and Streamable HTTP.
+
+### E2. Discovery
+
+- [ ] List tools and capabilities; cache with a TTL.
+- [ ] Surface tool names to the policy layer, not to clients directly.
+
+### E3. Policy and execution
+
+- [ ] Deny by default; per-tool and per-provider allowlists.
+- [ ] Timeouts, retries, idempotency, and error mapping.
+- [ ] No raw credential reaches a northbound client.
+
+### E4. Northbound exposure
+
+- [ ] Optional tools for northbound agents, behind a separate scope.
+- [ ] Audit every call.
+
+### E5. UI and tests
+
+- [ ] Connections screen with health and discovered tools.
+- [ ] Policy editor and audit view.
+- [ ] Tests: denied tool never reaches the provider; timeout is normalized.
+
+**Phase done:** the acceptance in `roadmap.md` passes.
+
+## Phase 8 — Hardening and observability
+
+Target: 2–3 weeks. Release: `v0.7.0`.
+
+### F1. Metrics
+
+- [ ] `/metrics` in Prometheus text format.
+- [ ] Provider health, event lag, SSE clients, notification delivery, action
+  counts, run durations. No message content.
+
+### F2. Logs and redaction
+
+- [ ] Structured logs with a central redaction pass.
+- [ ] A test that asserts tokens and message bodies never appear at info level.
+
+### F3. Backup and restore
+
+- [ ] Snapshot `dataDir` and restore it into a fresh hub.
+- [ ] Document what is safe to copy and what must be re-paired.
+
+### F4. Packaging
+
+- [ ] Docker image, Termux archive, systemd unit.
+- [ ] Clean Node 24 install check.
+
+### F5. Acceptance runs
+
+- [ ] Real Termux and cross-host run.
+- [ ] TLS/VPN validation.
+
+### F6. Load and security
+
+- [ ] SSE fan-out and event-burst load test.
+- [ ] Security review with a written record.
+
+### F7. Rust decision
+
+- [ ] Decision record, with contract tests as the gate if the answer is yes.
+
+## Phase 9 — Surfaces and bets
+
+Schedule one bet at a time, each with its own acceptance before it starts.
+
+- [ ] G1. Cross-provider handoff.
+- [ ] G2. Templates and recipes.
+- [ ] G3. G2 ambient mode and hardware acceptance.
+- [ ] G4. Local reply drafting through Ollama.
+- [ ] G5. Multi-user decision. Default answer: defer.
+
+## Cross-cutting work
+
+- [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.
+- [ ] Add fake-provider fixtures with every new provider behavior.
+- [ ] Add an e2e flow for every user-visible phase outcome.
+- [ ] Update `ui-ia.md`, `interaction-contract.md`, `visual-audit.md`, and
+  `design-lock.md` in the same change as UI work.
+- [ ] Keep one primary action per surface and the existing type/space scales.
+- [ ] Review dark and light, 1440/1024/390/320, and console errors before
+  calling UI work done.
+
+## Release map
+
+| Version | Scope | Gate |
+|---|---|---|
+| `0.1.29` | Phase 3, slice 1: contracts, notification core, Web Push | e2e push delivery |
+| `0.1.30` | Phase 3, slice 2: channels, quiet hours, settings | routing/quiet-hours tests |
+| `0.2.0` | Phase 3 complete: PWA, offline, deep links | phase acceptance |
+| `0.3.0` | Phase 4: supervisor | safety matrix |
+| `0.4.0` | Phase 5: recall and lineage | search/export acceptance |
+| `0.5.0` | Phase 6: Provider platform and Hermes | conformance suite |
+| `0.6.0` | Phase 7: MCP southbound | policy acceptance |
+| `0.7.0` | Phase 8: hardening | acceptance runs |
+
+Patch releases inside a phase are expected. A phase does not merge to `main`
+until its acceptance passes.
+
+## Definition of done
+
+A task is done when:
+
+1. The contract change is in `packages/contracts` and OpenAPI is regenerated.
+2. Unit tests cover the new logic, including the failure path.
+3. An e2e test covers the user-visible outcome when there is one.
+4. Docs are updated in the same change.
+5. `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`, `pnpm brand:check`, and
+   `pnpm openapi:check` pass.
+6. No secret or message body is logged.
+7. The change is independently revertible.
+
+## Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| iOS requires an installed PWA for push and shows no silent push | Detect and explain; keep ntfy/Telegram as the fallback |
+| Push encryption and VAPID are easy to get wrong | Use a pinned, pure-JS implementation; test against a fake receiver |
+| Notifications become noise | Coalesce by session, default digest for non-blocking, quiet hours |
+| Auto-answer does something wrong | Dry-run default, allowlist only, approval queue, kill switch, audit |
+| Transcript cache disagrees with the provider | Provider `updatedAt` invalidates; cache is never authoritative |
+| Search index drifts or grows unbounded | Incremental update plus rebuild; TTL and size cap |
+| `App.tsx` keeps growing | New UI in its own module; mount only from `App.tsx` |
+| Hermes cannot bind existing sessions | Use the TUI gateway and document the split |
+| Termux rejects a dependency | Verify pure JS before adopting; no native modules |
+| Work collides with another active session | One branch per phase; docs-only changes stay path-scoped |
+
+## Open decisions
+
+These need an answer before the task that depends on them.
+
+1. **Push implementation.** Pin a pure-JS package or hand-roll VAPID +
+   `aes128gcm`? Recommendation: pin a maintained pure-JS package. Owner: A3.
+2. **VAPID key location.** Generate into `dataDir` on first enable, or accept
+   operator-provided keys? Recommendation: generate, print the public key once,
+   allow an override in config. Owner: A3.
+3. **Channel scope.** Web Push only, or Web Push plus ntfy/Telegram/webhook?
+   Recommendation: Web Push first, ntfy in the same phase as the escape hatch.
+   Owner: A7.
+4. **Search index.** Add a pure-JS dependency (for example MiniSearch) or
+   hand-roll a small inverted index? Recommendation: measure with a hand-rolled
+   index on the 500-session fixture; adopt a package only if relevance is poor.
+   Owner: C2.
+5. **Cache TTL and opt-in.** Default off or default on? Recommendation: default
+   off, explicit opt-in, 30-day TTL, visible storage size. Owner: C1.
+6. **Low-risk question shapes.** Recommendation: boolean and single-select with
+   explicit options only; no free text, no destructive verbs. Owner: B3.
+7. **G2 notifications.** Recommendation: no direct push; the phone notification
+   is the alert and G2 shows it on next sync. Owner: A5/G3.
+8. **Multi-user.** Recommendation: defer to Phase 9 at the earliest, and only
+   with demand. Owner: G5.
+9. **Device identity.** Pairing is stateless today. Recommendation: client-
+   generated `deviceID` plus a label, stored with the subscription; per-
+   subscription revoke. Avoid a server-side device registry until Phase 8.
+   Owner: A4.
+
+## First sprint (two weeks)
+
+Goal: a blocking question reaches a phone with the app closed and opens the
+exact item. This proves the loop end to end before adding channels or offline.
+
+1. **Day 1–2 — A1.** Contracts, config schema, OpenAPI regeneration.
+2. **Day 3–4 — A2.** Notification service: routing, coalescing, quiet hours,
+   delivery log, unit tests.
+3. **Day 5–7 — A3.** Web Push transport, VAPID keys, expiry cleanup, fake
+   receiver test.
+4. **Day 8 — A4.** Subscription and settings routes, client methods, auth tests.
+5. **Day 9–10 — A5.** Service worker, registration, deep links.
+6. **Day 11 — A6 (minimal).** Settings panel: enable, test, device revoke.
+7. **Day 12 — A9 (partial).** e2e: subscribe, trigger, deliver, click through.
+8. **Day 13–14 — Docs and release.** `deployment.md`, `ui-ia.md`,
+   `interaction-contract.md`; cut `0.1.29`.
+
+Sprint exit criteria:
+
+- A synthetic blocking attention produces exactly one push.
+- Tapping it opens `/sessions/<ref>?attention=<id>`.
+- A revoked subscription receives nothing.
+- Quiet hours suppress a normal-priority item.
+- All gates pass.

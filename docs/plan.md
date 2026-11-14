@@ -4,6 +4,8 @@ The plan starts with the hub API and the web client. Glasses and VR come after t
 
 The concrete repository layout, runtime systems, API additions, and vertical-slice order are in [`code-structure.md`](code-structure.md).
 
+The current strategy and re-sequenced phases are in [`roadmap.md`](roadmap.md). The ordered execution checklist, dependencies, and release map are in [`roadmap-execution.md`](roadmap-execution.md). Where this document and the roadmap disagree on ordering, the roadmap wins; the milestone acceptance below still applies.
+
 ## Milestone 0: Foundation
 
 Status: complete.
