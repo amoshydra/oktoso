@@ -5968,6 +5968,14 @@ function StepBody(props: {
               <pre className="activity-code">{path}</pre>
             </StepBlock>
           ) : null}
+          {/* A read of an image returns the bytes in the tool output, even when
+              the path sits outside the session directory. Show them here; the
+              path preview would be jailed and fail. */}
+          <StepOutputImages
+            output={part.output}
+            client={props.client}
+            resource={props.resource}
+          />
           {outputText ? (
             <StepBlock label="Content">
               <pre className="activity-code">{outputText}</pre>
