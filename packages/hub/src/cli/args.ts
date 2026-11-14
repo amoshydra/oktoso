@@ -1,7 +1,9 @@
 import { defaultConfigPath } from "../config/paths";
 
 export interface CliOptions {
-  command: "serve" | "pair" | "status" | "mcp";
+  command: "serve" | "pair" | "status" | "mcp" | "automation";
+  automationAction: "status" | "pause" | "resume";
+  automationWatcher?: string;
   configPath: string;
   explicitConfig: boolean;
   host?: string;
@@ -38,7 +40,9 @@ export function parseArgs(
   env: Env = process.env,
   platform: NodeJS.Platform = process.platform,
 ): CliOptions {
-  let command: "serve" | "pair" | "status" | "mcp" = "serve";
+  let command: "serve" | "pair" | "status" | "mcp" | "automation" = "serve";
+  let automationAction: "status" | "pause" | "resume" = "status";
+  let automationWatcher: string | undefined;
   let configPath = env.HUB_CONFIG ?? defaultConfigPath(env, platform);
   let explicitConfig = Boolean(env.HUB_CONFIG);
   let host: string | undefined;
@@ -69,6 +73,21 @@ export function parseArgs(
       case "--mcp":
         command = "mcp";
         break;
+      case "automation": {
+        command = "automation";
+        const next = argv[index + 1];
+        if (next === "status" || next === "pause" || next === "resume") {
+          automationAction = next;
+          index += 1;
+        }
+        break;
+      }
+      case "--watcher": {
+        const read = readValue(argv, index, arg);
+        automationWatcher = read.value;
+        index = read.next;
+        break;
+      }
       case "--host": {
         const read = readValue(argv, index, arg);
         host = read.value;
@@ -144,6 +163,8 @@ export function parseArgs(
 
   return {
     command,
+    automationAction,
+    automationWatcher,
     configPath,
     explicitConfig,
     host,
@@ -170,6 +191,7 @@ Usage:
   oktoso pair [--url <url>] [--config <path>]
   oktoso status [--config <path>]
   oktoso mcp [--allow-write] [--url <url>] [--config <path>]
+  oktoso automation status|pause|resume [--watcher <id>] [--url <url>] [--config <path>]
 
 Options:
   --config <path>    Hub config file (default: see Config below)

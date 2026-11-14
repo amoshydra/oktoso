@@ -24,6 +24,7 @@ import {
 } from "./cli/pairing-panel";
 import { createTheme } from "./cli/terminal";
 import { runMcpCommand } from "./cli/mcp-command";
+import { runAutomationCommand } from "./cli/automation-command";
 import { TerminalUi } from "./cli/tui";
 import type { PairingLinkInfo, UiSnapshot } from "./cli/types";
 import {
@@ -249,6 +250,25 @@ async function main(): Promise<void> {
     } catch (error) {
       process.stderr.write(
         `Unable to start the MCP server: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (options.command === "automation") {
+    try {
+      await runAutomationCommand({
+        configPath: options.configPath,
+        action: options.automationAction,
+        watcher: options.automationWatcher,
+        url: options.url,
+      });
+    } catch (error) {
+      process.stderr.write(
+        `Automation command failed: ${
           error instanceof Error ? error.message : String(error)
         }\n`,
       );

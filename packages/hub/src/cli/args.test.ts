@@ -47,6 +47,20 @@ describe("CLI arguments", () => {
     expect(readWrite.allowWrite).toBe(true);
   });
 
+  it("parses automation commands", () => {
+    const status = parseArgs(["automation"]);
+    expect(status.command).toBe("automation");
+    expect(status.automationAction).toBe("status");
+
+    const pause = parseArgs(["automation", "pause", "--watcher", "w1"]);
+    expect(pause.command).toBe("automation");
+    expect(pause.automationAction).toBe("pause");
+    expect(pause.automationWatcher).toBe("w1");
+
+    const resume = parseArgs(["automation", "resume"]);
+    expect(resume.automationAction).toBe("resume");
+  });
+
   it("rejects invalid ports and unknown options", () => {
     expect(() => parseArgs(["--port", "0"])).toThrow(/--port/);
     expect(() => parseArgs(["--nope"])).toThrow(/Unknown option/);

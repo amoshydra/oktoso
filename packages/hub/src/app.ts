@@ -147,6 +147,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
       questions: deps.questions,
       attention: deps.attention,
       actions,
+      automation: deps.automation,
     }),
     logger: deps.logger,
     version: VERSION,
