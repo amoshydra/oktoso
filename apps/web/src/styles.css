@@ -3791,7 +3791,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     padding-bottom: calc(54px + env(safe-area-inset-bottom));
   }
 
-  .shell-run {
+  .chat-shell {
     grid-template-columns: minmax(0, 1fr);
   }
 
