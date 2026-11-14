@@ -295,8 +295,8 @@ start-from-template, always-allow, G2 approvals, and an in-flight abort.
 
 ### B5. Approval queue
 
-- [x] Pending approvals with the session, watcher, policy reason, and proposed
-  answer.
+- [x] Pending approvals with the session, watcher, policy reason, and a typed
+  `actionable`/`proposed` summary. The execution plan stays in hub state.
 - [x] Approve and deny from the API, the Settings panel, and the Inbox.
 - [x] Inbox uses the existing group and card grammar; approvals count toward
   the attention badge.

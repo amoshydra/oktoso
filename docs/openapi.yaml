@@ -3856,7 +3856,19 @@ components:
           type: integer
         decidedAt:
           type: integer
-        plan: {}
+        actionable:
+          type: boolean
+        proposed:
+          type: object
+          properties:
+            label:
+              type: string
+              maxLength: 80
+            text:
+              type: string
+              maxLength: 500
+          required:
+            - text
       required:
         - id
         - watcherID
@@ -3869,6 +3881,7 @@ components:
         - status
         - createdAt
         - expiresAt
+        - actionable
     AutomationApprovalPage:
       type: object
       properties:
@@ -3948,7 +3961,19 @@ components:
                 type: integer
               decidedAt:
                 type: integer
-              plan: {}
+              actionable:
+                type: boolean
+              proposed:
+                type: object
+                properties:
+                  label:
+                    type: string
+                    maxLength: 80
+                  text:
+                    type: string
+                    maxLength: 500
+                required:
+                  - text
             required:
               - id
               - watcherID
@@ -3961,6 +3986,7 @@ components:
               - status
               - createdAt
               - expiresAt
+              - actionable
       required:
         - data
     AutomationView:
@@ -4244,7 +4270,19 @@ components:
                 type: integer
               decidedAt:
                 type: integer
-              plan: {}
+              actionable:
+                type: boolean
+              proposed:
+                type: object
+                properties:
+                  label:
+                    type: string
+                    maxLength: 80
+                  text:
+                    type: string
+                    maxLength: 500
+                required:
+                  - text
             required:
               - id
               - watcherID
@@ -4257,6 +4295,7 @@ components:
               - status
               - createdAt
               - expiresAt
+              - actionable
       required:
         - enabled
         - paused

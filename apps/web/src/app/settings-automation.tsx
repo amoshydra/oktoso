@@ -233,7 +233,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                   </span>
                   <span className="settings-device-detail">
                     {approval.watcherID} · {approval.reason} ·{" "}
-                    {approval.summary}
+                    {approval.proposed?.text ?? approval.summary}
                   </span>
                 </div>
                 <div className="automation-actions">

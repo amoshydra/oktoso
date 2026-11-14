@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   Attention,
+  HubEvent,
   PendingQuestion,
   QuestionPrompt,
   SendInput,
@@ -285,10 +286,21 @@ describe("AutomationService", () => {
       },
     });
 
+    const events: HubEvent[] = [];
+    const unsubscribe = bus.subscribe((event) => {
+      if (event.type === "automation.approval") events.push(event);
+    });
     await publish(bus, attention());
     await service.whenIdle();
+    unsubscribe();
 
     expect(sends).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.data).toMatchObject({
+      actionable: true,
+      proposed: { label: "Delete everything" },
+    });
+    expect(events[0]?.data).not.toHaveProperty("plan");
     expect(service.runs()[0]).toMatchObject({
       decision: "escalated",
       reason: "not_low_risk",
@@ -298,8 +310,10 @@ describe("AutomationService", () => {
       attentionID: "att_1",
       reason: "not_low_risk",
       status: "pending",
-      plan: expect.objectContaining({ label: "Delete everything" }),
+      actionable: true,
+      proposed: { label: "Delete everything", text: "Delete everything" },
     });
+    expect(approval).not.toHaveProperty("plan");
 
     await service.actOnApproval(approval.id, "approve");
 
@@ -387,7 +401,10 @@ describe("AutomationService", () => {
       decision: "escalated",
       reason: "multiple_questions",
     });
-    expect(service.approvals()[0]?.plan).toBeUndefined();
+    const approval = service.approvals()[0]!;
+    expect(approval.actionable).toBe(false);
+    expect(approval.proposed).toBeUndefined();
+    expect(approval).not.toHaveProperty("plan");
   });
 });
 

@@ -13,7 +13,10 @@ import {
   type SendAnswer,
   type Session,
 } from "@amoshydra/oktoso-contracts";
-import type { StateStore } from "@amoshydra/oktoso-storage";
+import type {
+  AutomationApprovalState,
+  StateStore,
+} from "@amoshydra/oktoso-storage";
 import type { AutomationConfig } from "../config/schema";
 import { conflict, notFound } from "../domain/errors";
 import type { Logger } from "../lib/logger";
@@ -182,10 +185,12 @@ export class AutomationService {
         .filter(([, paused]) => paused)
         .map(([id]) => id),
       runs: state.automationRuns.slice(-50).reverse(),
-      approvals: state.automationApprovals.filter(
-        (approval) =>
-          approval.status === "pending" && approval.expiresAt > now,
-      ),
+      approvals: state.automationApprovals
+        .filter(
+          (approval) =>
+            approval.status === "pending" && approval.expiresAt > now,
+        )
+        .map(toPublicApproval),
     };
   }
 
@@ -203,7 +208,8 @@ export class AutomationService {
       .automationApprovals.filter(
         (approval) =>
           approval.status === "pending" && approval.expiresAt > now,
-      );
+      )
+      .map(toPublicApproval);
   }
 
   async updateSettings(input: AutomationSettingsInput): Promise<AutomationView> {
@@ -255,15 +261,11 @@ export class AutomationService {
 
     if (this.paused) throw conflict("Automation is paused");
 
-    const plan = approval.plan as
-      | { text?: unknown; answers?: unknown; label?: unknown }
-      | undefined;
-    const text = typeof plan?.text === "string" ? plan.text : undefined;
-    const answers = Array.isArray(plan?.answers)
-      ? (plan.answers as SendAnswer[])
-      : undefined;
+    const plan = approval.plan;
+    const text = plan?.text;
+    const answers = plan?.answers;
 
-    if (!text || !answers) {
+    if (!plan || !text || !answers) {
       // An escalation approval has no executable plan; approving it records
       // that a human handled the item elsewhere.
       await this.updateApproval(id, "approved", now);
@@ -727,7 +729,7 @@ export class AutomationService {
     }
 
     const now = this.now();
-    const approval: AutomationApproval = {
+    const approval: AutomationApprovalState = {
       id: randomUUID(),
       watcherID: watcher.id,
       attentionID: item.id,
@@ -755,7 +757,7 @@ export class AutomationService {
       const overflow = state.automationApprovals.length - MAX_APPROVALS;
       if (overflow > 0) state.automationApprovals.splice(0, overflow);
     });
-    await this.eventBus.publish("automation.approval", approval, {
+    await this.eventBus.publish("automation.approval", toPublicApproval(approval), {
       sessionRef: item.sessionRef,
       attentionID: item.id,
     });
@@ -815,7 +817,7 @@ export class AutomationService {
   }
 
   private async recordApprovalRun(
-    approval: AutomationApproval,
+    approval: AutomationApprovalState,
     decision: AutomationRun["decision"],
     reason: string,
     detail: string,
@@ -846,7 +848,7 @@ export class AutomationService {
     status: AutomationApproval["status"],
     decidedAt: number,
   ): Promise<void> {
-    let updated: AutomationApproval | undefined;
+    let updated: AutomationApprovalState | undefined;
     await this.store.update((state) => {
       const approval = state.automationApprovals.find((item) => item.id === id);
       if (!approval) return;
@@ -855,10 +857,14 @@ export class AutomationService {
       updated = approval;
     });
     if (updated) {
-      await this.eventBus.publish("automation.approval", updated, {
-        sessionRef: updated.sessionRef,
-        attentionID: updated.attentionID,
-      });
+      await this.eventBus.publish(
+        "automation.approval",
+        toPublicApproval(updated),
+        {
+          sessionRef: updated.sessionRef,
+          attentionID: updated.attentionID,
+        },
+      );
     }
   }
 
@@ -935,6 +941,24 @@ export function pickSafeChoice(
       ? choice.id === action.value
       : choice.label === action.value,
   );
+}
+
+function toPublicApproval(
+  approval: AutomationApprovalState,
+): AutomationApproval {
+  const { plan, ...base } = approval;
+  return {
+    ...base,
+    actionable: Boolean(plan),
+    ...(plan
+      ? {
+          proposed: {
+            text: plan.text,
+            ...(plan.label ? { label: plan.label } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 function matchesSession(

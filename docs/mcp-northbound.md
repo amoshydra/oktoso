@@ -241,10 +241,11 @@ Write (`--allow-write`):
 | `automation_pause` | Pause or resume the policy or one watcher |
 | `approvals_act` | Approve or deny an automation approval |
 
-Automation read results use a `{ data: ... }` envelope. A provider-scoped
-token sees only watchers whose condition names an allowed provider, plus
-watchers without a provider condition; runs, approvals, and paused watcher IDs
-are filtered the same way.
+Automation read results use a `{ data: ... }` envelope. An approval exposes
+`actionable` and a typed `proposed` answer; the execution plan stays inside the
+hub. A provider-scoped token sees only watchers whose condition names an
+allowed provider, plus watchers without a provider condition; runs, approvals,
+and paused watcher IDs are filtered the same way.
 
 ## Controller policy
 

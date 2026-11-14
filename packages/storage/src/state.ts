@@ -4,6 +4,7 @@ import {
   zAssistantConfig,
   zAutomationApproval,
   zAutomationRun,
+  zSendAnswer,
   zNotificationDelivery,
   zNotificationRouting,
 } from "@amoshydra/oktoso-contracts";
@@ -48,6 +49,22 @@ export const zNotificationOverrideState = z.object({
   routing: zNotificationRouting.optional(),
 });
 
+/**
+ * Approvals keep the executable plan in hub state only. The public contract
+ * exposes a typed `actionable`/`proposed` summary instead of this blob.
+ */
+export const zAutomationApprovalState = zAutomationApproval
+  .omit({ actionable: true, proposed: true })
+  .extend({
+    plan: z
+      .object({
+        text: z.string().min(1),
+        label: z.string().optional(),
+        answers: z.array(zSendAnswer).min(1),
+      })
+      .optional(),
+  });
+
 export const zHubState = z.object({
   schemaVersion: z.literal(1),
   lastSeq: z.number().int().nonnegative(),
@@ -62,7 +79,7 @@ export const zHubState = z.object({
   notificationDeliveries: z.array(zNotificationDelivery).default([]),
   notificationOverrides: zNotificationOverrideState.default({}),
   automationRuns: z.array(zAutomationRun).default([]),
-  automationApprovals: z.array(zAutomationApproval).default([]),
+  automationApprovals: z.array(zAutomationApprovalState).default([]),
   automationLeases: z
     .record(z.string(), z.number().int().nonnegative())
     .default({}),
@@ -75,6 +92,9 @@ export type HubState = z.infer<typeof zHubState>;
 export type ReadMarker = z.infer<typeof zReadMarker>;
 export type NotificationSubscriptionState = z.infer<
   typeof zNotificationSubscriptionState
+>;
+export type AutomationApprovalState = z.infer<
+  typeof zAutomationApprovalState
 >;
 
 export function createInitialState(): HubState {
