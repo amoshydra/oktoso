@@ -44,7 +44,14 @@ interface ChoiceGeneration {
 interface RoleTexts {
   answer: string;
   opposite: string;
+  next: string;
+  verify: string;
+  extend: string;
   ask: string;
+}
+
+interface LintContext {
+  running?: string;
 }
 
 interface MomentContext {
@@ -53,10 +60,20 @@ interface MomentContext {
   userGoal: string;
   lastUser: string;
   lastAssistantTail: string;
+  running?: string;
   evidence: string;
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1_000;
+const MIN_SUGGESTIONS = 4;
+const ALL_ROLES: ReplyRole[] = [
+  "answer",
+  "opposite",
+  "next",
+  "verify",
+  "extend",
+  "ask",
+];
 const CACHE_MAX_ENTRIES = 100;
 const CONTEXT_MESSAGE_LIMIT = 40;
 const MAX_CONTEXT_PAGES = 4;
@@ -70,7 +87,7 @@ const MAX_DONE_CHARS = 160;
 const MAX_CONSTRAINT_CHARS = 200;
 const MAX_SUGGESTION_CHARS = 80;
 const MAX_ROLE_WORDS = 12;
-const MIN_ROLE_WORDS = 3;
+const MIN_ROLE_WORDS = 2;
 const MAX_CHOICES = 5;
 
 const COURTESY =
@@ -87,15 +104,19 @@ const ACTION_NEEDED =
   /\b(you'll need to|you need to|please (?:approve|merge|review|confirm|run)|approve (?:it|the)|waiting for (?:your|approval)|requires? (?:your )?approval|before it can go green|merge it to publish|merge (?:#\d+|the pr|it)|say the word|needs? your (?:approval|review))\b/i;
 const DONE_START =
   /^(done|delivered|committed|merged|published|verified|fixed|installed|released|updated|passed|all green)\b/i;
+const DONE_END =
+  /\b(fixed|pushed|merged|committed|published|verified|installed|released|updated|pass(?:ed|es|ing)?|green|shipped|deployed)\b/i;
 const CONSTRAINT_WORD = /\b(do not|don't|never|only|keep|without)\b/i;
 const META_TEXT =
   /\b(contrast|alt|alternative role|restatement|audit|evaluation|system prompt|context policy|json|moment|suggestion)\b/i;
+const META_ACT =
+  /^(?:acknowledge|propose|suggest|summari[sz]e|express|communicate|reply with|respond with|note that)\b/i;
 const UNSAFE_TEXT =
   /\b(?:skip|bypass|ignore|circumvent)\b[^.]*\b(?:approval|review|permission|guard|check|auth|security)\b/i;
 const UNSAFE_TEXT_ALT =
   /\bwithout\b[^.]*\b(?:approval|review|permission|guard|check)\b/i;
 const GENERIC =
-  /^(proceed with the current approach|continue with the current approach|keep going|sounds good|looks good|that works|do it|go ahead|carry on)\b/i;
+  /^(?:proceed with the current approach|continue with the current approach|keep going|sounds good|looks good|that works|do it|go ahead|carry on|great|perfect|nice|thanks|i accept|accepted|approved|lgtm|ship it)(?=[\s,.]|$)/i;
 
 const STOPWORDS = new Set([
   "the",
@@ -166,21 +187,32 @@ const STOPWORDS = new Set([
   "let",
 ]);
 
-const REPLY_SYSTEM_PROMPT = `You write messages a user can send to an AI coding agent.
+const REPLY_SYSTEM_PROMPT = `You write short messages a user can send to an AI coding agent.
 The hub has already classified the moment. Use the MOMENT block, not the whole transcript.
 
-Write JSON:
-- "answer": answer the pending question or proposal, or respond to the reported result.
-- "opposite": the opposite decision or a different valid route. It must be mutually exclusive with answer, not a rewording.
-- "ask": one question that resolves the single most important ambiguity, or "".
+Write JSON with six fields:
+- "answer": the expected response: answer the pending question, accept the proposal, or acknowledge the result. Write the message, never a description of it.
+- "opposite": the credible alternative: decline, revert, or take a different valid route. It must be mutually exclusive with answer, not a rewording. In state "done" it closes the loop; in state "wait" it interrupts.
+- "next": a concrete next step the answer does not already take. If the answer names the action, next must touch a different artifact or be "".
+- "verify": a check that proves the result holds: tests, the diff, logs, or a rerun.
+- "extend": a small adjacent follow-up that builds on the result.
+- "ask": one question about something MOMENT leaves unspecified, or "". Never a confirmation of the answer and never an invented topic.
 
 Rules:
+- Always offer five usable suggestions, and six when every field is genuinely distinct. Never return all empty strings.
+- In state "failure", answer must be a route out, not acceptance of the failure. The opposite must be a route the environment can still take.
+- In state "challenge" the user corrected the agent: answer acknowledges the correction in a statement, opposite defends the old diagnosis or names a different cause, and neither asks the question back.
+- A finished turn is still a conversation. In state "done", answer is a short acknowledgement, opposite closes the loop, and next, verify, extend, and ask are all required.
+- In state "wait" the run is still going: answer is the natural wait message ("Let it finish.", "Ping me when the tests pass."), opposite is an interrupt ("Stop it, the cache assumption is wrong."), and next must not repeat the running command.
+- Answer the assistant's own question; never repeat it back as a suggestion.
+- Keep every field a distinct intent. Never reword another field, and never restate the same object with a different verb: "Switch to the mirror" and "Execute the pull using the mirror" are one chip.
+- Never name a file, version, PR, or option that is not in MOMENT. If unsure, describe the action without naming it.
 - Never propose anything listed in done.
 - Never contradict a constraint.
 - Never bypass an approval, permission, or safety check.
 - Ground every message in a real entity from MOMENT. No invented files, versions, or options.
-- 3-12 words. Plain text. User voice. No quotes, no numbering, no meta commentary.
-- If the moment genuinely has no decision, return all empty strings.
+- 2-10 words. Plain text. Write what you would type, not a specification. Only "ask" may be a question; every other field is a statement. No quotes, no numbering, no meta commentary, and no "Acknowledge / Propose / Confirm the ...".
+- For a finished fix, bad: "Acknowledge the successful fix and delivery." Good: "Thanks, looks good." / "Show me the diff." / "Add a regression test for the auth race."
 Return only JSON.`;
 
 const REPLY_SCHEMA = {
@@ -188,9 +220,12 @@ const REPLY_SCHEMA = {
   properties: {
     answer: { type: "string" },
     opposite: { type: "string" },
+    next: { type: "string" },
+    verify: { type: "string" },
+    extend: { type: "string" },
     ask: { type: "string" },
   },
-  required: ["answer", "opposite", "ask"],
+  required: ["answer", "opposite", "next", "verify", "extend", "ask"],
   additionalProperties: false,
 } as const;
 
@@ -349,7 +384,7 @@ export class ReplyService {
       confidence: moment.confidence,
     };
 
-    if (moment.state !== "reply" || !replyModelReady(config)) {
+    if (!replyModelReady(config)) {
       const value = base;
       this.cache.set(cacheKey, {
         value,
@@ -359,11 +394,11 @@ export class ReplyService {
       return value;
     }
 
-    const generation = await this.modelRoles(context, config);
-    const linted = buildRoleOptions(
-      generation.roles,
-      moment,
+    const { generation, linted } = await this.roleOptions(
       context,
+      moment,
+      config,
+      lintContext(momentContext),
     );
     if (linted.options.length === 0) {
       return {
@@ -445,7 +480,7 @@ export class ReplyService {
     }
 
     const canned = cannedOptions();
-    if (moment.state !== "reply" || !replyModelReady(config)) {
+    if (!replyModelReady(config)) {
       return {
         sessionRef: ref,
         ...(session?.title ? { sessionTitle: session.title } : {}),
@@ -468,8 +503,12 @@ export class ReplyService {
       };
     }
 
-    const generation = await this.modelRoles(context, config);
-    const linted = buildRoleOptions(generation.roles, moment, context);
+    const { generation, linted } = await this.roleOptions(
+      context,
+      moment,
+      config,
+      lintContext(momentContext),
+    );
     const options =
       linted.options.length > 0
         ? [...canned.slice(0, 1), ...linted.options, ...canned.slice(1)]
@@ -503,6 +542,72 @@ export class ReplyService {
     };
   }
 
+  /**
+   * Generate and lint the roles, then make one bounded repair call when a full
+   * draft still leaves fewer than four usable suggestions. The accepted roles
+   * are kept; only the missing or rejected ones are rewritten.
+   */
+  private async roleOptions(
+    context: string,
+    moment: ReplyMoment,
+    config: AssistantConfig,
+    lint: LintContext,
+  ): Promise<{
+    generation: {
+      roles: RoleTexts;
+      raw: string;
+      reasoning: string;
+      finishReason?: string;
+    };
+    linted: ReturnType<typeof buildRoleOptions>;
+  }> {
+    const generation = await this.modelRoles(context, config);
+    let linted = buildRoleOptions(generation.roles, moment, context, lint);
+    const draftFields = ALL_ROLES.filter(
+      (role) => generation.roles[role].trim().length > 0,
+    ).length;
+    // A sparse draft is a model failure worth another call; a nearly full draft
+    // is the case the repair exists for. Both only retry once.
+    if (linted.options.length >= MIN_SUGGESTIONS || draftFields < 5) {
+      return { generation, linted };
+    }
+
+    const accepted = new Set(linted.options.map((option) => option.role));
+    const gap = ALL_ROLES.filter((role) => !accepted.has(role));
+    const reasons = new Map(
+      linted.rejected
+        .filter((item) => item.role !== undefined)
+        .map((item) => [item.role, item.reason]),
+    );
+    const repairContext = [
+      context,
+      "",
+      "repair:",
+      `  rewrite only: ${gap.join(", ")}`,
+      ...gap.map((role) => `  ${role}: ${reasons.get(role) ?? "empty"}`),
+      "  Return all six fields again and keep the accepted ones unchanged.",
+    ].join("\n");
+    const retry = await this.modelRoles(repairContext, config);
+    const roles = { ...generation.roles };
+    for (const role of gap) roles[role] = retry.roles[role];
+    linted = buildRoleOptions(roles, moment, context, lint);
+    return {
+      generation: {
+        roles,
+        raw: `${generation.raw}\n--- retry ---\n${retry.raw}`,
+        reasoning: [generation.reasoning, retry.reasoning]
+          .filter(Boolean)
+          .join("\n--- retry ---\n"),
+        ...(retry.finishReason
+          ? { finishReason: retry.finishReason }
+          : generation.finishReason
+            ? { finishReason: generation.finishReason }
+            : {}),
+      },
+      linted,
+    };
+  }
+
   private async modelRoles(
     context: string,
     config: AssistantConfig,
@@ -522,7 +627,14 @@ export class ReplyService {
         { maxTokens: 320, schema: REPLY_SCHEMA },
       );
       const roles = parseRoles(result.content);
-      if (!roles.answer && !roles.opposite && !roles.ask) {
+      if (
+        !roles.answer &&
+        !roles.opposite &&
+        !roles.next &&
+        !roles.verify &&
+        !roles.extend &&
+        !roles.ask
+      ) {
         this.logger.warn("Reply role generation returned no usable text");
       }
       return {
@@ -536,7 +648,14 @@ export class ReplyService {
         error: error instanceof Error ? error.message : String(error),
       });
       return {
-        roles: { answer: "", opposite: "", ask: "" },
+        roles: {
+          answer: "",
+          opposite: "",
+          next: "",
+          verify: "",
+          extend: "",
+          ask: "",
+        },
         raw: "",
         reasoning: "",
       };
@@ -852,7 +971,7 @@ function buildMomentContext(input: {
     input.latestRequest ?? userTexts.at(-1) ?? "",
   );
   const latestMessage = messages.at(-1);
-  const running =
+  const isRunning =
     session?.status === "running" ||
     latestMessage?.streaming === true ||
     hasRunningTool(latestMessage);
@@ -897,7 +1016,7 @@ function buildMomentContext(input: {
   if (question) {
     state = "reply";
     kind = approval ? "approval" : "question";
-  } else if (running) {
+  } else if (isRunning) {
     state = "wait";
     kind = "running";
   } else if (pendingFromText) {
@@ -954,6 +1073,7 @@ function buildMomentContext(input: {
     userGoal: clip(userGoal, MAX_REQUEST_CHARS),
     lastUser: clip(lastUser, MAX_REQUEST_CHARS),
     lastAssistantTail,
+    ...(isRunning ? { running: runningSummary(messages) } : {}),
     evidence,
   };
 }
@@ -977,6 +1097,7 @@ function buildMomentPrompt(context: MomentContext): string {
     `  user_goal: ${context.userGoal || "(unknown)"}`,
     `  last_user: ${context.lastUser || "(none)"}`,
     `  last_assistant_tail: ${context.lastAssistantTail || "(none)"}`,
+    ...(context.running ? [`  running: ${context.running}`] : []),
   ];
   if (context.evidence) {
     lines.push("  evidence:", context.evidence);
@@ -998,6 +1119,27 @@ function buildEvidence(messages: Message[]): string {
         )}`,
     )
     .join("\n");
+}
+
+function runningSummary(messages: Message[]): string | undefined {
+  // The running tool may sit just behind a newer text message, so scan the
+  // transcript from the end rather than only the last message.
+  for (const message of [...messages].reverse()) {
+    for (const part of message.parts) {
+      if (part.type === "shell" && part.status === "running") {
+        return clip(`shell ${part.command}`, 120);
+      }
+      if (part.type === "tool" && part.status === "running") {
+        const input = part.input as { command?: unknown } | undefined;
+        const detail =
+          input && typeof input.command === "string"
+            ? input.command
+            : part.name;
+        return clip(`${part.name} ${detail}`, 120);
+      }
+    }
+  }
+  return undefined;
 }
 
 function latestReasoningTail(messages: Message[]): string {
@@ -1051,31 +1193,21 @@ function isApprovalText(text: string): boolean {
 
 function extractDone(text: string): string[] {
   const prose = text.replace(/```[\s\S]*?```/g, " ");
-  const lines = prose
-    .split("\n")
-    .map((line) =>
-      line
-        .replace(/^\s*[-*]\s+/, "")
-        .replace(/\*\*/g, "")
-        .trim(),
-    )
-    .filter(
-      (line) =>
-        line.length >= 4 &&
-        line.length <= MAX_DONE_CHARS &&
-        !/^[#$]/.test(line),
-    );
   const result: string[] = [];
-  for (const line of lines) {
-    if (DONE_START.test(line)) result.push(clip(line, MAX_DONE_CHARS));
-    if (result.length >= 3) break;
-  }
-  if (result.length === 0) {
-    for (const sentence of splitSentences(prose)) {
+  for (const raw of prose.split("\n")) {
+    const line = raw.replace(/^\s*[-*]\s+/, "").replace(/\*\*/g, "").trim();
+    if (!line) continue;
+    // A single line often carries several sentences ("Done. Fixed it. Pushed
+    // it."). Keep each completed sentence on its own so done items stay short
+    // and do not swallow a later instruction.
+    for (const sentence of splitSentences(line)) {
       const clean = sentence.trim();
       if (clean.length < 4 || clean.length > MAX_DONE_CHARS) continue;
-      if (DONE_START.test(clean)) result.push(clip(clean, MAX_DONE_CHARS));
-      if (result.length >= 3) break;
+      if (/^[#$]/.test(clean)) continue;
+      if (DONE_START.test(clean) || DONE_END.test(clean)) {
+        result.push(clip(clean, MAX_DONE_CHARS));
+      }
+      if (result.length >= 3) return unique(result).slice(0, 3);
     }
   }
   return unique(result).slice(0, 3);
@@ -1125,17 +1257,18 @@ function cutWords(value: string, side: "start" | "end"): string {
 function parseRoles(raw: string): RoleTexts {
   const parsed = parseJsonValue(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { answer: "", opposite: "", ask: "" };
+    return { answer: "", opposite: "", next: "", verify: "", extend: "", ask: "" };
   }
   const record = parsed as Record<string, unknown>;
+  const text = (key: keyof RoleTexts): string =>
+    typeof record[key] === "string" ? cleanSuggestion(record[key] as string) : "";
   return {
-    answer:
-      typeof record.answer === "string" ? cleanSuggestion(record.answer) : "",
-    opposite:
-      typeof record.opposite === "string"
-        ? cleanSuggestion(record.opposite)
-        : "",
-    ask: typeof record.ask === "string" ? cleanSuggestion(record.ask) : "",
+    answer: text("answer"),
+    opposite: text("opposite"),
+    next: text("next"),
+    verify: text("verify"),
+    extend: text("extend"),
+    ask: text("ask"),
   };
 }
 
@@ -1143,6 +1276,7 @@ function buildRoleOptions(
   roles: RoleTexts,
   moment: ReplyMoment,
   grounding: string,
+  lint: LintContext = {},
 ): {
   options: ReplyOption[];
   rejected: ReplyRejected[];
@@ -1151,42 +1285,46 @@ function buildRoleOptions(
   const candidates: Array<{ role: ReplyRole; text: string }> = [
     { role: "answer", text: roles.answer },
     { role: "opposite", text: roles.opposite },
+    { role: "next", text: roles.next },
+    { role: "verify", text: roles.verify },
+    { role: "extend", text: roles.extend },
     { role: "ask", text: roles.ask },
   ];
   const rejected: ReplyRejected[] = [];
   const accepted: Array<{ role: ReplyRole; text: string }> = [];
 
   for (const candidate of candidates) {
-    if (!candidate.text.trim()) {
-      if (candidate.role !== "ask") {
-        rejected.push({ ...candidate, reason: "empty" });
-      }
-      continue;
-    }
+    // An empty field is the model declining that role, not a rejected try.
+    if (!candidate.text.trim()) continue;
     const reason = lintSuggestion(
       candidate.role,
       candidate.text,
       moment,
       grounding,
+      lint,
     );
     if (reason) {
       rejected.push({ ...candidate, reason });
       continue;
     }
-    if (
-      candidate.role === "opposite" &&
-      accepted.some(
-        (item) =>
-          item.role === "answer" && similarText(item.text, candidate.text),
-      )
-    ) {
-      rejected.push({ ...candidate, reason: "duplicate" });
-      continue;
-    }
-    if (
+    // Questions are distinct by form, so they only count as duplicates when
+    // they are nearly the same sentence. Other roles differ by intent.
+    const threshold = candidate.role === "ask" ? 0.85 : 0.6;
+    const repeatedQuestion =
       candidate.role === "ask" &&
-      !/\bor\b/i.test(candidate.text) &&
-      accepted.some((item) => similarText(item.text, candidate.text))
+      moment.pending !== undefined &&
+      overlapRatio(moment.pending, candidate.text) >= 0.8;
+    if (
+      repeatedQuestion ||
+      (candidate.role === "next" &&
+        accepted.some(
+          (item) =>
+            item.role === "answer" &&
+            objectContainment(item.text, candidate.text) >= 0.8,
+        )) ||
+      accepted.some(
+        (item) => overlapRatio(item.text, candidate.text) >= threshold,
+      )
     ) {
       rejected.push({ ...candidate, reason: "duplicate" });
       continue;
@@ -1194,8 +1332,7 @@ function buildRoleOptions(
     accepted.push(candidate);
   }
 
-  const answer = accepted.find((item) => item.role === "answer");
-  if (!answer) {
+  if (accepted.length === 0) {
     return { options: [], rejected, confidence: "low" };
   }
   const options = accepted.map((item) => ({
@@ -1205,7 +1342,13 @@ function buildRoleOptions(
         ? `Alt: ${truncateLabel(item.text)}`
         : item.role === "ask"
           ? `Ask: ${truncateLabel(item.text)}`
-          : truncateLabel(item.text),
+          : item.role === "next"
+            ? `Next: ${truncateLabel(item.text)}`
+            : item.role === "verify"
+              ? `Check: ${truncateLabel(item.text)}`
+              : item.role === "extend"
+                ? `More: ${truncateLabel(item.text)}`
+                : truncateLabel(item.text),
     text: item.text,
     source: "model" as const,
     action: "send" as const,
@@ -1214,9 +1357,8 @@ function buildRoleOptions(
   return {
     options,
     rejected,
-    confidence: options.some((option) => option.role === "opposite")
-      ? "high"
-      : "medium",
+    confidence:
+      accepted.length >= 4 ? "high" : accepted.length === 3 ? "medium" : "low",
   };
 }
 
@@ -1225,6 +1367,7 @@ function lintSuggestion(
   raw: string,
   moment: ReplyMoment,
   grounding: string,
+  lint: LintContext = {},
 ): string | undefined {
   const text = raw.trim();
   if (!text) return role === "ask" ? undefined : "empty";
@@ -1234,10 +1377,54 @@ function lintSuggestion(
   if (META_TEXT.test(text)) return "meta";
   if (UNSAFE_TEXT.test(text) || UNSAFE_TEXT_ALT.test(text)) return "unsafe";
   if (violatesConstraints(text, moment.constraints)) return "constraint";
-  if (isStale(text, moment.done)) return "stale";
+  // Only a direct response can redo finished work. A next, verify, extend, or
+  // ask move is forward-looking by definition. Answering the pending decision
+  // is never stale: the agent has not done it yet.
+  const answersPending =
+    moment.pending !== undefined && sharesToken(text, moment.pending);
+  if (
+    (role === "answer" || role === "opposite") &&
+    !answersPending &&
+    isStale(text, moment.done)
+  ) {
+    return "stale";
+  }
   if (role === "ask" && !/\?\s*$/.test(text)) return "not a question";
-  if (GENERIC.test(text)) return "generic";
-  if (!hasGroundedEntity(text, grounding)) return "ungrounded";
+  if (role !== "ask" && /\?\s*$/.test(text)) return "not a statement";
+  if (META_ACT.test(text)) return "meta";
+  // A finished turn can legitimately be closed with "Thanks, looks good."
+  const closing =
+    moment.state === "done" && (role === "answer" || role === "opposite");
+  if (GENERIC.test(text) && !closing) return "generic";
+  if (
+    moment.state === "wait" &&
+    role === "opposite" &&
+    !/^(stop|hold|cancel|wait|don'?t|do not|abort)\b/i.test(text)
+  ) {
+    return "not an interrupt";
+  }
+  if (
+    role === "ask" &&
+    moment.pending !== undefined &&
+    tokenSet(moment.pending).size >= 2 &&
+    !sharesToken(text, moment.pending)
+  ) {
+    return "off-topic";
+  }
+  // Without a pending question the ask still has to hang off the task itself,
+  // not just share a work verb like "fix" or "build".
+  if (
+    role === "ask" &&
+    (moment.pending === undefined || tokenSet(moment.pending).size < 2) &&
+    !sharesContentToken(text, grounding)
+  ) {
+    return "off-topic";
+  }
+  if (role === "ask" && lint.running && !sharesToken(text, lint.running)) {
+    return "off-topic";
+  }
+  const invented = inventedEntity(text, grounding);
+  if (invented) return `ungrounded: ${invented}`;
   return undefined;
 }
 
@@ -1256,11 +1443,10 @@ function violatesConstraints(
     for (const token of constraintTokens) {
       if (tokens.has(token)) overlap += 1;
     }
-    if (
-      constraintTokens.size <= 5 ? overlap >= 1 : overlap >= 2
-    ) {
-      return true;
-    }
+    // "Do not change the API" must be violated by the API, not by the word
+    // "change" in an unrelated phrase.
+    const needed = constraintTokens.size === 1 ? 1 : 2;
+    if (overlap >= needed) return true;
   }
   return false;
 }
@@ -1282,16 +1468,29 @@ function isStale(text: string, done: string[]): boolean {
   });
 }
 
-function hasGroundedEntity(text: string, grounding: string): boolean {
-  const source = tokenSet(
-    `${grounding} ${extractNumbers(grounding)} ${extractTicks(grounding)}`,
-  );
-  if (source.size === 0) return true;
-  const tokens = tokenSet(`${text} ${extractNumbers(text)} ${extractTicks(text)}`);
-  for (const token of tokens) {
-    if (source.has(token)) return true;
+/**
+ * A suggestion may introduce ordinary words, but every concrete entity it
+ * names - a version, PR number, path, filename, or backticked token - must
+ * come from the moment. Returns the first invented entity, if any.
+ */
+function inventedEntity(text: string, grounding: string): string | undefined {
+  const haystack = grounding.toLowerCase();
+  const sourceTokens = tokenSet(grounding);
+  for (const raw of text.split(/\s+/)) {
+    const token = raw.replace(/^[("'`\[]+|[)"'`\].,;:!?]+$/g, "");
+    if (!token) continue;
+    const concrete =
+      /\d/.test(token) ||
+      token.includes("/") ||
+      /\.[a-z]{2,5}$/i.test(token) ||
+      /^`[^`]+`$/.test(token);
+    if (!concrete) continue;
+    const normalized = token.toLowerCase().replace(/^`|`$/g, "");
+    if (haystack.includes(normalized)) continue;
+    if (sourceTokens.has(normalized)) continue;
+    return token;
   }
-  return false;
+  return undefined;
 }
 
 function extractNumbers(text: string): string {
@@ -1308,23 +1507,117 @@ function tokenSet(text: string): Set<string> {
     .replace(/[^a-z0-9._/-]+/g, " ")
     .split(/\s+/)
     .map((token) => token.replace(/^[._/-]+|[._/-]+$/g, ""))
-    .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
+    .filter(
+      (token) =>
+        (token.length >= 3 || /\d/.test(token)) && !STOPWORDS.has(token),
+    );
   return new Set(tokens);
 }
 
-function similarText(left: string, right: string): boolean {
+function overlapRatio(left: string, right: string): number {
   const leftKey = comparisonKey(left);
   const rightKey = comparisonKey(right);
-  if (!leftKey || !rightKey) return false;
-  if (leftKey === rightKey) return true;
+  if (!leftKey || !rightKey) return 0;
+  if (leftKey === rightKey) return 1;
   const leftTokens = tokenSet(leftKey);
   const rightTokens = tokenSet(rightKey);
-  if (leftTokens.size === 0 || rightTokens.size === 0) return false;
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
   let overlap = 0;
   for (const token of leftTokens) {
     if (rightTokens.has(token)) overlap += 1;
   }
-  return overlap / Math.min(leftTokens.size, rightTokens.size) >= 0.6;
+  // Jaccard, not overlap/min: a short reply that shares one common word with a
+  // long one is not a duplicate.
+  return overlap / (leftTokens.size + rightTokens.size - overlap);
+}
+
+const ACTION_SYNONYMS: Record<string, string> = {
+  run: "run",
+  retry: "run",
+  rerun: "run",
+  execute: "run",
+  try: "run",
+  launch: "run",
+  start: "run",
+  switch: "change",
+  use: "change",
+  change: "change",
+  set: "change",
+  update: "change",
+  bump: "change",
+  apply: "change",
+  force: "change",
+  check: "check",
+  verify: "check",
+  review: "check",
+  inspect: "check",
+  confirm: "check",
+  merge: "merge",
+  commit: "merge",
+  push: "merge",
+  publish: "merge",
+  deploy: "merge",
+  ship: "merge",
+  stop: "stop",
+  cancel: "stop",
+  abort: "stop",
+  halt: "stop",
+  show: "show",
+  open: "show",
+  display: "show",
+  add: "add",
+  create: "add",
+  write: "add",
+  make: "add",
+  revert: "revert",
+  undo: "revert",
+  rollback: "revert",
+  fix: "fix",
+  look: "look",
+  work: "work",
+};
+
+function objectTokens(text: string): Set<string> {
+  const tokens = tokenSet(comparisonKey(text));
+  for (const token of tokens) {
+    if (token in ACTION_SYNONYMS) tokens.delete(token);
+  }
+  return tokens;
+}
+
+/** How much of the shorter object the longer one covers, ignoring verbs. */
+function objectContainment(left: string, right: string): number {
+  const a = objectTokens(left);
+  const b = objectTokens(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const token of a) {
+    if (b.has(token)) shared += 1;
+  }
+  return shared / Math.min(a.size, b.size);
+}
+
+/** True when the two texts share a noun, not just a work verb. */
+function sharesContentToken(left: string, right: string): boolean {
+  const a = tokenSet(left);
+  const b = tokenSet(right);
+  for (const token of a) {
+    if (!(token in ACTION_SYNONYMS) && b.has(token)) return true;
+  }
+  return false;
+}
+
+function lintContext(context: MomentContext): LintContext {
+  return context.running ? { running: context.running } : {};
+}
+
+function sharesToken(left: string, right: string): boolean {
+  const a = tokenSet(left);
+  const b = tokenSet(right);
+  for (const token of a) {
+    if (b.has(token)) return true;
+  }
+  return false;
 }
 
 function comparisonKey(text: string): string {

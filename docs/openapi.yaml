@@ -1038,6 +1038,9 @@ components:
                 enum:
                   - answer
                   - opposite
+                  - next
+                  - verify
+                  - extend
                   - ask
             required:
               - id
@@ -1172,6 +1175,9 @@ components:
                 enum:
                   - answer
                   - opposite
+                  - next
+                  - verify
+                  - extend
                   - ask
               text:
                 type: string
@@ -1233,6 +1239,9 @@ components:
                 enum:
                   - answer
                   - opposite
+                  - next
+                  - verify
+                  - extend
                   - ask
             required:
               - id
@@ -1313,6 +1322,9 @@ components:
                 enum:
                   - answer
                   - opposite
+                  - next
+                  - verify
+                  - extend
                   - ask
             required:
               - id
@@ -1423,6 +1435,9 @@ components:
                 enum:
                   - answer
                   - opposite
+                  - next
+                  - verify
+                  - extend
                   - ask
             required:
               - id
@@ -1544,6 +1559,9 @@ components:
                       enum:
                         - answer
                         - opposite
+                        - next
+                        - verify
+                        - extend
                         - ask
                   required:
                     - id

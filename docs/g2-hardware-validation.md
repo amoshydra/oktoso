@@ -147,8 +147,8 @@ Seed or open a session with at least 300 readable lines.
 | Q7 | Retry a failed send. | The same idempotency key is reused; no duplicate message appears. |
 | Q8 | Answer a question with a provider-native form. | The glasses route to `Answer in Inbox`; the form is authoritative. |
 | Q9 | Trigger a provider-native `question` tool call (not a form). | Footer shows `? Answer`; tap opens `ANSWER` with the tool choices and free-text fallback. |
-| Q10 | Tap Chat while the agent is running with no pending question. | `SESSION` opens with `Stop` and `Phone keyboard`; the reply model is not called. |
-| Q11 | Tap Chat after a finished turn with no question or decision. | `SESSION` opens with `Phone keyboard` and no `Stop`; the reply model is not called. |
+| Q10 | Tap Chat while the agent is running with no pending question. | `REPLY` opens with grounded model suggestions, then `Stop` and `Phone keyboard`. |
+| Q11 | Tap Chat after a finished turn with no question or decision. | `REPLY` opens with grounded next/verify/extend/ask suggestions and `Phone keyboard`. |
 | Q12 | Tap Chat when the gate says a decision is ready. | `REPLY` opens with model answer / `Alt:` / `Ask:` first. |
 
 ## Multi-question batches

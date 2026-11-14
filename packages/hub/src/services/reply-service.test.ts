@@ -113,12 +113,18 @@ function completionWith(
 function roleCompletion(roles: {
   answer?: string;
   opposite?: string;
+  next?: string;
+  verify?: string;
+  extend?: string;
   ask?: string;
 }): Response {
   return completion(
     JSON.stringify({
       answer: roles.answer ?? "",
       opposite: roles.opposite ?? "",
+      next: roles.next ?? "",
+      verify: roles.verify ?? "",
+      extend: roles.extend ?? "",
       ask: roles.ask ?? "",
     }),
   );
@@ -211,7 +217,7 @@ describe("ReplyService gate", () => {
     ]);
   });
 
-  it("waits while the agent is running and has not asked", async () => {
+  it("still suggests while the agent is running", async () => {
     const data = [
       textMessage("m1", "user", "Fix the build"),
       message("m2", "assistant", [
@@ -224,7 +230,14 @@ describe("ReplyService gate", () => {
         },
       ]),
     ];
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        next: "Check the build after it lands.",
+        verify: "Rerun the tests after the build.",
+        extend: "Add a build log line.",
+        ask: "Which test is still failing?",
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const service = new ReplyService(
@@ -236,13 +249,13 @@ describe("ReplyService gate", () => {
 
     expect(result.state).toBe("wait");
     expect(result.kind).toBe("running");
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.data.every((option) => option.source === "canned")).toBe(
-      true,
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      result.data.filter((option) => option.source === "model").map((option) => option.role),
+    ).toEqual(["next", "verify", "extend", "ask"]);
   });
 
-  it("returns done after a finished delivery with no ask", async () => {
+  it("still suggests after a finished delivery", async () => {
     const data = [
       textMessage("m1", "user", "Ship it"),
       textMessage(
@@ -251,7 +264,14 @@ describe("ReplyService gate", () => {
         "Done. Published 1.2.3. Nothing else is pending.",
       ),
     ];
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        next: "Open the 1.2.3 release notes.",
+        verify: "Check the published 1.2.3 artifact.",
+        extend: "Add the 1.2.3 changelog entry.",
+        ask: "Who should review 1.2.3 first?",
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const service = new ReplyService(settings(), sessions(data), logger);
@@ -259,10 +279,10 @@ describe("ReplyService gate", () => {
 
     expect(result.state).toBe("done");
     expect(result.kind).toBe("delivery");
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.data.every((option) => option.source === "canned")).toBe(
-      true,
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      result.data.filter((option) => option.source === "model").map((option) => option.role),
+    ).toEqual(["next", "verify", "extend", "ask"]);
   });
 
   it("treats a post-delivery explicit next action as a reply", async () => {
@@ -327,14 +347,26 @@ describe("ReplyService gate", () => {
         "Published 1.2.3. Anything else?",
       ),
     ];
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        next: "Open the 1.2.3 release notes.",
+        verify: "Check the published 1.2.3 artifact.",
+        extend: "Add the 1.2.3 changelog entry.",
+        ask: "Who should review 1.2.3 first?",
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const service = new ReplyService(settings(), sessions(data), logger);
     const result = await service.list("desktop-opencode:ses_1", "reply");
 
     expect(result.state).toBe("done");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.pending).toBeUndefined();
+    // Finished is not "no reply needed": the model still suggests next steps.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      result.data.filter((option) => option.source === "model"),
+    ).toHaveLength(4);
   });
 
   it("treats a failure as a reply", async () => {
@@ -478,7 +510,7 @@ describe("ReplyService moment", () => {
 });
 
 describe("ReplyService role generation and lint", () => {
-  it("keeps a valid answer, opposite, and ask", async () => {
+  it("keeps every usable role", async () => {
     const data = [
       textMessage("m1", "user", "Fix the docker pull failure"),
       textMessage(
@@ -492,6 +524,9 @@ describe("ReplyService role generation and lint", () => {
         JSON.stringify({
           answer: "Use the mirror.",
           opposite: "Retry the pull.",
+          next: "Switch back to docker.",
+          verify: "Check the pull logs.",
+          extend: "Add a mirror fallback test.",
           ask: "Should I check the mirror first?",
         }),
         "The registry is unreachable.",
@@ -503,7 +538,7 @@ describe("ReplyService role generation and lint", () => {
     const result = await service.list("desktop-opencode:ses_1", "reply");
 
     expect(result.data.filter((option) => option.source === "model")).toHaveLength(
-      3,
+      6,
     );
     expect(result.confidence).toBe("high");
   });
@@ -530,7 +565,9 @@ describe("ReplyService role generation and lint", () => {
     const audit = await service.audit("desktop-opencode:ses_1", "reply");
 
     expect(
-      audit.options.filter((option) => option.source === "model"),
+      audit.options.filter(
+        (option) => option.source === "model" && option.role === "answer",
+      ),
     ).toHaveLength(0);
     expect(audit.rejected).toEqual(
       expect.arrayContaining([
@@ -562,7 +599,9 @@ describe("ReplyService role generation and lint", () => {
       ]),
     );
     expect(
-      audit.options.filter((option) => option.source === "model"),
+      audit.options.filter(
+        (option) => option.source === "model" && option.role === "answer",
+      ),
     ).toHaveLength(0);
   });
 
@@ -627,6 +666,124 @@ describe("ReplyService role generation and lint", () => {
     expect(
       audit.options.filter((option) => option.source === "model"),
     ).toHaveLength(1);
+  });
+
+  it("keeps a wait reply to a wait message or an interrupt", async () => {
+    const data = [
+      textMessage("m1", "user", "Refactor the cache"),
+      message("m2", "assistant", [
+        {
+          type: "tool",
+          id: "t1",
+          name: "shell",
+          status: "running",
+          input: { command: "pnpm test" },
+        },
+      ]),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Let it finish.",
+        opposite: "Keep it open for review.",
+        next: "Check the cache keys.",
+        verify: "Ping me when the tests pass.",
+        ask: "Should I stop the test run?",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(
+      settings(),
+      sessions(data, session({ status: "running" })),
+      logger,
+    );
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(
+      audit.options.find((option) => option.role === "answer")?.text,
+    ).toBe("Let it finish.");
+    expect(audit.rejected).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "opposite",
+          reason: "not an interrupt",
+        }),
+      ]),
+    );
+  });
+
+  it("allows a short acknowledgement after a finished turn", async () => {
+    const data = [
+      textMessage("m1", "user", "Fix the auth race"),
+      textMessage(
+        "m2",
+        "assistant",
+        "Done. Fixed the auth race in session-service.ts.",
+      ),
+    ];
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        answer: "Thanks, looks good.",
+        next: "Show me the diff.",
+        verify: "Rerun the tests.",
+        extend: "Add a regression test for the race.",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(audit.moment.state).toBe("done");
+    expect(
+      audit.options.find((option) => option.role === "answer")?.text,
+    ).toBe("Thanks, looks good.");
+  });
+
+  it("repairs a full draft that lints down below four", async () => {
+    const data = [
+      textMessage("m1", "user", "Refactor the reply cache. Do not change the API."),
+      textMessage(
+        "m2",
+        "assistant",
+        "Done. The cache is bounded at 100 entries in reply-service.ts. All 459 tests pass. PR #92 is green. Merge it and I'll publish 0.1.29.",
+      ),
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        roleCompletion({
+          answer: "Merge PR #92 now.",
+          opposite: "Hold off for now.",
+          next: "Check the hit/miss logs.",
+          verify: "Check the hit/miss ratios.",
+          extend: "Should I add more tests?",
+          ask: "Should the cache bound grow?",
+        }),
+      )
+      .mockResolvedValueOnce(
+        roleCompletion({
+          answer: "Merge PR #92 now.",
+          opposite: "Hold off for now.",
+          next: "Run the 459 tests again.",
+          verify: "Check the diff for API changes.",
+          extend: "Update the README for the cache.",
+          ask: "When should I publish 0.1.29?",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(audit.raw).toContain("--- retry ---");
+    expect(
+      audit.options.filter((option) => option.source === "model").length,
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      audit.options.find((option) => option.role === "next")?.text,
+    ).toBe("Run the 459 tests again.");
   });
 
   it("does not call the model when the reply model is not configured", async () => {
@@ -767,7 +924,7 @@ describe("ReplyService audit", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does not call the model for wait or done audits", async () => {
+  it("audits a wait moment with the model", async () => {
     const data = [
       textMessage("m1", "user", "Fix the build"),
       message("m2", "assistant", [
@@ -780,7 +937,12 @@ describe("ReplyService audit", () => {
         },
       ]),
     ];
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      roleCompletion({
+        next: "Check the build after it lands.",
+        verify: "Rerun the tests after the build.",
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const service = new ReplyService(
@@ -791,8 +953,10 @@ describe("ReplyService audit", () => {
     const audit = await service.audit("desktop-opencode:ses_1", "reply");
 
     expect(audit.moment.state).toBe("wait");
-    expect(audit.raw).toBe("");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(audit.context).toContain("running: shell pnpm test");
+    expect(audit.raw).toContain("Check the build");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(audit.options.length).toBeGreaterThan(0);
   });
 });
 

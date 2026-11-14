@@ -2411,17 +2411,13 @@ async function openReply(): Promise<void> {
     );
     clearFailure();
     markRequestSuccess();
+    // A running or finished turn still gets suggestions: the reply screen is
+    // never replaced by a "no reply needed" notice.
     if (options.state === "wait" || options.state === "done") {
       state.sessionStatus = options.state === "wait" ? "running" : "idle";
-      state.notice =
-        options.state === "wait"
-          ? "Agent is running. You can wait or type."
-          : "No reply needed. The last turn is finished.";
-      state.screen = "session-actions";
-    } else {
-      state.screen = "reply";
-      state.notice = undefined;
     }
+    state.screen = "reply";
+    state.notice = undefined;
     render();
   } catch (error) {
     showFailure(error, {
@@ -3502,7 +3498,7 @@ function render(): void {
       state.notice ??
       (state.sessionStatus === "running"
         ? "Agent is running."
-        : "No reply needed.");
+        : "Open reply for suggestions.");
     const footer = "Tap choose   Back ×2";
     if (setPreview("SESSION", rows.join("\n"), footer, rows)) {
       void showPage(listPage("SESSION", rows, footer, body));
