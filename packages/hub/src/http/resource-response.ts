@@ -13,6 +13,9 @@ const TEXT_TYPES = new Set([
   "text/plain",
   "text/markdown",
   "text/html",
+  "text/css",
+  "text/javascript",
+  "application/javascript",
   "application/json",
 ]);
 

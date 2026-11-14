@@ -6,7 +6,7 @@ export type Route =
   | { name: "foundation" }
   | { name: "inbox"; filter: string }
   | { name: "sessions"; newSession?: boolean }
-  | { name: "chat"; ref: string; details: boolean }
+  | { name: "chat"; ref: string; details: boolean; preview?: string }
   | {
       name: "search";
       query: string;
@@ -69,10 +69,18 @@ export function parseRoute(pathname: string, search = ""): Route | null {
       if (rest.length !== 1) return null;
       const ref = decodeSegment(rest[0]!);
       if (!ref) return null;
+      const requested = params.get("preview");
+      const preview =
+        requested &&
+        requested.length <= 1024 &&
+        !requested.split(/[\\/]/).includes("..")
+          ? requested
+          : undefined;
       return {
         name: "chat",
         ref,
         details: params.get("details") === "1",
+        ...(preview ? { preview } : {}),
       };
     }
 
@@ -130,6 +138,7 @@ export function routeHref(route: Route): string {
     case "chat": {
       const params = new URLSearchParams();
       if (route.details) params.set("details", "1");
+      if (route.preview) params.set("preview", route.preview);
       return withQuery(`/sessions/${encodeURIComponent(route.ref)}`, params);
     }
     case "search": {

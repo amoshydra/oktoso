@@ -220,6 +220,7 @@ export function App() {
   const selectedSessionRef = route.name === "chat" ? route.ref : undefined;
   const chatOpen = route.name === "chat";
   const detailsOpen = route.name === "chat" ? route.details : false;
+  const previewPath = route.name === "chat" ? route.preview : undefined;
 
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme === "light" ? "light" : "dark",
@@ -990,6 +991,16 @@ export function App() {
                     events={events}
                     providers={providers}
                     detailsOpen={detailsOpen}
+                    previewPath={previewPath}
+                    onPreviewClose={
+                      route.name === "chat"
+                        ? () =>
+                            navigate(
+                              { ...route, preview: undefined },
+                              { replace: true },
+                            )
+                        : undefined
+                    }
                     onDetailsOpenChange={setDetailsOpen}
                     onSessionChange={setActiveSession}
                     onOpenSession={openSession}
@@ -3285,6 +3296,8 @@ function SessionDetail(props: {
   events: HubEvent[];
   providers: Provider[];
   detailsOpen: boolean;
+  previewPath?: string;
+  onPreviewClose?: () => void;
   onDetailsOpenChange: (open: boolean) => void;
   onSessionChange: (session: Session | undefined) => void;
   onOpenSession: (ref: string) => void;
@@ -3313,7 +3326,12 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
-  const [previewPath, setPreviewPath] = useState<string>();
+  const [previewPath, setPreviewPath] = useState<string | undefined>(
+    props.previewPath,
+  );
+  useEffect(() => {
+    setPreviewPath(props.previewPath);
+  }, [props.previewPath]);
   const [stepPanelOpen, setStepPanelOpen] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(0);
@@ -5071,7 +5089,10 @@ function SessionDetail(props: {
           path={previewPath}
           client={props.client}
           resource={resource}
-          onClose={() => setPreviewPath(undefined)}
+          onClose={() => {
+            setPreviewPath(undefined);
+            props.onPreviewClose?.();
+          }}
           onPreviewFile={(path) => setPreviewPath(path)}
         />
       ) : null}
@@ -6712,33 +6733,51 @@ function FilePreview(props: {
     let objectURL: string | undefined;
     setState({ status: "loading" });
 
-    props.client
-      .sessionFile(sessionRef, props.path)
-      .then(async (blob) => {
-        if (cancelled) return;
-        const resolved = previewKind(props.path, blob.type);
-        if (blob.size > previewMaxBytes(resolved)) {
-          setState({ status: "error", message: "This file is too large to preview." });
-          return;
-        }
+    // HTML needs a URL rooted in the session directory so its relative assets
+    // (maps, styles, scripts) resolve. A ticket does that without the token.
+    const loadFrame = async () => {
+      const ticket = await props.client.previewTicket(sessionRef, props.path);
+      if (!cancelled) {
+        setState({ status: "media", url: ticket.url, kind: "html" });
+      }
+    };
 
-        if (isTextPreview(resolved)) {
-          const text = await blob.text();
-          if (!cancelled) setState({ status: "text", text, kind: resolved });
-          return;
-        }
+    const load = async () => {
+      if (previewKind(props.path) === "html") {
+        await loadFrame();
+        return;
+      }
 
-        const typed =
-          blob.type && blob.type !== "application/octet-stream"
-            ? blob
-            : new Blob([blob], { type: previewMimeType(props.path) });
-        objectURL = URL.createObjectURL(typed);
-        setState({ status: "media", url: objectURL, kind: resolved });
-      })
-      .catch((reason: unknown) => {
-        if (cancelled) return;
-        setState({ status: "error", message: previewErrorMessage(reason) });
-      });
+      const blob = await props.client.sessionFile(sessionRef, props.path);
+      if (cancelled) return;
+      const resolved = previewKind(props.path, blob.type);
+      if (resolved === "html") {
+        await loadFrame();
+        return;
+      }
+      if (blob.size > previewMaxBytes(resolved)) {
+        setState({ status: "error", message: "This file is too large to preview." });
+        return;
+      }
+
+      if (isTextPreview(resolved)) {
+        const text = await blob.text();
+        if (!cancelled) setState({ status: "text", text, kind: resolved });
+        return;
+      }
+
+      const typed =
+        blob.type && blob.type !== "application/octet-stream"
+          ? blob
+          : new Blob([blob], { type: previewMimeType(props.path) });
+      objectURL = URL.createObjectURL(typed);
+      setState({ status: "media", url: objectURL, kind: resolved });
+    };
+
+    void load().catch((reason: unknown) => {
+      if (cancelled) return;
+      setState({ status: "error", message: previewErrorMessage(reason) });
+    });
 
     return () => {
       cancelled = true;
@@ -6808,7 +6847,7 @@ function FilePreview(props: {
               className="file-preview-frame"
               src={state.url}
               title={name}
-              sandbox={kind === "html" ? "" : undefined}
+              sandbox={kind === "html" ? "allow-scripts" : undefined}
             />
           )}
         </div>

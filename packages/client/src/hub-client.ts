@@ -171,6 +171,23 @@ export class HubClient {
     );
   }
 
+  /**
+   * Short-lived URL for an HTML preview frame.
+   *
+   * The frame loads its own relative assets, so it needs a URL rooted in the
+   * session directory. A ticket scopes that capability to one directory for
+   * ten minutes without putting the hub token in the URL.
+   */
+  async previewTicket(
+    ref: string,
+    path: string,
+  ): Promise<{ url: string; expiresAt: number }> {
+    const params = new URLSearchParams({ path });
+    return this.request<{ url: string; expiresAt: number }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/preview?${params.toString()}`,
+    );
+  }
+
   private async blob(suffix: string): Promise<Blob> {
     const headers: Record<string, string> = { Accept: "*/*" };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
