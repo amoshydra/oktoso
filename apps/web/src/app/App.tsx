@@ -1793,6 +1793,11 @@ function AttentionCard(props: {
   detail?: string;
   onAction: (action: string, input?: Record<string, unknown>) => void;
   onOpen?: () => void;
+  onRetry?: () => void;
+  retryBusy?: boolean;
+  onContinue?: () => void;
+  continueBusy?: boolean;
+  retryHint?: string;
 }) {
   const item = props.item;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -1823,6 +1828,9 @@ function AttentionCard(props: {
       <div className="attention-title">{item.title}</div>
       <div className="attention-summary">{item.summary}</div>
       {props.detail ? <div className="attention-detail">{props.detail}</div> : null}
+      {props.retryHint ? (
+        <div className="attention-detail">{props.retryHint}</div>
+      ) : null}
 
       {hasFields ? (
         <div className="attention-fields">
@@ -1851,6 +1859,26 @@ function AttentionCard(props: {
               {action.label}
             </button>
           ))}
+        {props.onRetry ? (
+          <button
+            className="btn small"
+            type="button"
+            disabled={props.busy || props.retryBusy}
+            onClick={props.onRetry}
+          >
+            {props.retryBusy ? "Retrying…" : "Retry turn"}
+          </button>
+        ) : null}
+        {props.onContinue ? (
+          <button
+            className="btn small secondary"
+            type="button"
+            disabled={props.busy || props.continueBusy}
+            onClick={props.onContinue}
+          >
+            {props.continueBusy ? "Sending…" : "Continue"}
+          </button>
+        ) : null}
         {answerAction ? (
           <button
             className="btn primary small"
@@ -3340,6 +3368,7 @@ function SessionDetail(props: {
   const [branches, setBranches] = useState<BranchPoint[]>([]);
   const [branchBusy, setBranchBusy] = useState<string>();
   const [retryBusy, setRetryBusy] = useState<string>();
+  const [continueBusy, setContinueBusy] = useState<string>();
   const [branchError, setBranchError] = useState<string>();
   const [editingMessageID, setEditingMessageID] = useState<string>();
   const [editText, setEditText] = useState("");
@@ -3696,6 +3725,31 @@ function SessionDetail(props: {
       );
     } finally {
       setRetryBusy(undefined);
+    }
+  };
+
+  const continueTurn = async (messageId: string) => {
+    if (continueBusy || sending) return;
+    setContinueBusy(messageId);
+    setBranchError(undefined);
+    setSendError(undefined);
+    try {
+      await props.client.sendMessage(props.sessionRef, {
+        text: "Continue from where you left off.",
+      });
+      setSession((current) =>
+        current ? { ...current, status: "running" } : current,
+      );
+      await refreshLatest(true);
+      setAtBottom(true);
+    } catch (reason) {
+      setBranchError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to continue the session.",
+      );
+    } finally {
+      setContinueBusy(undefined);
     }
   };
 
@@ -4341,9 +4395,10 @@ function SessionDetail(props: {
   const selectionDisabled =
     selectionSaving || sending || session?.status === "running";
   const errorAttention = inlineAttention.find((item) => item.type === "error");
-  const providerError = [...messages]
+  const errorMessage = [...messages]
     .reverse()
-    .find((message) => message.metadata?.error)?.metadata?.error;
+    .find((message) => message.metadata?.error);
+  const providerError = errorMessage?.metadata?.error;
   const attentionDetail =
     errorAttention && providerError ? providerErrorMessage(providerError) : undefined;
   const hasBlockingAttention = inlineAttention.some((item) => item.priority === "blocking");
@@ -4559,9 +4614,15 @@ function SessionDetail(props: {
                       onSwitchBranch={(point, siblingId) =>
                         void switchBranch(point, siblingId)
                       }
-                      canRetry={Boolean(sessionProvider?.capabilities.retry)}
+                      canRetry={
+                        Boolean(sessionProvider?.capabilities.retry) &&
+                        !selectionSaving
+                      }
                       retryBusy={retryBusy === item.message.id}
                       onRetry={(messageId) => void retryMessage(messageId)}
+                      canContinue={Boolean(sessionProvider?.capabilities.send)}
+                      continueBusy={continueBusy === item.message.id}
+                      onContinue={(messageId) => void continueTurn(messageId)}
                       onRetryOptimistic={(message) => void retryOptimistic(message)}
                       onDiscardOptimistic={discardOptimistic}
                       canEdit={canEdit}
@@ -4626,6 +4687,28 @@ function SessionDetail(props: {
                             : undefined
                       }
                       onAction={(action, input) => void actOnAttention(item, action, input)}
+                      onRetry={
+                        item.type === "error" &&
+                        errorMessage &&
+                        sessionProvider?.capabilities.retry &&
+                        !selectionSaving
+                          ? () => void retryMessage(errorMessage.id)
+                          : undefined
+                      }
+                      retryBusy={retryBusy === errorMessage?.id}
+                      onContinue={
+                        item.type === "error" &&
+                        errorMessage &&
+                        sessionProvider?.capabilities.send
+                          ? () => void continueTurn(errorMessage.id)
+                          : undefined
+                      }
+                      continueBusy={continueBusy === errorMessage?.id}
+                      retryHint={
+                        item.type === "error" && isRateLimitError(providerError)
+                          ? "Change the model in the composer, then retry the turn."
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -5278,6 +5361,9 @@ function TranscriptMessage(props: {
   onRetry?: (messageId: string) => void;
   onRetryOptimistic?: (message: Message) => void;
   onDiscardOptimistic?: (message: Message) => void;
+  canContinue?: boolean;
+  continueBusy?: boolean;
+  onContinue?: (messageId: string) => void;
   canEdit?: boolean;
   onEdit?: (message: Message) => void;
   editing?: boolean;
@@ -5359,6 +5445,34 @@ function TranscriptMessage(props: {
               <div className="message-error" role="alert">
                 <span className="message-error-label">Provider error</span>
                 <p>{providerErrorMessage(message.metadata.error)}</p>
+                {isRateLimitError(message.metadata.error) ? (
+                  <p className="message-error-hint">
+                    Change the model in the composer, then retry the turn. Or
+                    continue from where the agent stopped.
+                  </p>
+                ) : null}
+                <div className="message-error-actions">
+                  {props.canRetry ? (
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={props.retryBusy}
+                      onClick={() => props.onRetry?.(message.id)}
+                    >
+                      {props.retryBusy ? "Retrying…" : "Retry turn"}
+                    </button>
+                  ) : null}
+                  {props.canContinue ? (
+                    <button
+                      className="btn small secondary"
+                      type="button"
+                      disabled={props.continueBusy}
+                      onClick={() => props.onContinue?.(message.id)}
+                    >
+                      {props.continueBusy ? "Sending…" : "Continue"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             {message.parts.length === 0 && !message.metadata?.error ? (
@@ -7261,6 +7375,17 @@ function previewErrorMessage(reason: unknown): string {
     }
   }
   return reason instanceof Error ? reason.message : "Unable to open this file.";
+}
+
+function isRateLimitError(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const record = value as {
+    status?: unknown;
+    type?: unknown;
+    message?: unknown;
+  };
+  const text = `${String(record.type ?? "")} ${String(record.message ?? "")}`;
+  return record.status === 429 || /quota|rate.?limit|usage limit/i.test(text);
 }
 
 function providerErrorMessage(value: unknown): string {

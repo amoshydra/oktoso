@@ -2754,6 +2754,33 @@
   line-height: 1.5;
 }
 
+.message-error-hint {
+  color: var(--muted) !important;
+  font-size: var(--text-xs) !important;
+}
+
+.message-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.message-error-actions .btn {
+  min-height: 32px;
+}
+
+.message-error-actions .btn.secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.message-error-actions .btn.secondary:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
 .message-send-state {
   display: flex;
   flex-wrap: wrap;
