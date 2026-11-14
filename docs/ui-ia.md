@@ -242,8 +242,19 @@ The sessions view is the full browsing surface.
 - Project or directory basename.
 - Agent and model when available.
 - Relative update time.
-- Unread dot.
+- Unread is title weight, never another dot.
 - Attention badge when the session is blocked.
+- A subagent row is indented under its parent, carries a 10px `SUBAGENT` tag, and keeps the same dot, title, provider, project, time, and status grammar. A parent row shows `N subagents` in its meta, and `N running` when any child is live.
+- A parent with subagents has a chevron disclosure at the right edge of the card: 32px on desktop, 44px on mobile. The chevron is a separate control; the rest of the card still opens the parent session. Children indent 16px, with a quiet 1px rail.
+- The tree is two levels in practice but supports more. A child that has its own children gets the same disclosure.
+
+### Subagent tree
+
+- The Sessions list defaults to the tree: root sessions first, their subagents nested and collapsed behind the disclosure.
+- `All` is the tree. `Root` is a strict roots-only filter that still shows the child count. `Subagents` is a flat list of children for inspection.
+- The header count reads `N sessions · M subagents`. A parent is ordered by the newest update in its branch, so a running child lifts its parent.
+- Subagents whose parent is not in the loaded page appear under `Subagents without a loaded parent`, with the same tag.
+- The chat sidebar uses the same tree inside its day groups. It expands the active session's parent automatically, and keeps a family under the parent's day even when a child updates later.
 
 ### Filters
 
@@ -263,7 +274,7 @@ The sessions view is the full browsing surface.
 
 The session view is the core reading and reply surface.
 
-On desktop, a 300px session sidebar sits between the rail and the transcript. It carries search, provider and status filters, day groups, session rows, the active row, and an All sessions action. It is hidden at 760px and below, where Sessions remains the home list.
+On desktop, a 300px session sidebar sits between the rail and the transcript. It carries search, provider and status filters, day groups, the parent/subagent tree, the active row, and an All sessions action. It is hidden at 760px and below, where Sessions remains the home list.
 
 ### Header
 
@@ -277,7 +288,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - The transcript is its own scroll region inside the chat shell. The composer stays pinned below it; the page itself does not scroll.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
-- A floating "Jump to latest" control appears when the reader is scrolled away from the bottom. It reads "Input needed" when blocking attention is waiting below.
+- A "Jump to latest" action appears in the composer status row when the reader is scrolled away from the bottom. It reads "Input needed" when blocking attention is waiting below.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
 - Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
@@ -299,7 +310,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Preview caps are per kind: 1 MB for text and Markdown, 20 MB for images, media, and PDF. HTML streams through the ticket instead of a blob, so it has no client cap. The sheet is 720px for text and 960px for media; below 760px it is a bottom sheet with a 520px floor so a small image never collapses the surface.
 - A `?preview=<path>` query on a session URL opens the sheet directly, for a generated file the transcript does not mention; closing the sheet removes the query. The card's file name opens the same sheet. There is no download action, no file browser, and no diff.
 - Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block with the tile grid. A message that mixes text and tools keeps the provider's part order: reasoning and tools first, then the text they produced, with the action row (Copy, branches, retry) at the end. The answer is therefore the last thing in the message, and Copy still belongs to the message rather than the steps.
-- The chat shows a quiet `N running in background` chip above the composer whenever a shell or subagent is live. It opens Details, which is otherwise the only surface for that state on a phone.
+- A composer status row sits in flow above the composer whenever a shell or subagent is live, or the reader is away from the bottom. The background chip reads `1 subagent running`, `1 shell running`, or `N running`; the Jump to latest action shares the row. Both wrap instead of overlapping at 320px. The chip opens Details, which is otherwise the only surface for that state on a phone.
 - Background shell runs are their own transcript rows: terminal icon, `Background shell`, the command in mono, status (`running`, `exit 0`, `exit N`), elapsed, and Show output. They are separate from the activity grid because they outlive the turn that started them.
 - The Details panel has a **Background** section listing only live work for the session: running background shells and running subagents, each with its command or agent, elapsed time, and Open session for subagents. The section is absent when nothing is running.
 - A subagent's liveness comes from its child session's current status, never from the launch tool's metadata, which keeps the launch-time value forever. Old subagents therefore read as completed, not running.
@@ -310,7 +321,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - When the provider exposes `retry`, a completed assistant reply shows one quiet `Retry` action beside Copy. Retry creates a new assistant sibling under the same user message and leaves the old answer reachable through the branch picker. The action is absent when the provider does not support retry, and it reads `Retrying…` while the new response runs.
 - Permission and approval requests render inline at the end of the transcript as blocking cards with actions. Question requests render inline as form cards. The card shows the provider form description when it exists, then the fields; if the form has no description, the chat uses the latest assistant question sentence as the detail. Resolving a request removes it and reloads the session attention.
 - Error attention renders as an inline red-tinted card with the provider message and its available actions: Dismiss, plus **Retry turn** and **Continue** when the provider supports them. The provider message keeps the reset time for a quota error; the card does not add its own advice. The message error block remains as the fallback when there is no attention item, with the same two actions.
-- The assistant error card carries two quiet actions when the provider allows them: **Retry turn** (undo the failed turn and replay its user message on the current model) and **Continue** (append a continuation turn and keep partial work). A quota or rate-limit error adds a one-line hint to change the model in the composer first. Retry is hidden for providers without `retry`; Continue is hidden without `send`.
+- The assistant error card carries two quiet actions when the provider allows them: **Retry turn** (undo the failed turn and replay its user message on the current model) and **Continue** (append a continuation turn and keep partial work). Retry is hidden for providers without `retry`; Continue is hidden without `send`.
 - Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
 - Code blocks use a monospace font with horizontal scrolling; syntax highlighting and per-code-block copy remain follow-ups. Message-level Copy includes the fences.
 
@@ -710,4 +721,4 @@ The prototype is a design artifact, not production code. It uses the same labels
 
 ### Sessions scope
 
-- The Sessions list defaults to the root scope: top-level sessions only. `All`, `Root`, and `Subagents` chips switch the loaded page, and child sessions carry a `SUBAGENT` tag.
+- The Sessions list defaults to the tree. `All` shows roots with nested subagents, `Root` is roots only with child counts, and `Subagents` is a flat child list. Child sessions carry a `SUBAGENT` tag and a chevron disclosure on their parent.

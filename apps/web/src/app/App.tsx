@@ -95,6 +95,13 @@ import {
   previewMimeType,
   type PreviewKind,
 } from "./file-preview";
+import { SessionRow } from "./SessionRow";
+import { SessionTree, type SessionTreeLabels } from "./SessionTree";
+import {
+  buildSessionTree,
+  countTreeSessions,
+  filterSessionTree,
+} from "./session-tree";
 import {
   compactionPart,
   shellPart,
@@ -2213,38 +2220,31 @@ function SearchView(props: {
           </div>
           <div className={`session-list ${loading ? "search-loading" : ""}`}>
             {results.map((session) => (
-              <button
-                className={`session-list-item ${session.unread ? "unread" : ""}`}
-                type="button"
+              <SessionRow
                 key={session.ref}
-                onClick={() => props.onOpen(session.ref)}
-                aria-label={searchResultLabel(session)}
-              >
-                <span className={`session-status-dot ${session.status}`} />
-                <span className="session-list-main">
-                  <strong>{session.title}</strong>
-                  <span className="session-list-meta">
-                    {providerLabel(session.providerID)}
-                    {session.project || session.directory ? (
-                      <> · {session.project ?? session.directory}</>
-                    ) : null}
-                    {session.agent ? <> · {session.agent}</> : null}
-                  </span>
-                </span>
-                <span className="session-list-side">
-                  {session.attention ? (
-                    <span className={`type-badge ${session.attention.type}`}>
-                      {ATTENTION_LABELS[session.attention.type]}
-                    </span>
-                  ) : null}
-                  {session.unread ? <span className="sr-only">Unread</span> : null}
-                  <span className="mono">{relativeTime(session.updatedAt)}</span>
-                  <span className={`status-chip ${session.status}`}>
-                    <i />
-                    {session.status}
-                  </span>
-                </span>
-              </button>
+                session={session}
+                provider={providerLabel(session.providerID)}
+                time={relativeTime(session.updatedAt)}
+                ariaLabel={searchResultLabel(session)}
+                attention={
+                  session.attention
+                    ? {
+                        type: session.attention.type,
+                        label: ATTENTION_LABELS[session.attention.type],
+                      }
+                    : undefined
+                }
+                metaPrefix={
+                  session.parentRef ? (
+                    <span className="session-subagent-tag">Subagent</span>
+                  ) : undefined
+                }
+                metaSuffix={
+                  session.agent ? <> · {session.agent}</> : undefined
+                }
+                showStatusChip
+                onOpen={() => props.onOpen(session.ref)}
+              />
             ))}
           </div>
         </section>
@@ -2306,27 +2306,74 @@ function ChatSidebar(props: {
   }
   all.sort((left, right) => right.updatedAt - left.updatedAt);
 
+  const tree = buildSessionTree(all);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const parentRef = props.activeSession?.parentRef;
+    if (!parentRef) return;
+    setExpanded((current) =>
+      current.has(parentRef) ? current : new Set(current).add(parentRef),
+    );
+  }, [props.activeSession?.parentRef]);
+
   const needle = query.trim().toLowerCase();
-  const filtered = all.filter((session) => {
+  const matches = (session: Session) => {
     if (provider !== "all" && session.providerID !== provider) return false;
     if (status !== "all" && session.status !== status) return false;
     if (!needle) return true;
     return searchResultLabel(session).toLowerCase().includes(needle);
-  });
+  };
+  const filteredNodes = filterSessionTree(tree.nodes, matches);
+  const filteredOrphans = tree.orphans.filter(matches);
+  const filteredCount =
+    countTreeSessions(filteredNodes) + filteredOrphans.length;
 
-  const groups: Array<{ label: string; items: Session[] }> = [];
-  for (const session of filtered) {
-    const label = sidebarGroupLabel(session.updatedAt);
+  const groups: Array<{
+    label: string;
+    nodes: typeof filteredNodes;
+    orphans: Session[];
+  }> = [];
+  for (const node of filteredNodes) {
+    const label = sidebarGroupLabel(node.latestAt);
     const group = groups.find((candidate) => candidate.label === label);
-    if (group) group.items.push(session);
-    else groups.push({ label, items: [session] });
+    if (group) group.nodes.push(node);
+    else groups.push({ label, nodes: [node], orphans: [] });
   }
+  for (const orphan of filteredOrphans) {
+    const label = sidebarGroupLabel(orphan.updatedAt);
+    const group = groups.find((candidate) => candidate.label === label);
+    if (group) group.orphans.push(orphan);
+    else groups.push({ label, nodes: [], orphans: [orphan] });
+  }
+
+  const toggle = (ref: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  };
+
+  const labels: SessionTreeLabels = {
+    provider: providerLabel,
+    time: relativeTime,
+    aria: searchResultLabel,
+    attention: (session) =>
+      session.attention
+        ? {
+            type: session.attention.type,
+            label: ATTENTION_LABELS[session.attention.type],
+          }
+        : undefined,
+  };
 
   return (
     <aside className="chat-sidebar" aria-label="Session list">
       <div className="chat-sidebar-head">
         <span className="chat-sidebar-label">Sessions</span>
-        <span className="chat-sidebar-count">{filtered.length}</span>
+        <span className="chat-sidebar-count">{filteredCount}</span>
       </div>
 
       <div className="chat-sidebar-filters">
@@ -2380,47 +2427,45 @@ function ChatSidebar(props: {
         ) : null}
         {loading && sessions.length === 0 ? (
           <div className="chat-sidebar-empty">Loading sessions…</div>
-        ) : filtered.length === 0 ? (
+        ) : filteredCount === 0 ? (
           <div className="chat-sidebar-empty">No sessions match.</div>
         ) : (
           groups.map((group) => (
             <section className="chat-sidebar-group" key={group.label}>
               <div className="chat-sidebar-group-label">{group.label}</div>
               <div className="session-list">
-                {group.items.map((session) => (
-                  <button
-                    className={`session-list-item ${
-                      session.unread ? "unread" : ""
-                    } ${session.ref === props.activeRef ? "active" : ""}`}
-                    type="button"
+                {group.nodes.length > 0 ? (
+                  <SessionTree
+                    nodes={group.nodes}
+                    expanded={expanded}
+                    onToggle={toggle}
+                    onOpen={props.onOpen}
+                    labels={labels}
+                    activeRef={props.activeRef}
+                    showStatusChip={false}
+                  />
+                ) : null}
+                {group.orphans.map((session) => (
+                  <SessionRow
                     key={session.ref}
-                    aria-current={
-                      session.ref === props.activeRef ? "page" : undefined
+                    session={session}
+                    provider={providerLabel(session.providerID)}
+                    time={relativeTime(session.updatedAt)}
+                    ariaLabel={searchResultLabel(session)}
+                    active={session.ref === props.activeRef}
+                    attention={
+                      session.attention
+                        ? {
+                            type: session.attention.type,
+                            label: ATTENTION_LABELS[session.attention.type],
+                          }
+                        : undefined
                     }
-                    aria-label={searchResultLabel(session)}
-                    onClick={() => props.onOpen(session.ref)}
-                  >
-                    <span className={`session-status-dot ${session.status}`} />
-                    <span className="session-list-main">
-                      <strong>{session.title}</strong>
-                      <span className="session-list-meta">
-                        {providerLabel(session.providerID)}
-                        {session.project || session.directory ? (
-                          <> · {session.project ?? session.directory}</>
-                        ) : null}
-                      </span>
-                    </span>
-                    <span className="session-list-side">
-                      {session.attention ? (
-                        <span className={`type-badge ${session.attention.type}`}>
-                          {ATTENTION_LABELS[session.attention.type]}
-                        </span>
-                      ) : null}
-                      <span className="mono">
-                        {relativeTime(session.updatedAt)}
-                      </span>
-                    </span>
-                  </button>
+                    metaPrefix={
+                      <span className="session-subagent-tag">Subagent</span>
+                    }
+                    onOpen={() => props.onOpen(session.ref)}
+                  />
                 ))}
               </div>
             </section>
@@ -2447,7 +2492,10 @@ function sidebarGroupLabel(at: number): string {
   return "Earlier";
 }
 
-function searchResultLabel(session: Session): string {
+function searchResultLabel(
+  session: Session,
+  parentTitle?: string,
+): string {
   const cues = [
     session.unread ? "unread" : undefined,
     session.attention
@@ -2456,6 +2504,8 @@ function searchResultLabel(session: Session): string {
   ].filter(Boolean);
   return [
     session.title,
+    session.parentRef ? "subagent" : undefined,
+    parentTitle ? `of ${parentTitle}` : undefined,
     providerLabel(session.providerID),
     session.project ?? session.directory,
     session.status,
@@ -2491,17 +2541,68 @@ function SessionsView(props: {
   const [loading, setLoading] = useState(!cached.current);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
-  const [scope, setScope] = useState<"all" | "root" | "subagent">("root");
-  const visibleSessions = useMemo(
+  const [scope, setScope] = useState<"all" | "root" | "subagent">("all");
+  const tree = useMemo(() => buildSessionTree(sessions), [sessions]);
+  const subagentSessions = useMemo(
     () =>
-      sessions.filter((session) =>
-        scope === "all"
-          ? true
-          : scope === "root"
-            ? !session.parentRef
-            : Boolean(session.parentRef),
+      sessions
+        .filter((session) => Boolean(session.parentRef))
+        .sort((left, right) => right.updatedAt - left.updatedAt),
+    [sessions],
+  );
+  const parentTitles = useMemo(
+    () =>
+      new Map(
+        sessions
+          .filter((session) => !session.parentRef)
+          .map((session) => [session.ref, session.title] as const),
       ),
-    [scope, sessions],
+    [sessions],
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (ref: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  };
+  const labels: SessionTreeLabels = {
+    provider: providerLabel,
+    time: relativeTime,
+    aria: searchResultLabel,
+    attention: (session) =>
+      session.attention
+        ? {
+            type: session.attention.type,
+            label: ATTENTION_LABELS[session.attention.type],
+          }
+        : undefined,
+  };
+  const sessionRow = (session: Session) => (
+    <SessionRow
+      key={session.ref}
+      session={session}
+      provider={providerLabel(session.providerID)}
+      time={relativeTime(session.updatedAt)}
+      ariaLabel={searchResultLabel(session, session.parentRef ? parentTitles.get(session.parentRef) : undefined)}
+      attention={
+        session.attention
+          ? {
+              type: session.attention.type,
+              label: ATTENTION_LABELS[session.attention.type],
+            }
+          : undefined
+      }
+      metaPrefix={
+        session.parentRef ? (
+          <span className="session-subagent-tag">Subagent</span>
+        ) : undefined
+      }
+      showStatusChip
+      onOpen={() => props.onOpen(session.ref)}
+    />
   );
 
   const load = async (next?: string) => {
@@ -2598,8 +2699,10 @@ function SessionsView(props: {
             <h2>All sessions</h2>
             <p>
               {scope === "all"
-                ? `${sessions.length} sessions`
-                : `${visibleSessions.length} of ${sessions.length} sessions`}{" "}
+                ? `${sessions.length} sessions · ${tree.childCount} subagents`
+                : scope === "root"
+                  ? `${tree.nodes.length} root sessions`
+                  : `${subagentSessions.length} subagents`}{" "}
               · newest first
             </p>
           </div>
@@ -2621,42 +2724,66 @@ function SessionsView(props: {
           <div className="empty">Loading sessions…</div>
         ) : sessions.length === 0 ? (
           <div className="empty">No sessions returned by the provider.</div>
-        ) : visibleSessions.length === 0 ? (
-          <div className="empty">
-            No {scope === "subagent" ? "subagent" : "root"} sessions in the
-            loaded page.
+        ) : scope === "all" ? (
+          <div className="session-list">
+            <SessionTree
+              nodes={tree.nodes}
+              expanded={expanded}
+              onToggle={toggle}
+              onOpen={props.onOpen}
+              labels={labels}
+              showStatusChip
+            />
+            {tree.orphans.length > 0 ? (
+              <div className="session-tree-orphans">
+                <div className="session-tree-section-label">
+                  Subagents without a loaded parent
+                </div>
+                {tree.orphans.map(sessionRow)}
+              </div>
+            ) : null}
+          </div>
+        ) : scope === "root" ? (
+          <div className="session-list">
+            {tree.nodes.length === 0 ? (
+              <div className="empty">No root sessions in the loaded page.</div>
+            ) : (
+              tree.nodes.map((node) => (
+                <SessionRow
+                  key={node.session.ref}
+                  session={node.session}
+                  provider={providerLabel(node.session.providerID)}
+                  time={relativeTime(node.latestAt)}
+                  ariaLabel={searchResultLabel(node.session)}
+                  attention={
+                    node.session.attention
+                      ? {
+                          type: node.session.attention.type,
+                          label: ATTENTION_LABELS[node.session.attention.type],
+                        }
+                      : undefined
+                  }
+                  metaPrefix={
+                    node.children.length > 0 ? (
+                      <span className="session-child-count">
+                        {node.children.length} subagent
+                        {node.children.length === 1 ? "" : "s"}
+                      </span>
+                    ) : undefined
+                  }
+                  showStatusChip
+                  onOpen={() => props.onOpen(node.session.ref)}
+                />
+              ))
+            )}
           </div>
         ) : (
           <div className="session-list">
-            {visibleSessions.map((session) => (
-              <button
-                className={`session-list-item ${session.unread ? "unread" : ""}`}
-                type="button"
-                key={session.ref}
-                onClick={() => props.onOpen(session.ref)}
-              >
-                <span className={`session-status-dot ${session.status}`} />
-                <span className="session-list-main">
-                  <strong>{session.title}</strong>
-                  <span className="session-list-meta">
-                    {session.parentRef ? (
-                      <span className="session-subagent-tag">Subagent</span>
-                    ) : null}
-                    {providerLabel(session.providerID)}
-                    {session.project || session.directory ? (
-                      <> · {session.project ?? session.directory}</>
-                    ) : null}
-                  </span>
-                </span>
-                <span className="session-list-side">
-                  <span className="mono">{relativeTime(session.updatedAt)}</span>
-                  <span className={`status-chip ${session.status}`}>
-                    <i />
-                    {session.status}
-                  </span>
-                </span>
-              </button>
-            ))}
+            {subagentSessions.length === 0 ? (
+              <div className="empty">No subagents in the loaded page.</div>
+            ) : (
+              subagentSessions.map(sessionRow)
+            )}
           </div>
         )}
         {cursor ? (
@@ -4521,6 +4648,17 @@ function SessionDetail(props: {
     }
     return items;
   }, [messages, session?.providerID, childStatus]);
+  const backgroundSubagents = backgroundItems.filter(
+    (item) => item.kind === "subagent",
+  ).length;
+  const backgroundShells = backgroundItems.length - backgroundSubagents;
+  const backgroundLabel =
+    backgroundSubagents > 0 && backgroundShells === 0
+      ? `${backgroundSubagents} subagent${backgroundSubagents === 1 ? "" : "s"} running`
+      : backgroundShells > 0 && backgroundSubagents === 0
+        ? `${backgroundShells} shell${backgroundShells === 1 ? "" : "s"} running`
+        : `${backgroundItems.length} running`;
+
 
   return (
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
@@ -4768,22 +4906,32 @@ function SessionDetail(props: {
             ) : null}
 
             <div className="chat-composer-wrap">
-              {backgroundItems.length > 0 ? (
-                <button
-                  className="chat-background-chip"
-                  type="button"
-                  aria-label={`${backgroundItems.length} running in background. Open details.`}
-                  onClick={() => props.onDetailsOpenChange(true)}
-                >
-                  <span className="chat-background-dot" aria-hidden="true" />
-                  {backgroundItems.length} running in background
-                </button>
-              ) : null}
-              {!atBottom ? (
-                <button className="chat-jump" type="button" onClick={jumpToLatest}>
-                  {hasBlockingAttention ? "Input needed" : "Jump to latest"}
-                  <span aria-hidden="true">↓</span>
-                </button>
+              {backgroundItems.length > 0 || !atBottom ? (
+                <div className="composer-status">
+                  {backgroundItems.length > 0 ? (
+                    <button
+                      className="chat-background-chip"
+                      type="button"
+                      aria-label={`${backgroundLabel}. Open details.`}
+                      onClick={() => props.onDetailsOpenChange(true)}
+                    >
+                      <span className="chat-background-dot" aria-hidden="true" />
+                      <span className="chat-background-label">
+                        {backgroundLabel}
+                      </span>
+                    </button>
+                  ) : null}
+                  {!atBottom ? (
+                    <button
+                      className="chat-jump"
+                      type="button"
+                      onClick={jumpToLatest}
+                    >
+                      {hasBlockingAttention ? "Input needed" : "Jump to latest"}
+                      <span aria-hidden="true">↓</span>
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               <form
                 className="chat-composer"
