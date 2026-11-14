@@ -115,6 +115,75 @@ async function retryServer(stageFiles: unknown[]): Promise<{
   };
 }
 
+describe("OpenCodeAdapter form attention", () => {
+  it("keeps option descriptions, the custom answer, and required fields", async () => {
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/api/permission/request")) {
+        json(response, 200, { data: [] });
+        return;
+      }
+      if (request.url?.startsWith("/api/form")) {
+        json(response, 200, {
+          data: [
+            {
+              id: "frm_1",
+              sessionID: "ses_test",
+              title: "Questions",
+              fields: [
+                {
+                  key: "q0",
+                  title: "TUI dependencies",
+                  description: "How should the TUI handle terminal input?",
+                  type: "string",
+                  options: [
+                    {
+                      value: "x/term",
+                      label: "golang.org/x/term only",
+                      description: "Adds two modules and keeps cross-compiles.",
+                    },
+                  ],
+                  custom: true,
+                },
+              ],
+            },
+          ],
+        });
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const adapter = new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    });
+
+    const attention = await adapter.listAttention(
+      [],
+      AbortSignal.timeout(5_000),
+    );
+    const form = attention.find((item) => item.type === "question");
+    expect(form?.summary).toBe("1 field needs an answer");
+    expect(form?.fields?.[0]).toMatchObject({
+      id: "q0",
+      description: "How should the TUI handle terminal input?",
+      required: true,
+      custom: true,
+      options: [
+        {
+          value: "x/term",
+          label: "golang.org/x/term only",
+          description: "Adds two modules and keeps cross-compiles.",
+        },
+      ],
+    });
+  });
+});
+
 describe("OpenCodeAdapter.retryMessage", () => {
   it("reverts the failed user turn and replays its text", async () => {
     const { adapter, calls } = await retryServer([]);

@@ -1,17 +1,18 @@
-# Design Lock — v1.5
+# Design Lock — v1.6
 
 Status: **frozen**.
 
-- Version: `design-v1.5`
-- Parent: `design-v1.4`
+- Version: `design-v1.6`
+- Parent: `design-v1.5`
 - Date: 2026-11-15
-- Git tag: `design-v1.5`
+- Git tag: `design-v1.6`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
 - v1.3 scope: composer attachments, Open WebUI in-chat branch switching and retry, and OpenCode session forks.
 - v1.4 scope: composer reply suggestions and select sizing.
 - v1.5 scope: the parent/subagent session tree and the in-flow composer status row.
+- v1.6 scope: question choice detail, option descriptions, and custom answers.
 
 ## What is frozen
 
@@ -103,6 +104,31 @@ This aligns implementation with the existing prototype and does not add tokens, 
   `N running`) and shares the row with Jump to latest.
 - Sessions default to the parent/subagent tree; the Root and Subagents chips
   are filters, and child sessions carry a `SUBAGENT` tag.
+
+## Question choice detail (2026-11-15)
+
+Question forms now show the information the provider sends, instead of dropping
+it into a native select.
+
+- **Select fields.** A provider `select` renders as a radio list, not a
+  dropdown. The field title is a 10px uppercase label; the field description is
+  the question at 14px/500; `Select one answer` is the 11px hint. Each row has
+  a radio, the option label at 14px/500, the provider description at 12px/1.5,
+  and a 10px numbered index at the right. Rows use the 8px control radius and
+  a 1px border; the selected row uses the accent border and 2px inset.
+- **Custom answers.** A field with `custom: true` gets a final
+  `Type your own answer…` row. Selecting it reveals a text input. The field
+  value is the typed text, and Submit stays disabled while it is empty. The
+  custom row is the last row and takes the next number.
+- **Required.** OpenCode's forms expect a visible field to be answered unless
+  the provider sets `required: false`. Submit reflects that: it is disabled
+  until every required field has a value.
+- **Question text.** The field description is the question in the card. When a
+  field description exists, the card does not repeat the latest assistant
+  question; the transcript above already provides that context.
+- **No new tokens.** The change reuses the type scale, 8px control radius, 4px
+  badge radius, accent state, and spacing steps. The option rows are controls,
+  not new cards.
 
 ## Session tree and composer status (2026-11-15)
 

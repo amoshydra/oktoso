@@ -1116,6 +1116,111 @@
   min-height: 28px;
 }
 
+.attention-choice-field {
+  gap: var(--space-2);
+}
+
+.attention-field .attention-field-title {
+  margin: 0;
+  padding: 0;
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.attention-question {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.attention-choices {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.attention-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.attention-choice:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.attention-choice.selected {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.attention-choice input[type="radio"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.attention-choice-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attention-choice-label {
+  font-weight: 500;
+}
+
+.attention-choice-desc {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.attention-choice-index {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  line-height: 18px;
+  text-align: center;
+}
+
+.attention-choice-input {
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  outline: 0;
+}
+
+.attention-choice-input:focus {
+  border-color: var(--accent);
+}
+
 .attention-help {
   color: var(--faint);
   font-size: var(--text-xs);
