@@ -438,10 +438,10 @@ discovery surface.
 
 - The optimistic user message appears before the POST settles.
 - A failed send shows Retry and Discard; Retry uses the same idempotency key.
-- An assistant error card shows the provider message, a model hint for quota
-  and rate-limit errors, and **Retry turn** / **Continue** when the provider
-  supports them. Retry reuses the failed turn's user message; Continue appends
-  a new turn and keeps partial work.
+- An assistant error card shows the provider message and **Retry turn** /
+  **Continue** when the provider supports them. Retry reuses the failed turn's
+  user message; Continue appends a new turn and keeps partial work. The card
+  does not add its own advice; the provider message carries the reset time.
 - A successful send shows one user message after reconciliation.
 - Edit & fork opens the new session with the edited text in the draft and does
   not present the fork as an in-chat branch.

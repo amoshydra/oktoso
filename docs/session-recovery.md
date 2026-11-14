@@ -30,8 +30,9 @@ message did send; only the assistant turn failed.
   there. It keeps the original session intact.
 
 The web shows **Retry turn** and **Continue** in the assistant error card. The
-hint above them names the model step for quota errors. Both actions are hidden
-or disabled when the provider does not support them (`retry`, `send`).
+provider message carries the reset time; the card adds no advice of its own.
+Both actions are hidden or disabled when the provider does not support them
+(`retry`, `send`).
 
 ## Provider behavior
 
