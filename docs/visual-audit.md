@@ -908,3 +908,12 @@ instead of raw fences, without changing the transcript hierarchy.
   is unchanged when a session has no diagrams.
 - **Files.** `apps/web/src/app/mermaid.ts`, `markdown.ts`, `App.tsx`,
   `styles.css`, `apps/web/package.json`.
+
+## Notification focus (2026-11-15)
+
+- A notification deep link scrolls the matching inline attention card into
+  view and outlines it with the existing 2px accent. The card is not moved into
+  a sheet or a new surface; it keeps the inline grammar and stays the action
+  target.
+- The outline is transient only in the sense that it follows the query param.
+  It does not replace the card's blocking or focused states.

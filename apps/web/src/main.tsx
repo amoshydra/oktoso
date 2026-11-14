@@ -11,11 +11,13 @@ import {
   bootstrapBrowserHistory,
   HistoryProvider,
 } from "./app/history";
+import { registerServiceWorker } from "./pwa";
 
 const savedTheme = localStorage.getItem("oktoso-theme");
 document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
 
 bootstrapBrowserHistory();
+registerServiceWorker();
 
 const root = document.getElementById("app");
 if (!root) throw new Error("Missing #app root");
