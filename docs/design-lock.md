@@ -135,8 +135,10 @@ collapsed activity row. Nothing moved out of that row and no route was added.
   `GET /api/v1/sessions/:ref/files`, a provider-resolved read jailed to the
   session directory.
 - The preview renders by content type: Markdown, preformatted text, image,
-  native video and audio controls, sandboxed HTML frame, and PDF frame. Media
-  uses a 960px sheet with a 520px floor; text stays at 720px.
+  native video and audio controls, sandboxed HTML frame, and PDF frame. HTML
+  uses a short-lived ticket rooted in its directory so relative assets load,
+  and runs with scripts in an opaque origin. Media uses a 960px sheet with a
+  520px floor; text stays at 720px.
 - No new type, spacing, radius, color, or navigation token was added. The 360px
   preview region and the 10px metadata stay inside the existing activity body;
   the preview sheet uses the existing 16px sheet radius, large shadow, and

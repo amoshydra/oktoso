@@ -494,6 +494,9 @@ discovery surface.
   mention stays an inline code span otherwise.
 - Images, video, audio, PDF, and HTML open in the preview; unknown extensions do
   not become buttons.
+- HTML gets a ten-minute ticket at `/preview/<ticket>/<path>` so its relative
+  assets resolve and its scripts run in a sandboxed, opaque-origin frame. The
+  ticket is scoped to the file's directory and cannot reach the hub API.
 - The hub rejects escaping and absolute paths and never returns provider
   credentials or a provider URL to the browser.
 - A provider without `files` still renders the transcript body.

@@ -57,6 +57,30 @@ describe("parseRoute", () => {
     });
   });
 
+  it("carries an HTML preview path on the chat route", () => {
+    expect(
+      parseRoute(
+        "/sessions/openwebui%3Achat_1",
+        "?details=1&preview=reports%2Freport.html",
+      ),
+    ).toEqual({
+      name: "chat",
+      ref: "openwebui:chat_1",
+      details: true,
+      preview: "reports/report.html",
+    });
+    expect(
+      parseRoute(
+        "/sessions/openwebui%3Achat_1",
+        "?preview=..%2Fsecret.txt",
+      ),
+    ).toEqual({
+      name: "chat",
+      ref: "openwebui:chat_1",
+      details: false,
+    });
+  });
+
   it("parses search filters and ignores invalid status values", () => {
     expect(
       parseRoute(
@@ -152,6 +176,16 @@ describe("routeHref", () => {
     expect(
       routeHref({ name: "chat", ref: "desktop-opencode:ses/a b", details: true }),
     ).toBe("/sessions/desktop-opencode%3Ases%2Fa%20b?details=1");
+    expect(
+      routeHref({
+        name: "chat",
+        ref: "openwebui:chat_1",
+        details: false,
+        preview: "reports/report.html",
+      }),
+    ).toBe(
+      "/sessions/openwebui%3Achat_1?preview=reports%2Freport.html",
+    );
   });
 });
 

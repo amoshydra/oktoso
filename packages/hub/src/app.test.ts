@@ -371,6 +371,56 @@ describe("hub app", () => {
     });
   });
 
+  it("issues a ticket and serves an HTML preview frame", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const ticket = await app.request(
+      `/api/v1/sessions/${ref}/preview?path=${encodeURIComponent("reports/report.html")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(ticket.status).toBe(200);
+    const body = (await ticket.json()) as { url: string };
+    expect(body.url).toMatch(/^\/preview\/[0-9a-f-]+\/report\.html$/);
+
+    const frame = await app.request(body.url);
+    expect(frame.status).toBe(200);
+    expect(frame.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(frame.headers.get("content-disposition")).toContain("inline");
+    expect(frame.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+    expect(frame.headers.get("content-security-policy")).toContain(
+      "frame-ancestors 'self'",
+    );
+    expect(await frame.text()).toContain("Fake report");
+  });
+
+  it("does not serve a preview ticket outside its directory", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const ticket = await app.request(
+      `/api/v1/sessions/${ref}/preview?path=${encodeURIComponent("reports/report.html")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const { url } = (await ticket.json()) as { url: string };
+    const escaped = `${url.slice(0, url.lastIndexOf("/"))}/%2e%2e%2f%2e%2e%2fetc%2fpasswd`;
+    const response = await app.request(escaped);
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects an expired or unknown preview ticket", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/preview/nope/report.html");
+    expect(response.status).toBe(404);
+  });
+
+  it("requires a path to issue a preview ticket", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(`/api/v1/sessions/${ref}/preview`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(400);
+  });
+
   it("requires a path for session file reads", async () => {
     const { app } = await createTestApp();
     const ref = encodeURIComponent("desktop-opencode:ses_auth");

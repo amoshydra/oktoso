@@ -13,9 +13,13 @@ export function securityHeaders(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
-    // Device apps may be embedded by the Even Hub plugin loader. They are
-    // public static bundles; the API still requires an owner or session credential.
-    if (!c.req.path.startsWith("/apps/")) {
+    // Device apps may be embedded by the Even Hub plugin loader, and a preview
+    // frame is embedded by the web client. Both are public static bundles or
+    // ticket-scoped file views; the API still requires a credential.
+    if (
+      !c.req.path.startsWith("/apps/") &&
+      !c.req.path.startsWith("/preview/")
+    ) {
       c.header("X-Frame-Options", "DENY");
       // The web client records audio locally for hub-backed dictation. The
       // browser still asks for microphone permission; this only removes the
