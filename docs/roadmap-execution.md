@@ -314,7 +314,9 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
 - [x] Append every run with watcher, decision, reason, action, and result.
 - [x] Global pause and per-watcher pause.
 - [x] A paused hub or watcher drops new work.
-- [ ] Interrupt an action already in flight.
+- [x] Interrupt an action already in flight: pause and per-watcher pause abort
+  the active signal; the run records `skipped / aborted`. A request that already
+  reached the provider may still complete; idempotency keeps a retry safe.
 
 ### B7. MCP and CLI
 

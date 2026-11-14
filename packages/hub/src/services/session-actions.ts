@@ -34,6 +34,7 @@ export class SessionActions {
     ref: string,
     input: SendInput,
     idempotencyKey?: string,
+    signal?: AbortSignal,
   ): Promise<SendResult> {
     const cacheKey = idempotencyKey ? `${ref}:${idempotencyKey}` : undefined;
     const hash = requestHash(input);
@@ -113,11 +114,15 @@ export class SessionActions {
 
     // `answer` is hub-only metadata; providers receive the plain message.
     const send = () =>
-      this.sessions.sendMessage(ref, {
-        text: input.text,
-        ...(input.attachments ? { attachments: input.attachments } : {}),
-        ...(input.delivery ? { delivery: input.delivery } : {}),
-      });
+      this.sessions.sendMessage(
+        ref,
+        {
+          text: input.text,
+          ...(input.attachments ? { attachments: input.attachments } : {}),
+          ...(input.delivery ? { delivery: input.delivery } : {}),
+        },
+        signal,
+      );
     const result = cacheKey
       ? await this.idempotency.run(cacheKey, hash, send)
       : await send();

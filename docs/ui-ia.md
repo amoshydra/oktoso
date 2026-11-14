@@ -440,7 +440,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 
 - Appearance: theme, density, message width.
 - Notifications: per-device Web Push with enable, test, and disable; a permission badge; per-type routing (Immediate, Digest, Off) for permission, approval, question, unread, and error; a digest window; quiet hours with an IANA time zone; and a device list with per-device revoke. Channel credentials stay on the hub; a device only sees its label, device ID, and last-seen time.
-- Automation: pause all, per-watcher pause, pending approvals with Approve and Deny, and the most recent runs with their decision. An approval with a proposed answer offers **Always allow** behind a second confirmation; remembered shapes are listed below with uses and Revoke. Watchers and budgets stay file-configured; the panel never edits config.
+- Automation: pause all, per-watcher pause, pending approvals with Approve and Deny, and the most recent runs with their decision. An approval with a proposed answer offers **Always allow** behind a second confirmation; remembered shapes are listed below with uses and Revoke. **Pause all** and a per-watcher pause abort an action already in flight, not just new work. Watchers and budgets stay file-configured; the panel never edits config.
 - Pending automation approvals also appear in the Inbox under an `Automation` group, using the same approval card. They count toward the Inbox badge. Approve executes the stored plan; Deny records the decision.
 - Shortcuts: command palette, new session, search, send.
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
