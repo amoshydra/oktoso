@@ -310,7 +310,7 @@ the v1.8 mobile bar.
 - **One-line draft.** The textarea starts at one line on mobile (44px) and
   grows with the draft to 180px. Desktop keeps the two-line starting height.
   Composer padding is 8px on mobile and the bar gap is 4px.
-- **Height.** The collapsed mobile composer is about 108px, down from about
+- **Height.** The collapsed mobile composer is about 112px, down from about
   172px. The status row and queue summary stay conditional and unchanged.
 - **Desktop.** The inline Agent/Model/Reasoning selects, visible `Suggest`,
   `Attach`, `Dictate`, `Queue`, and two-line textarea are unchanged.

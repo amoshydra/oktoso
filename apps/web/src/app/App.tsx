@@ -5865,6 +5865,10 @@ function SessionDetail(props: {
                         <span className="composer-interrupt-short">
                           {interrupting ? "Stopping…" : "Stop"}
                         </span>
+                        <span
+                          className="composer-stop-square"
+                          aria-hidden="true"
+                        />
                       </button>
                     ) : null}
                     {running && canSteer && canQueue ? (
