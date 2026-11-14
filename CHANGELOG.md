@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.29](https://github.com/amoshydra/oktoso/compare/v0.1.28...v0.1.29) (2026-11-14)
+
+
+### Features
+
+* **chat:** preview files and redesign agent activity as tiles ([e0ccab4](https://github.com/amoshydra/oktoso/commit/e0ccab4f9d96f6a8983546632474e172ad46732b))
+* **chat:** show background shells and running subagents ([4ae6301](https://github.com/amoshydra/oktoso/commit/4ae630178823c09e8d8e8329bfbafce34daf1f33))
+* **web:** add a subagent scope to the sessions list ([96d1ab3](https://github.com/amoshydra/oktoso/commit/96d1ab30dc067df3e3de93fd66f7895ff4541896))
+
+
+### Bug Fixes
+
+* **chat:** track subagent liveness from the child session ([199624a](https://github.com/amoshydra/oktoso/commit/199624ad4d37cfcecf0fb12707cbb407b85d3f1e))
+* **web:** restore the mobile chat width ([d035f80](https://github.com/amoshydra/oktoso/commit/d035f80969735f6008b14f40067bf7c2db931f23))
+
 ## [0.1.28](https://github.com/amoshydra/oktoso/compare/v0.1.27...v0.1.28) (2026-11-09)
 
 
