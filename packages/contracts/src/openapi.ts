@@ -47,6 +47,19 @@ import {
   zQuestionPrompt,
   zPendingQuestionSummary,
   zQuestionSummaryPage,
+  zNotificationChannelKind,
+  zNotificationChannelView,
+  zNotificationDelivery,
+  zNotificationDeliveryPage,
+  zNotificationRouting,
+  zNotificationSettings,
+  zNotificationSettingsInput,
+  zNotificationTestInput,
+  zNotificationTestResult,
+  zPushSubscription,
+  zPushSubscriptionInput,
+  zPushSubscriptionPage,
+  zQuietHours,
   zReplyOptions,
   zReplyAudit,
   zReplyFeedbackInput,
@@ -202,6 +215,55 @@ const AttentionSummarySchema = registry.register(
 );
 const HubEventSchema = registry.register("HubEvent", zHubEvent);
 const SearchResultSchema = registry.register("SearchResult", zSearchResult);
+const NotificationChannelKindSchema = registry.register(
+  "NotificationChannelKind",
+  zNotificationChannelKind,
+);
+const QuietHoursSchema = registry.register("QuietHours", zQuietHours);
+const NotificationRoutingSchema = registry.register(
+  "NotificationRouting",
+  zNotificationRouting,
+);
+const NotificationChannelViewSchema = registry.register(
+  "NotificationChannelView",
+  zNotificationChannelView,
+);
+const PushSubscriptionInputSchema = registry.register(
+  "PushSubscriptionInput",
+  zPushSubscriptionInput,
+);
+const PushSubscriptionSchema = registry.register(
+  "PushSubscription",
+  zPushSubscription,
+);
+const PushSubscriptionPageSchema = registry.register(
+  "PushSubscriptionPage",
+  zPushSubscriptionPage,
+);
+const NotificationDeliverySchema = registry.register(
+  "NotificationDelivery",
+  zNotificationDelivery,
+);
+const NotificationDeliveryPageSchema = registry.register(
+  "NotificationDeliveryPage",
+  zNotificationDeliveryPage,
+);
+const NotificationTestInputSchema = registry.register(
+  "NotificationTestInput",
+  zNotificationTestInput,
+);
+const NotificationTestResultSchema = registry.register(
+  "NotificationTestResult",
+  zNotificationTestResult,
+);
+const NotificationSettingsSchema = registry.register(
+  "NotificationSettings",
+  zNotificationSettings,
+);
+const NotificationSettingsInputSchema = registry.register(
+  "NotificationSettingsInput",
+  zNotificationSettingsInput,
+);
 
 const json = <T extends z.ZodType>(schema: T) => ({
   "application/json": { schema },
@@ -1051,6 +1113,7 @@ export function buildOpenApiDocument() {
       { name: "transcription" },
       { name: "events" },
       { name: "search" },
+      { name: "notifications" },
       { name: "diagnostics" },
     ],
     security: [{ bearerAuth: [] }],

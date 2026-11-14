@@ -56,15 +56,16 @@ Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
 ### A1. Contracts and configuration
 
-- [ ] Add `packages/contracts/src/notifications.ts`:
-  - `zNotificationChannel` (`webpush`, `ntfy`, `telegram`, `webhook`)
-  - `zNotificationRule` (types, priority floor, quiet hours, digest window)
-  - `zPushSubscription` (endpoint, keys, device label, createdAt, lastSeenAt)
+- [x] Add `packages/contracts/src/notifications.ts`:
+  - `zNotificationChannelKind` and `zNotificationChannelView`
+  - `zNotificationRouting` (types, digest window, quiet hours)
+  - `zPushSubscriptionInput` / `zPushSubscription` (transport secrets omitted
+    on read)
   - `zNotificationDelivery` (id, channel, attentionID, status, attempts, error)
-- [ ] Export from `packages/contracts/src/index.ts`.
-- [ ] Extend the hub config schema with a `notifications` block, including
+- [x] Export from `packages/contracts/src/index.ts`.
+- [x] Extend the hub config schema with a `notifications` block, including
   `${ENV}` substitution for channel tokens.
-- [ ] Regenerate `docs/openapi.yaml` and add a schema round-trip test.
+- [x] Regenerate `docs/openapi.yaml` and add a schema round-trip test.
 
 **Touch:** `packages/contracts/src/notifications.ts`,
 `packages/contracts/src/index.ts`, `packages/hub/src/config.ts`,

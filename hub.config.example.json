@@ -6,6 +6,21 @@
   "cors": [],
   "healthCheckIntervalMs": 30000,
   "appsRoot": "dist/apps",
+  "notifications": {
+    "enabled": false,
+    "channels": [],
+    "routing": {
+      "immediate": ["permission", "approval"],
+      "digest": ["question", "unread", "error"],
+      "digestWindowMs": 900000,
+      "quietHours": {
+        "enabled": false,
+        "start": "22:00",
+        "end": "07:00",
+        "timezone": "UTC"
+      }
+    }
+  },
   "providers": [
     {
       "id": "desktop-opencode",
