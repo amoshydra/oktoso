@@ -1,15 +1,17 @@
-# Design Lock — v1.3
+# Design Lock — v1.5
 
 Status: **frozen**.
 
-- Version: `design-v1.3`
-- Parent: `design-v1.2`
-- Date: 2026-11-02
-- Git tag: `design-v1.3`
+- Version: `design-v1.5`
+- Parent: `design-v1.4`
+- Date: 2026-11-15
+- Git tag: `design-v1.5`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
 - v1.3 scope: composer attachments, Open WebUI in-chat branch switching and retry, and OpenCode session forks.
+- v1.4 scope: composer reply suggestions and select sizing.
+- v1.5 scope: the parent/subagent session tree and the in-flow composer status row.
 
 ## What is frozen
 
@@ -96,10 +98,46 @@ This aligns implementation with the existing prototype and does not add tokens, 
   subagents, with Open session for subagents. It is absent when nothing runs.
 - A background subagent's liveness is the child session's status, never the
   launch call's metadata. Old subagents read as completed.
-- A `N running in background` pill above the composer opens Details while
-  background work is live.
-- Sessions default to the root scope; the Subagents chip and `SUBAGENT` tag
-  expose child sessions.
+- A composer status row above the composer opens Details while background work
+  is live. It names the live work (`1 subagent running`, `1 shell running`, or
+  `N running`) and shares the row with Jump to latest.
+- Sessions default to the parent/subagent tree; the Root and Subagents chips
+  are filters, and child sessions carry a `SUBAGENT` tag.
+
+## Session tree and composer status (2026-11-15)
+
+The session list now exposes subagents instead of hiding them behind a scope
+filter or showing them as unrelated rows. This changes hierarchy and the
+interaction model, so it is a new design version. Forks remain ordinary rows;
+only `parentRef` subagents nest.
+
+- **Sessions tree:** root sessions first, children nested behind a chevron
+  disclosure. A parent shows `N subagents` in its meta and `N running` when a
+  child is live. Children indent 16px with a quiet 1px rail, keep the 14px
+  title, and add the existing 10px `SUBAGENT` tag. A parent is ordered by the
+  newest update in its branch.
+- **Disclosure:** a separate control at the right edge of the card, never a
+  nested button. It is 32px on desktop and 44px on mobile. The card reserves
+  trailing space so the time and status chip stay clear. The chevron rotates
+  90 degrees when open. The left side of the card keeps the session action.
+- **Scopes:** the list defaults to `All` (the tree). `Root` is roots only and
+  keeps the child count. `Subagents` is a flat child list. A subagent whose
+  parent is outside the loaded page appears under `Subagents without a loaded
+  parent`.
+- **Sidebar:** the chat sidebar uses the same tree inside its day groups. It
+  expands the active session's parent automatically and groups a family under
+  the parent's day.
+- **Composer status:** the background chip and Jump to latest are one in-flow
+  row above the composer, not two absolute pills. The row wraps; it never
+  overlaps the transcript, the composer, or the other action. The background
+  label names the kind (`1 subagent running`, `1 shell running`, `N running`).
+- **Responsive:** at 760px and below the disclosure is 44px, children indent
+  16px, and root rows keep the full content width. The status row wraps at
+  320px. No horizontal overflow.
+- **Accessibility:** the disclosure has `aria-expanded` and `aria-controls`;
+  the child group is labelled `Subagents of <parent>`. Child aria labels read
+  `subagent of <parent>`. The parent and child rows keep their normal session
+  action and status semantics.
 
 ## Agent activity tiles (2026-11-14)
 

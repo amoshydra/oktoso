@@ -688,19 +688,64 @@ their own surfaces instead of being buried in the activity grid.
   subagents. The section is hidden when nothing is live.
 - **Subagent liveness.** A background subagent's launch tool call completes
   immediately, so its tool status is `completed` while the child session keeps
-  running. The tile now takes its status from `metadata.status`, keeping the
-  green dot and label until the child finishes.
+  running. The tile takes its status from the child session's current status,
+  never the launch metadata, which keeps the launch-time `running` value
+  forever.
 - **Data.** OpenCode's `shell` messages (`shellID`, `command`, `status`, `exit`,
   `output`, background metadata, timings) map to a transcript `shell` part.
 
 
 ## Background indicator and root scope (2026-11-14)
 
-- The chat shows a pill above the composer while background work is live:
-  success dot, `N running in background`, opens Details. It is the only hint
-  outside the Details sheet on mobile.
+- Superseded by **design-v1.5** below: the chip is now part of an in-flow
+  composer status row, and the session list is a tree.
 - A subagent's status is resolved from its child session, not the launch tool
   metadata. The metadata keeps its launch-time `running` value forever, which
   made every historical subagent look live in the Background section.
-- Sessions default to the root scope, with child sessions tagged `SUBAGENT`
-  and available through the `Subagents` chip.
+- Sessions no longer default to a roots-only list; `All` is the tree and
+  `Root` is a strict filter.
+
+## Subagent tree and composer status (2026-11-15)
+
+The session list was a flat feed. Root sessions and subagents shared one column,
+so a child read as a peer, and a parent with 27 subagents produced 27 unrelated
+rows. The background chip was also a second absolute pill above the composer,
+which could overlap the Jump to latest action at narrow widths. Both were
+structure problems, not styling problems.
+
+- **Tree.** Root rows keep the full card width. A parent with children shows
+  `N subagents` (and `N running`) in the existing 11px meta line. Children
+  indent 16px with a quiet 1px rail and the 10px `SUBAGENT` tag; no new type
+  size, colour, or radius. A parent is ordered by the newest update in its
+  branch, so a live child lifts the family.
+- **Disclosure on the right.** A chevron sits in a reserved trailing area of
+  the parent card: 32px on desktop and 44px on mobile. It is a sibling of the
+  session button, never a nested button. The card reserves 44px/48px trailing
+  padding so time and status stay clear. The chevron rotates 90°, keeps the
+  standard 2px accent focus ring, and the rest of the card still opens the
+  parent.
+- **Why not a left gutter.** A left gutter on every row shifted the whole list
+  and cost 44px of title width at 390px. Root rows must align with the page
+  gutter; children are the only rows that indent.
+- **Scopes.** `All` is the tree, `Root` is roots only with child counts, and
+  `Subagents` is the flat inspection list. An orphan child (parent outside the
+  loaded page) stays visible under a quiet uppercase section label.
+- **Sidebar.** The same tree inside the sidebar's day groups. The active
+  session's parent auto-expands; a family is grouped under the parent's day.
+  The sidebar keeps its compact 2px row gap and 16px child indent.
+- **Composer status.** The background chip and Jump to latest are one in-flow
+  flex row above the composer, aligned to the composer width. The row wraps;
+  the chip truncates with ellipsis; the jump stays right. No absolute
+  positioning, no overlap, no extra scrim. The chip label names the work:
+  `1 subagent running`, `1 shell running`, or `N running`.
+- **Responsive.** Verified at 1440, 1024, 390, and 320 in both themes. At 390
+  root cards start at 33px, children at 50px, and the parent chevron sits in
+  the 44px trailing area. At 320 the status row stays above the composer and
+  wraps without horizontal overflow.
+- **Accessibility.** The disclosure has `aria-expanded` and `aria-controls`;
+  the child group is labelled `Subagents of <parent>`; child aria labels read
+  `subagent of <parent>`. The parent and child cards keep their normal session
+  button and status semantics.
+- **Files.** `apps/web/src/app/session-tree.ts` (pure tree/filter),
+  `SessionRow.tsx`, `SessionTree.tsx`, `App.tsx` mounts, `styles.css` tree and
+  composer status rules, `session-tree.test.ts`.

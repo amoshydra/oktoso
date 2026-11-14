@@ -135,6 +135,21 @@ Activity is derived from the transcript, not a new endpoint.
 - The block is collapsed by default. Expanding it is a local disclosure; the
   transcript suspends its bottom pin while a step panel is open.
 
+### Session list tree
+
+- `parentRef` is the only grouping signal. A root has no `parentRef`; a child
+  nests under the parent with the matching `ref`.
+- The Sessions list defaults to the tree. `All` shows roots with children
+  collapsed behind a disclosure; `Root` is roots only and keeps the child
+  count; `Subagents` is a flat child list.
+- The disclosure is a separate control at the card's right edge, with
+  `aria-expanded` and `aria-controls`. The card itself still opens the session.
+- A parent is ordered by the newest update in its branch. A child whose parent
+  is outside the loaded page is shown under `Subagents without a loaded
+  parent`, never dropped.
+- The chat sidebar uses the same tree inside its day groups and expands the
+  active session's parent. No new API or route is required.
+
 ### Background work
 
 - A provider `shell` message maps to a `shell` part: `id`, `command`, `status`,
@@ -145,6 +160,9 @@ Activity is derived from the transcript, not a new endpoint.
   the tile or the Background list.
 - The Details panel lists live background shells and subagents for the open
   session. Tracking work across sessions is a separate slice.
+- The composer status row is in flow above the composer. It names live work
+  (`1 subagent running`, `1 shell running`, or `N running`) and shares the row
+  with Jump to latest. It wraps instead of overlapping at narrow widths.
 
 ### Action
 
