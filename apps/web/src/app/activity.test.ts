@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compactionPart,
+  messageSegments,
   stepStatus,
   stepsFromParts,
   subagentRef,
@@ -36,6 +37,53 @@ describe("toolKind", () => {
     expect(toolKind("subagent")).toBe("subagent");
     expect(toolKind("task")).toBe("subagent");
     expect(toolKind("mystery")).toBe("other");
+  });
+});
+
+describe("messageSegments", () => {
+  it("keeps reasoning before the answer it produced", () => {
+    const segments = messageSegments([
+      { type: "reasoning", text: "thinking" },
+      tool("shell"),
+      { type: "text", text: "Done." },
+    ]);
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "steps",
+      "content",
+    ]);
+    expect(segments[0]?.parts).toHaveLength(2);
+    expect(segments[1]?.parts).toEqual([{ type: "text", text: "Done." }]);
+  });
+
+  it("keeps text that precedes a tool call in front of it", () => {
+    const segments = messageSegments([
+      { type: "text", text: "Let me check." },
+      tool("read"),
+    ]);
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "content",
+      "steps",
+    ]);
+  });
+
+  it("groups consecutive runs and records the start index", () => {
+    const segments = messageSegments([
+      { type: "text", text: "One" },
+      { type: "text", text: "Two" },
+      { type: "reasoning", text: "think" },
+      { type: "text", text: "Three" },
+    ]);
+    expect(segments).toEqual([
+      {
+        kind: "content",
+        parts: [
+          { type: "text", text: "One" },
+          { type: "text", text: "Two" },
+        ],
+      },
+      { kind: "steps", parts: [{ type: "reasoning", text: "think" }], start: 2 },
+      { kind: "content", parts: [{ type: "text", text: "Three" }] },
+    ]);
   });
 });
 
