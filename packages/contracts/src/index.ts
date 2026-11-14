@@ -10,3 +10,4 @@ export * from "./search";
 export * from "./settings";
 export * from "./reply-audit";
 export * from "./notifications";
+export * from "./automation";

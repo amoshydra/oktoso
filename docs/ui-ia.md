@@ -440,6 +440,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 
 - Appearance: theme, density, message width.
 - Notifications: per-device Web Push with enable, test, and disable; a permission badge; per-type routing (Immediate, Digest, Off) for permission, approval, question, unread, and error; a digest window; quiet hours with an IANA time zone; and a device list with per-device revoke. Channel credentials stay on the hub; a device only sees its label, device ID, and last-seen time.
+- Automation: pause all, per-watcher pause, pending approvals with Approve and Deny, and the most recent runs with their decision. Watchers and budgets stay file-configured; the panel never edits config.
 - Shortcuts: command palette, new session, search, send.
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
 - Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.

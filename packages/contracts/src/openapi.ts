@@ -72,6 +72,18 @@ import {
   zSessionPage,
   zSessionSelectionInput,
   zAttentionSummary,
+  zAutomationAction,
+  zAutomationApproval,
+  zAutomationApprovalAction,
+  zAutomationApprovalPage,
+  zAutomationCondition,
+  zAutomationLimits,
+  zAutomationRun,
+  zAutomationRunPage,
+  zAutomationSettingsInput,
+  zAutomationTrigger,
+  zAutomationView,
+  zAutomationWatcher,
   zTranscriptionResult,
   zAttachment,
   zBranchPage,
@@ -263,6 +275,51 @@ const NotificationSettingsSchema = registry.register(
 const NotificationSettingsInputSchema = registry.register(
   "NotificationSettingsInput",
   zNotificationSettingsInput,
+);
+const AutomationTriggerSchema = registry.register(
+  "AutomationTrigger",
+  zAutomationTrigger,
+);
+const AutomationConditionSchema = registry.register(
+  "AutomationCondition",
+  zAutomationCondition,
+);
+const AutomationActionSchema = registry.register(
+  "AutomationAction",
+  zAutomationAction,
+);
+const AutomationLimitsSchema = registry.register(
+  "AutomationLimits",
+  zAutomationLimits,
+);
+const AutomationWatcherSchema = registry.register(
+  "AutomationWatcher",
+  zAutomationWatcher,
+);
+const AutomationRunSchema = registry.register("AutomationRun", zAutomationRun);
+const AutomationRunPageSchema = registry.register(
+  "AutomationRunPage",
+  zAutomationRunPage,
+);
+const AutomationApprovalSchema = registry.register(
+  "AutomationApproval",
+  zAutomationApproval,
+);
+const AutomationApprovalPageSchema = registry.register(
+  "AutomationApprovalPage",
+  zAutomationApprovalPage,
+);
+const AutomationViewSchema = registry.register(
+  "AutomationView",
+  zAutomationView,
+);
+const AutomationSettingsInputSchema = registry.register(
+  "AutomationSettingsInput",
+  zAutomationSettingsInput,
+);
+const AutomationApprovalActionSchema = registry.register(
+  "AutomationApprovalAction",
+  zAutomationApprovalAction,
 );
 
 const json = <T extends z.ZodType>(schema: T) => ({
@@ -1192,6 +1249,106 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/automation",
+  tags: ["automation"],
+  summary: "Read automation watchers, runs, and approvals",
+  responses: {
+    200: {
+      description: "Automation view",
+      content: json(z.object({ data: AutomationViewSchema })),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/automation",
+  tags: ["automation"],
+  summary: "Pause, resume, or toggle dry-run",
+  request: {
+    body: { content: json(AutomationSettingsInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Updated automation view",
+      content: json(z.object({ data: AutomationViewSchema })),
+    },
+    400: errorResponse("Invalid automation settings"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/automation/watchers/{id}/pause",
+  tags: ["automation"],
+  summary: "Pause or resume one watcher",
+  request: {
+    params: z.object({ id: z.string() }),
+    body: {
+      content: json(z.object({ paused: z.boolean() })),
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "Updated automation view",
+      content: json(z.object({ data: AutomationViewSchema })),
+    },
+    404: errorResponse("Watcher not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/automation/runs",
+  tags: ["automation"],
+  summary: "Read recent automation runs",
+  request: {
+    query: z.object({
+      limit: z.coerce.number().int().min(1).max(200).optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Automation runs, newest first",
+      content: json(AutomationRunPageSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/automation/approvals",
+  tags: ["automation"],
+  summary: "List pending approvals",
+  responses: {
+    200: {
+      description: "Pending approvals",
+      content: json(AutomationApprovalPageSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/automation/approvals/{id}/{action}",
+  tags: ["automation"],
+  summary: "Approve or deny a queued automation action",
+  request: {
+    params: z.object({
+      id: z.string(),
+      action: AutomationApprovalActionSchema,
+    }),
+  },
+  responses: {
+    204: { description: "Approval decided" },
+    404: errorResponse("Approval not found"),
+    409: errorResponse("Approval expired, already decided, or the question changed"),
+  },
+});
+
 export function buildOpenApiDocument() {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",
@@ -1217,6 +1374,7 @@ export function buildOpenApiDocument() {
       { name: "events" },
       { name: "search" },
       { name: "notifications" },
+      { name: "automation" },
       { name: "diagnostics" },
     ],
     security: [{ bearerAuth: [] }],

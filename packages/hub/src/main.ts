@@ -55,6 +55,9 @@ import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { NotificationService } from "./services/notification-service";
+import { AutomationService } from "./services/automation-service";
+import { IdempotencyService } from "./services/idempotency";
+import { SessionActions } from "./services/session-actions";
 import { WebPushTransport } from "./services/web-push-transport";
 import { loadOrCreateVapidKeys } from "./services/vapid";
 import { createApp } from "./app";
@@ -547,6 +550,17 @@ async function main(): Promise<void> {
     await replyFeedback.init();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
+    const idempotency = new IdempotencyService(store);
+    const actions = new SessionActions(sessions, questions, idempotency);
+    const automation = new AutomationService({
+      config: config.automation,
+      store,
+      eventBus,
+      logger,
+      questions,
+      actions,
+    });
+    automation.start();
     // Generate the VAPID pair once and keep it owner-only. It is cheap, and a
     // later runtime enable should not need a restart to start delivering.
     const vapidKeys =
@@ -620,6 +634,8 @@ async function main(): Promise<void> {
       transcription,
       questions,
       notifications,
+      actions,
+      automation,
       logger,
       startedAt,
       webRoot: configuredWebRoot,
@@ -706,6 +722,7 @@ async function main(): Promise<void> {
       if (attentionRefreshTimer) clearInterval(attentionRefreshTimer);
       if (healthCheckTimer) clearInterval(healthCheckTimer);
       notifications.stop();
+      automation.stop();
       providerEvents?.stop();
       unsubscribeUi();
       server?.close();

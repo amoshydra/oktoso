@@ -119,6 +119,49 @@ phone notifications. Web Push is the only delivery path implemented today;
 - If the hub is behind a reverse proxy, terminate TLS there and set `publicUrl`
   so notification links open the external origin.
 
+## Automation
+
+`automation` is off by default. Watchers react to attention events under a
+policy. The first slice implements attention triggers (questions, permissions,
+approvals, errors); session-idle and schedule triggers are reserved.
+
+```jsonc
+{
+  "automation": {
+    "enabled": true,
+    "dryRun": true,
+    "maxActionsPerHour": 6,
+    "maxActionsPerDay": 24,
+    "watchers": [
+      {
+        "id": "answer-safe-questions",
+        "name": "Answer safe questions",
+        "enabled": true,
+        "trigger": { "kind": "attention", "types": ["question"] },
+        "condition": { "providerID": "desktop-opencode" },
+        "action": { "kind": "answer", "choice": "first-safe" },
+        "dryRun": true,
+        "limits": { "maxActionsPerHour": 3, "maxActionsPerDay": 12 }
+      }
+    ]
+  }
+}
+```
+
+- Two switches gate an action: the hub's `automation.dryRun` and the watcher's
+  `dryRun`. A watcher acts only when both are false. Start in dry run.
+- `answer` acts only on a normal, single, non-free-text, non-multi-select
+  question whose explicit choices are all non-destructive and non-sensitive.
+  Everything else becomes a pending approval.
+- Every run is leased per watcher + attention id, so duplicate events cannot
+  act twice.
+- Budgets are global and per watcher. Pause everything or one watcher from
+  Settings → Automation.
+- Approvals expire after `approvalTtlMs`. Approving executes the stored plan;
+  denying never sends.
+- Not implemented yet: token budgets, quiet hours, session-idle and schedule
+  triggers, `notify`/`retry`/`start` actions, MCP and CLI controls.
+
 ## OpenCode on another host
 
 Start the OpenCode server on an interface the hub can reach:
