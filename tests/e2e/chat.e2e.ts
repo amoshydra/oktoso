@@ -491,6 +491,17 @@ describe("responsive history surfaces", () => {
       await page.locator(".session-list-item").first().click();
       await page.locator(".chat-composer textarea").waitFor();
       await expectNoHorizontalOverflow(width, "chat");
+
+      // The chat must span the viewport on mobile, not sit in a grid column
+      // sized for the desktop sidebar.
+      if (width <= 760) {
+        const panelWidth = await page
+          .locator(".chat-panel")
+          .evaluate((element) => element.getBoundingClientRect().width);
+        expect(panelWidth, `chat panel width at ${width}px`).toBeGreaterThan(
+          width * 0.8,
+        );
+      }
     }
 
     expect(errors).toEqual([]);
