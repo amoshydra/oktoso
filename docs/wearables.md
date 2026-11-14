@@ -18,8 +18,9 @@ The first slice is deliberately narrow:
 
 - phone pairing with a terminal QR, pairing link, raw pairing code, or bearer token; the hub is the app origin
 - home with inbox count, recent sessions, and the current session
-- inbox with up to five attention items
-- permission / unread / failure detail and actions
+- inbox with up to five attention items, including automation approvals
+- permission / unread / failure / automation approval detail and actions (Approve / Deny)
+- automation approvals are fetched from `GET /api/v1/automation/approvals` and merged into the Inbox as blocking rows; decisions call `POST /api/v1/automation/approvals/:id/:action`
 - simple boolean/select attention forms can be completed on the glass; all other fields use the phone form with an explicit `Answer on phone` action
 - chat view of the latest transcript context with a full-response line viewport
 - reply menu with canned and 4B-assisted suggestions
