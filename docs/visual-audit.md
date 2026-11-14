@@ -692,3 +692,14 @@ their own surfaces instead of being buried in the activity grid.
 - **Data.** OpenCode's `shell` messages (`shellID`, `command`, `status`, `exit`,
   `output`, background metadata, timings) map to a transcript `shell` part.
 
+
+## Background indicator and root scope (2026-11-14)
+
+- The chat shows a pill above the composer while background work is live:
+  success dot, `N running in background`, opens Details. It is the only hint
+  outside the Details sheet on mobile.
+- A subagent's status is resolved from its child session, not the launch tool
+  metadata. The metadata keeps its launch-time `running` value forever, which
+  made every historical subagent look live in the Background section.
+- Sessions default to the root scope, with child sessions tagged `SUBAGENT`
+  and available through the `Subagents` chip.

@@ -94,8 +94,12 @@ This aligns implementation with the existing prototype and does not add tokens, 
   terminal icon, command, status pill, elapsed, and Show output.
 - The Details panel gains a Background section listing live shells and
   subagents, with Open session for subagents. It is absent when nothing runs.
-- A background subagent keeps its green running state while the child session
-  runs, even after the launch call completed.
+- A background subagent's liveness is the child session's status, never the
+  launch call's metadata. Old subagents read as completed.
+- A `N running in background` pill above the composer opens Details while
+  background work is live.
+- Sessions default to the root scope; the Subagents chip and `SUBAGENT` tag
+  expose child sessions.
 
 ## Agent activity tiles (2026-11-14)
 

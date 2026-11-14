@@ -140,8 +140,9 @@ Activity is derived from the transcript, not a new endpoint.
 - A provider `shell` message maps to a `shell` part: `id`, `command`, `status`,
   `background`, `exit`, `output`, and timings. It renders as a transcript row,
   not a tile.
-- A subagent's liveness comes from its `metadata.status`, not the launch tool's
-  status, so a background child stays green while it runs.
+- A subagent's liveness comes from its child session's current status. The
+  launch tool's `metadata.status` is a launch-time snapshot and must not drive
+  the tile or the Background list.
 - The Details panel lists live background shells and subagents for the open
   session. Tracking work across sessions is a separate slice.
 

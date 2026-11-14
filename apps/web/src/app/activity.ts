@@ -101,6 +101,16 @@ export function shellPart(message: Message): ShellPart | undefined {
   return message.parts.find((part): part is ShellPart => part.type === "shell");
 }
 
+/** Child session reference for a subagent tool part, when the provider gives one. */
+export function subagentRef(
+  part: ToolPart,
+  providerID: string | undefined,
+): string | undefined {
+  const sessionID = part.metadata?.sessionID;
+  if (!providerID || typeof sessionID !== "string" || !sessionID) return undefined;
+  return `${providerID}:${sessionID}`;
+}
+
 export function compactionPart(message: Message): CompactionPart | undefined {
   return message.parts.find(isCompactionPart);
 }
@@ -133,12 +143,7 @@ export function stepsFromParts(parts: MessagePart[], keyPrefix = ""): ActivitySt
     if (part.type !== "tool") continue;
 
     const kind = toolKind(part.name);
-    const metadataStatus =
-      typeof part.metadata?.status === "string" ? part.metadata.status : undefined;
-    const status =
-      kind === "subagent" && metadataStatus === "running"
-        ? "running"
-        : stepStatus(part);
+    const status = stepStatus(part);
     const metric = stepMetric(part, kind, status);
     steps.push({
       key: `${keyPrefix}${part.id || steps.length}`,

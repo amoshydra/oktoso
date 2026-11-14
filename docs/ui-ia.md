@@ -297,8 +297,10 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - Preview caps are per kind: 1 MB for text and Markdown, 5 MB for HTML, 20 MB for images, media, and PDF. The sheet is 720px for text and 960px for media; below 760px it is a bottom sheet with a 520px floor so a small image never collapses the surface.
 - The preview reads the live file through the session file endpoint, so a mention shows what is on disk now, not the snapshot a tool call reported. The card's file name opens the same sheet. There is no download action, no viewer route, no file browser, and no diff.
 - Consecutive assistant turns containing only reasoning/tool activity collapse into one "Agent activity" block with the tile grid. A message that mixes text and tools renders its text, its action row (Copy, branches, retry), and then the same "Agent activity" block, so Copy always belongs to the message and never to the steps.
+- The chat shows a quiet `N running in background` chip above the composer whenever a shell or subagent is live. It opens Details, which is otherwise the only surface for that state on a phone.
 - Background shell runs are their own transcript rows: terminal icon, `Background shell`, the command in mono, status (`running`, `exit 0`, `exit N`), elapsed, and Show output. They are separate from the activity grid because they outlive the turn that started them.
 - The Details panel has a **Background** section listing only live work for the session: running background shells and running subagents, each with its command or agent, elapsed time, and Open session for subagents. The section is absent when nothing is running.
+- A subagent's liveness comes from its child session's current status, never from the launch tool's metadata, which keeps the launch-time value forever. Old subagents therefore read as completed, not running.
 - A subagent whose child session is still running stays green even after its launch tool call completed; the green follows the child status, not the tool status.
 - Compaction is a divider in the transcript, above or between messages and outside every tile grid: `Context compacted · auto · 853,721 tokens in · 6.7k ch summary` with Show summary expanding the sanitized summary Markdown inline.
 - A completed assistant message with text exposes one quiet `Copy` action after the message. It copies the raw text parts, including Markdown fences, and never includes reasoning or tool payloads. Success reads `Copied` for two seconds; failure reads `Copy failed`. Both are announced to screen readers.
@@ -702,3 +704,7 @@ The prototype includes:
 - Light and dark themes through the operating system preference.
 
 The prototype is a design artifact, not production code. It uses the same labels, hierarchy, and states described here.
+
+### Sessions scope
+
+- The Sessions list defaults to the root scope: top-level sessions only. `All`, `Root`, and `Subagents` chips switch the loaded page, and child sessions carry a `SUBAGENT` tag.
