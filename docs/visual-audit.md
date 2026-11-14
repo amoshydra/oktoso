@@ -852,3 +852,31 @@ the toggle's `Steer`. This revision supersedes that control.
   and light. The chevron is decorative.
 - **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
   `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`, `docs/interaction-contract.md`.
+
+## Composer one-row revision (2026-11-15)
+
+The v1.8 mobile bar stacked the context selects above the actions and moved
+`Suggest` into the overflow. That cost about 36px of permanent height and one
+tap on a common action. This revision supersedes the mobile bar.
+
+- **Height audit.** The v1.8 composer measured about 172px: 24px padding,
+  64px two-line draft, 32px context row, 8px gap, 44px actions. The one-row
+  revision is about 108px: 16px padding, 44px one-line draft, 4px bar padding,
+  44px row.
+- **Action order.** `Suggest` and `Attach` are inline quiet actions; Send is
+  the only accent control. Interrupt becomes `Stop`. `Dictate` and `Queue`
+  move to the `⋯` menu. At 360px and below, `Attach` joins the menu only while
+  running, keeping the row at five controls.
+- **Context chip.** A 60px pill shows the agent (or the model when no agent is
+  set) with an ellipsis. It is 44px on mobile, uses the pill radius and a
+  subtle border, and carries the full `Model and agent: …` name.
+- **Sheet.** A bottom sheet with a 16px top radius, a 16px title, a 44px close
+  target, 10px uppercase field labels, 44px native selects at 16px, and a
+  pinned footer. The scrim is `#0000006b`; Escape and the scrim close, Tab is
+  trapped, and focus returns to the chip. It is the same sheet grammar as the
+  details and file preview surfaces.
+- **Draft.** The mobile textarea starts at one line (44px) and grows to 180px
+  from `scrollHeight`. Desktop keeps the two-line 56px minimum. Mobile composer
+  padding drops to 8px and the row gap to 4px.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`.
