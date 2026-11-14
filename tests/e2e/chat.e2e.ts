@@ -313,6 +313,52 @@ describe("chat sending", () => {
     );
   });
 
+  it("queues a running follow-up and promotes or removes it", async () => {
+    await openSession("Refactor session index");
+    await sendPrompt(`Slow queue check ${Date.now()}`);
+
+    const toggle = page!.getByRole("group", { name: "Message delivery" });
+    await toggle.waitFor({ state: "visible", timeout: 5_000 });
+    await toggle.getByRole("button", { name: "Queue", exact: true }).click();
+
+    const text = `Queued ${Date.now()}`;
+    await page!.locator(".chat-composer textarea").fill(text);
+    await page!
+      .getByRole("button", { name: "Queue message for the running agent" })
+      .click();
+
+    const tray = page!.locator(".composer-queued");
+    await tray.waitFor({ state: "visible", timeout: 5_000 });
+    expect(await tray.textContent()).toContain(text);
+    expect(
+      await page!.locator(".chat-message.user", { hasText: text }).count(),
+    ).toBe(0);
+
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await tray.getByRole("button", { name: "Steer now" }).click();
+    await tray.waitFor({ state: "hidden", timeout: 5_000 });
+
+    const second = `Queued again ${Date.now()}`;
+    await page!.locator(".chat-composer textarea").fill(second);
+    await page!
+      .getByRole("button", { name: "Queue message for the running agent" })
+      .click();
+    await tray.waitFor({ state: "visible", timeout: 5_000 });
+    await tray.getByRole("button", { name: "Remove queued message" }).click();
+    await tray.waitFor({ state: "hidden", timeout: 5_000 });
+    expect(
+      await page!.locator(".chat-message.user", { hasText: second }).count(),
+    ).toBe(0);
+  });
+
   it("shows Open WebUI folders and sends an attachment", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();

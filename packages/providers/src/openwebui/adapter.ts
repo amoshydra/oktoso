@@ -99,6 +99,8 @@ const openWebUICapabilities: ProviderCapabilities = {
   list: true,
   read: true,
   send: true,
+  steer: false,
+  queue: false,
   create: true,
   stream: true,
   interrupt: true,
@@ -317,6 +319,12 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     input: ProviderSendInput,
     signal: AbortSignal,
   ): Promise<SendResult> {
+    if (input.delivery === "queue") {
+      throw new ProviderError(
+        "unsupported",
+        "Open WebUI does not support queued messages",
+      );
+    }
     const nativeID = this.nativeID(ref);
     const chat = await this.fetchChat(nativeID, signal);
     const branch = this.currentBranch(chat);

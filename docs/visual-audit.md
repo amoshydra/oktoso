@@ -779,3 +779,37 @@ descriptions, and a custom answer; the select could only show three labels.
 - **Files.** `packages/contracts/src/attention.ts`,
   `packages/providers/src/opencode/adapter.ts`, `apps/web/src/app/App.tsx`
   (`AttentionChoiceField`), `apps/web/src/styles.css`.
+
+## Message delivery and queue (2026-11-15)
+
+Steer already lived in the composer as a send label. Queue added a second
+delivery mode, so the composer needed an explicit choice and a place for
+messages that the provider has not delivered yet.
+
+- **Toggle grammar.** `Steer` and `Queue` share one 28px pill control with a
+  1px border and a 2px inner padding: a control, not two more chips. The active
+  option uses `--accent` with `--on-accent`; the inactive option stays muted.
+  The accent marks the current delivery, not a provider identity.
+- **Placement.** The toggle leads the existing in-flow composer status row and
+  only renders while the turn runs. It does not displace the background chip or
+  Jump to latest, and the row already wraps at 320px.
+- **Queue tray.** The tray is a surface panel above the composer input: 1px
+  border, 8px radius, 8px padding, `Queued` at 10px/700 with a tabular count,
+  message text at 11px/1.5, and quiet text actions. It is not a transcript row
+  and it is not a card per message. The list caps at 24vh and scrolls; long text
+  breaks with `overflow-wrap: anywhere`.
+- **Primary action.** Send follows the toggle and reads `Steer` or `Queue`.
+  Interrupt stays the only other action while running, so the bar keeps one
+  filled control.
+- **Contrast.** The active option is `--on-accent` on `--accent`, matching the
+  primary button pair. Inactive options use `--muted` at 11px, which clears the
+  4.5:1 floor on `--surface-2`. Remove uses `--muted` and turns `--text` on
+  hover.
+- **Targets.** Desktop toggle options are 28px and tray actions 28px with the
+  row providing the hit area. At 760px and below the options are 32px and the
+  tray actions are 44px; Remove is a 44px square.
+- **States.** `aria-pressed` marks the delivery choice, the tray is labelled
+  `Queued messages`, and the send action names Steer or Queue. Provider failure
+  to read the tray shows inline `--danger` text without replacing the list.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `docs/ui-ia.md`, `docs/interaction-contract.md`.

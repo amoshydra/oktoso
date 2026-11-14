@@ -13,6 +13,7 @@ function requestHash(input: SendInput): string {
         attachments: input.attachments ?? [],
         answer: input.answer ?? null,
         answers: input.answers ?? null,
+        delivery: input.delivery ?? null,
       }),
     )
     .digest("hex");
@@ -115,6 +116,7 @@ export class SessionActions {
       this.sessions.sendMessage(ref, {
         text: input.text,
         ...(input.attachments ? { attachments: input.attachments } : {}),
+        ...(input.delivery ? { delivery: input.delivery } : {}),
       });
     const result = cacheKey
       ? await this.idempotency.run(cacheKey, hash, send)

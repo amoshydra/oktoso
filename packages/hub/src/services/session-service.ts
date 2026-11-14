@@ -5,6 +5,7 @@ import type {
   MessagePage,
   MessagesQuery,
   ProviderOptions,
+  SendDelivery,
   SendInput,
   SendResult,
   Session,
@@ -16,6 +17,7 @@ import {
   isAbsoluteSessionPath,
   relativeSessionPath,
   type ProviderAdapter,
+  type ProviderInboxItem,
   type ProviderResource,
 } from "@amoshydra/oktoso-providers";
 import { badRequest, notFound, notImplemented } from "../domain/errors";
@@ -408,6 +410,52 @@ export class SessionService {
     this.assertProviderAvailable(adapter.id);
     return adapter.listBranches(
       ref,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
+  }
+
+  async listInbox(ref: string): Promise<ProviderInboxItem[]> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.listInbox) {
+      throw notImplemented("This provider does not expose a message inbox");
+    }
+    this.assertProviderAvailable(adapter.id);
+    return adapter.listInbox(
+      ref,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
+  }
+
+  async updateInbox(
+    ref: string,
+    inboxID: string,
+    delivery: SendDelivery,
+  ): Promise<void> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.updateInbox) {
+      throw notImplemented("This provider cannot change queued delivery");
+    }
+    this.assertProviderAvailable(adapter.id);
+    await adapter.updateInbox(
+      ref,
+      inboxID,
+      delivery,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
+  }
+
+  async deleteInbox(ref: string, inboxID: string): Promise<void> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.deleteInbox) {
+      throw notImplemented("This provider cannot cancel queued messages");
+    }
+    this.assertProviderAvailable(adapter.id);
+    await adapter.deleteInbox(
+      ref,
+      inboxID,
       operationSignal(this.registry, adapter.id, 15_000, 5_000),
     );
   }

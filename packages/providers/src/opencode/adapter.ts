@@ -10,6 +10,7 @@ import type {
   ProviderCapabilities,
   ProviderHealth,
   ProviderOptions,
+  SendDelivery,
   SendResult,
   Session,
   SessionListQuery,
@@ -19,6 +20,7 @@ import type {
 import type {
   ProviderAdapter,
   ProviderFileRequest,
+  ProviderInboxItem,
   ProviderResource,
   ProviderSendInput,
 } from "../types";
@@ -147,6 +149,14 @@ interface OpenCodeFormInfo {
   fields: OpenCodeFormField[];
 }
 
+interface OpenCodeInboxRaw {
+  id: string;
+  type: string;
+  time?: { created?: number };
+  payload?: { text?: string };
+  delivery?: SendDelivery;
+}
+
 interface OpenCodeAgent {
   id: string;
   name: string;
@@ -168,6 +178,8 @@ const openCodeCapabilities: ProviderCapabilities = {
   list: true,
   read: true,
   send: true,
+  steer: true,
+  queue: true,
   create: true,
   stream: true,
   interrupt: true,
@@ -289,22 +301,24 @@ export class OpenCodeAdapter implements ProviderAdapter {
       uri: `data:${file.mimeType};base64,${Buffer.from(file.data).toString("base64")}`,
       name: file.name,
     }));
-    const response = await this.request<{ data?: { id?: string } }>(
+    const delivery = input.delivery ?? "steer";
+    const response = await this.request<{
+      data?: { id?: string; delivery?: SendDelivery };
+    }>(
       `/api/session/${encodeURIComponent(nativeID)}/prompt`,
       {},
       signal,
       "POST",
       {
         text: input.text,
-        // The hub exposes steer only today. Be explicit instead of relying on
-        // the provider default if it changes.
-        delivery: "steer",
+        delivery,
         ...(files.length > 0 ? { files } : {}),
       },
     );
     return {
       accepted: true,
       ...(response.data?.id ? { messageID: response.data.id } : {}),
+      delivery: response.data?.delivery ?? delivery,
     };
   }
 
@@ -388,6 +402,55 @@ export class OpenCodeAdapter implements ProviderAdapter {
         })),
       directories: [],
     };
+  }
+
+  async listInbox(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<ProviderInboxItem[]> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<{ data: OpenCodeInboxRaw[] }>(
+      `/api/session/${encodeURIComponent(nativeID)}/inbox`,
+      {},
+      signal,
+    );
+    return response.data.map((item) => ({
+      id: item.id,
+      type: item.type,
+      delivery: item.delivery ?? "steer",
+      text: item.payload?.text ?? "",
+      createdAt: item.time?.created ?? 0,
+    }));
+  }
+
+  async updateInbox(
+    ref: string,
+    inboxID: string,
+    delivery: SendDelivery,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    await this.request(
+      `/api/session/${encodeURIComponent(nativeID)}/inbox/${encodeURIComponent(inboxID)}`,
+      {},
+      signal,
+      "PATCH",
+      { delivery },
+    );
+  }
+
+  async deleteInbox(
+    ref: string,
+    inboxID: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    await this.request(
+      `/api/session/${encodeURIComponent(nativeID)}/inbox/${encodeURIComponent(inboxID)}`,
+      {},
+      signal,
+      "DELETE",
+    );
   }
 
   /**

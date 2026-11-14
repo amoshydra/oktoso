@@ -1,11 +1,11 @@
-# Design Lock — v1.6
+# Design Lock — v1.7
 
 Status: **frozen**.
 
-- Version: `design-v1.6`
-- Parent: `design-v1.5`
+- Version: `design-v1.7`
+- Parent: `design-v1.6`
 - Date: 2026-11-15
-- Git tag: `design-v1.6`
+- Git tag: `design-v1.7`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -13,6 +13,7 @@ Status: **frozen**.
 - v1.4 scope: composer reply suggestions and select sizing.
 - v1.5 scope: the parent/subagent session tree and the in-flow composer status row.
 - v1.6 scope: question choice detail, option descriptions, and custom answers.
+- v1.7 scope: the composer delivery toggle and the queued-message tray.
 
 ## What is frozen
 
@@ -218,6 +219,38 @@ the Settings card footers and the wide composer no longer wrap.
 
 This aligns implementation with `design-v1` and adds no routes, tokens, type
 roles, radii, or semantic color rules.
+
+## Message delivery and queue (2026-11-15)
+
+OpenCode's prompt API already separates steer from queue. The composer now
+exposes both without adding a route, screen, or navigation model.
+
+- **Delivery toggle.** While a turn runs and the provider advertises both
+  `steer` and `queue`, the composer status row starts with a two-option
+  `Steer | Queue` pill. The selected option uses the accent fill and
+  `--on-accent` text. The toggle disappears when the turn ends, so the idle
+  composer keeps one primary action: Send.
+- **Send label.** The send action follows the toggle: **Steer** or **Queue**,
+  and the running hint reads `Agent running · Ctrl/⌘ Enter to steer` or
+  `… to queue`. Open WebUI keeps the disabled Send and the
+  `Agent running · interrupt to send` hint.
+- **Queue tray.** Queued messages are not optimistic transcript rows. They
+  render in a quiet tray above the composer input, labelled `Queued` with a
+  tabular count. Each row shows the text at 11px/1.5 with **Steer now** and an
+  icon-only Remove. The tray uses the 8px control radius, the existing border,
+  and a 24vh scroll cap; it never becomes a second transcript.
+- **Delivery.** A delivered queued message leaves the tray and arrives through
+  the normal transcript. The tray refreshes on session events and polls while
+  the turn runs or items remain.
+- **Responsive.** The tray stays in flow above the composer. At 760px and below
+  the toggle options are 32px tall and the tray actions take 44px targets. Both
+  wrap at 320px with no horizontal overflow.
+- **Accessibility.** The toggle is a `role="group"` labelled `Message delivery`
+  with `aria-pressed` options. The tray is labelled `Queued messages`; Remove
+  carries the accessible name, and the send action's name states Steer or
+  Queue. No state relies on colour alone.
+- **No new tokens.** The revision reuses the type scale, spacing steps, 8px
+  control radius, pill radius, accent fill, and `--on-accent`.
 
 ## Change policy
 

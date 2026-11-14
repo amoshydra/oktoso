@@ -30,6 +30,8 @@ const provider: Provider = {
     list: true,
     read: true,
     send: true,
+    steer: false,
+    queue: false,
     create: true,
     stream: true,
     interrupt: true,

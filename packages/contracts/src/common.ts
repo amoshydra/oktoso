@@ -79,6 +79,8 @@ export const zProviderCapabilities = z.object({
   list: z.boolean(),
   read: z.boolean(),
   send: z.boolean(),
+  steer: z.boolean(),
+  queue: z.boolean(),
   create: z.boolean(),
   stream: z.boolean(),
   interrupt: z.boolean(),
