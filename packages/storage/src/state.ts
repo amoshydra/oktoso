@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   DEFAULT_ASSISTANT_CONFIG,
   zAssistantConfig,
+  zAutomationApproval,
+  zAutomationRun,
   zNotificationDelivery,
   zNotificationRouting,
 } from "@amoshydra/oktoso-contracts";
@@ -59,6 +61,14 @@ export const zHubState = z.object({
     .default({}),
   notificationDeliveries: z.array(zNotificationDelivery).default([]),
   notificationOverrides: zNotificationOverrideState.default({}),
+  automationRuns: z.array(zAutomationRun).default([]),
+  automationApprovals: z.array(zAutomationApproval).default([]),
+  automationLeases: z
+    .record(z.string(), z.number().int().nonnegative())
+    .default({}),
+  automationPaused: z.boolean().default(false),
+  automationDryRun: z.boolean().optional(),
+  automationWatcherPause: z.record(z.string(), z.boolean()).default({}),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -79,6 +89,11 @@ export function createInitialState(): HubState {
     notificationSubscriptions: {},
     notificationDeliveries: [],
     notificationOverrides: {},
+    automationRuns: [],
+    automationApprovals: [],
+    automationLeases: {},
+    automationPaused: false,
+    automationWatcherPause: {},
   };
 }
 

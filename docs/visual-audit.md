@@ -936,3 +936,11 @@ instead of raw fences, without changing the transcript hierarchy.
   alerts. They state what will happen; they do not block the composer.
 - A queued row keeps the normal user-message anatomy and adds one muted status
   line with Discard. It uses no new color or icon.
+
+## Automation (2026-11-15)
+
+- Run decisions use the existing pill geometry and semantic colors: acted
+  success, escalated warning, failed danger, dry run and skipped neutral. No
+  provider hue is used for policy state.
+- The panel reuses the device-list row, the form-action cluster, and the 44px
+  mobile targets. Watchers and approvals stack below 760px.

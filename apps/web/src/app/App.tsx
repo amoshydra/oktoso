@@ -82,6 +82,7 @@ import {
 import { readRouteCache, writeRouteCache } from "./route-cache";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
+import { AutomationSettingsPanel } from "./settings-automation";
 import {
   readSessionCache,
   readSessionsCache,
@@ -1137,6 +1138,7 @@ export function App() {
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
                 <NotificationSettingsPanel client={client as HubClient} />
+                <AutomationSettingsPanel client={client as HubClient} />
                 {diagnosticsPanel}
               </>
             ) : (

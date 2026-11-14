@@ -6,6 +6,11 @@ import type {
   AttentionPage,
   AttentionType,
   AuthCheck,
+  AutomationApproval,
+  AutomationApprovalAction,
+  AutomationRun,
+  AutomationSettingsInput,
+  AutomationView,
   BranchPoint,
   ForkInput,
   ProviderHealth,
@@ -389,6 +394,53 @@ export class HubClient {
   async notificationDeliveries(limit = 50): Promise<NotificationDelivery[]> {
     const response = await this.request<{ data: NotificationDelivery[] }>(
       `/api/v1/notifications/deliveries?limit=${limit}`,
+    );
+    return response.data;
+  }
+
+  async automation(): Promise<AutomationView> {
+    const response = await this.request<{ data: AutomationView }>(
+      "/api/v1/automation",
+    );
+    return response.data;
+  }
+
+  async saveAutomation(input: AutomationSettingsInput): Promise<AutomationView> {
+    const response = await this.request<{ data: AutomationView }>(
+      "/api/v1/automation",
+      { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async automationRuns(limit = 50): Promise<AutomationRun[]> {
+    const response = await this.request<{ data: AutomationRun[] }>(
+      `/api/v1/automation/runs?limit=${limit}`,
+    );
+    return response.data;
+  }
+
+  async automationApprovals(): Promise<AutomationApproval[]> {
+    const response = await this.request<{ data: AutomationApproval[] }>(
+      "/api/v1/automation/approvals",
+    );
+    return response.data;
+  }
+
+  async actOnApproval(
+    id: string,
+    action: AutomationApprovalAction,
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/automation/approvals/${encodeURIComponent(id)}/${action}`,
+      { method: "POST" },
+    );
+  }
+
+  async pauseWatcher(id: string, paused: boolean): Promise<AutomationView> {
+    const response = await this.request<{ data: AutomationView }>(
+      `/api/v1/automation/watchers/${encodeURIComponent(id)}/pause`,
+      { method: "POST", body: { paused } },
     );
     return response.data;
   }
