@@ -749,3 +749,33 @@ structure problems, not styling problems.
 - **Files.** `apps/web/src/app/session-tree.ts` (pure tree/filter),
   `SessionRow.tsx`, `SessionTree.tsx`, `App.tsx` mounts, `styles.css` tree and
   composer status rules, `session-tree.test.ts`.
+
+## Question choice detail (2026-11-15)
+
+The hub rendered a provider question as a native `<select>` with a field label
+and no option copy. OpenCode sends a question, a field label, three option
+descriptions, and a custom answer; the select could only show three labels.
+
+- **Field grammar.** The field title is a 10px uppercase label (`TUI
+  DEPENDENCIES`); the field description is the 14px/500 question
+  (`How should the TUI handle terminal input?`); `Select one answer` is the
+  11px hint. This separates the provider's label from its question without a
+  new type role.
+- **Option rows.** Each option is a 1px-bordered control with an 8px radius,
+  8px/12px padding, a 16px radio, the label at 14px/500, the description at
+  12px/1.5, and a 10px numbered index in a 4px-radius badge. The selected row
+  uses the accent border plus the 2px accent inset. The rows read as choices,
+  not as another layer of cards.
+- **Custom answer.** `Type your own answer…` is the last row; selecting it
+  reveals a 14px text input inside the row. The radio remains the selection
+  control; the value is the text. Submit is disabled until the text is
+  non-empty.
+- **Required.** The Submit action is disabled until every required field has a
+  value. OpenCode's visible fields default to required unless the provider says
+  otherwise.
+- **Question vs assistant text.** The field description replaces the previous
+  fallback to the latest assistant question. The transcript above the card
+  still carries the assistant's framing, so the card does not repeat it.
+- **Files.** `packages/contracts/src/attention.ts`,
+  `packages/providers/src/opencode/adapter.ts`, `apps/web/src/app/App.tsx`
+  (`AttentionChoiceField`), `apps/web/src/styles.css`.

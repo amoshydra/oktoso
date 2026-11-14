@@ -1841,6 +1841,7 @@ function AttentionCard(props: {
             <AttentionFieldInput
               field={field}
               key={field.id}
+              attentionID={item.id}
               value={values[field.id]}
               onValue={(value) => setValues((current) => ({ ...current, [field.id]: value }))}
             />
@@ -1909,6 +1910,7 @@ function AttentionCard(props: {
 
 function AttentionFieldInput(props: {
   field: NonNullable<Attention["fields"]>[number];
+  attentionID: string;
   value: unknown;
   onValue: (value: unknown) => void;
 }) {
@@ -1928,19 +1930,12 @@ function AttentionFieldInput(props: {
   }
   if (field.type === "select") {
     return (
-      <label className="attention-field">
-        <span>{field.label}</span>
-        <select
-          value={typeof props.value === "string" ? props.value : ""}
-          onChange={(event) => props.onValue((event.currentTarget as HTMLSelectElement).value)}
-        >
-          <option value="">Choose…</option>
-          {(field.options ?? []).map((option) => (
-            <option value={option.value} key={option.value}>{option.label}</option>
-          ))}
-        </select>
-        {field.description ? <small className="attention-help">{field.description}</small> : null}
-      </label>
+      <AttentionChoiceField
+        field={field}
+        attentionID={props.attentionID}
+        value={props.value}
+        onValue={props.onValue}
+      />
     );
   }
   if (field.type === "multiselect") {
@@ -1999,6 +1994,102 @@ function AttentionFieldInput(props: {
       />
       {field.description ? <small className="attention-help">{field.description}</small> : null}
     </label>
+  );
+}
+
+function AttentionChoiceField(props: {
+  field: NonNullable<Attention["fields"]>[number];
+  attentionID: string;
+  value: unknown;
+  onValue: (value: unknown) => void;
+}) {
+  const { field } = props;
+  const options = field.options ?? [];
+  const selected = typeof props.value === "string" ? props.value : "";
+  const customValue =
+    selected !== "" && !options.some((option) => option.value === selected);
+  const [customMode, setCustomMode] = useState(customValue);
+
+  useEffect(() => {
+    if (customValue) setCustomMode(true);
+  }, [customValue]);
+
+  const name = `attention-${props.attentionID}-${field.id}`;
+  return (
+    <fieldset className="attention-field attention-field-wide attention-choice-field">
+      <legend className="attention-field-title">{field.label}</legend>
+      {field.description ? (
+        <p className="attention-question">{field.description}</p>
+      ) : null}
+      <span className="attention-help">Select one answer</span>
+      <div className="attention-choices">
+        {options.map((option, index) => {
+          const checked = !customMode && selected === option.value;
+          return (
+            <label
+              className={`attention-choice ${checked ? "selected" : ""}`}
+              key={option.value}
+            >
+              <input
+                type="radio"
+                name={name}
+                checked={checked}
+                onChange={() => {
+                  setCustomMode(false);
+                  props.onValue(option.value);
+                }}
+              />
+              <span className="attention-choice-copy">
+                <span className="attention-choice-label">{option.label}</span>
+                {option.description ? (
+                  <span className="attention-choice-desc">
+                    {option.description}
+                  </span>
+                ) : null}
+              </span>
+              <span className="attention-choice-index" aria-hidden="true">
+                {index + 1}
+              </span>
+            </label>
+          );
+        })}
+        {field.custom ? (
+          <label
+            className={`attention-choice ${customMode ? "selected" : ""}`}
+          >
+            <input
+              type="radio"
+              name={name}
+              checked={customMode}
+              onChange={() => {
+                setCustomMode(true);
+                if (options.some((option) => option.value === selected)) {
+                  props.onValue("");
+                }
+              }}
+            />
+            <span className="attention-choice-copy">
+              <span className="attention-choice-label">
+                Type your own answer…
+              </span>
+              {customMode ? (
+                <input
+                  className="attention-choice-input"
+                  type="text"
+                  value={selected}
+                  placeholder="Type your answer"
+                  aria-label={`Your answer for ${field.label}`}
+                  onChange={(event) => props.onValue(event.currentTarget.value)}
+                />
+              ) : null}
+            </span>
+            <span className="attention-choice-index" aria-hidden="true">
+              {options.length + 1}
+            </span>
+          </label>
+        ) : null}
+      </div>
+    </fieldset>
   );
 }
 
@@ -3466,6 +3557,22 @@ function SessionDetail(props: {
   const restoreScroll = useRef(hasSavedScroll("transcript"));
   const [atBottom, setAtBottom] = useState(() => !restoreScroll.current);
   const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
+  const attentionSignature = useMemo(
+    () =>
+      inlineAttention
+        .map(
+          (item) =>
+            `${item.id}:${(item.fields ?? [])
+              .map(
+                (field) =>
+                  `${field.id}:${field.description ?? ""}:${field.options?.length ?? 0}`,
+              )
+              .join(",")}`,
+        )
+        .join("|"),
+    [inlineAttention],
+  );
+
   const [attentionBusyID, setAttentionBusyID] = useState<string>();
   const [attentionError, setAttentionError] = useState<string>();
   const [selectionOptions, setSelectionOptions] = useState<ProviderOptions>();
@@ -4346,7 +4453,7 @@ function SessionDetail(props: {
       scroller.scrollTop = scroller.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [inlineAttention.length, atBottom, stepPanelOpen]);
+  }, [attentionSignature, atBottom, stepPanelOpen]);
 
   useEffect(() => {
     const scroller = getScroller();
@@ -4817,7 +4924,11 @@ function SessionDetail(props: {
                         item.type === "error"
                           ? attentionDetail
                           : item.type === "question"
-                            ? attentionDetailText(item) ?? latestQuestion
+                            ? item.fields?.some((field) =>
+                                field.description?.trim(),
+                              )
+                              ? undefined
+                              : attentionDetailText(item) ?? latestQuestion
                             : undefined
                       }
                       onAction={(action, input) => void actOnAttention(item, action, input)}

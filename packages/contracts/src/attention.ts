@@ -13,6 +13,7 @@ export const zAttentionAction = z.object({
 export const zAttentionOption = z.object({
   value: z.string(),
   label: z.string(),
+  description: z.string().optional(),
 });
 
 export const zAttentionField = z.object({
@@ -24,6 +25,8 @@ export const zAttentionField = z.object({
   description: z.string().optional(),
   defaultValue: z.unknown().optional(),
   options: z.array(zAttentionOption).optional(),
+  /** The provider accepts a free-form answer in addition to the options. */
+  custom: z.boolean().optional(),
 });
 
 export const zAttentionSummary = z.object({

@@ -135,6 +135,19 @@ Activity is derived from the transcript, not a new endpoint.
 - The block is collapsed by default. Expanding it is a local disclosure; the
   transcript suspends its bottom pin while a step panel is open.
 
+### Question choice fields
+
+- A provider `select` field maps to an ordered option list. Each option keeps
+  its `label`, `value`, and optional `description`.
+- `custom: true` means the provider accepts a free-form answer in addition to
+  the options. The web renders a final `Type your own answer…` radio with a
+  text input; the submitted field value is the typed text, not the sentinel.
+- OpenCode forms default every visible field to `required: true` unless the
+  provider explicitly sends `false`. Submit is disabled until each required
+  field has a value, including a non-empty custom answer.
+- The field `description` is the question shown in the card. The card does not
+  repeat the latest assistant question when a field description exists.
+
 ### Session list tree
 
 - `parentRef` is the only grouping signal. A root has no `parentRef`; a child

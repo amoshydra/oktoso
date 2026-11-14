@@ -132,6 +132,7 @@ interface OpenCodeFormField {
   required?: boolean;
   hidden?: boolean;
   options?: Array<{ value: string; label: string; description?: string }>;
+  custom?: boolean;
   placeholder?: string;
   default?: unknown;
 }
@@ -936,7 +937,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
       const base = {
         id: field.key,
         label: field.title ?? field.key,
-        required: field.required,
+        // OpenCode forms expect every visible field to be answered; a provider
+        // can opt out with an explicit false.
+        required: field.required ?? true,
         ...(field.description ? { description: field.description } : {}),
       };
       if (field.type === "string") {
@@ -948,7 +951,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
             options: field.options.map((option) => ({
               value: option.value,
               label: option.label,
+              ...(option.description ? { description: option.description } : {}),
             })),
+            ...(field.custom ? { custom: true } : {}),
           });
         } else {
           fields.push({
@@ -979,7 +984,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
           options: field.options?.map((option) => ({
             value: option.value,
             label: option.label,
+            ...(option.description ? { description: option.description } : {}),
           })),
+          ...(field.custom ? { custom: true } : {}),
         });
       } else {
         supported = false;
@@ -998,7 +1005,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
       summary:
         detail?.trim() ??
         (supported
-          ? `${fields.length} field${fields.length === 1 ? "" : "s"} need an answer`
+          ? `${fields.length} field${fields.length === 1 ? "" : "s"} ${
+              fields.length === 1 ? "needs" : "need"
+            } an answer`
           : "This form needs the provider UI"),
       createdAt: Date.now(),
       actions: [
