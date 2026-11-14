@@ -35,6 +35,41 @@ function createActions(): {
   };
 }
 
+describe("SessionActions abort", () => {
+  it("passes the signal to the session service", async () => {
+    const controller = new AbortController();
+    const seen: Array<AbortSignal | undefined> = [];
+    const sessions = {
+      sendMessage: async (
+        _ref: string,
+        _input: SendInput,
+        signal?: AbortSignal,
+      ): Promise<SendResult> => {
+        seen.push(signal);
+        return { accepted: true };
+      },
+    } as unknown as SessionService;
+    const questions = {
+      get: async () => undefined,
+      invalidate: () => undefined,
+    } as unknown as QuestionService;
+    const actions = new SessionActions(
+      sessions,
+      questions,
+      new IdempotencyService(new MemoryStateStore()),
+    );
+
+    await actions.send(
+      "session:1",
+      { text: "hello" },
+      "key-1",
+      controller.signal,
+    );
+
+    expect(seen).toEqual([controller.signal]);
+  });
+});
+
 describe("SessionActions idempotency", () => {
   it("returns the cached result for a retry of the same payload", async () => {
     const { actions, sent } = createActions();

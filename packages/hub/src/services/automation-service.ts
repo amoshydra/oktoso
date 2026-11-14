@@ -90,6 +90,10 @@ export class AutomationService {
   private stopListening?: () => void;
   private timer?: ReturnType<typeof setInterval>;
   private ticking = false;
+  private readonly inFlight = new Map<
+    string,
+    { watcherID: string; controller: AbortController }
+  >();
   private work: Promise<void> = Promise.resolve();
 
   constructor(options: AutomationServiceOptions) {
@@ -165,6 +169,7 @@ export class AutomationService {
     this.stopListening = undefined;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    this.abortAll();
   }
 
   /** Await every handler queued so far. Tests use this. */
@@ -222,6 +227,7 @@ export class AutomationService {
       if (input.paused !== undefined) state.automationPaused = input.paused;
       if (input.dryRun !== undefined) state.automationDryRun = input.dryRun;
     });
+    if (input.paused === true) this.abortAll();
     return this.view();
   }
 
@@ -233,6 +239,7 @@ export class AutomationService {
       if (paused) state.automationWatcherPause[id] = true;
       else delete state.automationWatcherPause[id];
     });
+    if (paused) this.abortWatcher(id);
     return this.view();
   }
 
@@ -496,25 +503,31 @@ export class AutomationService {
     await this.evaluate(watcher, item);
   }
 
-  private async retryTurn(item: Attention): Promise<void> {
+  private async retryTurn(
+    item: Attention,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const page = await this.sessions.messages(item.sessionRef, {
       limit: 20,
       order: "desc",
     });
     const failed = page.data.find((message) => message.metadata?.error);
     if (!failed) throw new Error("No failed message to retry");
-    await this.sessions.retryMessage(item.sessionRef, failed.id);
+    await this.sessions.retryMessage(item.sessionRef, failed.id, signal);
   }
 
-  private async withRetry<T>(action: () => Promise<T>): Promise<T> {
+  private async withRetry<T>(
+    action: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    if (signal?.aborted) throw signal.reason ?? new Error("Aborted");
     try {
       return await action();
     } catch (error) {
+      if (signal?.aborted) throw error;
       if (isTerminalError(error)) throw error;
       if (this.retryDelayMs > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.retryDelayMs),
-        );
+        await sleepAbortable(this.retryDelayMs, signal);
       }
       return action();
     }
@@ -587,33 +600,25 @@ export class AutomationService {
         return;
       }
 
-      try {
-        await this.withRetry(() =>
-          this.actions.send(
-            item.sessionRef,
-            { text: plan.choice.text, answers: [plan.answer] },
-            `automation:${watcher.id}:${item.id}`,
-          ),
+      await this.runAction(watcher, item, "send", async (signal) => {
+        await this.withRetry(
+          () =>
+            this.actions.send(
+              item.sessionRef,
+              { text: plan.choice.text, answers: [plan.answer] },
+              `automation:${watcher.id}:${item.id}`,
+              signal,
+            ),
+          signal,
         );
         if (plan.viaShape && plan.shapeID) {
           await this.touchShape(plan.shapeID);
         }
-        await this.record(
-          watcher,
-          item,
-          "acted",
-          plan.viaShape ? "answered_shape" : "answered",
-          `Answered: ${plan.choice.label}`,
-        );
-      } catch (error) {
-        await this.record(
-          watcher,
-          item,
-          "failed",
-          "send_failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+        return {
+          reason: plan.viaShape ? "answered_shape" : "answered",
+          detail: `Answered: ${plan.choice.label}`,
+        };
+      });
       return;
     }
 
@@ -640,24 +645,13 @@ export class AutomationService {
         await this.record(watcher, item, "skipped", "budget");
         return;
       }
-      try {
-        await this.withRetry(() => this.retryTurn(item));
-        await this.record(
-          watcher,
-          item,
-          "acted",
-          "retried",
-          "Retried the failed turn",
-        );
-      } catch (error) {
-        await this.record(
-          watcher,
-          item,
-          "failed",
-          "retry_failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+      await this.runAction(watcher, item, "retry", async (signal) => {
+        await this.withRetry(() => this.retryTurn(item, signal), signal);
+        return {
+          reason: "retried",
+          detail: "Retried the failed turn",
+        };
+      });
       return;
     }
 
@@ -684,33 +678,29 @@ export class AutomationService {
         await this.record(watcher, item, "skipped", "budget");
         return;
       }
-      try {
-        const session = await this.withRetry(() =>
-          this.sessions.create({
-            providerID: template.providerID,
-            title: template.title,
-            ...(template.directory ? { directory: template.directory } : {}),
-            ...(template.agent ? { agent: template.agent } : {}),
-            ...(template.model ? { model: template.model } : {}),
-            ...(template.text ? { text: template.text } : {}),
-          }),
+      await this.runAction(watcher, item, "start", async (signal) => {
+        const session = await this.withRetry(
+          () =>
+            this.sessions.create(
+              {
+                providerID: template.providerID,
+                title: template.title,
+                ...(template.directory
+                  ? { directory: template.directory }
+                  : {}),
+                ...(template.agent ? { agent: template.agent } : {}),
+                ...(template.model ? { model: template.model } : {}),
+                ...(template.text ? { text: template.text } : {}),
+              },
+              signal,
+            ),
+          signal,
         );
-        await this.record(
-          watcher,
-          item,
-          "acted",
-          "started",
-          `Started ${session.ref}`,
-        );
-      } catch (error) {
-        await this.record(
-          watcher,
-          item,
-          "failed",
-          "start_failed",
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+        return {
+          reason: "started",
+          detail: `Started ${session.ref}`,
+        };
+      });
       return;
     }
 
@@ -889,6 +879,75 @@ export class AutomationService {
       attentionID: item.id,
     });
     await this.record(watcher, item, "escalated", reason);
+  }
+
+  private beginAction(watcherID: string): {
+    key: string;
+    controller: AbortController;
+  } {
+    const key = randomUUID();
+    const controller = new AbortController();
+    this.inFlight.set(key, { watcherID, controller });
+    return { key, controller };
+  }
+
+  private endAction(key: string): void {
+    this.inFlight.delete(key);
+  }
+
+  private abortAll(): void {
+    for (const entry of this.inFlight.values()) entry.controller.abort();
+    this.inFlight.clear();
+  }
+
+  private abortWatcher(id: string): void {
+    for (const [key, entry] of this.inFlight) {
+      if (entry.watcherID !== id) continue;
+      entry.controller.abort();
+      this.inFlight.delete(key);
+    }
+  }
+
+  private async runAction(
+    watcher: AutomationWatcher,
+    item: Attention,
+    action: string,
+    work: (signal: AbortSignal) => Promise<{
+      reason: string;
+      detail: string;
+    }>,
+  ): Promise<void> {
+    const entry = this.beginAction(watcher.id);
+    try {
+      const result = await work(entry.controller.signal);
+      await this.record(
+        watcher,
+        item,
+        "acted",
+        result.reason,
+        result.detail,
+      );
+    } catch (error) {
+      if (entry.controller.signal.aborted) {
+        await this.record(
+          watcher,
+          item,
+          "skipped",
+          "aborted",
+          "Paused before the action completed",
+        );
+        return;
+      }
+      await this.record(
+        watcher,
+        item,
+        "failed",
+        `${action}_failed`,
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      this.endAction(entry.key);
+    }
   }
 
   private withinBudget(watcher: AutomationWatcher): boolean {
@@ -1163,6 +1222,28 @@ function matchesSession(
     return false;
   }
   return true;
+}
+
+function sleepAbortable(
+  ms: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, ms));
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new Error("Aborted"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason ?? new Error("Aborted"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function isTerminalError(error: unknown): boolean {

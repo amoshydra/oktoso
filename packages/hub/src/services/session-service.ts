@@ -357,7 +357,11 @@ export class SessionService {
     );
   }
 
-  async sendMessage(ref: string, input: SendInput): Promise<SendResult> {
+  async sendMessage(
+    ref: string,
+    input: SendInput,
+    signal?: AbortSignal,
+  ): Promise<SendResult> {
     const adapter = this.adapterForRef(ref);
     if (!adapter?.capabilities.send) {
       throw notImplemented("This provider does not support sending messages");
@@ -386,10 +390,16 @@ export class SessionService {
       }
     }
 
+    const operation = operationSignal(
+      this.registry,
+      adapter.id,
+      180_000,
+      5_000,
+    );
     const result = await adapter.sendMessage(
       ref,
       { ...input, ...(files.length > 0 ? { files } : {}) },
-      operationSignal(this.registry, adapter.id, 180_000, 5_000),
+      signal ? AbortSignal.any([operation, signal]) : operation,
     );
 
     for (const id of attachmentIDs) {
@@ -460,17 +470,27 @@ export class SessionService {
     );
   }
 
-  async retryMessage(ref: string, messageId: string): Promise<SendResult> {
+  async retryMessage(
+    ref: string,
+    messageId: string,
+    signal?: AbortSignal,
+  ): Promise<SendResult> {
     const adapter = this.adapterForRef(ref);
     if (!adapter) throw notFound("Session not found");
     if (!adapter.capabilities.retry || !adapter.retryMessage) {
       throw notImplemented("This provider does not support retrying messages");
     }
     this.assertProviderAvailable(adapter.id);
+    const operation = operationSignal(
+      this.registry,
+      adapter.id,
+      180_000,
+      5_000,
+    );
     const result = await adapter.retryMessage(
       ref,
       messageId,
-      operationSignal(this.registry, adapter.id, 180_000, 5_000),
+      signal ? AbortSignal.any([operation, signal]) : operation,
     );
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });
@@ -537,15 +557,24 @@ export class SessionService {
     return updated;
   }
 
-  async create(input: CreateSessionInput): Promise<Session> {
+  async create(
+    input: CreateSessionInput,
+    signal?: AbortSignal,
+  ): Promise<Session> {
     const adapter = this.registry.adapter(input.providerID);
     if (!adapter?.capabilities.create) {
       throw notImplemented("This provider does not support creating sessions");
     }
     this.assertProviderAvailable(adapter.id);
+    const operation = operationSignal(
+      this.registry,
+      adapter.id,
+      30_000,
+      5_000,
+    );
     const session = await adapter.createSession(
       input,
-      operationSignal(this.registry, adapter.id, 30_000, 5_000),
+      signal ? AbortSignal.any([operation, signal]) : operation,
     );
     this.sessions.set(session.ref, session);
     return session;

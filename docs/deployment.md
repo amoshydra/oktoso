@@ -172,7 +172,9 @@ schedule triggers under a policy.
 - Every run is leased per watcher + attention id, so duplicate events cannot
   act twice.
 - Budgets are global and per watcher. Pause everything or one watcher from
-  Settings → Automation.
+  Settings → Automation. Pausing aborts an in-flight send, retry, or session
+  create; a request that already reached the provider may still complete, and
+  the idempotency key keeps a later retry safe.
 - Approvals expire after `approvalTtlMs`. Approving executes the stored plan;
   denying never sends.
 - Session triggers fire once when a session stays idle or error for `idleMs`;
