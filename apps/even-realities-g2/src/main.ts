@@ -54,6 +54,11 @@ import {
 } from "./answer-model";
 import { glassInput } from "./input";
 import { sortAttention, visibleAttention } from "./attention-model";
+import {
+  approvalAction,
+  approvalAttention,
+  isAutomationApproval,
+} from "./approval-model";
 import { classifyFailure, type FailureInfo } from "./failure";
 import { listPage, textPage } from "./layout";
 import {
@@ -790,7 +795,9 @@ function rememberQuestionSummary(
 function discoveryRefs(): string[] {
   const refs = new Set<string>();
   if (state.sessionRef) refs.add(state.sessionRef);
-  for (const item of state.attention) refs.add(item.sessionRef);
+  for (const item of state.attention) {
+    if (!isAutomationApproval(item)) refs.add(item.sessionRef);
+  }
   for (const session of state.sessions) refs.add(session.ref);
   return [...refs].slice(0, 10);
 }
@@ -1276,7 +1283,11 @@ function startEventStream(): void {
         ) {
           scheduleEventRefresh(() => loadChat(true));
         }
-        if (event.type.startsWith("attention.") && state.screen === "inbox") {
+        if (
+          (event.type.startsWith("attention.") ||
+            event.type === "automation.approval") &&
+          (state.screen === "inbox" || state.screen === "home")
+        ) {
           scheduleEventRefresh(() => refreshInbox());
         }
       },
@@ -1361,8 +1372,14 @@ async function refreshInbox(): Promise<void> {
   const previousTotal = state.attentionTotal;
   const previousFailure = state.failure;
   try {
-    const page = await client.attention();
-    state.attention = sortAttention(page.data);
+    const [page, approvals] = await Promise.all([
+      client.attention(),
+      client.automationApprovals().catch(() => []),
+    ]);
+    state.attention = sortAttention([
+      ...page.data,
+      ...approvals.map(approvalAttention),
+    ]);
     state.attentionTotal = state.attention.length;
     if (
       phoneFormItem &&
@@ -1568,7 +1585,11 @@ async function performAttention(index: number): Promise<void> {
   }
   if (!client) return;
   try {
-    await client.actOnAttention(item.id, action.id, {});
+    if (isAutomationApproval(item)) {
+      await client.actOnApproval(item.id, approvalAction(action.id));
+    } else {
+      await client.actOnAttention(item.id, action.id, {});
+    }
     state.selectedAttention = undefined;
     await refreshInbox();
   } catch (error) {
@@ -3416,7 +3437,9 @@ function render(): void {
       return;
     }
     const actions = attentionActions(item);
-    const discovered = questionSummaryFor(item.sessionRef);
+    const discovered = isAutomationApproval(item)
+      ? undefined
+      : questionSummaryFor(item.sessionRef);
     const summaryText = discovered?.text ?? item.summary;
     const summary = wrapText(summaryText, 54, 2).join("\n");
     if (

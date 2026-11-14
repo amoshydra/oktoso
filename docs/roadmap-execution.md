@@ -304,7 +304,8 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
   bounded fingerprint (watcher + question kind + option labels + selected
   label), only for normal explicit questions with a safe choice. Settings lists
   remembered shapes with uses and Revoke.
-- [ ] G2 approvals.
+- [x] G2 approvals: fetched directly and merged into the Inbox; Approve/Deny
+  dispatch to `actOnApproval`. Simulator coverage; hardware validation pending.
 
 ### B6. Audit and kill switch
 
