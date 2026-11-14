@@ -159,6 +159,35 @@ export function stepsFromParts(parts: MessagePart[], keyPrefix = ""): ActivitySt
   return steps;
 }
 
+export type MessageSegment =
+  | { kind: "content"; parts: MessagePart[] }
+  | { kind: "steps"; parts: MessagePart[]; start: number };
+
+/**
+ * Split a message into ordered content and step runs.
+ *
+ * Providers emit reasoning and tool calls before the text they produced.
+ * Rendering the runs in order keeps the answer as the last thing the reader
+ * sees; rendering all text first put the reasoning underneath its own answer.
+ */
+export function messageSegments(parts: MessagePart[]): MessageSegment[] {
+  const segments: MessageSegment[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]!;
+    const stepPart = part.type === "tool" || part.type === "reasoning";
+    const last = segments.at(-1);
+    if (stepPart) {
+      if (last?.kind === "steps") last.parts.push(part);
+      else segments.push({ kind: "steps", parts: [part], start: index });
+    } else if (last?.kind === "content") {
+      last.parts.push(part);
+    } else {
+      segments.push({ kind: "content", parts: [part] });
+    }
+  }
+  return segments;
+}
+
 export function stepsFromMessages(messages: Message[]): ActivityStep[] {
   return messages.flatMap((message) =>
     stepsFromParts(message.parts, `${message.id}:`),

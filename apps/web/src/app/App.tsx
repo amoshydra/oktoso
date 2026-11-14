@@ -98,6 +98,7 @@ import {
 import {
   compactionPart,
   shellPart,
+  messageSegments,
   stepsFromMessages,
   stepsFromParts,
   subagentRef,
@@ -5293,15 +5294,13 @@ function TranscriptMessage(props: {
   subagentStatus?: Record<string, Session["status"] | "unknown">;
 }) {
   const message = props.message;
-  const contentParts = message.parts.filter(
-    (part) => part.type === "text" || part.type === "file" || part.type === "unknown",
+  // Keep the provider's part order. A final answer is normally emitted after
+  // its reasoning and tools, so moving every step to the bottom put the
+  // reasoning below the answer it produced.
+  const segments = useMemo(
+    () => messageSegments(message.parts),
+    [message.parts],
   );
-  const steps = useMemo(() => {
-    const parts = message.parts.filter(
-      (part) => part.type === "tool" || part.type === "reasoning",
-    );
-    return parts.length > 0 ? stepsFromParts(parts, `${message.id}:`) : [];
-  }, [message.id, message.parts]);
   const send = optimisticSend(message);
   const copyText =
     message.role === "assistant" && !message.streaming
@@ -5368,15 +5367,34 @@ function TranscriptMessage(props: {
               <div className="message-empty">Provider error reported below.</div>
             ) : (
               <>
-                {contentParts.map((part, index) => (
-                  <MessagePartView
-                    part={part}
-                    key={index}
-                    client={props.client}
-                    resource={props.resource}
-                    onPreviewFile={props.onPreviewFile}
-                  />
-                ))}
+                {segments.map((segment, segmentIndex) =>
+                  segment.kind === "content" ? (
+                    segment.parts.map((part, index) => (
+                      <MessagePartView
+                        part={part}
+                        key={`content:${segmentIndex}:${index}`}
+                        client={props.client}
+                        resource={props.resource}
+                        onPreviewFile={props.onPreviewFile}
+                      />
+                    ))
+                  ) : (
+                    <ActivityTiles
+                      key={`steps:${segment.start}`}
+                      steps={stepsFromParts(
+                        segment.parts,
+                        `${message.id}:${segment.start}:`,
+                      )}
+                      client={props.client}
+                      resource={props.resource}
+                      onPreviewFile={props.onPreviewFile}
+                      onOpenSession={props.onOpenSession}
+                      onStepOpenChange={props.onStepOpenChange}
+                      subagentStatus={props.subagentStatus}
+                      header={{ label: "Agent activity" }}
+                    />
+                  ),
+                )}
               </>
             )}
           </>
@@ -5445,17 +5463,6 @@ function TranscriptMessage(props: {
             {copyText ? <CopyMessageButton text={copyText} /> : null}
           </div>
         </div>
-      ) : null}
-      {!props.editing && steps.length > 0 ? (
-        <ActivityTiles
-          steps={steps}
-          client={props.client}
-          resource={props.resource}
-          onPreviewFile={props.onPreviewFile}
-          onOpenSession={props.onOpenSession}
-          onStepOpenChange={props.onStepOpenChange}
-          header={{ label: "Agent activity" }}
-        />
       ) : null}
     </article>
   );
