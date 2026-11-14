@@ -22,8 +22,20 @@ jobs:
       - run: pnpm brand:check
       - run: pnpm openapi:check
       - run: pnpm build:single-port
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          # Keyed on the resolved Playwright version: a bump re-downloads once.
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
       - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # The e2e suite is headless, so the smaller headless shell is enough.
+        run: pnpm exec playwright install --with-deps --only-shell chromium
       - run: pnpm test:e2e:run
       - run: pnpm hardware:check
       - run: npm pack --dry-run
