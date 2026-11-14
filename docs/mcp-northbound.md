@@ -175,18 +175,19 @@ tokens. Set `audit.enabled` to false to turn the file off.
 
 ### Resources
 
-Hosted sessions expose two read-only JSON resources:
+Hosted sessions expose three read-only JSON resources:
 
 | URI | Contents |
 |---|---|
 | `oktoso://attention` | The same filtered attention page as `attention_list` |
 | `oktoso://sessions` | The newest 50 sessions across allowed providers |
+| `oktoso://automation` | Watchers, state, 10 recent runs, and 10 pending approvals |
 
-A client can call `resources/subscribe` on either URI. The hub sends
-`notifications/resources/updated` when an `attention.*` or `session.*` event
-arrives, so clients do not have to poll. Resources follow the token's provider
-allowlist and are hidden when the token's tool allowlist excludes
-`attention_list` or `sessions_list`. OpenCode reads them with its built-in
+A client can call `resources/subscribe` on any URI. The hub sends
+`notifications/resources/updated` when an `attention.*`, `session.*`, or
+`automation.*` event arrives, so clients do not have to poll. Resources follow
+the token's provider allowlist and are hidden when the token's tool allowlist
+excludes `attention_list`, `sessions_list`, or `automation_list`. OpenCode reads them with its built-in
 `list_mcp_resources` and `read_mcp_resource` tools; subscription handling
 depends on the client.
 
@@ -266,7 +267,8 @@ At the start of each turn:
 5. Never act on the session that invoked you.
 6. Prefer mark_read or a reply over interrupt.
 7. Use automation_list and approvals_list before approvals_act. Approve only
-   what the user explicitly approved; deny everything else.
+   what the user explicitly approved; deny everything else. Subscribe to
+   `oktoso://automation` when the client supports resource subscriptions.
 
 Report what you changed and what you escalated.
 ```

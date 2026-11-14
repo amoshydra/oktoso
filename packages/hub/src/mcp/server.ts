@@ -127,6 +127,7 @@ export const MCP_TOOL_NAMES = [
 
 export const MCP_ATTENTION_RESOURCE = "oktoso://attention";
 export const MCP_SESSIONS_RESOURCE = "oktoso://sessions";
+export const MCP_AUTOMATION_RESOURCE = "oktoso://automation";
 
 const INSTRUCTIONS = `Oktoso is a control plane for sessions across AI providers.
 
@@ -209,6 +210,7 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
   const restricted = options.tools !== undefined;
   const canReadAttention = !restricted || allowed.has("attention_list");
   const canReadSessions = !restricted || allowed.has("sessions_list");
+  const canReadAutomation = !restricted || allowed.has("automation_list");
   const server = new McpServer(
     { name: "oktoso", version: options.version },
     {
@@ -272,12 +274,44 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
     );
   }
 
+  if (canReadAutomation) {
+    server.registerResource(
+      "automation",
+      MCP_AUTOMATION_RESOURCE,
+      {
+        title: "Automation",
+        description:
+          "Watchers, dry-run/pause state, recent runs, and pending approvals.",
+        mimeType: "application/json",
+      },
+      async (uri) => {
+        const view = await api.automation();
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify({
+                data: {
+                  ...view,
+                  runs: view.runs.slice(0, 10),
+                  approvals: view.approvals.slice(0, 10),
+                },
+              }),
+            },
+          ],
+        };
+      },
+    );
+  }
+
   server.server.setRequestHandler(
     SubscribeRequestSchema,
     async ({ params }) => {
       if (
         (params.uri === MCP_ATTENTION_RESOURCE && canReadAttention) ||
-        (params.uri === MCP_SESSIONS_RESOURCE && canReadSessions)
+        (params.uri === MCP_SESSIONS_RESOURCE && canReadSessions) ||
+        (params.uri === MCP_AUTOMATION_RESOURCE && canReadAutomation)
       ) {
         subscribed.add(params.uri);
         return {};
@@ -299,7 +333,9 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
         ? MCP_ATTENTION_RESOURCE
         : event.type.startsWith("session.")
           ? MCP_SESSIONS_RESOURCE
-          : undefined;
+          : event.type.startsWith("automation.")
+            ? MCP_AUTOMATION_RESOURCE
+            : undefined;
       if (!uri || !subscribed.has(uri)) return;
       void server.server.sendResourceUpdated({ uri }).catch(() => undefined);
     });
