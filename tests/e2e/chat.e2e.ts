@@ -625,3 +625,45 @@ describe("notification settings", () => {
     ).resolves.toBe("23:00");
   });
 });
+
+describe("offline queue", () => {
+  it("queues a send offline, survives a reload, and lands once", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.evaluate(() =>
+      navigator.serviceWorker.ready.then(() => undefined),
+    );
+
+    let posts = 0;
+    await page!.route("**/api/v1/sessions/*/messages", async (route) => {
+      if (route.request().method() === "POST") posts += 1;
+      await route.continue();
+    });
+
+    await page!.context().setOffline(true);
+    const text = `Offline ${Date.now()}`;
+    await sendPrompt(text);
+
+    await page!
+      .locator(".message-send-state.queued")
+      .waitFor({ state: "visible", timeout: 5_000 });
+    expect(posts).toBe(0);
+
+    await page!.reload();
+    await page!
+      .locator(".chat-message.user", { hasText: text })
+      .waitFor({ state: "visible", timeout: 10_000 });
+    await page!
+      .locator(".message-send-state.queued")
+      .waitFor({ state: "visible", timeout: 5_000 });
+
+    await page!.context().setOffline(false);
+    await page!
+      .locator(".message-send-state.queued")
+      .waitFor({ state: "hidden", timeout: 10_000 });
+
+    expect(posts).toBe(1);
+    expect(
+      await page!.locator(".chat-message.user", { hasText: text }).count(),
+    ).toBe(1);
+  }, 60_000);
+});

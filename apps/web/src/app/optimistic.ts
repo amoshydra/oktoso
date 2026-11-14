@@ -1,7 +1,7 @@
 import type { Attachment, Message, MessagePart } from "@amoshydra/oktoso-contracts";
 import { createID } from "./ids";
 
-export type OptimisticSendStatus = "sending" | "sent" | "failed";
+export type OptimisticSendStatus = "sending" | "sent" | "queued" | "failed";
 
 export interface OptimisticSend {
   status: OptimisticSendStatus;
@@ -24,6 +24,7 @@ export function optimisticSend(message: Message): OptimisticSend | undefined {
   if (
     (record.status !== "sending" &&
       record.status !== "sent" &&
+      record.status !== "queued" &&
       record.status !== "failed") ||
     typeof record.text !== "string" ||
     !Array.isArray(record.attachmentIDs) ||

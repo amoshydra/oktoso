@@ -3,10 +3,30 @@ const SHELL = ["/", "/site.webmanifest", "/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
-      .catch(() => undefined),
+    (async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        // The shell's hashed JS/CSS are not known ahead of time. Read the
+        // built index and precache every /assets/ reference with it, so an
+        // offline reload can actually boot the app.
+        const response = await fetch("/", { cache: "reload" });
+        if (response.ok) {
+          const html = await response.clone().text();
+          const assets = [
+            ...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g),
+          ].map((match) => match[1]);
+          await cache.put("/", response);
+          await cache.addAll([
+            ...SHELL.filter((url) => url !== "/"),
+            ...assets,
+          ]);
+          return;
+        }
+      } catch {
+        // Fall through to the plain shell list.
+      }
+      await cache.addAll(SHELL).catch(() => undefined);
+    })(),
   );
   self.skipWaiting();
 });
