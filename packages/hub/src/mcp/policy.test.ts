@@ -95,6 +95,7 @@ const automationView: AutomationView = {
       status: "pending",
       createdAt: 1,
       expiresAt: 2,
+      actionable: false,
     },
     {
       id: "approval_web",
@@ -108,6 +109,7 @@ const automationView: AutomationView = {
       status: "pending",
       createdAt: 1,
       expiresAt: 2,
+      actionable: false,
     },
   ] as AutomationApproval[],
 };
