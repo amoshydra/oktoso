@@ -4067,7 +4067,8 @@ function SessionDetail(props: {
       (!text && attachmentIDs.length === 0) ||
       sending ||
       dictationBusy ||
-      uploadingAttachments > 0
+      uploadingAttachments > 0 ||
+      (session?.status === "running" && sessionProvider?.type !== "opencode")
     ) {
       return;
     }
@@ -4644,7 +4645,9 @@ function SessionDetail(props: {
         : dictation.phase === "transcribing"
           ? "Transcribing…"
           : draftStatus === "idle" && session?.status === "running"
-            ? "Agent running · Ctrl/⌘ Enter to queue"
+            ? sessionProvider?.type === "opencode"
+              ? "Agent running · Ctrl/⌘ Enter to steer"
+              : "Agent running · interrupt to send"
             : draftStatusLabel(draftStatus);
   const resource: ResourceContext = {
     baseUrl: sessionProvider?.baseUrl,
@@ -5361,16 +5364,30 @@ function SessionDetail(props: {
                     <button
                       className="btn primary small composer-send"
                       type="submit"
-                      aria-label={sending ? "Sending message" : "Send message"}
+                      aria-label={
+                        session.status === "running" &&
+                        sessionProvider?.type === "opencode"
+                          ? "Steer the running agent"
+                          : sending
+                            ? "Sending message"
+                            : "Send message"
+                      }
                       disabled={
                         sending ||
                         (!draft.trim() && attachments.length === 0) ||
                         dictationBusy ||
-                        uploadingAttachments > 0
+                        uploadingAttachments > 0 ||
+                        (session.status === "running" &&
+                          sessionProvider?.type !== "opencode")
                       }
                     >
                       <span className="composer-send-label">
-                        {sending ? "Sending…" : "Send"}
+                        {session.status === "running" &&
+                        sessionProvider?.type === "opencode"
+                          ? "Steer"
+                          : sending
+                            ? "Sending…"
+                            : "Send"}
                       </span>
                       <svg
                         className="composer-send-icon"

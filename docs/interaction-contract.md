@@ -484,6 +484,19 @@ discovery surface.
 
 ## 11. Sending states and message editing
 
+### Delivery while running
+
+- OpenCode's prompt API accepts `delivery: "steer" | "queue"`. Steer is the
+  default: it lands at the next safe step boundary, lets running tools finish,
+  and is kept in the transcript. Queue waits for an idle boundary and is not in
+  the provider transcript until delivered.
+- The hub does not pass `delivery`; OpenCode uses its default steer. The web
+  reflects that with **Steer** and the steer hint. Queue is not exposed.
+- Open WebUI rejects a send while the current assistant message is not done
+  with a conflict. The web disables Send while running and points to Interrupt.
+- Providers without steer/queue semantics keep the plain Send action. A hub-side
+  queue would need a durable queued state and is not part of this slice.
+
 ### Optimistic send
 
 - A send creates a local user message immediately with a `local:` id and
