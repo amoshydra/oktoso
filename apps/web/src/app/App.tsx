@@ -20,6 +20,7 @@ import type {
   Attachment,
   Attention,
   AttentionType,
+  AutomationApproval,
   BranchPoint,
   Diagnostics,
   Health,
@@ -265,6 +266,7 @@ export function App() {
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [attentionCount, setAttentionCount] = useState(0);
+  const [approvalCount, setApprovalCount] = useState(0);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
   const queuedCount = useSendQueue(client, connection);
   const [events, setEvents] = useState<HubEvent[]>([]);
@@ -469,22 +471,30 @@ export function App() {
     setDiagnostics(undefined);
     setProviders([]);
     setAttentionCount(0);
+    setApprovalCount(0);
     setEvents([]);
     setError(undefined);
   }, []);
 
   const loadSnapshot = useCallback(async (hub: HubClient) => {
-    const [nextHealth, nextProviders, nextDiagnostics, nextAttention] =
-      await Promise.all([
-        hub.health(),
-        hub.providers(),
-        hub.diagnostics(),
-        hub.attention().catch(() => undefined),
-      ]);
+    const [
+      nextHealth,
+      nextProviders,
+      nextDiagnostics,
+      nextAttention,
+      nextApprovals,
+    ] = await Promise.all([
+      hub.health(),
+      hub.providers(),
+      hub.diagnostics(),
+      hub.attention().catch(() => undefined),
+      hub.automationApprovals().catch(() => []),
+    ]);
     setHealth(nextHealth);
     setProviders(nextProviders);
     setDiagnostics(nextDiagnostics);
     if (nextAttention) setAttentionCount(nextAttention.data.length);
+    setApprovalCount(nextApprovals.length);
     return {
       health: nextHealth,
       providers: nextProviders,
@@ -611,12 +621,20 @@ export function App() {
           if (event.type === "resync") {
             void loadSnapshot(client).catch(() => undefined);
           }
-          if (event.type.startsWith("attention.")) {
+          if (
+            event.type.startsWith("attention.") ||
+            event.type === "automation.approval"
+          ) {
             if (attentionTimer.current) clearTimeout(attentionTimer.current);
             attentionTimer.current = setTimeout(() => {
-              void client
-                .attention()
-                .then((page) => setAttentionCount(page.data.length))
+              void Promise.all([
+                client.attention(),
+                client.automationApprovals().catch(() => []),
+              ])
+                .then(([page, approvals]) => {
+                  setAttentionCount(page.data.length);
+                  setApprovalCount(approvals.length);
+                })
                 .catch(() => undefined);
             }, 250);
           }
@@ -682,9 +700,10 @@ export function App() {
       ? `${providerLabel(activeSession.providerID)} · ${statusLabel(activeSession.status)}`
       : "Loading session…"
     : current.sub;
-  const badge = attentionCount > 99 ? "99+" : String(attentionCount);
+  const totalAttention = attentionCount + approvalCount;
+  const badge = totalAttention > 99 ? "99+" : String(totalAttention);
   const attentionAria =
-    attentionCount === 1 ? "1 item needs attention" : `${attentionCount} items need attention`;
+    totalAttention === 1 ? "1 item needs attention" : `${totalAttention} items need attention`;
 
   if (auth === "signed-out") {
     return (
@@ -851,14 +870,14 @@ export function App() {
                 onClick={() => selectView(id)}
                 title={item.label}
                 aria-label={
-                  id === "inbox" && attentionCount > 0
+                  id === "inbox" && totalAttention > 0
                     ? `${item.label}, ${attentionAria}`
                     : item.label
                 }
               >
                 <span className="rail-mark" aria-hidden="true">
                   <Icon name={item.icon} size={18} />
-                  {id === "inbox" && attentionCount > 0 ? (
+                  {id === "inbox" && totalAttention > 0 ? (
                     <span className="nav-badge">{badge}</span>
                   ) : null}
                 </span>
@@ -1159,14 +1178,14 @@ export function App() {
                 aria-current={view === id ? "page" : undefined}
                 onClick={() => selectView(id)}
                 aria-label={
-                  id === "inbox" && attentionCount > 0
+                  id === "inbox" && totalAttention > 0
                     ? `${item.label}, ${attentionAria}`
                     : item.label
                 }
               >
                 <span className="bottom-mark" aria-hidden="true">
                   <Icon name={item.icon} size={18} />
-                  {id === "inbox" && attentionCount > 0 ? (
+                  {id === "inbox" && totalAttention > 0 ? (
                     <span className="nav-badge">{badge}</span>
                   ) : null}
                 </span>
@@ -1641,6 +1660,7 @@ function InboxView(props: {
   const [items, setItems] = useState<Attention[]>(
     () => readRouteCache<Attention[]>(key, "inbox-items") ?? [],
   );
+  const [approvals, setApprovals] = useState<AutomationApproval[]>([]);
   const filter = ATTENTION_FILTERS.some(([value]) => value === props.filter)
     ? props.filter
     : "all";
@@ -1652,8 +1672,12 @@ function InboxView(props: {
     if (!silent) setLoading(true);
     setError(undefined);
     try {
-      const page = await props.client.attention();
+      const [page, nextApprovals] = await Promise.all([
+        props.client.attention(),
+        props.client.automationApprovals().catch(() => []),
+      ]);
       setItems(page.data);
+      setApprovals(nextApprovals);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load attention");
     } finally {
@@ -1676,6 +1700,7 @@ function InboxView(props: {
       (event) =>
         event.type.startsWith("session.") ||
         event.type.startsWith("attention.") ||
+        event.type === "automation.approval" ||
         event.type === "resync",
     )?.seq ?? 0;
   useEffect(() => {
@@ -1685,12 +1710,19 @@ function InboxView(props: {
   }, [liveSeq]);
 
   const count = (value: string) => {
-    if (value === "all") return items.length;
+    if (value === "all") return items.length + approvals.length;
     if (value === "approval") {
-      return items.filter((item) => item.type === "permission" || item.type === "approval").length;
+      return (
+        items.filter(
+          (item) => item.type === "permission" || item.type === "approval",
+        ).length + approvals.length
+      );
     }
     return items.filter((item) => item.type === value).length;
   };
+
+  const visibleApprovals =
+    filter === "all" || filter === "approval" ? approvals : [];
 
   const visible = items.filter((item) => {
     if (filter === "all") return true;
@@ -1718,6 +1750,29 @@ function InboxView(props: {
       setItems((current) => current.filter((candidate) => candidate.id !== item.id));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to complete the action");
+    } finally {
+      setBusyID(undefined);
+    }
+  };
+
+  const actOnApproval = async (
+    approval: AutomationApproval,
+    action: string,
+  ) => {
+    setBusyID(approval.id);
+    setError(undefined);
+    try {
+      await props.client.actOnApproval(
+        approval.id,
+        action === "deny" ? "deny" : "approve",
+      );
+      setApprovals((current) =>
+        current.filter((candidate) => candidate.id !== approval.id),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to decide the approval",
+      );
     } finally {
       setBusyID(undefined);
     }
@@ -1757,12 +1812,32 @@ function InboxView(props: {
         </button>
       </div>
 
-      {loading && items.length === 0 ? (
+      {loading && items.length === 0 && approvals.length === 0 ? (
         <div className="empty">Loading attention…</div>
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && visibleApprovals.length === 0 ? (
         <div className="empty">Nothing needs you right now.</div>
       ) : (
-        groups
+        <>
+        {visibleApprovals.length > 0 ? (
+          <section className="inbox-group">
+            <div className="inbox-group-head">
+              <span>Automation</span>
+              <span className="line" />
+              <span>{visibleApprovals.length}</span>
+            </div>
+            {visibleApprovals.map((approval) => (
+              <AttentionCard
+                item={approvalAttention(approval)}
+                key={approval.id}
+                busy={busyID === approval.id}
+                detail={`${approval.watcherID} · ${approval.reason}`}
+                onAction={(action) => void actOnApproval(approval, action)}
+                onOpen={() => props.onOpen(approval.sessionRef)}
+              />
+            ))}
+          </section>
+        ) : null}
+        {groups
           .filter(([, groupItems]) => groupItems.length > 0)
           .map(([label, groupItems]) => (
             <section className="inbox-group" key={label}>
@@ -1782,10 +1857,28 @@ function InboxView(props: {
                 />
               ))}
             </section>
-          ))
+          ))}
+        </>
       )}
     </>
   );
+}
+
+function approvalAttention(approval: AutomationApproval): Attention {
+  return {
+    id: approval.id,
+    sessionRef: approval.sessionRef,
+    type: "approval",
+    priority: "blocking",
+    title: approval.title,
+    summary: approval.summary,
+    createdAt: approval.createdAt,
+    actions: [
+      { id: "approve_once", label: "Approve", style: "primary" },
+      { id: "deny", label: "Deny", style: "danger" },
+    ],
+    payload: { watcherID: approval.watcherID, reason: approval.reason },
+  };
 }
 
 function attentionDetailText(item: Attention): string | undefined {

@@ -121,9 +121,8 @@ phone notifications. Web Push is the only delivery path implemented today;
 
 ## Automation
 
-`automation` is off by default. Watchers react to attention events under a
-policy. The first slice implements attention triggers (questions, permissions,
-approvals, errors); session-idle and schedule triggers are reserved.
+`automation` is off by default. Watchers react to attention, session, or
+schedule triggers under a policy.
 
 ```jsonc
 {
@@ -159,8 +158,13 @@ approvals, errors); session-idle and schedule triggers are reserved.
   Settings → Automation.
 - Approvals expire after `approvalTtlMs`. Approving executes the stored plan;
   denying never sends.
-- Not implemented yet: token budgets, quiet hours, session-idle and schedule
-  triggers, `notify`/`retry`/`start` actions, MCP and CLI controls.
+- Session triggers fire once when a session stays idle or error for `idleMs`;
+  a status change resets the timer. Schedule triggers require
+  `condition.sessionRef` and fire every `everyMs`.
+- Quiet hours escalate answer and retry actions instead of acting.
+- Actions: `answer`, `escalate`, `notify`, `retry`.
+- Not implemented yet: token budgets, `start`, always-allow, G2 approvals, and
+  MCP/CLI controls.
 
 ## OpenCode on another host
 

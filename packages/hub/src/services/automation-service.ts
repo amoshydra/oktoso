@@ -11,14 +11,18 @@ import {
   type AutomationWatcher,
   type PendingQuestion,
   type SendAnswer,
+  type Session,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AutomationConfig } from "../config/schema";
 import { conflict, notFound } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { EventBus } from "./event-bus";
+import type { NotificationService } from "./notification-service";
+import { isQuietHours } from "./notification-service";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
+import type { SessionService } from "./session-service";
 
 export interface AutomationServiceOptions {
   config: AutomationConfig;
@@ -27,8 +31,11 @@ export interface AutomationServiceOptions {
   logger: Logger;
   questions: QuestionService;
   actions: SessionActions;
+  sessions: SessionService;
+  notifications?: NotificationService;
   now?: () => number;
   leaseTtlMs?: number;
+  retryDelayMs?: number;
 }
 
 interface AnswerPlan {
@@ -63,9 +70,19 @@ export class AutomationService {
   private readonly logger: Logger;
   private readonly questions: QuestionService;
   private readonly actions: SessionActions;
+  private readonly sessions: SessionService;
+  private readonly notifications?: NotificationService;
   private readonly now: () => number;
   private readonly leaseTtlMs: number;
+  private readonly retryDelayMs: number;
+  private readonly lastStatus = new Map<
+    string,
+    { status: Session["status"]; since: number }
+  >();
+  private readonly lastSchedule = new Map<string, number>();
   private stopListening?: () => void;
+  private timer?: ReturnType<typeof setInterval>;
+  private ticking = false;
   private work: Promise<void> = Promise.resolve();
 
   constructor(options: AutomationServiceOptions) {
@@ -75,8 +92,11 @@ export class AutomationService {
     this.logger = options.logger;
     this.questions = options.questions;
     this.actions = options.actions;
+    this.sessions = options.sessions;
+    this.notifications = options.notifications;
     this.now = options.now ?? Date.now;
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+    this.retryDelayMs = options.retryDelayMs ?? 500;
   }
 
   get paused(): boolean {
@@ -111,17 +131,43 @@ export class AutomationService {
       unsubscribe();
       this.stopListening = undefined;
     };
+    if (
+      this.config.watchers.some(
+        (watcher) =>
+          watcher.trigger.kind === "session" ||
+          watcher.trigger.kind === "schedule",
+      )
+    ) {
+      const now = this.now();
+      for (const watcher of this.config.watchers) {
+        if (watcher.trigger.kind === "schedule") {
+          this.lastSchedule.set(watcher.id, now);
+        }
+      }
+      this.timer = setInterval(
+        () => void this.tick(),
+        this.config.pollIntervalMs,
+      );
+      this.timer.unref?.();
+    }
     return this.stopListening;
   }
 
   stop(): void {
     this.stopListening?.();
     this.stopListening = undefined;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
   }
 
   /** Await every handler queued so far. Tests use this. */
   async whenIdle(): Promise<void> {
     await this.work;
+  }
+
+  /** Run one session/schedule poll immediately. Tests and the CLI use this. */
+  async tickNow(): Promise<void> {
+    await this.tick();
   }
 
   view(): AutomationView {
@@ -268,6 +314,157 @@ export class AutomationService {
     );
   }
 
+  private async tick(): Promise<void> {
+    if (!this.config.enabled || this.paused || this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.tickSessions();
+      await this.tickSchedules();
+    } catch (error) {
+      this.logger.warn("Automation tick failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async tickSessions(): Promise<void> {
+    const state = this.store.getState();
+    const watchers = this.config.watchers.filter(
+      (watcher) =>
+        watcher.enabled &&
+        watcher.trigger.kind === "session" &&
+        !state.automationWatcherPause[watcher.id],
+    );
+    if (watchers.length === 0) return;
+
+    const page = await this.sessions.list({ limit: 200 });
+    const now = this.now();
+    const seen = new Set<string>();
+
+    for (const session of page.data) {
+      seen.add(session.ref);
+      const previous = this.lastStatus.get(session.ref);
+      if (!previous || previous.status !== session.status) {
+        this.lastStatus.set(session.ref, {
+          status: session.status,
+          since: now,
+        });
+        continue;
+      }
+
+      for (const watcher of watchers) {
+        if (watcher.trigger.kind !== "session") continue;
+        if (watcher.trigger.on !== session.status) continue;
+        if (!matchesSession(watcher, session)) continue;
+        if (now - previous.since < watcher.trigger.idleMs) continue;
+
+        const key = `session:${watcher.id}:${session.ref}:${session.status}:${previous.since}`;
+        if (!(await this.acquire(key))) continue;
+        await this.evaluateSession(watcher, session);
+      }
+    }
+
+    for (const ref of [...this.lastStatus.keys()]) {
+      if (!seen.has(ref)) this.lastStatus.delete(ref);
+    }
+  }
+
+  private async tickSchedules(): Promise<void> {
+    const state = this.store.getState();
+    const watchers = this.config.watchers.filter(
+      (watcher) =>
+        watcher.enabled &&
+        watcher.trigger.kind === "schedule" &&
+        !state.automationWatcherPause[watcher.id],
+    );
+    if (watchers.length === 0) return;
+
+    const now = this.now();
+    for (const watcher of watchers) {
+      if (watcher.trigger.kind !== "schedule") continue;
+      const last = this.lastSchedule.get(watcher.id) ?? now;
+      if (now - last < watcher.trigger.everyMs) continue;
+      this.lastSchedule.set(watcher.id, now);
+      const bucket = Math.floor(now / watcher.trigger.everyMs);
+      if (!(await this.acquire(`schedule:${watcher.id}:${bucket}`))) continue;
+      await this.evaluateSchedule(watcher);
+    }
+  }
+
+  private async evaluateSession(
+    watcher: AutomationWatcher,
+    session: Session,
+  ): Promise<void> {
+    const item: Attention = {
+      id: `automation:session:${watcher.id}:${session.ref}:${session.status}:${session.updatedAt}`,
+      sessionRef: session.ref,
+      type: session.status === "error" ? "error" : "unread",
+      priority: "high",
+      title: session.title,
+      summary:
+        session.status === "error" ? "Session failed" : "Session is idle",
+      createdAt: this.now(),
+      actions: [],
+    };
+    await this.evaluate(watcher, item);
+  }
+
+  private async evaluateSchedule(
+    watcher: AutomationWatcher,
+  ): Promise<void> {
+    const ref = watcher.condition?.sessionRef;
+    const now = this.now();
+    let session: Session | undefined;
+    if (ref) {
+      try {
+        session = await this.sessions.get(ref);
+      } catch {
+        session = undefined;
+      }
+    }
+    const item: Attention = {
+      id: `automation:schedule:${watcher.id}:${now}`,
+      sessionRef: ref ?? "automation:schedule",
+      type: "unread",
+      priority: "high",
+      title: session?.title ?? watcher.name ?? watcher.id,
+      summary: `Scheduled check · ${watcher.name ?? watcher.id}`,
+      createdAt: now,
+      actions: [],
+    };
+    if (!ref) {
+      await this.record(watcher, item, "skipped", "missing_target");
+      return;
+    }
+    await this.evaluate(watcher, item);
+  }
+
+  private async retryTurn(item: Attention): Promise<void> {
+    const page = await this.sessions.messages(item.sessionRef, {
+      limit: 20,
+      order: "desc",
+    });
+    const failed = page.data.find((message) => message.metadata?.error);
+    if (!failed) throw new Error("No failed message to retry");
+    await this.sessions.retryMessage(item.sessionRef, failed.id);
+  }
+
+  private async withRetry<T>(action: () => Promise<T>): Promise<T> {
+    try {
+      return await action();
+    } catch (error) {
+      if (isTerminalError(error)) throw error;
+      if (this.retryDelayMs > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.retryDelayMs),
+        );
+      }
+      return action();
+    }
+  }
+
   private async handleAttention(item: Attention): Promise<void> {
     if (!this.config.enabled || this.paused) return;
 
@@ -290,6 +487,7 @@ export class AutomationService {
     item: Attention,
   ): Promise<void> {
     const dryRun = this.dryRun || watcher.dryRun;
+    const quiet = isQuietHours(this.now(), this.config.quietHours);
 
     if (watcher.action.kind === "answer") {
       const plan = await this.planAnswer(watcher, item);
@@ -324,16 +522,23 @@ export class AutomationService {
         return;
       }
 
+      if (quiet) {
+        await this.escalate(watcher, item, "quiet_hours", plan);
+        return;
+      }
+
       if (!this.withinBudget(watcher)) {
         await this.record(watcher, item, "skipped", "budget");
         return;
       }
 
       try {
-        await this.actions.send(
-          item.sessionRef,
-          { text: plan.choice.text, answers: [plan.answer] },
-          `automation:${watcher.id}:${item.id}`,
+        await this.withRetry(() =>
+          this.actions.send(
+            item.sessionRef,
+            { text: plan.choice.text, answers: [plan.answer] },
+            `automation:${watcher.id}:${item.id}`,
+          ),
         );
         await this.record(
           watcher,
@@ -348,6 +553,78 @@ export class AutomationService {
           item,
           "failed",
           "send_failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      return;
+    }
+
+    if (watcher.action.kind === "retry") {
+      if (item.type !== "error") {
+        await this.record(watcher, item, "skipped", "invalid_action");
+        return;
+      }
+      if (dryRun) {
+        await this.record(
+          watcher,
+          item,
+          "dry_run",
+          "dry_run",
+          "Would retry the failed turn",
+        );
+        return;
+      }
+      if (quiet) {
+        await this.escalate(watcher, item, "quiet_hours");
+        return;
+      }
+      if (!this.withinBudget(watcher)) {
+        await this.record(watcher, item, "skipped", "budget");
+        return;
+      }
+      try {
+        await this.withRetry(() => this.retryTurn(item));
+        await this.record(
+          watcher,
+          item,
+          "acted",
+          "retried",
+          "Retried the failed turn",
+        );
+      } catch (error) {
+        await this.record(
+          watcher,
+          item,
+          "failed",
+          "retry_failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      return;
+    }
+
+    if (watcher.action.kind === "notify") {
+      if (!this.notifications || !this.notifications.enabled) {
+        await this.record(watcher, item, "skipped", "notifications_disabled");
+        return;
+      }
+      if (dryRun) {
+        await this.record(watcher, item, "dry_run", "dry_run", "Would notify");
+        return;
+      }
+      if (!this.withinBudget(watcher)) {
+        await this.record(watcher, item, "skipped", "budget");
+        return;
+      }
+      try {
+        await this.withRetry(() => this.notifications!.notify(item));
+        await this.record(watcher, item, "acted", "notified", "Notification sent");
+      } catch (error) {
+        await this.record(
+          watcher,
+          item,
+          "failed",
+          "notify_failed",
           error instanceof Error ? error.message : String(error),
         );
       }
@@ -569,12 +846,20 @@ export class AutomationService {
     status: AutomationApproval["status"],
     decidedAt: number,
   ): Promise<void> {
+    let updated: AutomationApproval | undefined;
     await this.store.update((state) => {
       const approval = state.automationApprovals.find((item) => item.id === id);
       if (!approval) return;
       approval.status = status;
       approval.decidedAt = decidedAt;
+      updated = approval;
     });
+    if (updated) {
+      await this.eventBus.publish("automation.approval", updated, {
+        sessionRef: updated.sessionRef,
+        attentionID: updated.attentionID,
+      });
+    }
   }
 
   private async acquire(key: string): Promise<boolean> {
@@ -652,7 +937,41 @@ export function pickSafeChoice(
   );
 }
 
+function matchesSession(
+  watcher: AutomationWatcher,
+  session: Session,
+): boolean {
+  if (watcher.trigger.kind !== "session") return false;
+  const condition = watcher.condition;
+  if (!condition) return true;
+  if (condition.providerID && condition.providerID !== session.providerID) {
+    return false;
+  }
+  if (condition.sessionRef && condition.sessionRef !== session.ref) {
+    return false;
+  }
+  if (
+    condition.titleContains &&
+    !session.title.toLowerCase().includes(condition.titleContains.toLowerCase())
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isTerminalError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | undefined)?.status;
+  return (
+    typeof status === "number" &&
+    status >= 400 &&
+    status < 500 &&
+    status !== 408 &&
+    status !== 429
+  );
+}
+
 function matches(watcher: AutomationWatcher, item: Attention): boolean {
+  if (watcher.trigger.kind !== "attention") return false;
   if (!watcher.trigger.types.includes(item.type)) return false;
   const condition = watcher.condition;
   if (!condition) return true;

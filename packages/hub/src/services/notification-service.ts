@@ -162,6 +162,11 @@ export class NotificationService {
     this.digest.clear();
   }
 
+  /** Deliver one attention item directly, outside the event stream. */
+  async notify(item: Attention): Promise<void> {
+    await this.handle(item);
+  }
+
   /** Flush the immediate coalescing window now. */
   async flushImmediate(): Promise<void> {
     if (this.immediateTimer) {

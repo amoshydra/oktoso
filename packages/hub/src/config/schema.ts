@@ -3,6 +3,7 @@ import {
   DEFAULT_NOTIFICATION_ROUTING,
   zAutomationWatcher,
   zNotificationRouting,
+  zQuietHours,
 } from "@amoshydra/oktoso-contracts";
 
 export const zProviderAuth = z.discriminatedUnion("kind", [
@@ -181,6 +182,13 @@ export const zAutomationConfig = z
     enabled: z.boolean().default(false),
     dryRun: z.boolean().default(true),
     watchers: z.array(zAutomationWatcher).default([]),
+    quietHours: zQuietHours.default({
+      enabled: false,
+      start: "22:00",
+      end: "07:00",
+      timezone: "UTC",
+    }),
+    pollIntervalMs: z.number().int().min(5_000).max(300_000).default(30_000),
     maxActionsPerHour: z.number().int().min(1).max(1_000).default(6),
     maxActionsPerDay: z.number().int().min(1).max(10_000).default(24),
     approvalTtlMs: z
@@ -235,6 +243,13 @@ export const zHubConfig = z.object({
     enabled: false,
     dryRun: true,
     watchers: [],
+    quietHours: {
+      enabled: false,
+      start: "22:00",
+      end: "07:00",
+      timezone: "UTC",
+    },
+    pollIntervalMs: 30_000,
     maxActionsPerHour: 6,
     maxActionsPerDay: 24,
     approvalTtlMs: 24 * 60 * 60 * 1_000,

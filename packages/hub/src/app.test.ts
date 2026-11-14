@@ -140,6 +140,13 @@ async function createTestApp(options: {
           limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
         },
       ],
+      quietHours: {
+        enabled: false,
+        start: "22:00",
+        end: "07:00",
+        timezone: "UTC",
+      },
+      pollIntervalMs: 30_000,
       maxActionsPerHour: 6,
       maxActionsPerDay: 24,
       approvalTtlMs: 24 * 60 * 60 * 1_000,
@@ -150,6 +157,7 @@ async function createTestApp(options: {
     logger,
     questions,
     actions,
+    sessions,
   });
   automation.start();
   const notifications = new NotificationService({

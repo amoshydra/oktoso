@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type {
   AutomationApproval,
   AutomationRun,
+  AutomationTrigger,
   AutomationView,
 } from "@amoshydra/oktoso-contracts";
 import type { HubClient } from "@amoshydra/oktoso-client";
@@ -13,6 +14,12 @@ const DECISION_LABELS: Record<AutomationRun["decision"], string> = {
   skipped: "Skipped",
   failed: "Failed",
 };
+
+function triggerLabel(trigger: AutomationTrigger): string {
+  if (trigger.kind === "attention") return trigger.types.join(", ");
+  if (trigger.kind === "session") return `session ${trigger.on}`;
+  return `every ${Math.round(trigger.everyMs / 60_000)}m`;
+}
 
 function formatWhen(at: number): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -181,7 +188,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                       {watcher.name ?? watcher.id}
                     </span>
                     <span className="settings-device-detail">
-                      {watcher.trigger.types.join(", ")} · {watcher.action.kind}
+                      {triggerLabel(watcher.trigger)} · {watcher.action.kind}
                       {watcher.dryRun ? " · dry run" : ""}
                       {paused ? " · paused" : ""}
                     </span>
