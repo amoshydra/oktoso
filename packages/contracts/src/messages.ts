@@ -19,6 +19,19 @@ export const zMessagePart = z.discriminatedUnion("type", [
     completedAt: z.number().int().optional(),
   }),
   z.object({
+    type: z.literal("shell"),
+    /** Provider shell id (`sh_…`); stable while the command runs. */
+    id: z.string(),
+    command: z.string(),
+    status: z.string(),
+    background: z.boolean(),
+    exit: z.number().optional(),
+    output: z.string().optional(),
+    truncated: z.boolean().optional(),
+    startedAt: z.number().int().optional(),
+    completedAt: z.number().int().optional(),
+  }),
+  z.object({
     type: z.literal("compaction"),
     /** Why the history was compacted: "auto" or "manual". */
     reason: z.string(),

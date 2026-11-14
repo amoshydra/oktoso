@@ -88,6 +88,15 @@ The production chat now follows the design-v1 prototype shell. The fixed topbar 
 
 This aligns implementation with the existing prototype and does not add tokens, routes, or navigation. The v1.1 transcript reading model is unchanged.
 
+## Background work (2026-11-14)
+
+- Background shell runs render as transcript rows outside the activity grid:
+  terminal icon, command, status pill, elapsed, and Show output.
+- The Details panel gains a Background section listing live shells and
+  subagents, with Open session for subagents. It is absent when nothing runs.
+- A background subagent keeps its green running state while the child session
+  runs, even after the launch call completed.
+
 ## Agent activity tiles (2026-11-14)
 
 The agent activity block is a disclosure again, collapsed by default.

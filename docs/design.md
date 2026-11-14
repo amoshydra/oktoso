@@ -281,6 +281,7 @@ Mapping notes:
 
 - OpenCode message records include `type` values beyond chat, such as `idle` and `system`. The adapter returns `user` and `assistant` records and drops lifecycle records.
 - Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`, including tool `state.metadata` and the part-level `created`/`completed` timings used for tile metrics.
+- `shell` records become a single `shell` part (`shellID`, `command`, `status`, `exit`, background flag, output, timings) on a `system` message. Background shells are long-lived and are shown as transcript rows.
 - `compaction` records become a single `compaction` part (`reason`, `status`, `summary`, model, cost, tokens) on a `system` message. `synthetic` records stay dropped: they duplicate tool results.
 - `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running when `busy` is newer than `idle` (or `idle` is absent); `outcome` drives error state, and `viewed` drives unread state.
 - Permission requests block the agent. They are blocking attention items.

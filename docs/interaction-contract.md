@@ -135,6 +135,16 @@ Activity is derived from the transcript, not a new endpoint.
 - The block is collapsed by default. Expanding it is a local disclosure; the
   transcript suspends its bottom pin while a step panel is open.
 
+### Background work
+
+- A provider `shell` message maps to a `shell` part: `id`, `command`, `status`,
+  `background`, `exit`, `output`, and timings. It renders as a transcript row,
+  not a tile.
+- A subagent's liveness comes from its `metadata.status`, not the launch tool's
+  status, so a background child stays green while it runs.
+- The Details panel lists live background shells and subagents for the open
+  session. Tracking work across sessions is a separate slice.
+
 ### Action
 
 An action belongs to a message and is capability-gated:

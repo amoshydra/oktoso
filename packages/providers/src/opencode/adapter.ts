@@ -82,6 +82,11 @@ interface OpenCodeMessageRaw {
   summary?: string;
   cost?: number;
   tokens?: Record<string, unknown>;
+  command?: string;
+  exit?: number;
+  shellID?: string;
+  output?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface OpenCodeMessagesResponse {
@@ -955,6 +960,18 @@ export class OpenCodeAdapter implements ProviderAdapter {
       };
     }
 
+    if (raw.type === "shell") {
+      const part = toShellPart(raw);
+      if (!part) return undefined;
+      return {
+        id: raw.id,
+        sessionRef,
+        role: "system",
+        parts: [part],
+        createdAt: raw.time?.created ?? 0,
+      };
+    }
+
     if (raw.type === "compaction") {
       const part = toCompactionPart(raw);
       if (!part) return undefined;
@@ -1177,6 +1194,26 @@ function toCompactionPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
           },
         }
       : {}),
+  };
+}
+
+function toShellPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
+  const command = typeof raw.command === "string" ? raw.command : undefined;
+  if (!command) return undefined;
+  const output = asRecord(raw.output);
+  const text = output && typeof output.output === "string" ? output.output : undefined;
+  const metadata = asRecord(raw.metadata);
+  return {
+    type: "shell",
+    id: String(raw.shellID ?? raw.id ?? ""),
+    command,
+    status: typeof raw.status === "string" ? raw.status : "unknown",
+    background: metadata?.background === true,
+    ...(typeof raw.exit === "number" ? { exit: raw.exit } : {}),
+    ...(text ? { output: text } : {}),
+    ...(output?.truncated === true ? { truncated: true } : {}),
+    ...(raw.time?.created !== undefined ? { startedAt: raw.time.created } : {}),
+    ...(raw.time?.completed !== undefined ? { completedAt: raw.time.completed } : {}),
   };
 }
 

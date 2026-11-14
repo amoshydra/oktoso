@@ -257,6 +257,38 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
         { type: "text", text: "The index now reconciles by native session ID." },
       ],
     },
+    {
+      id: "msg_index_shell",
+      type: "shell",
+      time: { created: 1_792_968_060_000, completed: 1_792_968_061_400 },
+      shellID: "sh_fake_build",
+      command: "pnpm build",
+      status: "exited",
+      exit: 0,
+      metadata: { background: true },
+      output: {
+        output: "built in 1.4s",
+        cursor: 14,
+        size: 14,
+        truncated: false,
+      },
+    },
+    {
+      id: "msg_index_shell_live",
+      type: "shell",
+      // Recent so a demo shows minutes, not decades.
+      time: { created: Date.now() - 72_000 },
+      shellID: "sh_fake_dev",
+      command: "pnpm dev",
+      status: "running",
+      metadata: { background: true },
+      output: {
+        output: "listening on 5173",
+        cursor: 19,
+        size: 19,
+        truncated: false,
+      },
+    },
   ],
   ses_rust: [
     {

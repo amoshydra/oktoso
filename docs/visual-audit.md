@@ -670,3 +670,25 @@ fixed-grammar wrap grid.
 - `packages/testing/src/fake-providers.ts`: shell/execute/subagent metadata, timings, and a compaction fixture.
 - `packages/hub/src/app.test.ts`: metadata, timings, and compaction coverage.
 - `docs/ui-ia.md`, `docs/interaction-contract.md`, `docs/design.md`, `docs/design-lock.md`: rules.
+
+## Background work (2026-11-14)
+
+Background shells and subagents outlive the turn that starts them, so they get
+their own surfaces instead of being buried in the activity grid.
+
+- **Shell rows.** A `shell` message renders as a full-width transcript row:
+  16px terminal icon, `Background shell` at 12px, the command in mono at 10px
+  with ellipsis, a status pill (`running` amber, `exit N` red when non-zero),
+  elapsed time, and one Show output action. Output expands into the same
+  14rem mono block used elsewhere. The row is separate from the activity grid.
+- **Details → Background.** Lists only live work for the open session: running
+  background shells and running subagents. Each row carries an icon, type
+  label, command or agent, a running pill, elapsed time, and Open session for
+  subagents. The section is hidden when nothing is live.
+- **Subagent liveness.** A background subagent's launch tool call completes
+  immediately, so its tool status is `completed` while the child session keeps
+  running. The tile now takes its status from `metadata.status`, keeping the
+  green dot and label until the child finishes.
+- **Data.** OpenCode's `shell` messages (`shellID`, `command`, `status`, `exit`,
+  `output`, background metadata, timings) map to a transcript `shell` part.
+

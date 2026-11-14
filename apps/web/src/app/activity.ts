@@ -29,6 +29,7 @@ export type StepStatus = "completed" | "running" | "error";
 export type ToolPart = Extract<MessagePart, { type: "tool" }>;
 export type ReasoningPart = Extract<MessagePart, { type: "reasoning" }>;
 export type CompactionPart = Extract<MessagePart, { type: "compaction" }>;
+export type ShellPart = Extract<MessagePart, { type: "shell" }>;
 
 export interface ActivityStep {
   key: string;
@@ -96,6 +97,10 @@ export function isCompactionPart(part: MessagePart): part is CompactionPart {
   return part.type === "compaction";
 }
 
+export function shellPart(message: Message): ShellPart | undefined {
+  return message.parts.find((part): part is ShellPart => part.type === "shell");
+}
+
 export function compactionPart(message: Message): CompactionPart | undefined {
   return message.parts.find(isCompactionPart);
 }
@@ -128,7 +133,12 @@ export function stepsFromParts(parts: MessagePart[], keyPrefix = ""): ActivitySt
     if (part.type !== "tool") continue;
 
     const kind = toolKind(part.name);
-    const status = stepStatus(part);
+    const metadataStatus =
+      typeof part.metadata?.status === "string" ? part.metadata.status : undefined;
+    const status =
+      kind === "subagent" && metadataStatus === "running"
+        ? "running"
+        : stepStatus(part);
     const metric = stepMetric(part, kind, status);
     steps.push({
       key: `${keyPrefix}${part.id || steps.length}`,
