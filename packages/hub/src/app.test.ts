@@ -303,6 +303,106 @@ describe("hub app", () => {
     expect(response.status).toBe(401);
   });
 
+  it("reads a session file through the provider", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("notes/plan.md")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/markdown");
+    expect(response.headers.get("content-disposition")).toContain("inline");
+    expect(await response.text()).toContain("book the train");
+  });
+
+  it("serves a session image with its own content type", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("plots/chart.png")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("content-disposition")).toContain("inline");
+    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+  });
+
+  it("accepts an absolute path inside the session directory", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("/home/me/oktoso/notes/plan.md")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("book the train");
+  });
+
+  it("rejects an absolute path outside the session directory", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("/home/me/other/notes/plan.md")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_request" },
+    });
+  });
+
+  it("jails session file reads to the session directory", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("../../etc/passwd")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_request" },
+    });
+  });
+
+  it("requires a path for session file reads", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(`/api/v1/sessions/${ref}/files`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("reports session files as unsupported for providers without them", async () => {
+    const { app } = await createTestApp({ openwebui: true });
+    const ref = encodeURIComponent("fake-openwebui:chat_1");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=notes/plan.md`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).toMatchObject({
+      error: { code: "not_implemented" },
+    });
+  });
+
+  it("requires hub auth for session file reads", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const response = await app.request(
+      `/api/v1/sessions/${ref}/files?path=notes/plan.md`,
+    );
+    expect(response.status).toBe(401);
+  });
+
   it("issues and redeems a single-use pairing code for a JSON client", async () => {
     const auth = new AuthService(token);
     const { app } = await createTestApp({ auth });
@@ -740,6 +840,50 @@ describe("hub app", () => {
       events: { lastSeq: 0 },
       storage: { kind: "memory" },
     });
+  });
+
+  it("carries tool metadata, timings, and compaction summaries", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const tools = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/messages?order=asc",
+      { headers },
+    );
+    const toolBody = (await tools.json()) as {
+      data: Array<{
+        parts: Array<{
+          type: string;
+          name?: string;
+          metadata?: Record<string, unknown>;
+          startedAt?: number;
+          completedAt?: number;
+        }>;
+      }>;
+    };
+    const shell = toolBody.data
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "tool" && part.name === "shell");
+    expect(shell?.metadata).toMatchObject({ exit: 1 });
+    expect(shell?.startedAt).toBe(1_792_970_027_000);
+    expect(shell?.completedAt).toBe(1_792_970_028_400);
+
+    const compacted = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_index/messages?order=asc",
+      { headers },
+    );
+    const compactedBody = (await compacted.json()) as {
+      data: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const compaction = compactedBody.data
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "compaction");
+    expect(compaction).toMatchObject({
+      reason: "auto",
+      status: "completed",
+      tokens: { input: 853_721, output: 1829, reasoning: 1497 },
+    });
+    expect(String(compaction?.summary)).toContain("Reconcile sessions");
   });
 
   it("returns a pending question from the latest assistant message", async () => {

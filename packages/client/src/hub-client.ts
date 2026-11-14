@@ -155,15 +155,32 @@ export class HubClient {
 
   async attachment(providerID: string, url: string): Promise<Blob> {
     const params = new URLSearchParams({ provider: providerID, url });
+    return this.blob(`/api/v1/attachments?${params.toString()}`);
+  }
+
+  /**
+   * Read a file from a session's working directory.
+   *
+   * The hub jails the path and asks the provider, so the browser never needs
+   * the provider address or credentials.
+   */
+  async sessionFile(ref: string, path: string): Promise<Blob> {
+    const params = new URLSearchParams({ path });
+    return this.blob(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/files?${params.toString()}`,
+    );
+  }
+
+  private async blob(suffix: string): Promise<Blob> {
     const headers: Record<string, string> = { Accept: "*/*" };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
     let response: Response;
     try {
-      response = await this.fetchImpl(
-        `${this.baseUrl}/api/v1/attachments?${params.toString()}`,
-        { headers, credentials: this.credentials },
-      );
+      response = await this.fetchImpl(`${this.baseUrl}${suffix}`, {
+        headers,
+        credentials: this.credentials,
+      });
     } catch (error) {
       throw new HubError("network_error", "Unable to reach the hub", {
         retryable: true,

@@ -104,6 +104,7 @@ interface ProviderCapabilities {
   permissions: boolean
   forms: boolean
   attachments: boolean
+  files: boolean
   search: boolean
 }
 ```
@@ -272,13 +273,15 @@ Endpoints:
 | Pending forms | `GET /api/form` |
 | Reply form | `POST /api/session/{sessionID}/form/{formID}/reply` |
 | Mark viewed | `POST /api/session/{sessionID}/view` |
+| Read file | `GET /api/fs/read/{path}?location[directory]={session directory}` |
 
-Capabilities: `list`, `read`, `send`, `create`, `stream`, `interrupt`, `permissions`, `forms`, `attachments`. No search across messages.
+Capabilities: `list`, `read`, `send`, `create`, `stream`, `interrupt`, `permissions`, `forms`, `attachments`, `files`. No search across messages.
 
 Mapping notes:
 
 - OpenCode message records include `type` values beyond chat, such as `idle` and `system`. The adapter returns `user` and `assistant` records and drops lifecycle records.
-- Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`.
+- Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`, including tool `state.metadata` and the part-level `created`/`completed` timings used for tile metrics.
+- `compaction` records become a single `compaction` part (`reason`, `status`, `summary`, model, cost, tokens) on a `system` message. `synthetic` records stay dropped: they duplicate tool results.
 - `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running when `busy` is newer than `idle` (or `idle` is absent); `outcome` drives error state, and `viewed` drives unread state.
 - Permission requests block the agent. They are blocking attention items.
 - Forms can be simple option lists or complex multi-field forms. The hub exposes the field schema so clients can render what they can and defer complex forms to the web client.
@@ -390,9 +393,21 @@ DELETE /api/v1/sessions/:ref/draft
 GET    /api/v1/attention
 POST   /api/v1/attention/:id/actions/:action
 GET    /api/v1/attachments?provider=&url=
+GET    /api/v1/sessions/:ref/files?path=
 GET    /api/v1/events?after=
 GET    /api/v1/search?q=            (later)
 ```
+
+`GET /api/v1/sessions/:ref/files` reads a file inside the session's working
+directory. The path may be provider-relative or absolute inside that directory;
+the hub strips the directory prefix and rejects anything that escapes it with
+`400`. The provider resolves
+the path with its own credentials, so the hub never reads the provider's disk and
+the browser never learns the provider address. Providers that do not expose files
+return `501`. Images, text (Markdown, text, JSON, HTML), and the common media
+types render inline with a sandbox CSP; unknown types download. The client
+renders by content type with the extension as fallback, and HTML opens in a
+frame with `sandbox=""`.
 
 `GET /api/v1/attachments` is a binary, authenticated proxy for provider-hosted
 images and files. It is not part of the JSON OpenAPI contract: it requires a

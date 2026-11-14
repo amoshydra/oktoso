@@ -88,6 +88,47 @@ The production chat now follows the design-v1 prototype shell. The fixed topbar 
 
 This aligns implementation with the existing prototype and does not add tokens, routes, or navigation. The v1.1 transcript reading model is unchanged.
 
+## Agent activity tiles (2026-11-14)
+
+The agent activity block is a disclosure again, collapsed by default.
+
+- Collapsed: one header row (label, step count, error count, time) plus a
+  4-row dot stamp. Dots are 0.375rem, gap 0.1875rem, filled top to bottom and
+  starting a new column every four steps, coloured by tool family and status.
+  The stamp is `aria-hidden`; the header button carries the accessible name.
+- Expanded: a wrapping grid of 49px tiles (56px reference x 0.875), 4px gap,
+  8px radius, soft 6% family wash, no border, icon over one short metric. No
+  horizontal scrolling.
+- Selecting a tile opens the step inline under its row: a disclosure with a
+  pinned header and footer and a body capped at 22.5rem. No modal.
+- Status keeps its meaning: error red, running amber, live subagent green.
+- Compaction is a transcript divider, outside the grid, with an inline summary.
+
+
+
+A written Markdown file was previously readable only as escaped JSON inside the
+collapsed activity row. Nothing moved out of that row and no route was added.
+
+- A write tool part now opens to a file card instead of raw input JSON: file
+  name at 12px/600, size and path at 10px, and the written body in a 360px
+  scroll region. Markdown uses the transcript renderer at 12px with headings
+  capped at 14px; other bodies are preformatted at 11px.
+- The row keeps its humanized name, status, and chevron and gains the file name
+  in the existing quiet meta slot.
+- A file mention in message prose becomes a quiet button when the provider
+  exposes `files`. It opens a modal preview with the file name as the title, the
+  path beneath, one close control, and a scrolling body. The card's file name
+  opens the same sheet. The body is the live read through
+  `GET /api/v1/sessions/:ref/files`, a provider-resolved read jailed to the
+  session directory.
+- The preview renders by content type: Markdown, preformatted text, image,
+  native video and audio controls, sandboxed HTML frame, and PDF frame. Media
+  uses a 960px sheet with a 520px floor; text stays at 720px.
+- No new type, spacing, radius, color, or navigation token was added. The 360px
+  preview region and the 10px metadata stay inside the existing activity body;
+  the preview sheet uses the existing 16px sheet radius, large shadow, and
+  pinned header with a scrolling body.
+
 ## Page chrome alignment (2026-11-07)
 
 The production Inbox, Sessions, Search, and Providers screens no longer repeat the

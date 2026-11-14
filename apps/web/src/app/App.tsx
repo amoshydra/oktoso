@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -6,6 +7,8 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -82,7 +85,24 @@ import {
 import {
   collectToolImages,
   sanitizeToolOutput,
+  toolOutputText,
 } from "./tool-images";
+import { formatBytes, formatChars } from "./metrics";
+import {
+  isTextPreview,
+  previewKind,
+  previewMaxBytes,
+  previewMimeType,
+  type PreviewKind,
+} from "./file-preview";
+import {
+  compactionPart,
+  stepsFromMessages,
+  stepsFromParts,
+  type ActivityStep,
+  type StepKind,
+  type StepStatus,
+} from "./activity";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -3253,6 +3273,8 @@ function SessionDetail(props: {
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
   const [sendError, setSendError] = useState<string>();
+  const [previewPath, setPreviewPath] = useState<string>();
+  const [stepPanelOpen, setStepPanelOpen] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(0);
   const [attachmentError, setAttachmentError] = useState<string>();
@@ -4093,14 +4115,14 @@ function SessionDetail(props: {
   }, [attentionSeq, loadAttention]);
 
   useEffect(() => {
-    if (!atBottom) return;
+    if (!atBottom || stepPanelOpen) return;
     const scroller = getScroller();
     if (!scroller) return;
     const frame = requestAnimationFrame(() => {
       scroller.scrollTop = scroller.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [inlineAttention.length, atBottom]);
+  }, [inlineAttention.length, atBottom, stepPanelOpen]);
 
   useEffect(() => {
     const scroller = getScroller();
@@ -4110,7 +4132,7 @@ function SessionDetail(props: {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        setAtBottom(isAtBottom());
+        if (!stepPanelOpen) setAtBottom(isAtBottom());
       });
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
@@ -4118,17 +4140,17 @@ function SessionDetail(props: {
       cancelAnimationFrame(frame);
       scroller.removeEventListener("scroll", onScroll);
     };
-  }, [session]);
+  }, [session, stepPanelOpen]);
 
   useEffect(() => {
     const scroller = getScroller();
     if (!scroller) return;
     const observer = new ResizeObserver(() => {
-      if (atBottom) scroller.scrollTop = scroller.scrollHeight;
+      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
     });
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [session, atBottom]);
+  }, [session, atBottom, stepPanelOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4279,7 +4301,7 @@ function SessionDetail(props: {
     errorAttention && providerError ? providerErrorMessage(providerError) : undefined;
   const hasBlockingAttention = inlineAttention.some((item) => item.priority === "blocking");
   const latestQuestion = latestQuestionText(messages);
-  const transcriptItems = groupTranscript(messages);
+  const transcriptItems = useMemo(() => groupTranscript(messages), [messages]);
   const composerHint =
     uploadingAttachments > 0
       ? "Uploading attachment…"
@@ -4297,6 +4319,8 @@ function SessionDetail(props: {
     providerID: session?.providerID,
     providerType: sessionProvider?.type,
     directory: session?.directory,
+    sessionRef: session?.ref,
+    fileRead: Boolean(sessionProvider?.capabilities.files),
   };
 
   return (
@@ -4402,13 +4426,33 @@ function SessionDetail(props: {
                       onSaveEdit={() => void saveEdit()}
                       onCancelEdit={cancelEdit}
                       suppressError={Boolean(errorAttention)}
+                      onPreviewFile={(path) => setPreviewPath(path)}
+                      onOpenSession={props.onOpenSession}
+                      onStepOpenChange={(open) => {
+                        setStepPanelOpen(open);
+                        if (open) setAtBottom(false);
+                      }}
                     />
-                  ) : (
-                    <AgentActivity
-                      messages={item.messages}
+                  ) : item.kind === "compaction" ? (
+                    <CompactionRow
+                      message={item.message}
                       key={item.key}
                       client={props.client}
                       resource={resource}
+                    />
+                  ) : (
+                    <ActivityTiles
+                      steps={item.steps}
+                      key={item.key}
+                      client={props.client}
+                      resource={resource}
+                      onPreviewFile={(path) => setPreviewPath(path)}
+                      onOpenSession={props.onOpenSession}
+                      onStepOpenChange={(open) => {
+                        setStepPanelOpen(open);
+                        if (open) setAtBottom(false);
+                      }}
+                      header={{ label: "Agent activity", at: item.messages[0]?.createdAt ?? 0 }}
                     />
                   ),
                 )
@@ -4534,7 +4578,7 @@ function SessionDetail(props: {
                           {attachment.name}
                         </span>
                         <span className="composer-attachment-size">
-                          {formatFileSize(attachment.size)}
+                          {formatBytes(attachment.size)}
                         </span>
                         <button
                           className="composer-attachment-remove"
@@ -4881,13 +4925,24 @@ function SessionDetail(props: {
           />
         </>
       ) : null}
+
+      {previewPath && resource.sessionRef ? (
+        <FilePreview
+          path={previewPath}
+          client={props.client}
+          resource={resource}
+          onClose={() => setPreviewPath(undefined)}
+          onPreviewFile={(path) => setPreviewPath(path)}
+        />
+      ) : null}
     </div>
   );
 }
 
 type TranscriptItem =
   | { kind: "message"; message: Message }
-  | { kind: "activity"; messages: Message[]; key: string }
+  | { kind: "activity"; messages: Message[]; key: string; steps: ActivityStep[] }
+  | { kind: "compaction"; message: Message; key: string }
   | { kind: "date"; at: number; key: string };
 
 function groupTranscript(messages: Message[]): TranscriptItem[] {
@@ -4908,6 +4963,7 @@ function groupTranscript(messages: Message[]): TranscriptItem[] {
       {
         kind: "activity",
         messages: activity,
+        steps: stepsFromMessages(activity),
         // Keep the disclosure mounted while new activity appends to the group.
         // Including the last message ID remounts and collapses it on every update.
         key: `activity:${activity[0]!.id}`,
@@ -4917,7 +4973,10 @@ function groupTranscript(messages: Message[]): TranscriptItem[] {
     activity = [];
   };
   for (const message of messages) {
-    if (isActivityMessage(message)) {
+    if (compactionPart(message)) {
+      flush();
+      push({ kind: "compaction", message, key: `compaction:${message.id}` }, message.createdAt);
+    } else if (isActivityMessage(message)) {
       activity.push(message);
     } else {
       flush();
@@ -5053,8 +5112,20 @@ function TranscriptMessage(props: {
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
   suppressError?: boolean;
+  onPreviewFile?: (path: string) => void;
+  onOpenSession?: (ref: string) => void;
+  onStepOpenChange?: (open: boolean) => void;
 }) {
   const message = props.message;
+  const contentParts = message.parts.filter(
+    (part) => part.type === "text" || part.type === "file" || part.type === "unknown",
+  );
+  const steps = useMemo(() => {
+    const parts = message.parts.filter(
+      (part) => part.type === "tool" || part.type === "reasoning",
+    );
+    return parts.length > 0 ? stepsFromParts(parts, `${message.id}:`) : [];
+  }, [message.id, message.parts]);
   const send = optimisticSend(message);
   const copyText =
     message.role === "assistant" && !message.streaming
@@ -5120,14 +5191,17 @@ function TranscriptMessage(props: {
             ) : message.parts.length === 0 && props.suppressError ? (
               <div className="message-empty">Provider error reported below.</div>
             ) : (
-              message.parts.map((part, index) => (
-                <MessagePartView
-                  part={part}
-                  key={index}
-                  client={props.client}
-                  resource={props.resource}
-                />
-              ))
+              <>
+                {contentParts.map((part, index) => (
+                  <MessagePartView
+                    part={part}
+                    key={index}
+                    client={props.client}
+                    resource={props.resource}
+                    onPreviewFile={props.onPreviewFile}
+                  />
+                ))}
+              </>
             )}
           </>
         )}
@@ -5196,55 +5270,657 @@ function TranscriptMessage(props: {
           </div>
         </div>
       ) : null}
+      {!props.editing && steps.length > 0 ? (
+        <ActivityTiles
+          steps={steps}
+          client={props.client}
+          resource={props.resource}
+          onPreviewFile={props.onPreviewFile}
+          onOpenSession={props.onOpenSession}
+          onStepOpenChange={props.onStepOpenChange}
+          header={{ label: "Agent activity" }}
+        />
+      ) : null}
     </article>
   );
 }
 
-function AgentActivity(props: {
-  messages: Message[];
+const STEP_ICONS: Record<StepKind, Parameters<typeof Icon>[0]["name"]> = {
+  think: "bulb",
+  shell: "terminal",
+  execute: "code",
+  read: "file",
+  write: "file-plus",
+  edit: "pencil",
+  search: "search",
+  fetch: "globe",
+  subagent: "bot",
+  image: "image",
+  other: "activity",
+};
+
+function stepStatusLabel(status: StepStatus): string {
+  return status === "error" ? "error" : status === "running" ? "running" : "completed";
+}
+
+function inputText(input: unknown, keys: string[]): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const record = input as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+function stepSubtitle(step: ActivityStep): string {
+  const part = step.part;
+  if (part.type === "reasoning") {
+    return `${part.text.length.toLocaleString()} characters`;
+  }
+  const metadata = part.metadata ?? {};
+  switch (step.kind) {
+    case "shell":
+      return inputText(part.input, ["command"]) ?? "";
+    case "execute":
+      return inputText(part.input, ["language"]) ?? "code";
+    case "read":
+    case "write":
+      return inputText(part.input, ["filePath", "path"]) ?? "";
+    case "search":
+      return inputText(part.input, ["pattern", "query"]) ?? "";
+    case "fetch":
+      return inputText(part.input, ["url"]) ?? "";
+    case "subagent": {
+      const agent = inputText(part.input, ["agent", "description"]) ?? "";
+      const sessionID =
+        typeof metadata.sessionID === "string" ? metadata.sessionID : "";
+      return [agent, sessionID].filter(Boolean).join(" · ");
+    }
+    case "image":
+      return inputText(part.input, ["filePath", "path"]) ?? "";
+    default:
+      return step.metric ?? "";
+  }
+}
+
+/**
+ * Agent activity as a wrapping tile grid.
+ *
+ * Every step is a thumb-size button. Selecting one opens the step inline, on
+ * its own line under the row of the selected tile, like a disclosure - never a
+ * modal. The grid height is the only cost; the transcript keeps scrolling.
+ */
+function ActivityTiles(props: {
+  steps: ActivityStep[];
+  client: HubClient;
+  resource: ResourceContext;
+  onPreviewFile?: (path: string) => void;
+  onOpenSession?: (ref: string) => void;
+  onStepOpenChange?: (open: boolean) => void;
+  header?: { label: string; at?: number };
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [openKey, setOpenKey] = useState<string>();
+  const [perRow, setPerRow] = useState(Math.max(1, props.steps.length));
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const openIndex = props.steps.findIndex((step) => step.key === openKey);
+  const errors = props.steps.filter((step) => step.status === "error").length;
+  const running = props.steps.some((step) => step.status === "running");
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const update = () => {
+      const tile = grid.querySelector<HTMLElement>(".activity-tile");
+      if (!tile) return;
+      const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
+      const width = tile.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const next = Math.max(1, Math.floor((grid.clientWidth + gap) / (width + gap)));
+      setPerRow((current) => (current === next ? current : next));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [props.steps.length, expanded]);
+
+  useEffect(() => {
+    props.onStepOpenChange?.(openKey !== undefined);
+    if (openKey === undefined) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenKey(undefined);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [openKey]);
+
+  if (props.steps.length === 0) return null;
+
+  const insertAt =
+    openIndex >= 0
+      ? Math.min((Math.floor(openIndex / perRow) + 1) * perRow, props.steps.length) - 1
+      : -1;
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const buttons = Array.from(
+      grid.querySelectorAll<HTMLButtonElement>(".activity-tile"),
+    );
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (current < 0) return;
+    let next = current;
+    if (event.key === "ArrowRight") next = Math.min(current + 1, buttons.length - 1);
+    else if (event.key === "ArrowLeft") next = Math.max(current - 1, 0);
+    else if (event.key === "ArrowDown") next = Math.min(current + perRow, buttons.length - 1);
+    else if (event.key === "ArrowUp") next = Math.max(current - perRow, 0);
+    else return;
+    event.preventDefault();
+    buttons[next]?.focus();
+  };
+
+  return (
+    <article className={`agent-activity ${expanded ? "expanded" : "collapsed"}`}>
+      <button
+        className="agent-activity-toggle"
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${props.header?.label ?? "Steps"}: ${props.steps.length} ${props.steps.length === 1 ? "step" : "steps"}${errors > 0 ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`}
+        onClick={() => {
+          if (expanded) setOpenKey(undefined);
+          setExpanded(!expanded);
+        }}
+      >
+        <span className="agent-activity-label">{props.header?.label ?? "Steps"}</span>
+        <span className="agent-activity-count">
+          {props.steps.length} {props.steps.length === 1 ? "step" : "steps"}
+        </span>
+        {errors > 0 ? (
+          <span className="agent-activity-error">
+            {errors} {errors === 1 ? "error" : "errors"}
+          </span>
+        ) : null}
+        {running && errors === 0 ? (
+          <span className="agent-activity-running">running</span>
+        ) : null}
+        {props.header?.at !== undefined ? (
+          <time className="agent-activity-time">{formatTime(props.header.at)}</time>
+        ) : null}
+        <span className="agent-activity-chevron" aria-hidden="true">
+          <Icon name={expanded ? "chevron-right" : "chevron-right"} size={14} />
+        </span>
+      </button>
+      {expanded ? null : (
+        <div className="agent-activity-dots" aria-hidden="true">
+          {props.steps.map((step) => (
+            <span
+              className="activity-dot"
+              key={step.key}
+              data-kind={step.kind}
+              data-status={step.status}
+            />
+          ))}
+        </div>
+      )}
+      {expanded ? (
+      <div
+        className="agent-activity-grid"
+        role="group"
+        aria-label={props.header?.label ?? "Agent steps"}
+        ref={gridRef}
+        onKeyDown={onKeyDown}
+      >
+        {props.steps.map((step, index) => {
+          const open = step.key === openKey;
+          return (
+            <Fragment key={step.key}>
+              <button
+                className="activity-tile"
+                type="button"
+                data-kind={step.kind}
+                data-status={step.status}
+                data-open={open ? "true" : "false"}
+                aria-expanded={open}
+                aria-label={[
+                  step.label,
+                  stepStatusLabel(step.status),
+                  step.metric && step.metric !== stepStatusLabel(step.status)
+                    ? step.metric
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+                title={step.title ?? step.metric}
+                onClick={() => setOpenKey(open ? undefined : step.key)}
+              >
+                <Icon name={STEP_ICONS[step.kind]} size={18} />
+                <span className="activity-tile-meta">{step.metric ?? ""}</span>
+                {step.status !== "completed" ? (
+                  <span className="activity-tile-dot" aria-hidden="true" />
+                ) : null}
+              </button>
+              {openIndex >= 0 && index === insertAt ? (
+                <StepPanel
+                  step={props.steps[openIndex]!}
+                  index={openIndex}
+                  total={props.steps.length}
+                  client={props.client}
+                  resource={props.resource}
+                  onPreviewFile={props.onPreviewFile}
+                  onOpenSession={props.onOpenSession}
+                  onClose={() => setOpenKey(undefined)}
+                  onPrev={() => setOpenKey(props.steps[openIndex - 1]?.key)}
+                  onNext={() => setOpenKey(props.steps[openIndex + 1]?.key)}
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </div>
+      ) : null}
+    </article>
+  );
+}
+
+function StepPanel(props: {
+  step: ActivityStep;
+  index: number;
+  total: number;
+  client: HubClient;
+  resource: ResourceContext;
+  onPreviewFile?: (path: string) => void;
+  onOpenSession?: (ref: string) => void;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Let the transcript finish its own anchoring pass, then bring the step
+    // fully into view.
+    const timer = window.setTimeout(() => {
+      ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [props.step.key]);
+
+  return (
+    <section
+      className="activity-step"
+      aria-label={`${props.step.label} step`}
+      ref={ref}
+    >
+      <header className="activity-step-head">
+        <span className={`tool-status ${props.step.status}`}>
+          {stepStatusLabel(props.step.status)}
+        </span>
+        <span className="activity-step-title">{props.step.label}</span>
+        <span className="activity-step-subtitle">{stepSubtitle(props.step)}</span>
+        {props.step.startedAt !== undefined ? (
+          <time className="activity-step-time">{formatTime(props.step.startedAt)}</time>
+        ) : null}
+        <button
+          className="icon-btn activity-step-close"
+          type="button"
+          aria-label="Close step"
+          onClick={props.onClose}
+        >
+          <Icon name="x" size={14} />
+        </button>
+      </header>
+      <div className="activity-step-body">
+        <StepBody
+          step={props.step}
+          client={props.client}
+          resource={props.resource}
+          onPreviewFile={props.onPreviewFile}
+          onOpenSession={props.onOpenSession}
+        />
+      </div>
+      <footer className="activity-step-foot">
+        <span className="activity-step-hint">
+          Arrow keys move between tiles · Esc closes
+        </span>
+        <span className="activity-step-nav">
+          <button
+            className="btn small"
+            type="button"
+            disabled={props.index === 0}
+            onClick={props.onPrev}
+          >
+            Previous
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            disabled={props.index === props.total - 1}
+            onClick={props.onNext}
+          >
+            Next
+          </button>
+        </span>
+      </footer>
+    </section>
+  );
+}
+
+function StepBlock(props: { label: string; aside?: string; children: ReactNode }) {
+  return (
+    <div className="activity-block">
+      <span className="activity-block-label">
+        {props.label}
+        {props.aside ? <span className="activity-block-aside">{props.aside}</span> : null}
+      </span>
+      {props.children}
+    </div>
+  );
+}
+
+function StepOutputImages(props: {
+  output: unknown;
   client: HubClient;
   resource: ResourceContext;
 }) {
-  const working = props.messages.some((message) => message.streaming);
-  const failed = props.messages.some((message) =>
-    message.parts.some((part) => part.type === "tool" && part.status === "error"),
-  );
-  const events = props.messages.reduce((total, message) => total + message.parts.length, 0);
-  const stepLabel = `${props.messages.length} ${props.messages.length === 1 ? "step" : "steps"}`;
-  const eventLabel = `${events} ${events === 1 ? "event" : "events"}`;
+  const images = collectToolImages(props.output);
+  if (images.length === 0) return null;
   return (
-    <article className="chat-activity">
-      <details className="message-aux chat-activity-details">
-        <summary>
-          <span className="message-aux-label">Agent activity</span>
-          <span className="message-aux-meta">
-            {stepLabel} · {eventLabel}
-          </span>
-          {failed ? <span className="tool-status error">error</span> : null}
-          {working ? <span className="streaming-label">working</span> : null}
-          <span className="message-aux-chevron" aria-hidden="true">
-            <Icon name="chevron-right" size={14} />
-          </span>
-        </summary>
-        <div className="chat-activity-body">
-          {props.messages.map((message) => (
-            <div className="activity-step" key={message.id}>
-              <div className="activity-step-time">{formatTime(message.createdAt)}</div>
-              <div className="chat-message-parts">
-                {message.parts.map((part, index) => (
-                  <MessagePartView
-                    part={part}
-                    key={index}
-                    client={props.client}
-                    resource={props.resource}
-                  />
-                ))}
-              </div>
+    <div className="activity-step-images">
+      {images.map((image, index) => {
+        const resolved = resolveSessionResource(image.url, props.resource, "image");
+        return (
+          <figure className="message-attachment" key={`${image.url.slice(0, 48)}-${index}`}>
+            <AttachmentImage
+              client={props.client}
+              providerID={props.resource.providerID}
+              url={resolved.url ?? image.url}
+              viaProxy={resolved.attachment}
+              name={image.name}
+            />
+            <figcaption>
+              <span className="message-file-name">{image.name}</span>
+            </figcaption>
+          </figure>
+        );
+      })}
+    </div>
+  );
+}
+
+function StepBody(props: {
+  step: ActivityStep;
+  client: HubClient;
+  resource: ResourceContext;
+  onPreviewFile?: (path: string) => void;
+  onOpenSession?: (ref: string) => void;
+}) {
+  const { step } = props;
+  const part = step.part;
+
+  if (part.type === "reasoning") {
+    return (
+      <div className="activity-step-markdown">
+        <Markdown
+          text={part.text}
+          client={props.client}
+          resource={props.resource}
+          onPreviewFile={props.onPreviewFile}
+        />
+      </div>
+    );
+  }
+
+  const metadata = part.metadata ?? {};
+  const outputText = toolOutputText(part.output);
+
+  switch (step.kind) {
+    case "shell": {
+      const command = inputText(part.input, ["command"]);
+      const exit = typeof metadata.exit === "number" ? metadata.exit : undefined;
+      return (
+        <>
+          {command ? (
+            <StepBlock label="Command">
+              <pre className="activity-code">{`$ ${command}`}</pre>
+            </StepBlock>
+          ) : null}
+          {outputText ? (
+            <StepBlock
+              label="Output"
+              aside={exit !== undefined ? `exit ${exit}` : undefined}
+            >
+              <pre className="activity-code">{outputText}</pre>
+            </StepBlock>
+          ) : null}
+        </>
+      );
+    }
+    case "execute": {
+      const code = inputText(part.input, ["code"]);
+      const language = inputText(part.input, ["language"]);
+      return (
+        <>
+          {code ? (
+            <StepBlock label="Code" aside={language}>
+              <pre className="activity-code">{code}</pre>
+            </StepBlock>
+          ) : null}
+          {outputText ? (
+            <StepBlock label="Output">
+              <pre className="activity-code">{outputText}</pre>
+            </StepBlock>
+          ) : null}
+        </>
+      );
+    }
+    case "write": {
+      const path = inputText(part.input, ["filePath", "path", "file"]);
+      const content = inputText(part.input, ["content", "text", "body"]);
+      if (!path || content === undefined) break;
+      const name = path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+      const bytes = new TextEncoder().encode(content).byteLength;
+      const markdown = /\.(?:md|markdown|mdx)$/i.test(path);
+      return (
+        <>
+          <div className="activity-file-head">
+            <span className="activity-file-name">{name}</span>
+            <span className="activity-file-size">{formatBytes(bytes)}</span>
+          </div>
+          {path === name ? null : <span className="activity-file-path">{path}</span>}
+          {markdown ? (
+            <div className="activity-step-markdown">
+              <Markdown
+                text={content}
+                client={props.client}
+                resource={props.resource}
+                headingOffset={1}
+                onPreviewFile={props.onPreviewFile}
+              />
             </div>
-          ))}
+          ) : (
+            <pre className="activity-code">{content}</pre>
+          )}
+        </>
+      );
+    }
+    case "read": {
+      const path = inputText(part.input, ["filePath", "path", "file"]);
+      return (
+        <>
+          {path ? (
+            <StepBlock label="File">
+              <pre className="activity-code">{path}</pre>
+            </StepBlock>
+          ) : null}
+          {outputText ? (
+            <StepBlock label="Content">
+              <pre className="activity-code">{outputText}</pre>
+            </StepBlock>
+          ) : null}
+        </>
+      );
+    }
+    case "search": {
+      const query = inputText(part.input, ["pattern", "query"]);
+      return (
+        <>
+          {query ? (
+            <StepBlock label="Query">
+              <pre className="activity-code">{query}</pre>
+            </StepBlock>
+          ) : null}
+          {outputText ? (
+            <StepBlock label="Result">
+              <pre className="activity-code">{outputText}</pre>
+            </StepBlock>
+          ) : null}
+        </>
+      );
+    }
+    case "fetch": {
+      const url = inputText(part.input, ["url", "query"]);
+      return (
+        <>
+          {url ? (
+            <StepBlock label="Request">
+              <pre className="activity-code">{url}</pre>
+            </StepBlock>
+          ) : null}
+          {outputText ? (
+            <StepBlock label="Response">
+              <pre className="activity-code">{outputText}</pre>
+            </StepBlock>
+          ) : null}
+        </>
+      );
+    }
+    case "subagent": {
+      const agent = inputText(part.input, ["agent"]);
+      const description = inputText(part.input, ["description"]);
+      const prompt = inputText(part.input, ["prompt"]);
+      const background = part.input && typeof part.input === "object"
+        ? Boolean((part.input as Record<string, unknown>).background)
+        : false;
+      const sessionID =
+        typeof metadata.sessionID === "string" ? metadata.sessionID : undefined;
+      const childRef =
+        sessionID && props.resource.providerID
+          ? `${props.resource.providerID}:${sessionID}`
+          : undefined;
+      return (
+        <>
+          <StepBlock label="Agent" aside={background ? "background" : undefined}>
+            <pre className="activity-code">{agent ?? "subagent"}</pre>
+          </StepBlock>
+          {description ? (
+            <StepBlock label="Task">
+              <div className="activity-step-markdown">
+                <Markdown
+                  text={description}
+                  client={props.client}
+                  resource={props.resource}
+                />
+              </div>
+            </StepBlock>
+          ) : null}
+          {prompt ? (
+            <StepBlock label="Prompt">
+              <pre className="activity-code">{prompt}</pre>
+            </StepBlock>
+          ) : null}
+          {sessionID ? (
+            <StepBlock label="Child session">
+              <pre className="activity-code">{sessionID}</pre>
+            </StepBlock>
+          ) : null}
+          {childRef && props.onOpenSession ? (
+            <button
+              className="btn small activity-step-open"
+              type="button"
+              onClick={() => props.onOpenSession?.(childRef)}
+            >
+              Open session
+            </button>
+          ) : null}
+        </>
+      );
+    }
+    default:
+      break;
+  }
+
+  return (
+    <>
+      {part.input !== undefined ? (
+        <StepBlock label="Input">
+          <pre className="activity-code">{formatJson(part.input)}</pre>
+        </StepBlock>
+      ) : null}
+      <StepOutputImages
+        output={part.output}
+        client={props.client}
+        resource={props.resource}
+      />
+      {part.output !== undefined ? (
+        <StepBlock label="Output">
+          <pre className="activity-code">
+            {outputText ?? formatJson(sanitizeToolOutput(part.output))}
+          </pre>
+        </StepBlock>
+      ) : null}
+    </>
+  );
+}
+
+function CompactionRow(props: {
+  message: Message;
+  client: HubClient;
+  resource: ResourceContext;
+}) {
+  const part = compactionPart(props.message);
+  const [open, setOpen] = useState(false);
+  if (!part) return null;
+
+  const tokensIn = part.tokens?.input;
+  const meta = [
+    part.reason,
+    tokensIn !== undefined ? `${tokensIn.toLocaleString()} tokens in` : undefined,
+    `${formatChars(part.summary.length)} summary`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <section className="chat-compaction">
+      <div className="chat-compaction-row">
+        <span className="chat-compaction-icon" aria-hidden="true">
+          <Icon name="layers" size={16} />
+        </span>
+        <span className="chat-compaction-title">Context compacted</span>
+        <span className="chat-compaction-meta">{meta}</span>
+        <button
+          className="text-button chat-compaction-toggle"
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? "Hide summary" : "Show summary"}
+        </button>
+      </div>
+      {open ? (
+        <div className="chat-compaction-body">
+          <Markdown
+            text={part.summary}
+            client={props.client}
+            resource={props.resource}
+            headingOffset={1}
+          />
         </div>
-      </details>
-    </article>
+      ) : null}
+    </section>
   );
 }
 
@@ -5476,16 +6152,23 @@ function Markdown(props: {
   text: string;
   client: HubClient;
   resource: ResourceContext;
+  headingOffset?: number;
+  onPreviewFile?: (path: string) => void;
 }) {
   const html = useMemo(
     () =>
-      renderMarkdown(props.text, props.resource),
+      renderMarkdown(props.text, props.resource, {
+        headingOffset: props.headingOffset,
+      }),
     [
       props.text,
+      props.headingOffset,
       props.resource.baseUrl,
       props.resource.providerID,
       props.resource.providerType,
       props.resource.directory,
+      props.resource.sessionRef,
+      props.resource.fileRead,
     ],
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -5543,6 +6226,16 @@ function Markdown(props: {
       className="message-markdown"
       ref={containerRef}
       onClick={(event) => {
+        const mention = (event.target as HTMLElement).closest(
+          "button[data-file-path]",
+        );
+        if (mention instanceof HTMLButtonElement) {
+          event.preventDefault();
+          const path = mention.dataset.filePath;
+          if (path) props.onPreviewFile?.(path);
+          return;
+        }
+
         const anchor = (event.target as HTMLElement).closest(
           "a[data-attachment-url]",
         );
@@ -5569,99 +6262,20 @@ function MessagePartView(props: {
   part: MessagePart;
   client: HubClient;
   resource: ResourceContext;
+  onPreviewFile?: (path: string) => void;
 }) {
   const part = props.part;
+  if (part.type === "tool" || part.type === "reasoning" || part.type === "compaction") {
+    return null;
+  }
   if (part.type === "text") {
     return (
       <Markdown
         text={part.text}
         client={props.client}
         resource={props.resource}
+        onPreviewFile={props.onPreviewFile}
       />
-    );
-  }
-  if (part.type === "reasoning") {
-    return (
-      <details className="message-aux message-reasoning">
-        <summary>
-          <span className="message-aux-label">Reasoning</span>
-          <span className="message-aux-meta">{part.text.length.toLocaleString()} chars</span>
-          <span className="message-aux-chevron" aria-hidden="true">
-            <Icon name="chevron-right" size={14} />
-          </span>
-        </summary>
-        <div className="message-aux-body">
-          <Markdown
-            text={part.text}
-            client={props.client}
-            resource={props.resource}
-          />
-        </div>
-      </details>
-    );
-  }
-  if (part.type === "tool") {
-    const outputImages = collectToolImages(part.output);
-    return (
-      <details className="message-aux message-tool">
-        <summary>
-          <span className="message-aux-label">{toolLabel(part.name)}</span>
-          <span className={`tool-status ${part.status}`}>{part.status}</span>
-          <span className="message-aux-chevron" aria-hidden="true">
-            <Icon name="chevron-right" size={14} />
-          </span>
-        </summary>
-        <div className="message-aux-body">
-          {part.input !== undefined ? (
-            <>
-              <span className="tool-section-label">Input</span>
-              <pre>{formatJson(part.input)}</pre>
-            </>
-          ) : null}
-          {outputImages.length > 0 ? (
-            <>
-              <span className="tool-section-label">Images</span>
-              <div className="tool-images">
-                {outputImages.map((image, index) => {
-                  const resolved = resolveSessionResource(
-                    image.url,
-                    props.resource,
-                    "image",
-                  );
-                  return (
-                    <figure
-                      className="message-attachment"
-                      key={`${image.url.slice(0, 48)}-${index}`}
-                    >
-                      <AttachmentImage
-                        client={props.client}
-                        providerID={props.resource.providerID}
-                        url={resolved.url ?? image.url}
-                        viaProxy={resolved.attachment}
-                        name={image.name}
-                      />
-                      <figcaption>
-                        <span className="message-file-name">{image.name}</span>
-                        {image.mimeType ? (
-                          <span className="message-file-meta">
-                            {image.mimeType}
-                          </span>
-                        ) : null}
-                      </figcaption>
-                    </figure>
-                  );
-                })}
-              </div>
-            </>
-          ) : null}
-          {part.output !== undefined ? (
-            <>
-              <span className="tool-section-label">Output</span>
-              <pre>{formatJson(sanitizeToolOutput(part.output))}</pre>
-            </>
-          ) : null}
-        </div>
-      </details>
     );
   }
   if (part.type === "file") {
@@ -5763,6 +6377,163 @@ function saveBlob(blob: Blob, name: string): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+}
+
+/**
+ * Preview a file the transcript mentions, without leaving the chat.
+ *
+ * The body is the live file from the session directory, so a mention opens what
+ * is on disk now rather than the snapshot a tool call reported. Text renders as
+ * a document, images and media as themselves, HTML and PDF in a sandboxed frame.
+ */
+function FilePreview(props: {
+  path: string;
+  client: HubClient;
+  resource: ResourceContext;
+  onClose: () => void;
+  onPreviewFile?: (path: string) => void;
+}) {
+  const [state, setState] = useState<
+    | { status: "loading" }
+    | { status: "text"; text: string; kind: PreviewKind }
+    | { status: "media"; url: string; kind: PreviewKind }
+    | { status: "error"; message: string }
+  >({ status: "loading" });
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const onClose = useRef(props.onClose);
+  onClose.current = props.onClose;
+
+  const sessionRef = props.resource.sessionRef;
+  const name = props.path.split(/[\\/]/).filter(Boolean).at(-1) ?? props.path;
+  const kind =
+    state.status === "text" || state.status === "media"
+      ? state.kind
+      : previewKind(props.path);
+
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (previous instanceof HTMLElement) previous.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionRef) return;
+    let cancelled = false;
+    let objectURL: string | undefined;
+    setState({ status: "loading" });
+
+    props.client
+      .sessionFile(sessionRef, props.path)
+      .then(async (blob) => {
+        if (cancelled) return;
+        const resolved = previewKind(props.path, blob.type);
+        if (blob.size > previewMaxBytes(resolved)) {
+          setState({ status: "error", message: "This file is too large to preview." });
+          return;
+        }
+
+        if (isTextPreview(resolved)) {
+          const text = await blob.text();
+          if (!cancelled) setState({ status: "text", text, kind: resolved });
+          return;
+        }
+
+        const typed =
+          blob.type && blob.type !== "application/octet-stream"
+            ? blob
+            : new Blob([blob], { type: previewMimeType(props.path) });
+        objectURL = URL.createObjectURL(typed);
+        setState({ status: "media", url: objectURL, kind: resolved });
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setState({ status: "error", message: previewErrorMessage(reason) });
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    };
+  }, [props.client, props.path, sessionRef]);
+
+  return (
+    <>
+      <div className="file-preview-scrim" aria-hidden="true" onClick={props.onClose} />
+      <section
+        className={`file-preview ${kind === "text" || kind === "markdown" ? "" : "file-preview-media"}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-preview-title"
+      >
+        <header className="file-preview-head">
+          <div className="file-preview-titles">
+            <h2 className="file-preview-title" id="file-preview-title">
+              {name}
+            </h2>
+            <span className="file-preview-path">{props.path}</span>
+          </div>
+          <button
+            className="icon-btn"
+            type="button"
+            aria-label="Close preview"
+            ref={closeRef}
+            onClick={props.onClose}
+          >
+            <Icon name="x" size={16} />
+          </button>
+        </header>
+        <div className="file-preview-body">
+          {state.status === "loading" ? (
+            <div className="empty">Loading…</div>
+          ) : state.status === "error" ? (
+            <div className="alert" role="alert">
+              {state.message}
+            </div>
+          ) : state.status === "text" ? (
+            kind === "markdown" ? (
+              <Markdown
+                text={state.text}
+                client={props.client}
+                resource={props.resource}
+                headingOffset={1}
+                onPreviewFile={props.onPreviewFile}
+              />
+            ) : (
+              <pre>{state.text}</pre>
+            )
+          ) : kind === "image" ? (
+            <img className="file-preview-image" src={state.url} alt={name} />
+          ) : kind === "video" ? (
+            <video
+              className="file-preview-video"
+              src={state.url}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : kind === "audio" ? (
+            <audio className="file-preview-audio" src={state.url} controls />
+          ) : (
+            <iframe
+              className="file-preview-frame"
+              src={state.url}
+              title={name}
+              sandbox={kind === "html" ? "" : undefined}
+            />
+          )}
+        </div>
+      </section>
+    </>
+  );
 }
 
 function AttachmentImage(props: {
@@ -5908,25 +6679,6 @@ function AttachmentButton(props: {
       {error ? <span className="message-file-error">{error}</span> : null}
     </span>
   );
-}
-
-const TOOL_LABELS: Record<string, string> = {
-  bash: "Shell",
-  shell: "Shell",
-  execute: "Execute",
-  edit: "Edit",
-  write: "Write",
-  read: "Read",
-  grep: "Search files",
-  glob: "Find files",
-  task: "Task",
-  webfetch: "Fetch",
-  websearch: "Web search",
-  apply_patch: "Patch",
-};
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name.toLowerCase()] ?? name;
 }
 
 function safeExternalURL(value: string | undefined): string | undefined {
@@ -6161,10 +6913,19 @@ function formatTokenSummary(
   return parts.join(" · ");
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function previewErrorMessage(reason: unknown): string {
+  if (reason instanceof HubError) {
+    if (reason.status === 404) {
+      return "This file is not in the session directory.";
+    }
+    if (reason.status === 501) {
+      return "This provider cannot preview files.";
+    }
+    if (reason.status === 400) {
+      return "This path is outside the session directory.";
+    }
+  }
+  return reason instanceof Error ? reason.message : "Unable to open this file.";
 }
 
 function providerErrorMessage(value: unknown): string {

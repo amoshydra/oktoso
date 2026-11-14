@@ -174,6 +174,36 @@ describe("HubClient.attachment", () => {
   });
 });
 
+describe("HubClient.sessionFile", () => {
+  it("reads a session file with the token", async () => {
+    let captured: { url: string; init: RequestInit | undefined } | undefined;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      captured = { url: String(input), init };
+      return new Response("# Plan\n", {
+        status: 200,
+        headers: { "content-type": "text/markdown" },
+      });
+    }) as typeof fetch;
+    const hub = new HubClient({
+      baseUrl: "http://hub",
+      token: "owner-token",
+      fetchImpl,
+    });
+
+    const blob = await hub.sessionFile(
+      "desktop-opencode:ses_a",
+      "notes/plan.md",
+    );
+
+    expect(captured?.url).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_a/files?path=notes%2Fplan.md",
+    );
+    const headers = new Headers(captured?.init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer owner-token");
+    expect(blob.type).toBe("text/markdown");
+  });
+});
+
 describe("HubClient.transcribe", () => {
   it("posts multipart audio and returns the transcript", async () => {
     let captured: { url: string; init: RequestInit | undefined } | undefined;

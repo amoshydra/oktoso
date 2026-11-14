@@ -60,6 +60,7 @@ function provider(config: ProviderConfig): Provider {
       forms: false,
       attachments: false,
       attach: false,
+      files: false,
       branches: false,
       fork: false,
       retry: false,

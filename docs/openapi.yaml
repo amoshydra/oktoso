@@ -263,6 +263,8 @@ components:
           type: boolean
         attach:
           type: boolean
+        files:
+          type: boolean
         branches:
           type: boolean
         fork:
@@ -286,6 +288,7 @@ components:
         - forms
         - attachments
         - attach
+        - files
         - branches
         - fork
         - retry
@@ -348,6 +351,8 @@ components:
               type: boolean
             attach:
               type: boolean
+            files:
+              type: boolean
             branches:
               type: boolean
             fork:
@@ -371,6 +376,7 @@ components:
             - forms
             - attachments
             - attach
+            - files
             - branches
             - fork
             - retry
@@ -1815,11 +1821,52 @@ components:
               type: string
             input: {}
             output: {}
+            metadata:
+              type: object
+              additionalProperties: {}
+            startedAt:
+              type: integer
+            completedAt:
+              type: integer
           required:
             - type
             - id
             - name
             - status
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - compaction
+            reason:
+              type: string
+            status:
+              type: string
+            summary:
+              type: string
+            model:
+              type: string
+            cost:
+              type: number
+            tokens:
+              type: object
+              properties:
+                input:
+                  type: integer
+                output:
+                  type: integer
+                reasoning:
+                  type: integer
+              required:
+                - input
+                - output
+                - reasoning
+          required:
+            - type
+            - reason
+            - status
+            - summary
         - type: object
           properties:
             type:
@@ -1898,11 +1945,52 @@ components:
                     type: string
                   input: {}
                   output: {}
+                  metadata:
+                    type: object
+                    additionalProperties: {}
+                  startedAt:
+                    type: integer
+                  completedAt:
+                    type: integer
                 required:
                   - type
                   - id
                   - name
                   - status
+              - type: object
+                properties:
+                  type:
+                    type: string
+                    enum:
+                      - compaction
+                  reason:
+                    type: string
+                  status:
+                    type: string
+                  summary:
+                    type: string
+                  model:
+                    type: string
+                  cost:
+                    type: number
+                  tokens:
+                    type: object
+                    properties:
+                      input:
+                        type: integer
+                      output:
+                        type: integer
+                      reasoning:
+                        type: integer
+                    required:
+                      - input
+                      - output
+                      - reasoning
+                required:
+                  - type
+                  - reason
+                  - status
+                  - summary
               - type: object
                 properties:
                   type:
@@ -2001,11 +2089,52 @@ components:
                           type: string
                         input: {}
                         output: {}
+                        metadata:
+                          type: object
+                          additionalProperties: {}
+                        startedAt:
+                          type: integer
+                        completedAt:
+                          type: integer
                       required:
                         - type
                         - id
                         - name
                         - status
+                    - type: object
+                      properties:
+                        type:
+                          type: string
+                          enum:
+                            - compaction
+                        reason:
+                          type: string
+                        status:
+                          type: string
+                        summary:
+                          type: string
+                        model:
+                          type: string
+                        cost:
+                          type: number
+                        tokens:
+                          type: object
+                          properties:
+                            input:
+                              type: integer
+                            output:
+                              type: integer
+                            reasoning:
+                              type: integer
+                          required:
+                            - input
+                            - output
+                            - reasoning
+                      required:
+                        - type
+                        - reason
+                        - status
+                        - summary
                     - type: object
                       properties:
                         type:
@@ -3390,6 +3519,53 @@ paths:
       responses:
         "204":
           description: Deleted
+  /api/v1/sessions/{ref}/files:
+    get:
+      tags:
+        - sessions
+      summary: Read a file from a session's working directory
+      description: Resolves a path inside the session directory and returns the bytes. Relative paths and absolute paths inside that directory are both accepted; paths that escape it, Windows paths, and parent segments are rejected.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            description: Path relative to the session directory
+          required: true
+          description: Path relative to the session directory
+          name: path
+          in: query
+      responses:
+        "200":
+          description: File bytes
+        "400":
+          description: Invalid or escaping path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or file not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not expose session files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/sessions/{ref}/interrupt:
     post:
       tags:

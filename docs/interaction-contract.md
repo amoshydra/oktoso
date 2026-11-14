@@ -34,8 +34,9 @@ The implementation is split into capability-gated slices. The transcript copy
 action and hub-backed dictation shipped first. OpenCode and Open WebUI
 attachments, Open WebUI in-chat branch switching, OpenCode session forks,
 optimistic send, failed-send retry, and OpenCode edit-and-fork follow the same
-contract. Open WebUI true in-chat editing remains gated off until its provider
-path exists.
+contract. Session file reading follows it too: the transcript renders a written
+file and the provider resolves the path. Open WebUI true in-chat editing remains
+gated off until its provider path exists.
 
 ## 2. Non-goals
 
@@ -101,10 +102,42 @@ selected -> uploading -> ready -> sending -> sent
   as `Parent / Child`, so the session list, search, details, and chat header
   show the folder path without a new API field.
 
+### Session file
+
+A written file is not a new resource type; it is the provider's own file, read
+through the hub.
+
+- The provider capability `files` decides whether a file mention or a written
+  file opens the preview. Providers without it still show the transcript body.
+- The browser never builds a provider filesystem URL and never holds a provider
+  credential. It asks the hub with a provider-relative path.
+- The hub jails the path to the session directory, applies the response policy,
+  and returns `400`, `404`, or `501` for a bad path, a missing file, or an
+  unsupported provider.
+- The transcript body is the snapshot the tool reported. The preview reads the
+  live file, so an edit after the turn is not hidden.
+
+### Agent activity
+
+Activity is derived from the transcript, not a new endpoint.
+
+- Tool parts carry `metadata` (exit code, signal, match counts, patch stats,
+  subagent session id and status) and `startedAt`/`completedAt`. The web client
+  turns those into one abbreviated metric per tile; the exact value stays in
+  the tooltip and the step panel.
+- Reasoning parts become steps with a character count; their body renders as
+  sanitized Markdown, images included.
+- `compaction` is a message part: `reason`, `status`, `summary`, and optional
+  model, cost, and token usage. It renders as a transcript divider with an
+  inline summary, never as a tile.
+- A `subagent` tool part may carry a child session id. The step panel links to
+  it through the existing session route; the tile only says `launched`.
+- The block is collapsed by default. Expanding it is a local disclosure; the
+  transcript suspends its bottom pin while a step panel is open.
+
 ### Action
 
 An action belongs to a message and is capability-gated:
-
 | Action | Scope | Provider-neutral? |
 |---|---|---|
 | Copy | Any assistant message with text | Yes |
@@ -274,6 +307,30 @@ constraint, not a product toggle. The Settings screen explains the requirement.
   history before the message and returns a `Session` with `parentRef`.
 - The web details panel exposes `Fork session` and `Open parent`.
 
+`GET /api/v1/sessions/{ref}/files?path=`
+
+- Reads a file inside the session's working directory.
+- Both forms are accepted: a provider-relative path, or an absolute path that
+  sits inside the session directory. Agents write both (`notes/plan.md`,
+  `/home/me/project/notes/plan.md`), so the hub strips the session directory
+  prefix before resolving. An absolute path outside that directory, a `..`
+  segment, a Windows path, a NUL byte, or a path over 1024 characters returns
+  `400 invalid_request`. A missing file returns `404`; providers without `files`
+  return `501 not_implemented`.
+- The provider resolves the path with its own credentials. OpenCode uses
+  `GET /api/fs/read/{path}?location[directory]={session directory}`. The hub
+  never reads the provider's disk and the browser never learns the provider
+  address.
+- Images, text (Markdown, plain text, JSON, HTML), and media (MP4, WebM, MOV,
+  MP3, WAV, OGG, M4A, FLAC) are served inline with a sandbox CSP. Unknown types
+  fall back to `application/octet-stream` and download.
+- The transcript renders by content type, with the extension as fallback: source
+  for text, Markdown as a document, images inline, video and audio with native
+  controls, HTML in a frame with `sandbox=""`, and PDF in a frame.
+- The transcript uses this for the file preview: a mention in message prose and
+  the file name on a written-file card. Markdown links inside message prose keep
+  their existing resolver.
+
 `GET /api/v1/sessions?q=`
 
 - With `q`, the hub queries enabled providers in parallel, merges provider
@@ -319,9 +376,10 @@ discovery surface.
    transcript rendering.
 3. **Done:** Open WebUI in-chat siblings and OpenCode session forks.
 4. **Done:** optimistic send, failed-send retry, and OpenCode edit-and-fork.
-5. **Deferred:** true in-chat editing for Open WebUI and the full
+5. **Done:** readable file preview for write tools and session file reads.
+6. **Deferred:** true in-chat editing for Open WebUI and the full
    session-family tree.
-6. **Production migration:** only after grouping and the frozen design hold
+7. **Production migration:** only after grouping and the frozen design hold
    against live provider data.
 
 ## 10. Acceptance criteria
@@ -353,8 +411,7 @@ discovery surface.
 **Branching**
 
 - Open WebUI branch points show the active sibling index and count under the
-  active assistant message.
-- Switching a branch replaces the visible path and updates the picker.
+  active assistant message.- Switching a branch replaces the visible path and updates the picker.
 - Retry creates a new assistant sibling, keeps the old answer reachable, and
   updates the picker count.
 - OpenCode `Fork session` creates a child session and opens it; the child links
@@ -416,6 +473,19 @@ discovery surface.
 - A failed send shows Retry; Retry reuses the same idempotency key.
 - A successful send leaves exactly one user message after reconciliation.
 - Edit & fork opens the new session with the edited text in the draft.
+
+**Session files**
+
+- A write tool renders the file name, size, and body instead of raw JSON.
+- Markdown bodies render as Markdown; other bodies render as preformatted text;
+  bodies over 50,000 characters are truncated with a note.
+- A mention opens the preview only when the provider exposes `files`; a plain
+  mention stays an inline code span otherwise.
+- Images, video, audio, PDF, and HTML open in the preview; unknown extensions do
+  not become buttons.
+- The hub rejects escaping and absolute paths and never returns provider
+  credentials or a provider URL to the browser.
+- A provider without `files` still renders the transcript body.
 
 ## 12. Open questions
 

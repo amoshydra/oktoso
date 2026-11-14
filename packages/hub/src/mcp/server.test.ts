@@ -37,6 +37,7 @@ const provider: Provider = {
     forms: true,
     attachments: false,
     attach: true,
+    files: false,
     branches: false,
     fork: true,
     retry: false,

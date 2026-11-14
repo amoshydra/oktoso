@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import {
   attachmentProxyPath,
+  previewableFilePath,
   resolveSessionResource,
   type ResourceContext,
 } from "./urls";
@@ -14,7 +15,19 @@ marked.setOptions({
   breaks: true,
 });
 
-export function renderMarkdown(text: string, context?: ResourceContext): string {
+export interface MarkdownOptions {
+  /**
+   * Shift heading levels down. The transcript keeps one page `h1`, so an
+   * embedded document preview starts at `h2`.
+   */
+  headingOffset?: number;
+}
+
+export function renderMarkdown(
+  text: string,
+  context?: ResourceContext,
+  options: MarkdownOptions = {},
+): string {
   const html = marked.parse(text, { async: false }) as string;
   const sanitized = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
@@ -26,8 +39,45 @@ export function renderMarkdown(text: string, context?: ResourceContext): string 
   const template = document.createElement("template");
   template.innerHTML = sanitized;
 
-  for (const anchor of template.content.querySelectorAll("a")) {
-    const resolved = resolveSessionResource(
+  const offset = options.headingOffset ?? 0;
+  if (offset > 0) {
+    const headings = [
+      ...template.content.querySelectorAll("h1, h2, h3, h4, h5"),
+    ];
+    for (const heading of headings) {
+      const level = Number(heading.tagName.slice(1));
+      const replacement = document.createElement(
+        `h${Math.min(6, level + offset)}`,
+      );
+      replacement.innerHTML = heading.innerHTML;
+      for (const attribute of heading.attributes) {
+        replacement.setAttribute(attribute.name, attribute.value);
+      }
+      heading.replaceWith(replacement);
+    }
+  }
+
+  if (context?.fileRead && context.sessionRef) {
+    const mentions = [...template.content.querySelectorAll("code")];
+    for (const code of mentions) {
+      if (code.closest("pre")) continue;
+      const path = previewableFilePath(
+        code.textContent ?? undefined,
+        context.directory,
+      );
+      if (!path) continue;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "file-mention";
+      button.dataset.filePath = path;
+      button.setAttribute("aria-label", `Preview ${path}`);
+      code.replaceWith(button);
+      button.appendChild(code);
+    }
+  }
+
+  for (const anchor of template.content.querySelectorAll("a")) {    const resolved = resolveSessionResource(
       anchor.getAttribute("href") ?? undefined,
       context ?? {},
       "link",

@@ -18,10 +18,12 @@ import type {
 } from "@amoshydra/oktoso-contracts";
 import type {
   ProviderAdapter,
+  ProviderFileRequest,
   ProviderResource,
   ProviderSendInput,
 } from "../types";
 import { ProviderError } from "../errors";
+import { normalizeSessionPath } from "../files";
 import { readProviderResource } from "../http/resource";
 import { readSse } from "../http/sse";
 
@@ -75,6 +77,11 @@ interface OpenCodeMessageRaw {
   agent?: string;
   model?: { id: string; providerID: string; variant?: string };
   error?: unknown;
+  reason?: string;
+  status?: string;
+  summary?: string;
+  cost?: number;
+  tokens?: Record<string, unknown>;
 }
 
 interface OpenCodeMessagesResponse {
@@ -162,6 +169,7 @@ const openCodeCapabilities: ProviderCapabilities = {
   forms: true,
   attachments: true,
   attach: true,
+  files: true,
   branches: false,
   fork: true,
   retry: false,
@@ -524,6 +532,41 @@ export class OpenCodeAdapter implements ProviderAdapter {
       signal,
       providerLabel: "OpenCode",
     });
+  }
+
+  /**
+   * Read a file inside a session's working directory.
+   *
+   * OpenCode serves project files from `/api/fs/read/<path>` and scopes the read
+   * with `location[directory]`, so the hub asks the provider instead of reading
+   * the host disk itself.
+   */
+  async readFile(
+    input: ProviderFileRequest,
+    signal: AbortSignal,
+  ): Promise<ProviderResource> {
+    const path = normalizeSessionPath(input.path);
+    const directory =
+      input.directory ?? (await this.getSession(input.ref, signal)).directory;
+    if (!directory) {
+      throw new ProviderError(
+        "invalid_request",
+        "This session has no working directory",
+      );
+    }
+
+    const encoded = path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const url = new URL(`/api/fs/read/${encoded}`, this.baseUrl);
+    url.searchParams.set("location[directory]", directory);
+
+    const resource = await this.readResource(url.toString(), signal);
+    return {
+      ...resource,
+      filename: resource.filename ?? path.split("/").at(-1),
+    };
   }
 
   async markRead(ref: string, signal: AbortSignal): Promise<void> {
@@ -912,6 +955,18 @@ export class OpenCodeAdapter implements ProviderAdapter {
       };
     }
 
+    if (raw.type === "compaction") {
+      const part = toCompactionPart(raw);
+      if (!part) return undefined;
+      return {
+        id: raw.id,
+        sessionRef,
+        role: "system",
+        parts: [part],
+        createdAt: raw.time?.created ?? 0,
+      };
+    }
+
     if (raw.type !== "assistant") return undefined;
 
     const parts: MessagePart[] = (raw.content ?? []).map((part) =>
@@ -1098,6 +1153,33 @@ async function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+function toCompactionPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
+  const summary = typeof raw.summary === "string" ? raw.summary : undefined;
+  if (!summary) return undefined;
+  const tokens = asRecord(raw.tokens);
+  const tokenCount = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return {
+    type: "compaction",
+    reason: typeof raw.reason === "string" ? raw.reason : "auto",
+    status: typeof raw.status === "string" ? raw.status : "completed",
+    summary,
+    ...(raw.model?.id && raw.model?.providerID
+      ? { model: `${raw.model.providerID}/${raw.model.id}` }
+      : {}),
+    ...(typeof raw.cost === "number" ? { cost: raw.cost } : {}),
+    ...(tokens
+      ? {
+          tokens: {
+            input: tokenCount(tokens.input),
+            output: tokenCount(tokens.output),
+            reasoning: tokenCount(tokens.reasoning),
+          },
+        }
+      : {}),
+  };
+}
+
 function toMessagePart(raw: Record<string, unknown>): MessagePart {
   const type = raw.type;
   if (type === "text") {
@@ -1108,6 +1190,10 @@ function toMessagePart(raw: Record<string, unknown>): MessagePart {
   }
   if (type === "tool") {
     const state = asRecord(raw.state) ?? {};
+    const time = asRecord(raw.time) ?? {};
+    const metadata = asRecord(state.metadata);
+    const startedAt = numberValue(time, "created");
+    const completedAt = numberValue(time, "completed");
     return {
       type: "tool",
       id: String(raw.id ?? raw.callID ?? ""),
@@ -1115,6 +1201,9 @@ function toMessagePart(raw: Record<string, unknown>): MessagePart {
       status: String(state.status ?? raw.status ?? "unknown"),
       input: state.input,
       output: state.content ?? state.output ?? state.error,
+      ...(metadata ? { metadata } : {}),
+      ...(startedAt !== undefined ? { startedAt } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}),
     };
   }
   if (type === "file") {

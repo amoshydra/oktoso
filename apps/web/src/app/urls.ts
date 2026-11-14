@@ -1,3 +1,5 @@
+import { PREVIEW_EXTENSIONS } from "./file-preview";
+
 const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 const IMAGE_DATA = /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i;
 const FILE_EXTENSION =
@@ -8,6 +10,43 @@ export interface ResourceContext {
   providerID?: string;
   providerType?: string;
   directory?: string;
+  /** Session the transcript belongs to; used for session-scoped file reads. */
+  sessionRef?: string;
+  /** True when the provider exposes files in the session directory. */
+  fileRead?: boolean;
+}
+
+/**
+ * Recognize a file mention that the session preview can open.
+ *
+ * Files inside the session directory qualify, either relative or absolute
+ * under `directory` (agents write both). URL-like values, anything with
+ * whitespace, escaping paths, and unknown extensions stay plain code so a
+ * command or a domain name never turns into a broken preview.
+ */
+export function previewableFilePath(
+  value: string | undefined,
+  directory?: string,
+): string | undefined {
+  const raw = value?.trim();
+  if (!raw || /\s/.test(raw)) return undefined;
+  if (raw.startsWith("#") || raw.startsWith("//")) return undefined;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return undefined;
+
+  const root = directory?.trim().replace(/\/+$/, "");
+  let path = (raw.split(/[?#]/, 1)[0] ?? raw).replace(/^\.\//, "");
+  if (path.startsWith("/")) {
+    if (!root || !path.startsWith(`${root}/`)) return undefined;
+    path = path.slice(root.length + 1);
+  }
+  if (path.split(/[\\/]/).includes("..")) return undefined;
+
+  const name = path.split(/[\\/]/).at(-1) ?? path;
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot === name.length - 1) return undefined;
+
+  const extension = name.slice(dot + 1).toLowerCase();
+  return PREVIEW_EXTENSIONS.has(extension) ? path : undefined;
 }
 
 export interface ResolvedResource {

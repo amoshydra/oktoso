@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentProxyPath,
   isProviderResource,
+  previewableFilePath,
   resolveProviderUrl,
   resolveSessionResource,
 } from "./urls";
@@ -123,5 +124,52 @@ describe("attachmentProxyPath", () => {
     ).toBe(
       "/api/v1/attachments?provider=desktop-opencode&url=http%3A%2F%2F127.0.0.1%3A4096%2Fapi%2Ffs%2Fread%2Fa.png%3Fx%3D1",
     );
+  });
+});
+
+describe("previewableFilePath", () => {
+  it("accepts relative text files", () => {
+    expect(previewableFilePath("trip-korea-2026.md")).toBe("trip-korea-2026.md");
+    expect(previewableFilePath("./notes/plan.md")).toBe("notes/plan.md");
+    expect(previewableFilePath("src/app.tsx")).toBe("src/app.tsx");
+    expect(previewableFilePath("config.yaml?plain=1")).toBe("config.yaml");
+  });
+
+  it("accepts documents, images, media, and HTML", () => {
+    for (const mention of [
+      "plots/chart.png",
+      "clip.mp4",
+      "voice.m4a",
+      "spec.pdf",
+      "report.html",
+      "diagram.svg",
+    ]) {
+      expect(previewableFilePath(mention)).toBe(mention);
+    }
+  });
+
+  it("accepts an absolute path inside the session directory", () => {
+    expect(
+      previewableFilePath("/home/me/project/notes/plan.md", "/home/me/project"),
+    ).toBe("notes/plan.md");
+    expect(
+      previewableFilePath("/home/me/other/plan.md", "/home/me/project"),
+    ).toBeUndefined();
+  });
+
+  it("rejects commands, URLs, absolute paths, and binary types", () => {
+    expect(previewableFilePath("pnpm run build")).toBeUndefined();
+    expect(previewableFilePath("npm")).toBeUndefined();
+    expect(previewableFilePath("127.0.0.1:4056")).toBeUndefined();
+    expect(previewableFilePath("https://example.com/a.md")).toBeUndefined();
+    expect(previewableFilePath("/home/me/notes.md")).toBeUndefined();
+    expect(previewableFilePath("../notes.md")).toBeUndefined();
+    expect(previewableFilePath("/home/me/notes.md")).toBeUndefined();
+    expect(previewableFilePath("archive.zip")).toBeUndefined();
+    expect(previewableFilePath("binary.bin")).toBeUndefined();
+    expect(previewableFilePath("app.exe")).toBeUndefined();
+    expect(previewableFilePath("--with-flag")).toBeUndefined();
+    expect(previewableFilePath("")).toBeUndefined();
+    expect(previewableFilePath(undefined)).toBeUndefined();
   });
 });

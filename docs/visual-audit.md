@@ -561,3 +561,112 @@ No new type, spacing, radius, or color tokens were introduced.
 - `docs/design-lock.md`: design-v1.3.
 - `docs/ui-ia.md`: attachment, branch, and fork rules.
 - `docs/visual-audit.md`: this section.
+
+## Transcript file preview (2026-11-12)
+
+A session that wrote a Markdown file showed the whole document as escaped JSON
+inside the collapsed activity row, and the reply named the file without any way
+to read it. The fix keeps the row collapsed and makes the body readable.
+
+- A write tool part whose input carries a path and a body renders as a file card
+  inside the existing disclosure: name at 12px/600, size and path at 10px, and
+  the body in a 360px scroll region. Markdown renders through the transcript
+  renderer at 12px/1.55 with headings capped at 14px; other bodies render as
+  preformatted text at 11px.
+- The row label keeps the humanized tool name and gains the file name in the
+  existing quiet meta slot. No new type, spacing, radius, or color token was
+  added, and nothing leaves the collapsed activity block.
+- A file mention in message prose becomes a quiet button (dashed underline,
+  accent on hover, 2px focus outline) when the provider advertises `files`. It
+  opens a modal preview, and so does the card's file name.
+- The preview is a sheet at 16px radius with a large shadow, a pinned head and a
+  scrolling body: title at 16px/600, path at 11px mono, one 32px (44px mobile)
+  close control. Text sits at 720px; media sits at 960px with a 520px floor and
+  a centered body. Escape and the scrim close it and focus returns to the
+  mention.
+- Render mode follows content type with the extension as fallback: Markdown,
+  preformatted text, image, `<video controls>`, `<audio controls>`, sandboxed
+  HTML frame, and PDF frame. The sandboxed HTML frame has `sandbox=""`, so an
+  agent-authored page cannot run scripts or reach the app.
+- The body is read live through `GET /api/v1/sessions/:ref/files`, so the
+  snapshot in the transcript is never mistaken for the current file.
+- Bodies over 50,000 characters are cut in the card with a note. Preview caps:
+  1 MB text and Markdown, 5 MB HTML, 20 MB images, media, and PDF.
+- The hub jails the path to the session directory: relative paths and absolute
+  paths inside it both work (agents write the absolute form), and anything
+  outside returns `400`. Missing files return `404`, providers without `files`
+  return `501`. Readable types render inline; other types download.
+
+Verification: unit coverage for the parser, the path guard, the route, and the
+client method. The card sits inside `.message-aux-body`, so it inherits the
+collapsed-row surfaces in both themes; the 360px region keeps long documents from
+pushing the composer, and the card wraps without horizontal overflow at 320px.
+
+### Files changed
+
+- `apps/web/src/app/tool-files.ts`, `apps/web/src/app/tool-files.test.ts`: write-tool detection, path/body extraction, truncation, size formatting.
+- `apps/web/src/app/App.tsx`: file card, row meta, preview sheet, mention handling, shared size formatter.
+- `apps/web/src/app/urls.ts`: previewable mention detection.
+- `apps/web/src/app/markdown.ts`: mention buttons and heading offsets.
+- `apps/web/src/app/urls.ts`: `sessionRef` and `fileRead` on the resource context.
+- `apps/web/src/styles.css`: file card, path, preview region, and download action.
+- `packages/contracts/src/common.ts`, `packages/contracts/src/openapi.ts`: `files` capability and the session file route.
+- `packages/providers/src/files.ts`, `packages/providers/src/files.test.ts`: session path normalization and rejection rules.
+- `packages/providers/src/types.ts`: `readFile` adapter method and file request shape.
+- `packages/providers/src/opencode/adapter.ts`: provider filesystem read through `/api/fs/read/`.
+- `packages/providers/src/openwebui/adapter.ts`: `files: false`.
+- `packages/hub/src/services/session-service.ts`: jailed session file reads.
+- `packages/hub/src/http/routes/files.ts`, `packages/hub/src/http/resource-response.ts`: file route and shared response policy.
+- `packages/hub/src/app.test.ts`: read, jail, missing path, unsupported provider, and auth coverage.
+- `packages/client/src/hub-client.ts`, `packages/client/src/hub-client.test.ts`: `sessionFile` and the shared blob path.
+- `packages/testing/src/fake-providers.ts`: `/api/fs/read/` fixtures.
+- `docs/openapi.yaml`: regenerated.
+- `docs/ui-ia.md`, `docs/design.md`, `docs/code-structure.md`, `docs/interaction-contract.md`: contract and transcript rules.
+
+## Agent activity tiles (2026-11-14)
+
+The activity block was an expanding list: an opened group exposed one row per
+event, so a long turn became thousands of pixels of vertical scroll. It is now a
+fixed-grammar wrap grid.
+
+- **Collapsed.** One header row plus a dot stamp that flows horizontally and
+  wraps naturally, so six steps are one row. Dots are 4px squares (1em at a
+  4px font size) with a 1px gap, no radius, and 50% opacity so the stamp reads
+  as texture rather than controls. They carry the same family/status colours
+  as the tiles. The header is the disclosure button; the stamp is
+  `aria-hidden`.
+- **Tiles.** 49px wide at the default size (56px reference × 0.875), content
+  height (~53px), 4px gap, 8px radius. One tile per step: 1.09rem icon over a
+  0.625rem metric. The grid wraps and never scrolls sideways.
+- **Colour.** The only category signal is a 6% `color-mix` wash of the family
+  hue plus the icon in that hue. No border, no fill at rest. Hover is 12%, an
+  open tile is 14% plus a 2px accent inset, and focus is the standard 2px accent
+  outline. Status overrides the family: error red, running amber, live subagent
+  green — the success colour means "alive" only for subagents.
+- **Metrics.** One value per tile, abbreviated by `metrics.ts` to about eight
+  characters (1.3k ch, exit 255, 1.5 KB, 49 hits, 1k×320). The exact number
+  lives in the tooltip, the aria label, and the step panel. A step with no
+  metric keeps the empty line so icons stay aligned.
+- **Inline step.** Selecting a tile inserts a full-width panel on its own line
+  after that row — no modal. Header: status chip, name, mono subtitle, time,
+  32px close (44px mobile). Body: kind-specific blocks, 22.5rem maximum with
+  its own scroll. Footer: hint plus Previous / Next. Opening scrolls the panel
+  into view and suspends the transcript's bottom pin until it closes.
+- **Compaction.** A transcript divider outside the grid, with the reason, input
+  tokens, summary size, and an inline Show summary. It wraps to two lines below
+  760px.
+- **Units.** Everything in this block is rem/em; the reference tile is 3.0625rem
+  wide so root font-size changes scale it.
+
+### Files changed
+
+- `packages/contracts/src/messages.ts`: tool `metadata`/`startedAt`/`completedAt`, and the `compaction` part.
+- `packages/providers/src/opencode/adapter.ts`: tool metadata and timings, compaction messages, synthetic still dropped.
+- `apps/web/src/app/activity.ts`, `activity.test.ts`: step extraction, families, status, metrics.
+- `apps/web/src/app/metrics.ts`, `metrics.test.ts`: compact numbers, bytes, durations, diffs, pixels.
+- `apps/web/src/app/App.tsx`: `ActivityTiles`, `StepPanel`, `StepBody`, `CompactionRow`; the old activity rows and tool disclosure are gone.
+- `apps/web/src/app/Icon.tsx`: terminal, code, file, file-plus, pencil, globe, bot, image, layers, bulb.
+- `apps/web/src/styles.css`: tile grid, family palette (dark and light), inline panel, compaction divider, `overflow-anchor: none` on the transcript.
+- `packages/testing/src/fake-providers.ts`: shell/execute/subagent metadata, timings, and a compaction fixture.
+- `packages/hub/src/app.test.ts`: metadata, timings, and compaction coverage.
+- `docs/ui-ia.md`, `docs/interaction-contract.md`, `docs/design.md`, `docs/design-lock.md`: rules.

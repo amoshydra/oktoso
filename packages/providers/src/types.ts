@@ -49,6 +49,19 @@ export interface ProviderAttachment {
   data: Uint8Array;
 }
 
+/**
+ * A file inside a session's working directory.
+ *
+ * `path` is always relative to `directory` and has already passed
+ * `normalizeSessionPath`. The adapter resolves it against the provider's
+ * filesystem endpoint, so the hub never touches the provider's disk.
+ */
+export interface ProviderFileRequest {
+  ref: string;
+  directory?: string;
+  path: string;
+}
+
 export interface ProviderSendInput extends SendInput {
   files?: ProviderAttachment[];
 }
@@ -105,6 +118,10 @@ export interface ProviderAdapter {
   ): Promise<void>;
   markRead?(ref: string, signal: AbortSignal): Promise<void>;
   readResource?(url: string, signal: AbortSignal): Promise<ProviderResource>;
+  readFile?(
+    input: ProviderFileRequest,
+    signal: AbortSignal,
+  ): Promise<ProviderResource>;
   subscribe?(
     onEvent: (event: ProviderEvent) => void,
     signal: AbortSignal,
@@ -122,6 +139,7 @@ export const emptyCapabilities: ProviderCapabilities = {
   forms: false,
   attachments: false,
   attach: false,
+  files: false,
   branches: false,
   fork: false,
   retry: false,

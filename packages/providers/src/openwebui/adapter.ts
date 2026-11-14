@@ -106,6 +106,7 @@ const openWebUICapabilities: ProviderCapabilities = {
   forms: false,
   attachments: true,
   attach: true,
+  files: false,
   branches: true,
   fork: false,
   retry: true,
