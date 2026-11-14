@@ -63,6 +63,9 @@ export const zHubState = z.object({
 
 export type HubState = z.infer<typeof zHubState>;
 export type ReadMarker = z.infer<typeof zReadMarker>;
+export type NotificationSubscriptionState = z.infer<
+  typeof zNotificationSubscriptionState
+>;
 
 export function createInitialState(): HubState {
   return {

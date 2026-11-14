@@ -55,6 +55,8 @@ import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { NotificationService } from "./services/notification-service";
+import { WebPushTransport } from "./services/web-push-transport";
+import { loadOrCreateVapidKeys } from "./services/vapid";
 import { createApp } from "./app";
 import { watchPairingCommands } from "./lib/pairing-prompt";
 import { VERSION } from "./version";
@@ -545,13 +547,26 @@ async function main(): Promise<void> {
     await replyFeedback.init();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
-    // The push transport lands with the notification slice; until then the
-    // service is inert and delivers nothing.
+    // Generate the VAPID pair once and keep it owner-only. It is cheap, and a
+    // later runtime enable should not need a restart to start delivering.
+    const vapidKeys =
+      config.notifications.vapid.publicKey &&
+      config.notifications.vapid.privateKey
+        ? {
+            publicKey: config.notifications.vapid.publicKey,
+            privateKey: config.notifications.vapid.privateKey,
+          }
+        : await loadOrCreateVapidKeys(resolve(config.dataDir));
     const notifications = new NotificationService({
       config: config.notifications,
       store,
       eventBus,
       logger,
+      transport: new WebPushTransport({
+        store,
+        logger,
+        vapid: { ...vapidKeys, subject: config.notifications.vapid.subject },
+      }),
     });
     notifications.start();
     providerEvents = new ProviderEventService(
