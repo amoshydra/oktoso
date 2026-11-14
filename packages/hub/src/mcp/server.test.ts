@@ -340,7 +340,11 @@ describe("Oktoso MCP server", () => {
     try {
       const listed = await client.listResources();
       expect(listed.resources.map((resource) => resource.uri)).toEqual(
-        expect.arrayContaining(["oktoso://attention", "oktoso://sessions"]),
+        expect.arrayContaining([
+          "oktoso://attention",
+          "oktoso://sessions",
+          "oktoso://automation",
+        ]),
       );
 
       const attention = await client.readResource({
@@ -350,6 +354,18 @@ describe("Oktoso MCP server", () => {
         (attention.contents[0] as { text: string }).text,
       );
       expect(payload.data[0].id).toBe("attention-1");
+
+      const automation = await client.readResource({
+        uri: "oktoso://automation",
+      });
+      const automationPayload = JSON.parse(
+        (automation.contents[0] as { text: string }).text,
+      );
+      expect(automationPayload.data).toMatchObject({
+        enabled: true,
+        dryRun: true,
+        watchers: [],
+      });
 
       const updates: string[] = [];
       client.setNotificationHandler(
@@ -367,8 +383,20 @@ describe("Oktoso MCP server", () => {
           at: 1,
         });
       }
+      await client.subscribeResource({ uri: "oktoso://automation" });
+      for (const listener of listeners) {
+        listener({
+          seq: 2,
+          type: "automation.approval",
+          data: {},
+          at: 2,
+        });
+      }
       await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(updates).toEqual(["oktoso://attention"]);
+      expect(updates).toEqual([
+        "oktoso://attention",
+        "oktoso://automation",
+      ]);
     } finally {
       await close();
     }
@@ -535,6 +563,20 @@ describe("automation tools", () => {
       });
       expect(act.isError).toBeUndefined();
       expect(api.actOnApproval).toHaveBeenCalledWith("approval_1", "deny");
+    } finally {
+      await close();
+    }
+  });
+
+  it("exposes only the automation resource with an automation-only allowlist", async () => {
+    const { client, close } = await connect(fakeApi(), false, {
+      tools: ["automation_list"],
+    });
+    try {
+      const listed = await client.listResources();
+      expect(listed.resources.map((resource) => resource.uri)).toEqual([
+        "oktoso://automation",
+      ]);
     } finally {
       await close();
     }
