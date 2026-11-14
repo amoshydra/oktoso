@@ -1830,7 +1830,9 @@ function InboxView(props: {
                 item={approvalAttention(approval)}
                 key={approval.id}
                 busy={busyID === approval.id}
-                detail={`${approval.watcherID} · ${approval.reason}`}
+                detail={`${approval.watcherID} · ${approval.reason}${
+                  approval.proposed ? ` · ${approval.proposed.text}` : ""
+                }`}
                 onAction={(action) => void actOnApproval(approval, action)}
                 onOpen={() => props.onOpen(approval.sessionRef)}
               />

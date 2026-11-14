@@ -824,7 +824,7 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       {
         title: "Approve or deny an automation action",
         description:
-          "Decide a pending automation approval. Approve executes the stored plan; deny never sends.",
+          "Decide a pending automation approval. Approve executes the proposed answer when actionable; otherwise it records that a human handled it. Deny never sends.",
         inputSchema: {
           id: z.string().describe("Approval ID from approvals_list"),
           action: z.enum(["approve", "deny"]),

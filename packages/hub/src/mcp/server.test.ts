@@ -400,6 +400,7 @@ describe("automation tools", () => {
     status: "pending",
     createdAt: 1,
     expiresAt: 2,
+    actionable: false,
   };
 
   it("reads automation and approvals", async () => {

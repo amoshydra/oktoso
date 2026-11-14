@@ -117,6 +117,11 @@ export const zAutomationApprovalStatus = z.enum([
   "expired",
 ]);
 
+export const zAutomationProposal = z.object({
+  label: z.string().max(80).optional(),
+  text: z.string().max(500),
+});
+
 export const zAutomationApproval = z.object({
   id: z.string(),
   watcherID: z.string(),
@@ -130,11 +135,10 @@ export const zAutomationApproval = z.object({
   createdAt: z.number().int(),
   expiresAt: z.number().int(),
   decidedAt: z.number().int().optional(),
-  /**
-   * The plan to execute on approval. Opaque to clients; it never contains
-   * provider credentials or transcript content.
-   */
-  plan: z.unknown().optional(),
+  /** True when approving will execute the proposed answer. */
+  actionable: z.boolean(),
+  /** The answer that approve will send, when actionable. */
+  proposed: zAutomationProposal.optional(),
 });
 
 export const zAutomationApprovalPage = z.object({
@@ -166,6 +170,7 @@ export type AutomationWatcher = z.infer<typeof zAutomationWatcher>;
 export type AutomationDecision = z.infer<typeof zAutomationDecision>;
 export type AutomationRun = z.infer<typeof zAutomationRun>;
 export type AutomationRunPage = z.infer<typeof zAutomationRunPage>;
+export type AutomationProposal = z.infer<typeof zAutomationProposal>;
 export type AutomationApproval = z.infer<typeof zAutomationApproval>;
 export type AutomationApprovalStatus = z.infer<
   typeof zAutomationApprovalStatus
