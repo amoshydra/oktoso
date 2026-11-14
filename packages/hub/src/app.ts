@@ -18,6 +18,7 @@ import type { ReplyService } from "./services/reply-service";
 import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
+import type { NotificationService } from "./services/notification-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import { ProviderError } from "@amoshydra/oktoso-providers";
@@ -44,6 +45,7 @@ import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
+import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerMcpRoutes } from "./mcp/http";
 import { createServiceMcpApi } from "./mcp/api";
 import { SessionActions } from "./services/session-actions";
@@ -63,6 +65,7 @@ export interface AppDependencies {
   replyFeedback: ReplyFeedbackStore;
   transcription: TranscriptionService;
   questions: QuestionService;
+  notifications?: NotificationService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -127,6 +130,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerSettingsRoutes(app, deps.settings);
   registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);
+  if (deps.notifications) {
+    registerNotificationRoutes(app, deps.notifications);
+  }
   registerEventRoutes(app, deps.eventBus);
   registerMcpRoutes(app, {
     config: deps.config,

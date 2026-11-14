@@ -1,15 +1,25 @@
 import { randomUUID } from "node:crypto";
 import {
   zAttention,
+  zNotificationRouting,
   type Attention,
   type NotificationChannelKind,
+  type NotificationChannelView,
   type NotificationDelivery,
   type NotificationRouting,
+  type NotificationSettings,
+  type NotificationSettingsInput,
+  type PushSubscription,
+  type PushSubscriptionInput,
   type QuietHours,
 } from "@amoshydra/oktoso-contracts";
-import type { StateStore } from "@amoshydra/oktoso-storage";
+import type {
+  NotificationSubscriptionState,
+  StateStore,
+} from "@amoshydra/oktoso-storage";
 import type { NotificationConfig } from "../config/schema";
 import type { Logger } from "../lib/logger";
+import { badRequest } from "../domain/errors";
 import type { EventBus } from "./event-bus";
 
 /** A single wake-up the hub wants to deliver. */
@@ -50,6 +60,8 @@ export interface NotificationServiceOptions {
   retryDelayMs?: number;
   maxDeliveries?: number;
   coalesceWindowMs?: number;
+  /** VAPID public key exposed to clients for `pushManager.subscribe`. */
+  applicationServerKey?: string;
 }
 
 const DEFAULT_MAX_DELIVERIES = 200;
@@ -73,6 +85,7 @@ export class NotificationService {
   private readonly retryDelayMs: number;
   private readonly maxDeliveries: number;
   private readonly coalesceWindowMs: number;
+  private readonly applicationServerKey?: string;
 
   private stopListening?: () => void;
   private timer?: ReturnType<typeof setTimeout>;
@@ -92,6 +105,7 @@ export class NotificationService {
     this.retryDelayMs = options.retryDelayMs ?? 500;
     this.maxDeliveries = options.maxDeliveries ?? DEFAULT_MAX_DELIVERIES;
     this.coalesceWindowMs = options.coalesceWindowMs ?? 1_500;
+    this.applicationServerKey = options.applicationServerKey;
   }
 
   get enabled(): boolean {
@@ -175,8 +189,112 @@ export class NotificationService {
     await this.deliver("digest", items);
   }
 
-  deliveries(): NotificationDelivery[] {
-    return [...this.store.getState().notificationDeliveries];
+  deliveries(limit = 50): NotificationDelivery[] {
+    return [...this.store.getState().notificationDeliveries]
+      .slice(-Math.max(0, limit))
+      .reverse();
+  }
+
+  settings(): NotificationSettings {
+    return {
+      enabled: this.enabled,
+      channels: this.channelViews(),
+      routing: this.routing,
+      subscriptions: this.subscriptions(),
+      ...(this.applicationServerKey
+        ? { applicationServerKey: this.applicationServerKey }
+        : {}),
+    };
+  }
+
+  subscriptions(): PushSubscription[] {
+    return Object.values(
+      this.store.getState().notificationSubscriptions,
+    ).map(toPublicSubscription);
+  }
+
+  async addSubscription(input: PushSubscriptionInput): Promise<PushSubscription> {
+    const at = this.now();
+    let stored!: NotificationSubscriptionState;
+
+    await this.store.update((state) => {
+      const existing = Object.values(state.notificationSubscriptions).find(
+        (subscription) => subscription.endpoint === input.endpoint,
+      );
+      const id = existing?.id ?? randomUUID();
+      stored = {
+        id,
+        deviceID: input.deviceID,
+        ...(input.label ? { label: input.label } : {}),
+        endpoint: input.endpoint,
+        p256dh: input.keys.p256dh,
+        auth: input.keys.auth,
+        createdAt: existing?.createdAt ?? at,
+        lastSeenAt: at,
+        ...(input.expirationTime !== undefined
+          ? { expirationTime: input.expirationTime }
+          : {}),
+      };
+      state.notificationSubscriptions[id] = stored;
+    });
+
+    return toPublicSubscription(stored);
+  }
+
+  async removeSubscription(id: string): Promise<boolean> {
+    let removed = false;
+    await this.store.update((state) => {
+      if (state.notificationSubscriptions[id]) {
+        delete state.notificationSubscriptions[id];
+        removed = true;
+      }
+    });
+    return removed;
+  }
+
+  async updateSettings(
+    input: NotificationSettingsInput,
+  ): Promise<NotificationSettings> {
+    await this.store.update((state) => {
+      if (input.enabled !== undefined) {
+        state.notificationOverrides.enabled = input.enabled;
+      }
+      if (input.routing) {
+        const current = state.notificationOverrides.routing ?? this.config.routing;
+        try {
+          state.notificationOverrides.routing = zNotificationRouting.parse({
+            ...current,
+            ...input.routing,
+            quietHours: {
+              ...current.quietHours,
+              ...(input.routing.quietHours ?? {}),
+            },
+          });
+        } catch (error) {
+          throw badRequest("Invalid notification routing", {
+            issues: (error as { issues?: unknown }).issues,
+          });
+        }
+      }
+    });
+    return this.settings();
+  }
+
+  private channelViews(): NotificationChannelView[] {
+    const views: NotificationChannelView[] = [];
+    const webpush = this.config.channels.find(
+      (channel) => channel.kind === "webpush",
+    );
+    views.push({
+      kind: "webpush",
+      enabled: webpush ? webpush.enabled : true,
+      configured: Boolean(this.applicationServerKey),
+    });
+    for (const channel of this.config.channels) {
+      if (channel.kind === "webpush") continue;
+      views.push({ kind: channel.kind, enabled: channel.enabled, configured: true });
+    }
+    return views;
   }
 
   /** Await every handler queued so far. Tests and shutdown use this. */
@@ -370,6 +488,21 @@ export class NotificationService {
       this.seen.delete(oldest.value);
     }
   }
+}
+
+function toPublicSubscription(
+  subscription: NotificationSubscriptionState,
+): PushSubscription {
+  return {
+    id: subscription.id,
+    deviceID: subscription.deviceID,
+    ...(subscription.label ? { label: subscription.label } : {}),
+    createdAt: subscription.createdAt,
+    lastSeenAt: subscription.lastSeenAt,
+    ...(subscription.expirationTime !== undefined
+      ? { expirationTime: subscription.expirationTime }
+      : {}),
+  };
 }
 
 export function buildPayload(

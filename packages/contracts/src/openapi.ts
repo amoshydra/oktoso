@@ -1089,6 +1089,109 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/notifications",
+  tags: ["notifications"],
+  summary: "Read notification settings",
+  responses: {
+    200: {
+      description: "Notification settings",
+      content: json(z.object({ data: NotificationSettingsSchema })),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/notifications",
+  tags: ["notifications"],
+  summary: "Update notification settings",
+  request: {
+    body: { content: json(NotificationSettingsInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Updated notification settings",
+      content: json(z.object({ data: NotificationSettingsSchema })),
+    },
+    400: errorResponse("Invalid settings"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/notifications/subscriptions",
+  tags: ["notifications"],
+  summary: "List push subscriptions",
+  responses: {
+    200: {
+      description: "Push subscriptions",
+      content: json(PushSubscriptionPageSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/notifications/subscriptions",
+  tags: ["notifications"],
+  summary: "Register a push subscription",
+  request: {
+    body: { content: json(PushSubscriptionInputSchema), required: true },
+  },
+  responses: {
+    201: {
+      description: "Registered subscription",
+      content: json(z.object({ data: PushSubscriptionSchema })),
+    },
+    400: errorResponse("Invalid subscription"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/notifications/subscriptions/{id}",
+  tags: ["notifications"],
+  summary: "Remove a push subscription",
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    204: { description: "Subscription removed" },
+    404: errorResponse("Subscription not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/notifications/deliveries",
+  tags: ["notifications"],
+  summary: "Read the recent delivery log",
+  request: {
+    query: z.object({
+      limit: z.coerce.number().int().min(1).max(200).optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Recent deliveries, newest first",
+      content: json(NotificationDeliveryPageSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/notifications/test",
+  tags: ["notifications"],
+  summary: "Send a test notification",
+  responses: {
+    200: {
+      description: "Delivery result",
+      content: json(z.object({ data: NotificationTestResultSchema })),
+    },
+  },
+});
+
 export function buildOpenApiDocument() {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",
