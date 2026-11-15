@@ -815,6 +815,31 @@ describe("transcript cache", () => {
   });
 });
 
+describe("overview usage", () => {
+  it("reports usage and regroups it", async () => {
+    await page!.goto(`${BASE_URL}/`);
+    await page!.getByRole("heading", { name: "Usage" }).waitFor({ timeout: 10_000 });
+
+    await page!.locator(".usage-table tbody tr").first().waitFor();
+    const providerHeader = await page!
+      .locator(".usage-table thead th")
+      .first()
+      .innerText();
+    expect(providerHeader.toLowerCase()).toBe("provider");
+    expect(await page!.locator(".usage-table tbody tr").count()).toBeGreaterThan(1);
+    expect(await page!.locator(".usage-table").innerText()).toContain("OpenCode");
+
+    await page!
+      .getByRole("group", { name: "Group usage by" })
+      .getByRole("button", { name: "Project" })
+      .click();
+
+    expect(
+      (await page!.locator(".usage-table thead th").first().innerText()).toLowerCase(),
+    ).toBe("project");
+  });
+});
+
 describe("session lineage", () => {
   it("shows a fork under its parent and opens the parent", async () => {
     await openSession("Fix auth race in gateway");

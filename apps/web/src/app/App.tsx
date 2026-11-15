@@ -88,6 +88,7 @@ import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
 import { highlightParts } from "./search-highlight";
+import { OverviewUsage } from "./overview-usage";
 import { TranscriptCacheSettingsPanel } from "./settings-transcripts";
 import {
   readSessionCache,
@@ -159,11 +160,11 @@ const VIEW_META: Record<
   { label: string; icon: IconName; sub: string; phase: string; description: string }
 > = {
   foundation: {
-    label: "Foundation",
+    label: "Overview",
     icon: "activity",
-    sub: "Hub runtime",
+    sub: "Usage and hub runtime",
     phase: "0",
-    description: "Hub runtime, authentication, state, and the event stream.",
+    description: "Usage, runtime status, and the event stream.",
   },
   inbox: {
     label: "Inbox",
@@ -970,21 +971,7 @@ export function App() {
           <div className={`page ${chatOpen ? "page-chat" : ""}`}>
             {view === "foundation" ? (
               <>
-                <section className="hero">
-                  <div>
-                    <p className="eyebrow">Oktoso</p>
-                    <h2>Runtime online</h2>
-                    <p>
-                      The hub API, authentication, durable state, event bus, and provider
-                      adapters are connected. Sessions and attention are live; search and
-                      deployment hardening are next.
-                    </p>
-                  </div>
-                  <div className="hero-badge">
-                    <span className="status-dot online" />
-                    v{health?.version ?? "0.1.0"}
-                  </div>
-                </section>
+                <OverviewUsage client={client as HubClient} />
 
                 {error ? (
                   <div className="alert" role="alert">
@@ -8650,7 +8637,7 @@ function Placeholder(props: { view: View; onBack: () => void }) {
         <p>{item.description} This screen is not wired to the hub yet.</p>
       </div>
       <button className="btn small" type="button" onClick={props.onBack}>
-        Back to Foundation
+        Back to Overview
       </button>
     </section>
   );

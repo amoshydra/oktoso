@@ -919,6 +919,25 @@ instead of raw fences, without changing the transcript hierarchy.
 - Titles are 12px and truncate on one line; the depth label stays at 10px faint.
   The section header carries the count and the word `partial` when capped.
 
+## Overview usage (2026-11-16)
+
+- The default destination is renamed Overview; the route does not change. The
+  phase-0 hero is removed because it carried a second 20px heading (the chat
+  document title owns `--text-xl`) and repeated roadmap copy that had gone
+  stale. Runtime cards, the provider panel, the event stream, and diagnostics
+  stay, after the usage report.
+- Usage is a table above 1100px and stacked rows below. Group, sessions,
+  tokens, and cost align right with tabular numerals in the sans family; the
+  mono family stays reserved for references, paths, and endpoints.
+- Unreported figures are em dashes. The count note names how many sessions
+  reported nothing, so a provider that reports nothing never reads as free.
+- The `Reported total` row is 600 weight with a stronger top border; every
+  other row separates on `--border-subtle`.
+- The group-by control reuses the filter chip row. No Collapse control: the
+  panel lives on its own screen, so hiding it would only add chrome.
+- Reviewed at 1440, 1024, 390, and 320px in both themes; no overflow, no
+  console errors. The bottom bar keeps five items.
+
 ## Message search (2026-11-16)
 
 - Results are a flat list of rows inside one panel, not cards. Rows separate on
