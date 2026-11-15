@@ -82,6 +82,23 @@ export function writeSessionCache(session: Session): void {
   }
 }
 
+/** Drop a deleted or not-found session so a stale header cannot keep rendering. */
+export function removeSessionCache(ref: string): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    const entries = readSessionEntries();
+    if (!(ref in entries)) return;
+    delete entries[ref];
+    storage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ version: 1, entries }),
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 function readSessionEntries(): Record<
   string,
   { session: Session; savedAt: number }

@@ -257,6 +257,7 @@ The sessions view is the full browsing surface.
 ### Session row
 
 - One status dot: running, idle, error, offline. The row does not repeat the status as a pill; the accessible name carries the status word.
+- Provider status is authoritative, with two resilience rules: a forked session with no busy/idle history is idle, and a busy run that has not updated for 30 minutes is treated as idle so the composer does not stay on Steer forever. A provider 404 removes the cached session instead of keeping a zombie header.
 - Title, truncated to one line.
 - Provider badge with the provider name.
 - Project or directory basename.

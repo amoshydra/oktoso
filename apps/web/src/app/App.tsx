@@ -94,6 +94,7 @@ import { LocalDataSettingsPanel } from "./settings-local-data";
 import {
   readSessionCache,
   readSessionsCache,
+  removeSessionCache,
   writeSessionCache,
   writeSessionsCache,
 } from "./offline-cache";
@@ -5364,9 +5365,18 @@ function SessionDetail(props: {
         }
       })
       .catch((reason) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Unable to load the session");
+        if (cancelled) return;
+        if ((reason as { status?: number } | undefined)?.status === 404) {
+          removeSessionCache(props.sessionRef);
+          setSession(undefined);
+          setMessages([]);
+          props.onSessionChange(undefined);
         }
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to load the session",
+        );
       })
       .finally(() => {
         if (!cancelled) {
