@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15 and aligned to the reading column in `design-v1.14`.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
@@ -1109,10 +1109,10 @@ This pass spends the space on the content already on the page.
 - **One title.** The transcript's 20px `h2` was removed. The topbar `h1` is the
   only page title, satisfying the design contract. The transcript now opens
   with a 11px context strip (project, agent, model, status) and a subtle rule.
-- **Measure.** The transcript and composer cap at 760px and the reading column
-  at 640px. Measured on the fixture transcript: 640px at 14px Inter is about 88
-  characters, down from about 104. The panel no longer looks like a wide card
-  with a narrow text strip inside it.
+- **Measure.** The transcript and composer cap at 672px, so the about-640px
+  reading column fills the panel instead of leaving an 88px strip inside it.
+  Measured on the fixture transcript: 640px at 14px Inter is about 88
+  characters, down from about 104.
 - **Proof.** The chat e2e asserts the 640px measure and keeps one `h1` in the
   view; the fork test now reads the topbar title. Screenshots were reviewed at
   1440, 1024, 390, and 320px in the dark theme, and the earlier icon and type
