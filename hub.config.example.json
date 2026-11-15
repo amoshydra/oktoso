@@ -8,7 +8,6 @@
   "appsRoot": "dist/apps",
   "notifications": {
     "enabled": false,
-    "channels": [],
     "routing": {
       "immediate": ["permission", "approval"],
       "digest": ["question", "unread", "error"],

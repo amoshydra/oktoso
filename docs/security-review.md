@@ -22,29 +22,30 @@ message transcripts, VAPID private key, MCP tokens.
 | 2 | Session cookie | `HttpOnly`, `SameSite=Lax`, `Secure` when the request is HTTPS, `Max-Age` 30 days. | OK |
 | 3 | CSRF | Cookie-authenticated mutations require the hub's own origin or `Sec-Fetch-Site: same-origin/none`; `SameSite=Lax` is the second layer. Bearer clients are unaffected. | OK |
 | 4 | CORS | Empty by default; `*` logs a warning and disables credentials. | OK |
-| 5 | Body limits | JSON capped at 1 MB; audio at 25 MB; unknown types rejected before parsing. | OK |
-| 6 | Pairing | Codes are five-minute, single-use, and only accept same-origin app paths. There is no attempt throttle on the pairing endpoint. | Low — add throttling if the hub is ever exposed beyond a trusted network |
+| 5 | Body limits | Advisory `content-length` cap: JSON 1 MB, audio 25 MB. A chunked body or a client that omits the header is not stopped, and the attachment multipart is parsed before any size check. | Known gap — enforce during the body read if the hub is exposed |
+| 6 | Pairing | Codes are five-minute, single-use, 128-bit. `POST /pair/:code` is limited to 20 attempts per minute per client. The limit keys on `x-forwarded-for`/`x-real-ip`, which a direct client can rotate. A mismatched `Origin` is logged but does not block redemption, by design for QR and embedded handoff. | Low — throttle is defence-in-depth on top of code entropy |
 | 7 | Logs | Central redaction masks credential keys, content keys, registered secrets, and token-shaped substrings before any sink. Asserted by tests. | OK |
 | 8 | SSRF | The attachment proxy only fetches the same origin as the configured provider and caps the response at 20 MB; file reads are jailed to the session directory. | OK |
 | 9 | MCP | Write tools require `--allow-write` and a token whose tool allowlist includes them; every call is audited. | OK |
 | 10 | Automation | Deny by default, dry run by default, bounded approvals, budgets, global and per-watcher pause, in-flight abort. | OK |
-| 11 | Export | Reads through the same provider path; no new credential surface. Downloads are authenticated and never cached. | OK |
+| 11 | Export | Reads through the same provider path; no new credential surface; authenticated. The export response sets no cache header; attachment and file responses allow private caching for a short TTL. | OK |
 | 12 | Local data | Clearing is authenticated; disable/clear also removes the search index; retention is per store. | OK |
 | 13 | Backup | Snapshot excludes logs and uploads, hashes every file, and restore refuses a running hub and a non-empty target without `--force`. | OK |
-| 14 | Metrics | Now authenticated with the owner token; series carry no titles, bodies, or credentials. | OK |
+| 14 | Metrics | Requires the owner token; a paired session token gets 403. Series carry no titles, bodies, or credentials. | OK |
 
 ## Load check
 
 `scripts/load-test.ts` publishes a 500-event burst to 200 subscribers, each
 serializing a frame the way the SSE path does:
 
-```
-frames 100,000 · 30 ms total · p50 0.039 ms · p95 0.099 ms per publish
-```
+| Store | p95 per publish | Frames/s |
+|---|---|---|
+| `MemoryStateStore` | 0.09 ms | ~3.5M |
+| `JsonStateStore` (production) | 0.21 ms | ~1.2M |
 
-The single process handled ~3.4M serialized frames per second on the review
-machine. The realistic ceiling is HTTP connections and clients, not the event
-bus.
+Production pays a clone, a schema parse, a full rewrite, and two fsyncs per
+event, so the ceiling is disk, not the bus — and flash storage on a phone is
+slower than the review machine. Re-run with `LOAD_STORE=json`.
 
 ## Residual risks
 
@@ -54,14 +55,16 @@ bus.
    the operator terminates TLS or uses a VPN. The hub does not terminate TLS.
 3. **Config secrets.** Provider credentials live in the config unless referenced
    from the environment; the file must stay `0600`.
-4. **Pairing endpoint throttling** is missing (finding 6).
+4. **The pairing throttle keys on a spoofable header** when the hub is exposed
+   directly (finding 6), and request body caps are advisory for chunked bodies
+   (finding 5).
 5. **No external audit.** This is a self-review with tests, not a third-party
    assessment. Treat findings as claims backed by code, not certification.
 
 ## Recommendations
 
-- Add a failed-pairing throttle before exposing the hub outside a trusted
-  network.
+- Enforce body limits while reading, not from `content-length`, before exposing
+  the hub to untrusted networks.
 - Keep `publicUrl` set when behind a proxy so notification and pairing links use
   the TLS origin.
 - Rotate the owner token to revoke devices; rotate provider keys on a schedule.

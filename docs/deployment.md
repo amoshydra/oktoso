@@ -120,7 +120,9 @@ Telegram, or webhook sender.
 
 ## Backup and restore
 
-Backups are offline and cover the data directory only. The config file holds the
+Backups are offline and cover the data directory only. Stop the hub first:
+appends to feedback and MCP audit files are not atomic, so a snapshot taken
+under a live process can certify a torn line as valid. The config file holds the
 owner token and provider credentials, so copy it separately with mode `0600`.
 
 ```sh
@@ -133,11 +135,18 @@ oktoso restore --from ./oktoso-backup --force
 - Included: hub state (`state.json`) with drafts, read markers, automation
   approvals and allowed shapes; notification subscriptions and VAPID keys;
   transcripts and the search index; reply feedback.
+- The manifest records the data directory's name, not its absolute path, so a
+  snapshot does not leak the operator's home layout.
+- Symlinks and special files are refused rather than silently skipped; a
+  non-empty output directory is refused rather than mixed with an older run.
 - Excluded: `attachments/` (staged uploads), `logs/`, and `*.tmp`.
 - Restore swaps the whole data directory. It refuses to run while the hub
   answers on its configured host and port, and it refuses a non-empty target
   unless you pass `--force`. The previous directory is kept as
-  `<dataDir>.before-restore-<timestamp>`.
+  `<dataDir>.before-restore-<timestamp>`. It stages the copy next to `dataDir`,
+  so the parent must be writable; in a container, restore from the host.
+- Every path in the manifest must be relative and stay inside the snapshot; a
+  crafted `../` entry aborts the restore before anything is written.
 - Files are restored owner-only (`0600`); the data directory is `0700`.
 
 What survives a restore:
@@ -276,8 +285,8 @@ schedule triggers under a policy.
 - Approvals expire after `approvalTtlMs`. Approving executes the stored plan;
   denying never sends.
 - Session triggers fire once when a session stays idle or error for `idleMs`;
-  a status change resets the timer. Schedule triggers require
-  `condition.sessionRef` and fire every `everyMs`.
+  a status change resets the timer. Schedule triggers fire every `everyMs` and
+  need `condition.sessionRef`, except a `start` action, which may omit it.
 - Quiet hours escalate answer and retry actions instead of acting.
 - Actions: `answer`, `escalate`, `notify`, `retry`, and `start`. A `start`
   action references a template (`providerID`, `title`, optional directory,
@@ -383,40 +392,43 @@ Use the provider's base URL and a bearer API key:
 
 ### Docker
 
+The image is built from this repository and pins Node 24:
+
 ```sh
 podman build -t oktoso .
-podman run --rm -p 8787:8787 \
-  -v oktoso-data:/data \
-  -v "$PWD/hub.config.json:/data/hub.config.json:ro,Z" \
+mkdir -p ./oktoso-data
+cp hub.config.json ./oktoso-data/hub.config.json
+chmod 600 ./oktoso-data/hub.config.json
+
+podman run -d --name oktoso --userns=keep-id \
+  --restart unless-stopped \
+  -p 127.0.0.1:8787:8787 \
+  -v "$PWD/oktoso-data:/data:Z" \
   oktoso
 ```
 
-The image pins Node 24 and builds the single-port bundle; the config must be
-mounted because the image contains no credentials. `dataDir` should be `/data`
-so state, the cache, and notification keys survive a container replace.
+The container sets `HUB_DATA_DIR=/data`, so the config can keep `dataDir` out of
+the file. The mount must stay writable: **Providers → Add/Edit** rewrites the
+config, and `:ro` turns that into a 500. `--userns=keep-id` is a rootless-podman
+detail; it lets the image's `node` user own the host directory. With Docker as
+root, drop it.
+
+To run the published package instead of the image:
+
+```sh
+docker run -d --name oktoso \
+  -p 127.0.0.1:8787:8787 \
+  -e HUB_HOST=0.0.0.0 -e HUB_TOKEN \
+  -v "$PWD/oktoso-data:/data" \
+  node:24-alpine npx -y @amoshydra/oktoso@latest --config /data/hub.config.json
+```
+
+Restore from the host, not inside the container: restore stages a directory
+next to `dataDir`, and `/` is not writable for the container user.
 
 ### systemd
 
-The unit lives in [`packaging/oktoso.service`](../packaging/oktoso.service).
-Copy it to `/etc/systemd/system/oktoso.service`, create the `oktoso` user, the
-config and env files with mode `0600`, and make `/var/lib/oktoso` writable by
-that user.
-
-### Termux
-
-[`packaging/termux-install.sh`](../packaging/termux-install.sh) installs the
-Node runtime, takes a wake lock, and creates the config and state directories.
-Run the hub once with `npx @amoshydra/oktoso`, edit
-`~/.config/oktoso/hub.config.json`, then start it again. Disable battery
-optimisation for Termux.
-
-### Clean Node 24 check
-
-CI runs the full test suite on Node 24 (`.github/workflows/ci.yml`), and the
-Docker image is pinned to `node:24-alpine`, so packaging and tests share one
-supported runtime.
-
-### systemd (reference)
+Unit: [`packaging/oktoso.service`](../packaging/oktoso.service).
 
 ```ini
 [Unit]
@@ -431,55 +443,46 @@ EnvironmentFile=/etc/oktoso/oktoso.env
 ExecStart=/usr/local/bin/oktoso --config /etc/oktoso/hub.config.json
 Restart=on-failure
 RestartSec=5
+StateDirectory=oktoso
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/oktoso
+ReadWritePaths=/var/lib/oktoso /etc/oktoso
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Install the package, create the config and env files with mode `0600`, then:
+`ReadWritePaths` includes `/etc/oktoso` because the provider editor rewrites the
+config. Put `HUB_DATA_DIR=/var/lib/oktoso` in `/etc/oktoso/oktoso.env` unless the
+config already points `dataDir` there, then:
 
 ```sh
 systemctl daemon-reload
 systemctl enable --now oktoso
 ```
 
-### Docker
+### Termux
 
-The container needs to listen on `0.0.0.0`, while the published host port stays
-on loopback:
-
-```sh
-docker run -d --name oktoso \
-  --restart unless-stopped \
-  -p 127.0.0.1:8787:8787 \
-  -e HUB_HOST=0.0.0.0 \
-  -e HUB_TOKEN \
-  -e OPENWEBUI_API_KEY \
-  -e OPENCODE_TERMUX_PASSWORD \
-  -v "$PWD/hub.config.json:/config/hub.config.json:ro" \
-  -v oktoso-data:/data \
-  node:24-alpine \
-  npx -y @amoshydra/oktoso@latest --config /config/hub.config.json
-```
-
-Set `dataDir` to `/data` in that config. The bind-mounted config must be mode
-`0600`; Docker on Linux preserves the host mode.
-
-### Termux hub
+[`packaging/termux-install.sh`](../packaging/termux-install.sh) installs the
+Node runtime, takes a wake lock, and creates the config and state directories.
+Then:
 
 ```sh
-pkg install nodejs
-npm install -g @amoshydra/oktoso
-termux-wake-lock
-oktoso --config ~/.config/oktoso/hub.config.json
+npx @amoshydra/oktoso                 # first run creates the config
+$EDITOR ~/.config/oktoso/hub.config.json
+npx @amoshydra/oktoso --config ~/.config/oktoso/hub.config.json
 ```
 
-Keep the token and provider secrets in the environment or a `0600` config file.
-For a long-running hub, use `termux-services` or start it from `tmux`.
+Keep the hub alive with `termux-wake-lock`, `termux-services` or `tmux`, and
+disable battery optimisation for Termux.
+
+### Clean Node 24 check
+
+CI runs the full suite on Node 24, the image is `node:24-alpine`, and
+`scripts/smoke-image.sh` builds and boots the image, then checks health and that
+`/metrics` rejects an unauthenticated scrape. Running it is the packaging
+acceptance check that does not need a phone.
 
 ## TLS, VPN, and reverse proxy
 
@@ -527,8 +530,9 @@ The hub does not manage the VPN, certificates, or DNS.
 
 ### Metrics
 
-`GET /metrics` returns Prometheus text exposition. It is authenticated with the
-same owner bearer token as the API, because the series name providers.
+`GET /metrics` returns Prometheus text exposition. It requires the **owner**
+token: a paired browser's session token is authenticated for the API but gets
+`403` here, because the series name providers.
 
 - `oktoso_up`, `oktoso_build_info`, `oktoso_uptime_seconds`
 - `oktoso_provider_up{provider,type}` and `oktoso_providers{status}`
@@ -600,8 +604,8 @@ Android version, Termux version, hub version, and network path.
   internet without authentication and a trusted proxy.
 - Use HTTPS for the hub UI whenever it crosses an untrusted network.
 - Keep CORS restricted to trusted origins; `"*"` is for local testing only.
-- Back up `dataDir` (`state.json`, attachments, MCP audit) separately from the
-  provider config.
+- Back up `dataDir` with `oktoso backup` while the hub is stopped; staged
+  uploads and logs are excluded by design. Keep the config separate.
 
 ## Current limits
 
