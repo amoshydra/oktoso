@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/amoshydra/oktoso/compare/v0.2.0...v0.2.1) (2026-11-15)
+
+
+### Features
+
+* **web:** float scroll-to-latest and fade transcript edges ([16237fb](https://github.com/amoshydra/oktoso/commit/16237fb251f490591508553a10869cdf9f34de53))
+
+
+### Bug Fixes
+
+* **automation:** answer provider forms through the form action ([871cfae](https://github.com/amoshydra/oktoso/commit/871cfae4f4dfa8823dbe81ec320e227815001bab))
+
 ## [0.2.0](https://github.com/amoshydra/oktoso/compare/v0.1.31...v0.2.0) (2026-11-15)
 
 
