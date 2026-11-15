@@ -23,6 +23,7 @@ import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
 import { NotificationService } from "./services/notification-service";
+import { TranscriptCacheService } from "./services/transcript-cache";
 import { VERSION } from "./version";
 import {
   JsonStateStore,
@@ -106,9 +107,16 @@ async function createTestApp(options: {
     root: join(await tempRoot(), "attachments"),
   });
   await attachments.init();
+  const transcripts = new TranscriptCacheService({
+    root: join(await tempRoot(), "transcripts"),
+    store,
+    logger,
+  });
+  await transcripts.init();
   const sessions = new SessionService(registry, logger, {
     store,
     attachments,
+    transcripts,
   });
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
@@ -194,6 +202,7 @@ async function createTestApp(options: {
     drafts,
     attachments,
     settings,
+    transcripts,
     replies,
     replyFeedback,
     transcription,
@@ -1348,6 +1357,49 @@ describe("hub app", () => {
     );
     expect(exportResponse.status).toBe(200);
     expect(await exportResponse.text()).toContain("Looks useful.");
+  });
+
+  it("exposes the opt-in transcript cache settings", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const initial = await app.request("/api/v1/settings/transcripts", { headers });
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({
+      data: {
+        settings: { enabled: false, ttlDays: 7, maxSessions: 200 },
+        stats: { sessions: 0, bytes: 0, completeSessions: 0 },
+      },
+    });
+
+    const updated = await app.request("/api/v1/settings/transcripts", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ enabled: true, ttlDays: 3, maxSessions: 50 }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      data: { settings: { enabled: true, ttlDays: 3, maxSessions: 50 } },
+    });
+
+    const invalid = await app.request("/api/v1/settings/transcripts", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ ttlDays: 0 }),
+    });
+    expect(invalid.status).toBe(400);
+
+    const cleared = await app.request("/api/v1/settings/transcripts", {
+      method: "DELETE",
+      headers,
+    });
+    expect(cleared.status).toBe(200);
+    expect(await cleared.json()).toMatchObject({
+      data: { stats: { sessions: 0, bytes: 0 } },
+    });
   });
 
   it("exposes assistant settings and canned reply options", async () => {

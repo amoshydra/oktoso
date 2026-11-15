@@ -8,6 +8,8 @@ import {
   zAgentOption,
   zAssistantInput,
   zAssistantView,
+  zTranscriptCacheInput,
+  zTranscriptCacheView,
   zAttention,
   zAttentionAction,
   zAttentionActionInput,
@@ -146,6 +148,14 @@ const DraftSchema = registry.register("Draft", zDraft);
 const DraftInputSchema = registry.register("DraftInput", zDraftInput);
 const DraftResponseSchema = registry.register("DraftResponse", zDraftResponse);
 const AssistantViewSchema = registry.register("AssistantView", zAssistantView);
+const TranscriptCacheViewSchema = registry.register(
+  "TranscriptCacheView",
+  zTranscriptCacheView,
+);
+const TranscriptCacheInputSchema = registry.register(
+  "TranscriptCacheInput",
+  zTranscriptCacheInput,
+);
 const AssistantInputSchema = registry.register("AssistantInput", zAssistantInput);
 const TranscriptionResultSchema = registry.register(
   "TranscriptionResult",
@@ -894,6 +904,51 @@ registry.registerPath({
   responses: {
     200: { description: "Updated assistant settings", content: json(z.object({ data: AssistantViewSchema })) },
     400: errorResponse("Invalid settings"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/settings/transcripts",
+  tags: ["settings"],
+  summary: "Read the transcript cache settings and size",
+  responses: {
+    200: {
+      description: "Transcript cache settings and stats",
+      content: json(z.object({ data: TranscriptCacheViewSchema })),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/settings/transcripts",
+  tags: ["settings"],
+  summary: "Update the opt-in transcript cache",
+  description:
+    "Turning the cache off deletes every stored transcript. The provider stays authoritative: cached copies never answer a transcript read.",
+  request: {
+    body: { content: json(TranscriptCacheInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Updated transcript cache settings",
+      content: json(z.object({ data: TranscriptCacheViewSchema })),
+    },
+    400: errorResponse("Invalid transcript cache settings"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/settings/transcripts",
+  tags: ["settings"],
+  summary: "Delete every cached transcript",
+  responses: {
+    200: {
+      description: "Transcript cache cleared",
+      content: json(z.object({ data: TranscriptCacheViewSchema })),
+    },
   },
 });
 

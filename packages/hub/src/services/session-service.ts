@@ -25,6 +25,7 @@ import { badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AttachmentStore } from "./attachment-store";
+import type { TranscriptCacheService } from "./transcript-cache";
 import type { ProviderRegistry } from "./provider-registry";
 import {
   DEFAULT_SESSION_COLD_START_MS,
@@ -41,6 +42,8 @@ export interface SessionServiceOptions {
   now?: () => number;
   store?: StateStore;
   attachments?: AttachmentStore;
+  /** Optional write-through transcript cache; the provider stays authoritative. */
+  transcripts?: TranscriptCacheService;
   syncTimeoutMs?: number;
   coldStartWaitMs?: number;
 }
@@ -59,6 +62,7 @@ export class SessionService {
   private readonly now: () => number;
   private readonly store?: StateStore;
   private readonly attachments?: AttachmentStore;
+  private readonly transcripts?: TranscriptCacheService;
   private readonly syncTimeoutMs: number;
   private readonly coldStartWaitMs: number;
   private lastSyncAt = 0;
@@ -74,6 +78,7 @@ export class SessionService {
     this.now = options.now ?? Date.now;
     this.store = options.store;
     this.attachments = options.attachments;
+    this.transcripts = options.transcripts;
     this.syncTimeoutMs = options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS;
     this.coldStartWaitMs =
       options.coldStartWaitMs ?? DEFAULT_SESSION_COLD_START_MS;
@@ -316,11 +321,25 @@ export class SessionService {
       return { data: [], cursor: { next: null, previous: null } };
     }
     this.assertProviderAvailable(adapter.id);
-    return adapter.getMessages(
+    const page = await adapter.getMessages(
       ref,
       query,
       operationSignal(this.registry, adapter.id, 15_000),
     );
+    // Write-through only. A cache failure must never fail a transcript read,
+    // and the provider response is what the client sees.
+    const session = this.sessions.get(ref);
+    if (this.transcripts && session) {
+      try {
+        await this.transcripts.record(session, page);
+      } catch (error) {
+        this.logger.warn("Transcript cache write failed", {
+          ref,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return page;
   }
 
   /**

@@ -952,6 +952,67 @@ components:
       required:
         - reply
         - transcription
+    TranscriptCacheView:
+      type: object
+      properties:
+        settings:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: false
+            ttlDays:
+              type: integer
+              minimum: 1
+              maximum: 90
+              default: 7
+            maxSessions:
+              type: integer
+              minimum: 10
+              maximum: 2000
+              default: 200
+        stats:
+          type: object
+          properties:
+            sessions:
+              type: integer
+              minimum: 0
+            bytes:
+              type: integer
+              minimum: 0
+            completeSessions:
+              type: integer
+              minimum: 0
+            oldestStoredAt:
+              type:
+                - integer
+                - "null"
+            newestStoredAt:
+              type:
+                - integer
+                - "null"
+          required:
+            - sessions
+            - bytes
+            - completeSessions
+            - oldestStoredAt
+            - newestStoredAt
+      required:
+        - settings
+        - stats
+    TranscriptCacheInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        ttlDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+        maxSessions:
+          type: integer
+          minimum: 10
+          maximum: 2000
     AssistantInput:
       type: object
       properties:
@@ -5554,6 +5615,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/settings/transcripts:
+    get:
+      tags:
+        - settings
+      summary: Read the transcript cache settings and size
+      responses:
+        "200":
+          description: Transcript cache settings and stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TranscriptCacheView"
+                required:
+                  - data
+    put:
+      tags:
+        - settings
+      summary: Update the opt-in transcript cache
+      description: "Turning the cache off deletes every stored transcript. The provider stays authoritative: cached copies never answer a transcript read."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscriptCacheInput"
+      responses:
+        "200":
+          description: Updated transcript cache settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TranscriptCacheView"
+                required:
+                  - data
+        "400":
+          description: Invalid transcript cache settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - settings
+      summary: Delete every cached transcript
+      responses:
+        "200":
+          description: Transcript cache cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TranscriptCacheView"
+                required:
+                  - data
   /api/v1/settings/assistant/{target}/models:
     get:
       tags:
