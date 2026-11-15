@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -9,15 +10,31 @@ import {
   type FakeProviderServer,
 } from "@amoshydra/oktoso-testing";
 
-const HUB_PORT = 8801;
 const TOKEN = "e2e-a11y-token-long-enough";
-const BASE_URL = `http://127.0.0.1:${HUB_PORT}`;
+/** Picked at startup so a dev hub on a fixed port cannot shadow the suite. */
+let HUB_PORT = 0;
+let BASE_URL = "";
 
 let providers: FakeProviderServer[] = [];
 let root: string | undefined;
 let hub: ChildProcess | undefined;
 let browser: Browser | undefined;
 let page: Page | undefined;
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Could not reserve a hub port")));
+        return;
+      }
+      server.close((error) => (error ? reject(error) : resolve(address.port)));
+    });
+  });
+}
 
 async function waitForHealth(): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -71,6 +88,8 @@ async function unnamedControls(): Promise<string[]> {
 }
 
 beforeAll(async () => {
+  HUB_PORT = await freePort();
+  BASE_URL = `http://127.0.0.1:${HUB_PORT}`;
   providers = await Promise.all([
     createFakeProviderServer({ kind: "opencode", port: 0 }),
     createFakeProviderServer({ kind: "openwebui", port: 0 }),
@@ -389,5 +408,236 @@ describe("accessible names", () => {
     await current.waitForTimeout(400);
     await expect(jump.getAttribute("aria-hidden")).resolves.toBe("true");
     await expect(jump.getAttribute("tabindex")).resolves.toBe("-1");
+  });
+});
+
+describe("login QR overlay", () => {
+  it("focuses Cancel, traps Tab, closes on Escape, and returns focus to the opener", async () => {
+    if (!browser) throw new Error("The accessibility E2E browser is not ready");
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      const login = await context.newPage();
+      // The overlay only renders when the browser exposes the Barcode Detection
+      // API and camera capture in a secure context. Both are stubbed; the
+      // scanner loop and its abort path stay the real implementation.
+      await login.addInitScript(() => {
+        const stub = window as unknown as {
+          BarcodeDetector: unknown;
+          __qrTrackStopped: boolean;
+        };
+        stub.__qrTrackStopped = false;
+        const stream = new MediaStream();
+        const track = {
+          stop() {
+            stub.__qrTrackStopped = true;
+          },
+        };
+        stream.getTracks = () => [track as unknown as MediaStreamTrack];
+        stub.BarcodeDetector = class {
+          async detect(): Promise<Array<{ rawValue: string }>> {
+            return [];
+          }
+        };
+        Object.defineProperty(navigator, "mediaDevices", {
+          configurable: true,
+          value: { getUserMedia: async () => stream },
+        });
+        HTMLMediaElement.prototype.play = () => Promise.resolve();
+      });
+      await login.goto(BASE_URL);
+
+      const opener = login.getByRole("button", { name: "Scan pairing QR" });
+      await opener.waitFor({ timeout: 10_000 });
+      await opener.click();
+
+      const overlay = login.getByRole("dialog", { name: "Scan pairing QR code" });
+      await overlay.waitFor({ timeout: 3_000 });
+      await login.waitForFunction(
+        () => document.activeElement?.textContent?.trim() === "Cancel",
+      );
+
+      // Tab and Shift+Tab stay inside the overlay.
+      await login.keyboard.press("Tab");
+      await expect(
+        login.evaluate(() =>
+          Boolean(
+            document
+              .querySelector(".qr-scan-overlay")
+              ?.contains(document.activeElement),
+          ),
+        ),
+      ).resolves.toBe(true);
+      await login.keyboard.press("Shift+Tab");
+      await expect(
+        login.evaluate(() =>
+          Boolean(
+            document
+              .querySelector(".qr-scan-overlay")
+              ?.contains(document.activeElement),
+          ),
+        ),
+      ).resolves.toBe(true);
+
+      // The camera stream is live until the overlay closes.
+      await expect(
+        login.evaluate(
+          () => (window as unknown as { __qrTrackStopped: boolean }).__qrTrackStopped,
+        ),
+      ).resolves.toBe(false);
+
+      await login.keyboard.press("Escape");
+      await overlay.waitFor({ state: "hidden", timeout: 3_000 });
+      await login.waitForFunction(
+        () => document.activeElement?.textContent?.trim() === "Scan pairing QR",
+      );
+      await login.waitForFunction(
+        () => (window as unknown as { __qrTrackStopped: boolean }).__qrTrackStopped,
+      );
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe("inline panel focus", () => {
+  it("focuses the first provider field and restores focus to Add", async () => {
+    const current = requirePage();
+    await current.goto(`${BASE_URL}/providers`);
+    const add = current.getByRole("button", { name: "+ Add" });
+    await add.waitFor({ timeout: 5_000 });
+    await add.click();
+
+    const form = current.locator(".provider-form");
+    await form.waitFor({ timeout: 3_000 });
+    await current.waitForFunction(
+      () => document.activeElement?.getAttribute("placeholder") === "desktop-opencode",
+    );
+
+    await form.getByRole("button", { name: "Cancel" }).click();
+    await form.waitFor({ state: "hidden", timeout: 3_000 });
+    await current.waitForFunction(
+      () => document.activeElement?.textContent?.trim() === "+ Add",
+    );
+  });
+
+  it("focuses the first new-session field and restores focus to its opener", async () => {
+    const current = requirePage();
+    await current.goto(`${BASE_URL}/sessions`);
+    const opener = current.getByRole("button", { name: "New session" });
+    await opener.waitFor({ timeout: 5_000 });
+    await opener.click();
+
+    const panel = current.locator(".new-session-panel");
+    await panel.waitFor({ timeout: 3_000 });
+    await current.waitForFunction(() => {
+      const active = document.activeElement;
+      return (
+        active instanceof HTMLSelectElement &&
+        document.querySelector(".new-session-panel")?.contains(active) === true
+      );
+    });
+
+    await current.getByRole("button", { name: "Close new session" }).click();
+    await panel.waitFor({ state: "hidden", timeout: 3_000 });
+    await current.waitForFunction(
+      () => document.activeElement?.textContent?.trim() === "New session",
+    );
+  });
+});
+
+describe("inbox live region", () => {
+  const baseline = {
+    id: "att_a11y_baseline",
+    sessionRef: "desktop-opencode:ses_auth",
+    type: "permission",
+    priority: "blocking",
+    title: "Allow the agent to push the branch?",
+    summary: "shell · git push origin main",
+    createdAt: Date.now(),
+    actions: [
+      { id: "approve_once", label: "Approve" },
+      { id: "deny", label: "Deny" },
+    ],
+  };
+  const blocking = {
+    ...baseline,
+    id: "att_a11y_blocking",
+    title: "Deploy the release?",
+    summary: "shell · deploy production",
+  };
+  const quiet = {
+    ...baseline,
+    id: "att_a11y_quiet",
+    type: "unread",
+    priority: "normal",
+    title: "A background note",
+  };
+
+  async function serveAttention(
+    responses: () => Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const current = requirePage();
+    await current.route("**/api/v1/attention*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({ json: { data: responses() } });
+    });
+  }
+
+  it("stays silent for the first load and for non-blocking arrivals", async () => {
+    const current = requirePage();
+    let data: Array<Record<string, unknown>> = [baseline];
+    await serveAttention(() => data);
+    await current.goto(`${BASE_URL}/inbox`);
+    await current.locator(".inbox-group").first().waitFor({ timeout: 5_000 });
+
+    const region = current.locator(".page > span.sr-only");
+    await expect(region.textContent()).resolves.toBe("");
+
+    data = [baseline, quiet];
+    const refreshed = current.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/attention") &&
+        response.request().method() === "GET",
+    );
+    await current.getByRole("button", { name: "Refresh" }).click();
+    await refreshed;
+    // Wait for the new card so the silence is checked after the update landed.
+    await current.getByText("A background note").waitFor({ timeout: 5_000 });
+    await expect(region.textContent()).resolves.toBe("");
+  });
+
+  it("announces a blocking request that arrives after the first load", async () => {
+    const current = requirePage();
+    let data: Array<Record<string, unknown>> = [baseline];
+    await serveAttention(() => data);
+    await current.goto(`${BASE_URL}/inbox`);
+    await current.locator(".inbox-group").first().waitFor({ timeout: 5_000 });
+
+    const region = current.locator(".page > span.sr-only");
+    await expect(region.textContent()).resolves.toBe("");
+
+    data = [baseline, blocking];
+    const refreshed = current.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/attention") &&
+        response.request().method() === "GET",
+    );
+    await current.getByRole("button", { name: "Refresh" }).click();
+    await refreshed;
+    await current.waitForFunction(() =>
+      Boolean(
+        document
+          .querySelector(".page > span.sr-only")
+          ?.textContent?.includes("New blocking request"),
+      ),
+    );
+    await expect(region.textContent()).resolves.toBe(
+      "New blocking request: Deploy the release?",
+    );
   });
 });
