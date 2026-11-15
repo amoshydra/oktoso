@@ -1559,10 +1559,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
           </label>
         </div>
         <div className="form-actions">
-          <button className="btn small" type="button" onClick={() => void loadModels("reply")}>
+          <button className="btn small" type="button" aria-label="Load reply models" onClick={() => void loadModels("reply")}>
             Load models
           </button>
-          <button className="btn primary small" type="button" disabled={saving === "reply"} onClick={() => void save("reply")}>
+          <button className="btn primary small" type="button" aria-label="Save reply assistance" disabled={saving === "reply"} onClick={() => void save("reply")}>
             {saving === "reply" ? "Saving…" : "Save"}
           </button>
         </div>
@@ -1651,10 +1651,10 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
           on the hub.
         </p>
         <div className="form-actions">
-          <button className="btn small" type="button" onClick={() => void loadModels("transcription")}>
+          <button className="btn small" type="button" aria-label="Load voice transcription models" onClick={() => void loadModels("transcription")}>
             Load models
           </button>
-          <button className="btn primary small" type="button" disabled={saving === "transcription"} onClick={() => void save("transcription")}>
+          <button className="btn primary small" type="button" aria-label="Save voice transcription" disabled={saving === "transcription"} onClick={() => void save("transcription")}>
             {saving === "transcription" ? "Saving…" : "Save"}
           </button>
         </div>
@@ -1809,16 +1809,21 @@ function InboxView(props: {
 
       <div className="page-toolbar inbox-toolbar">
         <div className="inbox-tabs">
-          {ATTENTION_FILTERS.map(([value, label]) => (
-            <button
-              className={`chip ${filter === value ? "active" : ""}`}
-              type="button"
-              key={value}
-              onClick={() => props.onFilterChange(value)}
-            >
-              {label} {count(value)}
-            </button>
-          ))}
+          {ATTENTION_FILTERS.map(([value, label]) => {
+            const total = count(value);
+            return (
+              <button
+                className={`chip ${filter === value ? "active" : ""}`}
+                type="button"
+                key={value}
+                aria-pressed={filter === value}
+                aria-label={`${label}, ${total} ${total === 1 ? "item" : "items"}`}
+                onClick={() => props.onFilterChange(value)}
+              >
+                {label} {total}
+              </button>
+            );
+          })}
         </div>
         <button
           className="btn small"
@@ -1990,7 +1995,13 @@ function AttentionCard(props: {
       <div className="attention-top">
         <span className={`type-badge ${item.type}`}>{ATTENTION_LABELS[item.type]}</span>
         <span className="attention-provider">{providerLabel(item.sessionRef.split(":")[0] ?? "")}</span>
-        <span className="attention-age">{relativeTime(item.createdAt)}</span>
+        <time
+          className="attention-age"
+          dateTime={new Date(item.createdAt).toISOString()}
+          title={formatDateTime(item.createdAt)}
+        >
+          {relativeTime(item.createdAt)}
+        </time>
       </div>
       <div className="attention-title">{item.title}</div>
       <div className="attention-summary">{item.summary}</div>
@@ -2049,13 +2060,22 @@ function AttentionCard(props: {
             className="btn primary small"
             type="button"
             disabled={props.busy || missingRequired.length > 0}
+            aria-describedby={
+              missingRequired.length > 0
+                ? `attention-required-${item.id}`
+                : undefined
+            }
             onClick={() => props.onAction("answer", actionInput())}
           >
             {answerAction.label}
           </button>
         ) : null}
         {answerAction && missingRequired.length > 0 ? (
-          <span className="attention-required">
+          <span
+            className="attention-required"
+            id={`attention-required-${item.id}`}
+            aria-live="polite"
+          >
             Complete {missingRequired.map((field) => field.label).join(", ")}
           </span>
         ) : null}
@@ -2082,6 +2102,7 @@ function AttentionFieldInput(props: {
         <input
           type="checkbox"
           checked={Boolean(props.value)}
+          aria-required={field.required || undefined}
           onChange={(event) => props.onValue((event.currentTarget as HTMLInputElement).checked)}
         />
         <span>{field.label}</span>
@@ -2133,6 +2154,7 @@ function AttentionFieldInput(props: {
           rows={3}
           value={typeof props.value === "string" ? props.value : ""}
           placeholder={field.placeholder}
+          aria-required={field.required || undefined}
           onChange={(event) => props.onValue((event.currentTarget as HTMLTextAreaElement).value)}
         />
         {field.description ? <small className="attention-help">{field.description}</small> : null}
@@ -2146,6 +2168,7 @@ function AttentionFieldInput(props: {
         type={field.type === "number" ? "number" : "text"}
         value={typeof props.value === "string" || typeof props.value === "number" ? props.value : ""}
         placeholder={field.placeholder}
+        aria-required={field.required || undefined}
         onChange={(event) => {
           const value = (event.currentTarget as HTMLInputElement).value;
           props.onValue(
@@ -2195,6 +2218,7 @@ function AttentionChoiceField(props: {
                 type="radio"
                 name={name}
                 checked={checked}
+                aria-required={field.required || undefined}
                 onChange={() => {
                   setCustomMode(false);
                   props.onValue(option.value);
@@ -2222,6 +2246,7 @@ function AttentionChoiceField(props: {
               type="radio"
               name={name}
               checked={customMode}
+              aria-required={field.required || undefined}
               onChange={() => {
                 setCustomMode(true);
                 if (options.some((option) => option.value === selected)) {
@@ -2477,6 +2502,7 @@ function SearchView(props: {
                 session={session}
                 provider={providerLabel(session.providerID)}
                 time={relativeTime(session.updatedAt)}
+                timeAt={session.updatedAt}
                 ariaLabel={searchResultLabel(session)}
                 attention={
                   session.attention
@@ -2699,6 +2725,7 @@ function ChatSidebar(props: {
                     session={session}
                     provider={providerLabel(session.providerID)}
                     time={relativeTime(session.updatedAt)}
+                    timeAt={session.updatedAt}
                     ariaLabel={searchResultLabel(session)}
                     active={session.ref === props.activeRef}
                     attention={
@@ -2839,6 +2866,7 @@ function SessionsView(props: {
       session={session}
       provider={providerLabel(session.providerID)}
       time={relativeTime(session.updatedAt)}
+      timeAt={session.updatedAt}
       ariaLabel={searchResultLabel(session, session.parentRef ? parentTitles.get(session.parentRef) : undefined)}
       attention={
         session.attention
@@ -3019,6 +3047,7 @@ function SessionsView(props: {
                   session={node.session}
                   provider={providerLabel(node.session.providerID)}
                   time={relativeTime(node.latestAt)}
+                  timeAt={node.latestAt}
                   ariaLabel={searchResultLabel(node.session)}
                   attention={
                     node.session.attention
@@ -3219,6 +3248,7 @@ function ProviderForm(props: {
           <input
             value={id}
             disabled={Boolean(editing)}
+            aria-required="true"
             placeholder="desktop-opencode"
             autoComplete="off"
             spellCheck={false}
@@ -3249,6 +3279,7 @@ function ProviderForm(props: {
           <span>Base URL</span>
           <input
             value={baseUrl}
+            aria-required="true"
             placeholder="http://127.0.0.1:4096"
             autoComplete="off"
             spellCheck={false}
@@ -3284,6 +3315,7 @@ function ProviderForm(props: {
             <input
               type="password"
               value={secret}
+              aria-required={secretRequired}
               autoComplete="new-password"
               placeholder={
                 editing && !authChanged
@@ -3469,6 +3501,7 @@ function NewSessionForm(props: {
               <span>Title</span>
               <input
                 value={title}
+                aria-required="true"
                 placeholder="Investigate auth race"
                 onChange={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
               />
@@ -3972,27 +4005,15 @@ function SessionDetail(props: {
   useEffect(() => {
     if (!contextOpen) return;
     const previous = contextChipRef.current;
-    const sheet = contextSheetRef.current;
     contextCloseRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
         setContextOpen(false);
         return;
       }
-      if (event.key !== "Tab" || !sheet) return;
-      const focusable = sheet.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      trapTabKey(event, contextSheetRef.current);
     };
     document.addEventListener("keydown", onKeyDown);
     const mq = window.matchMedia("(min-width: 761px)");
@@ -5663,7 +5684,11 @@ function SessionDetail(props: {
               )}
 
               {inlineAttention.length > 0 ? (
-                <div className="chat-inline-attention" aria-label="Needs your input">
+                <div
+                  className="chat-inline-attention"
+                  role="group"
+                  aria-label="Needs your input"
+                >
                   {inlineAttention.map((item) => (
                     <div
                       className={`chat-inline-attention-item${props.attentionID === item.id ? " is-focused" : ""}`}
@@ -5738,8 +5763,9 @@ function SessionDetail(props: {
                 className="chat-jump-float"
                 type="button"
                 data-visible={showJump}
-                aria-hidden={!showJump}
+                aria-hidden={showJump ? undefined : true}
                 tabIndex={showJump ? 0 : -1}
+                inert={!showJump}
                 onClick={jumpToLatest}
               >
                 {hasBlockingAttention ? "Input needed" : "Jump to latest"}
@@ -6504,6 +6530,7 @@ function BranchPicker(props: {
   return (
     <div
       className="message-branch"
+      role="group"
       aria-label={`Response ${point.index + 1} of ${point.count}`}
     >
       <button
@@ -6589,7 +6616,9 @@ function TranscriptMessage(props: {
     <article className={`chat-message ${message.role}`}>
       <div className="chat-message-role">
         <span>{message.role === "user" ? "You" : "Agent"}</span>
-        <time>{formatTime(message.createdAt)}</time>
+        <time dateTime={new Date(message.createdAt).toISOString()}>
+          {formatTime(message.createdAt)}
+        </time>
         {message.streaming ? <span className="streaming-label">streaming</span> : null}
       </div>
       <div className="chat-message-parts">
@@ -6980,7 +7009,12 @@ function ActivityTiles(props: {
           <span className="agent-activity-running">running</span>
         ) : null}
         {props.header?.at !== undefined ? (
-          <time className="agent-activity-time">{formatTime(props.header.at)}</time>
+          <time
+            className="agent-activity-time"
+            dateTime={new Date(props.header.at).toISOString()}
+          >
+            {formatTime(props.header.at)}
+          </time>
         ) : null}
         <span className="agent-activity-chevron" aria-hidden="true">
           <Icon name={expanded ? "chevron-right" : "chevron-right"} size={14} />
@@ -7094,7 +7128,12 @@ function StepPanel(props: {
         <span className="activity-step-title">{props.step.label}</span>
         <span className="activity-step-subtitle">{stepSubtitle(props.step)}</span>
         {props.step.startedAt !== undefined ? (
-          <time className="activity-step-time">{formatTime(props.step.startedAt)}</time>
+          <time
+            className="activity-step-time"
+            dateTime={new Date(props.step.startedAt).toISOString()}
+          >
+            {formatTime(props.step.startedAt)}
+          </time>
         ) : null}
         <button
           className="icon-btn activity-step-close"
@@ -7200,6 +7239,7 @@ function StepBody(props: {
           text={part.text}
           client={props.client}
           resource={props.resource}
+          headingOffset={1}
           onPreviewFile={props.onPreviewFile}
         />
       </div>
@@ -7363,6 +7403,7 @@ function StepBody(props: {
                   text={description}
                   client={props.client}
                   resource={props.resource}
+                  headingOffset={1}
                 />
               </div>
             </StepBlock>
@@ -7549,6 +7590,10 @@ function SessionDetails(props: {
   const [forkError, setForkError] = useState<string>();
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const restoreOnClose = useRef(false);
+  const [overlay, setOverlay] = useState(() =>
+    window.matchMedia("(max-width: 1319px)").matches,
+  );
   const providerUrl =
     safeExternalURL(session.nativeUrl) ?? safeExternalURL(provider?.baseUrl);
   const tokens = session.tokens;
@@ -7559,44 +7604,47 @@ function SessionDetails(props: {
       : undefined);
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    if (window.matchMedia("(max-width: 1319px)").matches) {
-      closeRef.current?.focus();
-    }
-    return () => previous?.focus();
+    const query = window.matchMedia("(max-width: 1319px)");
+    const onChange = () => setOverlay(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
+    const previous = document.activeElement;
+    restoreOnClose.current = window.matchMedia("(max-width: 1319px)").matches;
+    if (restoreOnClose.current) closeRef.current?.focus();
+    return () => {
+      if (!restoreOnClose.current) return;
+      if (previous instanceof HTMLElement && previous.isConnected) {
+        previous.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!overlay) return;
+    // The overlay is a modal sheet. Escape closes it; the FilePreview and
+    // composer sheets stop their own Escape before it reaches this listener.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose();
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      props.onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.onClose]);
+  }, [overlay, props.onClose]);
 
   useEffect(() => {
-    if (!window.matchMedia("(max-width: 1319px)").matches) return;
-    const aside = asideRef.current;
-    if (!aside) return;
+    if (!overlay) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const focusable = aside.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      // A sheet opened above details owns Tab until it closes.
+      if (document.querySelector(".file-preview, .composer-sheet")) return;
+      trapTabKey(event, asideRef.current);
     };
-    aside.addEventListener("keydown", onKeyDown);
-    return () => aside.removeEventListener("keydown", onKeyDown);
-  }, []);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [overlay]);
 
   const copyReference = async () => {
     setNotice(undefined);
@@ -7629,6 +7677,8 @@ function SessionDetails(props: {
     <aside
       className="chat-details"
       id="session-details"
+      role={overlay ? "dialog" : undefined}
+      aria-modal={overlay ? true : undefined}
       aria-labelledby="session-details-title"
       ref={asideRef}
     >
@@ -7924,6 +7974,7 @@ function MessagePartView(props: {
         text={part.text}
         client={props.client}
         resource={props.resource}
+        headingOffset={1}
         onPreviewFile={props.onPreviewFile}
       />
     );
@@ -8050,6 +8101,7 @@ function FilePreview(props: {
     | { status: "error"; message: string }
   >({ status: "loading" });
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const previewRef = useRef<HTMLElement | null>(null);
   const onClose = useRef(props.onClose);
   onClose.current = props.onClose;
 
@@ -8064,14 +8116,21 @@ function FilePreview(props: {
     const previous = document.activeElement;
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose.current();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        // Keep the sheet's Escape from also closing the details panel behind it.
+        event.stopPropagation();
+        onClose.current();
+        return;
+      }
+      trapTabKey(event, previewRef.current);
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      if (previous instanceof HTMLElement) previous.focus();
+      if (previous instanceof HTMLElement && previous.isConnected) {
+        previous.focus();
+      }
     };
   }, []);
 
@@ -8141,6 +8200,7 @@ function FilePreview(props: {
         role="dialog"
         aria-modal="true"
         aria-labelledby="file-preview-title"
+        ref={previewRef}
       >
         <header className="file-preview-head">
           <div className="file-preview-titles">
@@ -8416,6 +8476,36 @@ function microphoneErrorMessage(error: unknown): string {
     }
   }
   return "Unable to start recording. Check the microphone and try again.";
+}
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], audio[controls], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Keep Tab inside a modal surface. If focus has escaped the surface, the next
+ * Tab re-enters it instead of walking the page behind the scrim.
+ */
+function trapTabKey(event: KeyboardEvent, root: HTMLElement | null): void {
+  if (event.key !== "Tab" || !root) return;
+  const focusable = Array.from(
+    root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !root.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    return;
+  }
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function relativeTime(at: number): string {
