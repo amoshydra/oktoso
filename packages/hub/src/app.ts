@@ -48,6 +48,7 @@ import { registerSettingsRoutes } from "./http/routes/settings";
 import { registerTranscriptCacheRoutes } from "./http/routes/transcript-cache";
 import { registerSearchRoutes } from "./http/routes/search";
 import { registerLocalDataRoutes } from "./http/routes/local-data";
+import { registerMetricsRoutes } from "./http/routes/metrics";
 import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
@@ -123,7 +124,17 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   }
 
   app.use("/api/v1/*", bearerAuth(auth));
+  // Metrics name providers and counts, so they need the owner credential too.
+  app.use("/metrics", bearerAuth(auth));
 
+  registerMetricsRoutes(app, {
+    version: VERSION,
+    startedAt,
+    registry: deps.registry,
+    sessions: deps.sessions,
+    eventBus: deps.eventBus,
+    store: deps.store,
+  });
   registerHealthRoutes(app, {
     startedAt,
     eventSeq: () => deps.eventBus.lastSeq,

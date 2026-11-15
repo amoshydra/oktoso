@@ -1415,6 +1415,24 @@ describe("hub app", () => {
     expect(missing.status).toBeGreaterThanOrEqual(404);
   });
 
+  it("exposes Prometheus metrics behind the owner credential", async () => {
+    const { app } = await createTestApp();
+
+    const unauthorized = await app.request("/metrics");
+    expect(unauthorized.status).toBe(401);
+
+    const response = await app.request("/metrics", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/plain");
+    const body = await response.text();
+    expect(body).toContain("oktoso_up 1");
+    expect(body).toContain("oktoso_provider_up");
+    expect(body).toContain("oktoso_sse_clients");
+    expect(body).not.toContain("Fix auth race in gateway");
+  });
+
   it("reports and clears local data", async () => {
     const { app, store } = await createTestApp();
     const headers = {
