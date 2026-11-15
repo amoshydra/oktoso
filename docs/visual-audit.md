@@ -1242,3 +1242,48 @@ This stays `align-items: start`.
 - `docs/ui-ia.md`: navigation, runtime route, Inbox, Search, and mobile rules.
 - `tests/e2e/chat.e2e.ts`: mobile destinations, Providers route and active
   state, Runtime via Settings, and the desktop rail labels.
+## Accessibility pass: headings, filters, and modal focus (2026-11-15)
+
+A semantics-only pass. Routes, hierarchy, copy, spacing, color, and focus rings
+are unchanged; the fixes are ARIA state, element choice, and focus handling.
+
+- **One `h1` per view.** The transcript rendered Markdown without the heading
+  offset, so a message that started with `#` produced a second `h1` beside the
+  topbar title. Message prose, reasoning, and subagent task text now shift
+  headings down one level, matching the compaction summary, file card, and file
+  preview. The visible sizes are unchanged.
+- **Inbox filters.** The five Inbox chips were the only filter group without
+  `aria-pressed`; search, session scope, delivery, and dictation already had it.
+  The active chip now exposes its pressed state and the count joins the
+  accessible name (`Approvals, 2 items`) instead of being visual text only.
+- **Details overlay.** Below 1320px the panel now exposes `role="dialog"` and
+  `aria-modal="true"`; above 1320px it remains a labelled column. Escape only
+  closes the overlay. Focus returns to the details toggle, and only when the
+  opener is still connected.
+- **Tab trapping.** Details, the model/agent sheet, and the file preview share
+  one Tab loop. If focus has escaped a sheet, the next Tab re-enters it instead
+  of walking the page behind the scrim. The file preview stops its Escape from
+  also closing the details panel behind it.
+- **Hidden jump pill.** The pill keeps `aria-hidden`, `tabIndex=-1`, and now
+  `inert` while it is hidden, so it cannot be focused programmatically either.
+  While visible it has no `aria-hidden`, and its visible text stays its name.
+- **Times.** Message, agent-activity, step, attention, and session timestamps use
+  `<time>` with the absolute instant in `dateTime`. Relative labels (`2m`) stay
+  visible and gain the exact time on hover.
+- **Group names and names.** Label-only containers (`Needs your input`, the
+  response branch picker) gained `role="group"` so their labels are exposed.
+  Per-row settings actions now name their row (`Revoke Laptop`, `Approve <title>`,
+  `Save voice transcription`), and required provider, session, and question
+  fields expose `aria-required`. The disabled Answer button points at the
+  missing-field hint.
+- **Proof.** New `tests/e2e/accessibility.e2e.ts`: one `h1` per view with a
+  Markdown heading in a mocked message, Inbox `aria-pressed` and count names,
+  details/context sheet Tab traps and focus restore, a scan for unnamed
+  icon-only controls across list, chat, and details, and the hidden pill's tab
+  order. Typecheck, 587 unit tests, and all e2e tests pass.
+- **Files.** `apps/web/src/app/App.tsx`, `SessionRow.tsx`, `SessionTree.tsx`,
+  `settings-notifications.tsx`, `settings-automation.tsx`,
+  `tests/e2e/accessibility.e2e.ts`, `docs/ui-ia.md`.
+- **Left for a follow-up.** The login QR overlay is still a `dialog` without a
+  Tab trap, Escape close, or focus return. The provider form and new-session
+  panel are inline panels and do not move focus to their heading on open.
