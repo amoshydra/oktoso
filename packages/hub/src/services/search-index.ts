@@ -231,7 +231,7 @@ export class SearchIndexService {
   search(query: string, options: SearchOptions = {}): SearchHit[] {
     const terms = [...new Set(tokenize(query))];
     if (terms.length === 0) return [];
-    const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+    const limit = Math.max(1, Math.min(options.limit ?? 20, 500));
 
     const lists = terms
       .map((term) => ({ term, idf: 0, postings: this.postingsFor(term) }))

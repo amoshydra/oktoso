@@ -24,6 +24,8 @@ import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
 import { NotificationService } from "./services/notification-service";
 import { TranscriptCacheService } from "./services/transcript-cache";
+import { SearchIndexService } from "./services/search-index";
+import { SearchService } from "./services/search-service";
 import { VERSION } from "./version";
 import {
   JsonStateStore,
@@ -118,6 +120,12 @@ async function createTestApp(options: {
     attachments,
     transcripts,
   });
+  const searchIndex = new SearchIndexService({
+    root: join(await tempRoot(), "search"),
+    logger,
+  });
+  await searchIndex.init([]);
+  const search = new SearchService({ index: searchIndex, sessions });
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
   const settings = new AssistantSettingsService(store);
@@ -203,6 +211,7 @@ async function createTestApp(options: {
     attachments,
     settings,
     transcripts,
+    search,
     replies,
     replyFeedback,
     transcription,
@@ -231,6 +240,7 @@ async function createTestApp(options: {
     questions,
     notifications,
     automation,
+    searchIndex,
     fake,
     openwebui,
   };
@@ -1357,6 +1367,56 @@ describe("hub app", () => {
     );
     expect(exportResponse.status).toBe(200);
     expect(await exportResponse.text()).toContain("Looks useful.");
+  });
+
+  it("searches indexed transcripts with pagination", async () => {
+    const { app, searchIndex } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    await searchIndex.update({
+        ref: "desktop-opencode:ses_auth",
+        providerID: "desktop-opencode",
+        title: "Fix auth race in gateway",
+        project: "oktoso",
+        updatedAt: 1_793_000_000_000,
+        complete: true,
+        truncated: false,
+        storedAt: 1_793_000_000_000,
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            createdAt: 1_793_000_000_000,
+            text: "The refresh token rotates on every write.",
+          },
+        ],
+    });
+
+    const response = await app.request("/api/v1/search?q=refresh&limit=1", {
+      headers,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: Array<Record<string, unknown>>;
+      cursor: { next: string | null };
+      ready: boolean;
+    };
+    expect(body.ready).toBe(true);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      ref: "desktop-opencode:ses_auth",
+      messageID: "m1",
+      match: "message",
+    });
+    expect(String(body.data[0]?.snippet)).toContain("refresh");
+
+    const missing = await app.request("/api/v1/search?q=", { headers });
+    expect(missing.status).toBe(400);
+
+    const badCursor = await app.request("/api/v1/search?q=refresh&cursor=nope", {
+      headers,
+    });
+    expect(badCursor.status).toBe(400);
   });
 
   it("exposes the opt-in transcript cache settings", async () => {

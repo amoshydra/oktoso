@@ -384,11 +384,19 @@ under `dataDir/search`.
 
 ### C3. Search route
 
-- [ ] Implement `GET /api/v1/search?q=&scope=&provider=&status=&cursor=`.
-- [ ] Return sessions and messages with snippets; keep the existing
-  `zSearchResult` shape and extend it only additively.
-- [ ] Rank title matches above body matches; dedupe sessions.
-- [ ] Cap result size and paginate.
+Status: done. `GET /api/v1/search` reads the transcript index; the UI wiring is
+C4.
+
+- [x] Implement `GET /api/v1/search?q=&scope=&provider=&status=&cursor=`.
+- [x] Return sessions and messages with snippets; keep the existing
+  `zSearchResult` shape and extend it only additively (`match`, `messageID`,
+  `role`, `createdAt`, `score`). The messages scope returns one row per matching
+  message; sessions dedupe by ref and keep their best message.
+- [x] Rank title matches above body matches; dedupe sessions. Ordering is
+  score, then session `updatedAt`, then ref, so an offset cursor is stable.
+- [x] Cap result size and paginate. The index ranks at most 500 candidates per
+  query; pages are 20 by default and 50 at most, with opaque cursors and a 400
+  on a corrupt one.
 
 ### C4. Search UI
 

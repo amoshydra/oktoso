@@ -3016,11 +3016,94 @@ components:
           type: integer
         snippet:
           type: string
+        match:
+          type: string
+          enum:
+            - session
+            - message
+        messageID:
+          type: string
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+            - system
+            - tool
+        createdAt:
+          type: integer
+        score:
+          type: number
       required:
         - ref
         - title
         - providerID
         - updatedAt
+    SearchPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              ref:
+                type: string
+              title:
+                type: string
+              providerID:
+                type: string
+              project:
+                type: string
+              directory:
+                type: string
+              updatedAt:
+                type: integer
+              snippet:
+                type: string
+              match:
+                type: string
+                enum:
+                  - session
+                  - message
+              messageID:
+                type: string
+              role:
+                type: string
+                enum:
+                  - user
+                  - assistant
+                  - system
+                  - tool
+              createdAt:
+                type: integer
+              score:
+                type: number
+            required:
+              - ref
+              - title
+              - providerID
+              - updatedAt
+        cursor:
+          type: object
+          properties:
+            previous:
+              type:
+                - string
+                - "null"
+            next:
+              type:
+                - string
+                - "null"
+          required:
+            - previous
+            - next
+        ready:
+          type: boolean
+      required:
+        - data
+        - cursor
+        - ready
     NotificationChannelKind:
       type: string
       enum:
@@ -6065,7 +6148,8 @@ paths:
     get:
       tags:
         - search
-      summary: Search sessions
+      summary: Search cached transcripts
+      description: Ranks sessions and messages from the local transcript cache. Sessions dedupe by ref and keep their best message; the messages scope returns one row per matching message.
       parameters:
         - schema:
             type: string
@@ -6084,8 +6168,31 @@ paths:
           in: query
         - schema:
             type: string
+            minLength: 1
+          required: false
+          name: provider
+          in: query
+        - schema:
+            type: string
+            enum:
+              - running
+              - idle
+              - error
+              - offline
+          required: false
+          name: status
+          in: query
+        - schema:
+            type: string
           required: false
           name: cursor
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+          required: false
+          name: limit
           in: query
       responses:
         "200":
@@ -6093,16 +6200,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/SearchResult"
-                  cursor:
-                    $ref: "#/components/schemas/Cursor"
-                required:
-                  - data
+                $ref: "#/components/schemas/SearchPage"
+        "400":
+          description: Invalid query or cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/diagnostics:
     get:
       tags:
