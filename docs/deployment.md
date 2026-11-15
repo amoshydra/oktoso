@@ -185,7 +185,16 @@ schedule triggers under a policy.
   action references a template (`providerID`, `title`, optional directory,
   agent, model, and prompt text) and creates a new session. A schedule `start`
   watcher does not need `condition.sessionRef`; other schedule actions do.
-- Not implemented yet: token budgets, `start`, always-allow, and G2 approvals.
+- Always-allow stores a bounded shape (watcher, question kind, options, and the
+  chosen label) after a second confirmation in Settings → Automation. Only
+  boolean and single-choice questions are eligible; free-text, multi-select,
+  destructive, and sensitive choices never auto-answer. Revoke a shape at any
+  time; the usage count and last use are shown next to it.
+- Approvals are also merged into the Even G2 Inbox as blocking rows and can be
+  approved or denied from the glasses.
+- Not implemented yet: token and per-day token budgets. `sendMessage` returns
+  only `accepted` and a message id, so usage cannot be attributed before an
+  action.
 
 Control it from the CLI:
 
