@@ -1,11 +1,11 @@
-# Design Lock — v1.15
+# Design Lock — v1.16
 
 Status: **frozen**.
 
-- Version: `design-v1.15`
-- Parent: `design-v1.14`
+- Version: `design-v1.16`
+- Parent: `design-v1.15`
 - Date: 2026-11-16
-- Git tag: `design-v1.15`
+- Git tag: `design-v1.16`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -22,6 +22,7 @@ Status: **frozen**.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
 - v1.15 scope: the Overview destination and its usage report, the session details Data row for export, and the Settings Local data panel.
+- v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
 
 ## What is frozen
 
@@ -473,6 +474,24 @@ unchanged.
   `Data` heading in details.
 - The prototype gains the Overview view, the usage panel, and the renamed nav
   labels in the same revision.
+## Mobile collision fixes (2026-11-16)
+
+The narrow-screen pass found two headers where a side action competed with
+wrapping content.
+
+- **Session scope.** `.session-scope` is a flex group with an 8px gap. At 760px
+  and below the Sessions panel head stacks: summary first, then the scope chips
+  on their own row. The chips stay in one row at 390px. The old inline group
+  wrapped under the summary and clipped the `newest first` text.
+- **Providers head.** The Providers panel head stacks at 760px and below, so
+  `+ Add` and `Recheck` sit under the description instead of squeezing it.
+- **Inbox toolbar.** At 420px and below the filter chips take the full width and
+  wrap; Refresh moves to its own right-aligned row. This follows the existing
+  rule that filters wrap below 420px instead of clipping.
+- **Session rows.** The title, tag line, and facts line use a 4px row gap and a
+  4px tag offset, so a parent with a child count no longer reads as one tight
+  block.
+- **No new tokens.** The change uses the existing 4/8/12px spacing steps.
 
 ## Change policy
 
