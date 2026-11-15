@@ -2345,7 +2345,7 @@ function chatView(): { header: string; body: string; footer: string } {
       ? "Sending…"
       : state.question
         ? "? Answer"
-        : "Tap actions";
+        : "Tap reply";
   const stream = streamLabel();
   const base = [
     actionHint,
@@ -2443,7 +2443,7 @@ function scheduleReplyPrefetch(): void {
     if (!client || state.sessionRef !== ref || state.screen !== "chat") return;
     if (replyPrefetchKey === key) return;
     replyPrefetchKey = key;
-    void client.replyOptions(ref, "reply").catch(() => undefined);
+    void client.replyOptions(ref, "reply", "g2").catch(() => undefined);
   }, 2_000);
 }
 
@@ -2466,7 +2466,7 @@ async function openReply(): Promise<void> {
 
   try {
     const [options, settings] = await Promise.all([
-      client.replyOptions(sessionRef, "reply"),
+      client.replyOptions(sessionRef, "reply", "g2"),
       client.assistantSettings().catch(() => undefined),
     ]);
     if (request !== replyRequest) return;

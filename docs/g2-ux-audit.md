@@ -25,7 +25,7 @@ the only two layouts. The phone surface is a separate long page.
 | `attention` | `glyph title` | summary (2 lines) + action list | `Tap choose · Back ×2` | Inbox |
 | `glass-form` | `FORM · <attention title>` | fields + `Submit answer` | field error or `Tap change · Back ×2` | Attention |
 | `glass-options` | `SELECT · <field label>` | option rows | `Tap choose · Back ×2` | Form |
-| `chat` | `project · title` (or title) | six wrapped lines; body tap is gate-aware | one prioritized line: `? Answer`/`Tap actions`, line/message, activity, stream state, failure, `New below`, hint | origin (home/inbox/recent) |
+| `chat` | `project · title` (or title) | six wrapped lines; body tap opens the reply sheet | one prioritized line: `? Answer`/`Tap reply`, line/message, activity, stream state, failure, `New below`, hint | origin (home/inbox/recent) |
 | `answer` | `ANSWER · title` or `ANSWER · n questions` | question summary + choices + `Type answer` / `Answer on phone` / `More` / `Read chat` | `Swipe choose · Tap send · Back ×2` | Chat |
 | `answer-more` | `MORE · title` | `Q  <question>` + `More replies` / `Read chat` / `Stop` | `Tap choose · Back ×2` | Answer |
 | `answer-type` | `TYPE · title` | `Type on the phone` | `Tap to focus phone · Back ×2` | Answer |
@@ -34,6 +34,7 @@ the only two layouts. The phone surface is a separate long page.
 | `answer-stale` | `ANSWER · changed` or `ANSWER · resolved` | changed/resolved copy | `Tap choose · Back ×2` | Chat |
 | `session-actions` | `SESSION` | `Stop` (running) / `Phone keyboard` | `Tap choose · Back ×2` | Chat or More |
 | `reply` | `REPLY n/N` + ` · Suggested` on a model page | expected `answer` first (including a done fallback acknowledgement), then the other model roles, then canned | `Tap choose · Back ×2` (or `Sending…`) | Chat or More |
+| `reply` compact | `REPLY n/N` + ` · Suggested` | model text capped at 8 words / 46 characters; `Tap reply` opens it from chat | `Tap choose · Back ×2` | Chat |
 | `choices` | `CHOOSE n` + ` · Suggested` | choice labels | `Tap choose · Back ×2` | Reply |
 | `voice` | `VOICE` | `Listening…` / tap to stop / Back cancels | `Tap to stop` | Chat |
 | `failure` | `SESSION EXPIRED` / `HUB OFFLINE` / `AGENT OFFLINE` / `TIMEOUT` | failure message | `Pair again…` or `Tap choose · Back ×2` | origin |
@@ -203,9 +204,9 @@ Long sessions lose the hint or the activity. Fix: two-line footer, or prioritize
 dedicated short label; use `L`/`M` compactly.
 
 **7. There is no visible reply affordance on chat.**
-The footer only adds `? Answer` for questions. The tap-to-reply gesture is
-documented but not shown. Fix: show `Tap reply` when the gate says reply, and
-`Tap actions` when it says wait/done.
+The footer only added `? Answer` for questions. The tap-to-reply gesture was
+documented but not shown. Fixed: the footer now says `Tap reply` whenever the
+body tap opens REPLY.
 
 **8. Reply roles are not visually distinct.**
 Only the page header says `Suggested`; the answer and ask rows look like canned
@@ -348,7 +349,7 @@ have not yet been exercised on G2 hardware.
 | 4 | Settings mixed actions and info | `SETTINGS` lists only `Refresh data` and `Reload app`; info moved to the body; reload opens `RELOAD APP` with `Reload` / `Cancel`. |
 | 5 | Home state rows below navigation | Order is Inbox, Unsent, Retry/failure, Recent, Current, Symbols, Settings. |
 | 6 | Chat footer overpacked | One prioritized line: action, line/message, activity, stream, failure, `New below`, then the hint if it fits whole. The 42 px footer cannot fit two lines at G2 type size. |
-| 7 | No visible reply affordance | Footer shows `? Answer` for questions and `Tap actions` otherwise. |
+| 7 | No visible reply affordance | Footer shows `? Answer` for questions and `Tap reply` otherwise. |
 | 8 | Reply roles not distinct | Model roles sort first; ask is labelled `Ask:` and opposite `Alt:`. |
 | 9 | Pairing panel stayed expanded | Phone panel collapses to `Connected · <hub>` with `Pair another`; expires/failures expand it again. |
 | 10 | Inbox count misleading | Header is `ATTENTION <shown>/<total>` whenever items remain hidden. |
