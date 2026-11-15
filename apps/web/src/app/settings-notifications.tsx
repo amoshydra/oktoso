@@ -240,8 +240,8 @@ export function NotificationSettingsPanel(props: { client: HubClient }) {
           </div>
         ) : (
           <p className="form-note">
-            This browser does not support Web Push. Use the ntfy or Telegram
-            channel instead.
+            This browser does not support Web Push. Web Push needs a secure
+            context: open the hub over HTTPS or from localhost.
           </p>
         )}
 

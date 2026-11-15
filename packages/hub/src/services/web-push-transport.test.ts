@@ -89,7 +89,6 @@ describe("WebPushTransport", () => {
     const push = transport(store, new FakeSender());
 
     expect(push.supports("webpush")).toBe(true);
-    expect(push.supports("ntfy")).toBe(false);
   });
 
   it("sends the payload to every subscription", async () => {

@@ -85,14 +85,13 @@ reachability.
 ## Notifications
 
 `notifications` is off by default. Enabling it turns attention events into
-phone notifications. Web Push is the only delivery path implemented today;
-`ntfy`, `telegram`, and `webhook` are accepted by the schema but reserved.
+phone notifications. Web Push is the only delivery path; there is no ntfy,
+Telegram, or webhook sender.
 
 ```jsonc
 {
   "notifications": {
     "enabled": true,
-    // "channels": [] — reserved for future ntfy/Telegram/webhook senders
     "routing": {
       "immediate": ["permission", "approval"],
       "digest": ["question", "unread", "error"],
@@ -192,9 +191,12 @@ schedule triggers under a policy.
   time; the usage count and last use are shown next to it.
 - Approvals are also merged into the Even G2 Inbox as blocking rows and can be
   approved or denied from the glasses.
-- Not implemented yet: token and per-day token budgets. `sendMessage` returns
-  only `accepted` and a message id, so usage cannot be attributed before an
-  action.
+- There is no token budget. `sendMessage` returns only `accepted` and a message
+  id, and a session's usage arrives after the provider's reply, so an action's
+  cost cannot be known before it runs. The enforced guards are actions per hour
+  and per day, globally and per watcher. A post-hoc budget would only be able
+  to stop the action after the one that crossed the line, which is not a budget
+  worth shipping.
 
 Control it from the CLI:
 
