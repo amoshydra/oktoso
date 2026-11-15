@@ -603,6 +603,7 @@ async function main(): Promise<void> {
       questions,
       actions,
       sessions,
+      attention,
       notifications,
     });
     automation.start();

@@ -159,6 +159,7 @@ async function createTestApp(options: {
     questions,
     actions,
     sessions,
+    attention,
   });
   automation.start();
   const notifications = new NotificationService({
