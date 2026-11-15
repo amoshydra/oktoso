@@ -731,6 +731,8 @@
   overflow-wrap: anywhere;
   color: var(--text);
   font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   line-height: 1.5;
 }
 
@@ -1871,6 +1873,7 @@
   overflow-anchor: none;
   overscroll-behavior: contain;
   padding: var(--space-4);
+  padding-bottom: 48px;
   --fade-top: 0px;
   --fade-bottom: 0px;
   -webkit-mask-image: linear-gradient(
@@ -1902,6 +1905,8 @@
 
 .chat-panel > * {
   flex-shrink: 0;
+  width: 100%;
+  max-width: 728px;
 }
 
 .chat-panel:focus-visible {
@@ -2031,6 +2036,8 @@
 }
 
 .composer-queued-actions .composer-queued-remove {
+  min-width: 32px;
+  padding: 0;
   font-size: var(--text-base);
 }
 
@@ -2150,6 +2157,12 @@
 .composer-context-chevron {
   flex: none;
   color: var(--faint);
+}
+
+@media (min-width: 361px) and (max-width: 760px) {
+  .composer-context-chip {
+    max-width: 96px;
+  }
 }
 
 .composer-sheet-scrim {
@@ -4680,6 +4693,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 
   .chat-panel {
     padding: var(--space-3);
+    padding-bottom: 48px;
   }
 
   .chat-doc-head .chat-meta .status-chip {
@@ -4759,13 +4773,12 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   }
 
   .composer-tools-toggle {
-    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
@@ -4776,12 +4789,6 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   .composer-tools-toggle:hover {
     background: var(--surface-3);
     color: var(--text);
-  }
-
-  .composer-tools-toggle::after {
-    content: "";
-    position: absolute;
-    inset: -6px;
   }
 
   .composer-tools-menu button {
@@ -4798,9 +4805,9 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   }
 
   .composer-actions .btn.composer-interrupt {
-    width: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
   }
 
@@ -4808,6 +4815,10 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   .composer-suggest-dismiss,
   .composer-suggest-retry {
     min-height: 44px;
+  }
+
+  .composer-suggest-dismiss {
+    min-width: 44px;
   }
 
   .composer-options::-webkit-scrollbar {
@@ -4837,12 +4848,13 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   }
 
   .composer-actions .btn.small {
-    min-height: 32px;
+    min-height: 44px;
   }
 
   .composer-actions .composer-send {
-    width: 32px;
-    min-width: 32px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
   }
 
@@ -4852,12 +4864,6 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 
   .composer-send-icon {
     display: block;
-  }
-
-  .composer-actions .btn::after {
-    content: "";
-    position: absolute;
-    inset: -6px;
   }
 
   .composer-queued-summary {
@@ -4879,7 +4885,11 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   .message-edit textarea,
   .form-field input,
   .form-field select,
-  .form-field textarea {
+  .form-field textarea,
+  .attention-field input,
+  .attention-field select,
+  .attention-field textarea,
+  .attention-choice-input {
     font-size: var(--text-lg);
   }
 

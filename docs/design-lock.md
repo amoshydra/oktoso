@@ -1,9 +1,9 @@
-# Design Lock — v1.10
+# Design Lock — v1.11
 
 Status: **frozen**.
 
-- Version: `design-v1.10`
-- Parent: `design-v1.9`
+- Version: `design-v1.11`
+- Parent: `design-v1.10`
 - Date: 2026-11-15
 - Git tag: `design-v1.9`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
@@ -17,6 +17,7 @@ Status: **frozen**.
 - v1.8 scope: the steer-default send action and the collapsed queue summary.
 - v1.9 scope: the one-row mobile composer, context sheet, and one-line draft.
 - v1.10 scope: transcript edge masks, the floating jump, and the in-transcript background row.
+- v1.11 scope: the composer 44px control cluster, the 728px reading column, details value typography, and mobile target fixes.
 
 ## What is frozen
 
@@ -346,6 +347,36 @@ background work never change the composer's position.
   `jumpToLatest` scrolls instantly.
 - **No new tokens.** The change uses 24px, 8px, 12px, 16px, the existing pill
   and control radii, and the existing surfaces and shadows.
+
+## Audit fixes: targets and measure (2026-11-15)
+
+The first audit pass fixed functional target overlap and restored the reading
+measure. It supersedes the 32px square cluster in v1.9 and the jump overlap in
+v1.10.
+
+- **Composer cluster.** `⋯`, Stop, and Send are actual 44×44 controls on mobile.
+  The `-6px` pseudo hit-area expansion is removed from that cluster, so adjacent
+  targets cannot overlap. The text actions (Suggest, Attach) remain 44px tall.
+- **Context chip.** The chip shows the agent name, or `Model` when no agent is
+  set; the full pair stays in the accessible name and the sheet. It is 64px at
+  360px and below, 96px above.
+- **Attach placement.** Attach stays inline above 420px, moves into `⋯` while
+  running at 361–420px, and moves into `⋯` at all states at 360px and below.
+- **Reading column.** Transcript content is capped at 728px inside the panel;
+  the panel frame can be 920px. The right gutter on wide screens holds the
+  floating jump. A constant 48px bottom inset keeps the jump clear of the last
+  line at narrower widths.
+- **Jump name.** The visible `Input needed` / `Jump to latest` text is the
+  button's accessible name; no `aria-label` overrides it.
+- **Details values.** Detail values are 500 weight and tabular; Created,
+  Updated, Cost, and Tokens use sans. Mono stays for IDs, paths, references,
+  and endpoints. `font-synthesis: none` prevents faux bold.
+- **Mobile inputs.** Question fields and custom answer inputs join the 16px
+  mobile text rule.
+- **Targets.** Suggestion Dismiss and queue Remove get 32px desktop targets and
+  44px mobile targets.
+- **No new tokens.** The change uses 44px, 64/96px, 728px, 48px, and existing
+  surfaces, radii, and shadows.
 
 ## Change policy
 
