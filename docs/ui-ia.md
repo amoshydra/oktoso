@@ -1,6 +1,6 @@
 # Oktoso UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15, the reading-column alignment in `design-v1.14`, and the mobile collision fixes in `design-v1.15`. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15, the reading-column alignment in `design-v1.14`, and the mobile collision fixes in `design-v1.15`, and the navigation/accessibility pass in `design-v1.16`. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 

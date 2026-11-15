@@ -1,11 +1,11 @@
-# Design Lock — v1.16
+# Design Lock — v1.17
 
 Status: **frozen**.
 
-- Version: `design-v1.16`
-- Parent: `design-v1.15`
+- Version: `design-v1.17`
+- Parent: `design-v1.16`
 - Date: 2026-11-16
-- Git tag: `design-v1.16`
+- Git tag: `design-v1.17`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -23,6 +23,7 @@ Status: **frozen**.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
 - v1.15 scope: the Overview destination and its usage report, the session details Data row for export, and the Settings Local data panel.
 - v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
+- v1.17 scope: the accessibility semantics and focus pass.
 
 ## What is frozen
 
@@ -474,6 +475,7 @@ unchanged.
   `Data` heading in details.
 - The prototype gains the Overview view, the usage panel, and the renamed nav
   labels in the same revision.
+
 ## Mobile collision fixes (2026-11-16)
 
 The narrow-screen pass found two headers where a side action competed with
@@ -492,6 +494,22 @@ wrapping content.
   4px tag offset, so a parent with a child count no longer reads as one tight
   block.
 - **No new tokens.** The change uses the existing 4/8/12px spacing steps.
+
+## Accessibility semantics and focus (2026-11-16)
+
+This revision closes the semantics gaps found in the accessibility audit.
+Routes, type, spacing, color, and focus rings are unchanged.
+
+- **Headings.** Transcript, reasoning, and subagent Markdown use the same
+  heading offset as the summary and file cards, so a `#` in a message renders as
+  `h2`. Every view has one `h1`.
+- **Filters and dialogs.** Inbox chips expose `aria-pressed` and include the
+  count in the name. Details is a labelled column on desktop and a
+  `role="dialog"` sheet below 1320px, with one shared Tab trap, scoped Escape,
+  and focus restore. The model/agent sheet and file preview use the same trap.
+- **Targets.** The chat-sidebar disclosure is 32px on desktop, matching the
+  session-list contract, with 34px trailing padding.
+- **No new tokens or routes.**
 
 ## Change policy
 

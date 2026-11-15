@@ -1,8 +1,8 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, and given the mobile collision fixes in `design-v1.15`.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, given the mobile collision fixes in `design-v1.15`, and closed with the navigation/accessibility pass in `design-v1.16`.
 
-Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
+Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows are recorded in `docs/ui-ia.md`; the v1.16 pass changes the mobile destination set and the Runtime label.
 
 ## What was wrong
 
