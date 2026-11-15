@@ -36,6 +36,27 @@ describe("CLI arguments", () => {
     expect(options.verbose).toBe(true);
   });
 
+  it("parses backup and restore with their flags", () => {
+    const backup = parseArgs(["backup", "--out", "./snapshots/a"]);
+    expect(backup.command).toBe("backup");
+    expect(backup.out).toBe("./snapshots/a");
+    expect(backup.force).toBe(false);
+
+    const restore = parseArgs([
+      "restore",
+      "--from",
+      "./snapshots/a",
+      "--force",
+    ]);
+    expect(restore.command).toBe("restore");
+    expect(restore.from).toBe("./snapshots/a");
+    expect(restore.force).toBe(true);
+  });
+
+  it("rejects a flag that expects a value but gets none", () => {
+    expect(() => parseArgs(["restore", "--from"])).toThrow(/--from requires a value/);
+  });
+
   it("parses the mcp command and read-write opt-in", () => {
     const readOnly = parseArgs(["mcp", "--url", "http://127.0.0.1:8787"]);
     expect(readOnly.command).toBe("mcp");

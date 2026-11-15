@@ -1,7 +1,7 @@
 import { defaultConfigPath } from "../config/paths";
 
 export interface CliOptions {
-  command: "serve" | "pair" | "status" | "mcp" | "automation";
+  command: "serve" | "pair" | "status" | "mcp" | "automation" | "backup" | "restore";
   automationAction: "status" | "pause" | "resume";
   automationWatcher?: string;
   configPath: string;
@@ -16,6 +16,9 @@ export interface CliOptions {
   allowWrite: boolean;
   logFile?: string;
   logDir?: string;
+  out?: string;
+  from?: string;
+  force: boolean;
   noLogFile: boolean;
   help: boolean;
   version: boolean;
@@ -40,7 +43,7 @@ export function parseArgs(
   env: Env = process.env,
   platform: NodeJS.Platform = process.platform,
 ): CliOptions {
-  let command: "serve" | "pair" | "status" | "mcp" | "automation" = "serve";
+  let command: CliOptions["command"] = "serve";
   let automationAction: "status" | "pause" | "resume" = "status";
   let automationWatcher: string | undefined;
   let configPath = env.HUB_CONFIG ?? defaultConfigPath(env, platform);
@@ -58,6 +61,9 @@ export function parseArgs(
   let noLogFile = false;
   let help = false;
   let version = false;
+  let out: string | undefined;
+  let from: string | undefined;
+  let force = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
@@ -65,6 +71,27 @@ export function parseArgs(
       case "pair":
       case "--pair":
         command = "pair";
+        break;
+      case "backup":
+        command = "backup";
+        break;
+      case "restore":
+        command = "restore";
+        break;
+      case "--out": {
+        const read = readValue(argv, index, arg);
+        out = read.value;
+        index = read.next;
+        break;
+      }
+      case "--from": {
+        const read = readValue(argv, index, arg);
+        from = read.value;
+        index = read.next;
+        break;
+      }
+      case "--force":
+        force = true;
         break;
       case "status":
         command = "status";
@@ -180,6 +207,9 @@ export function parseArgs(
     noLogFile,
     help,
     version,
+    out,
+    from,
+    force,
   };
 }
 
@@ -192,6 +222,8 @@ Usage:
   oktoso status [--config <path>]
   oktoso mcp [--allow-write] [--url <url>] [--config <path>]
   oktoso automation status|pause|resume [--watcher <id>] [--url <url>] [--config <path>]
+  oktoso backup [--out <dir>] [--config <path>]
+  oktoso restore --from <dir> [--force] [--config <path>]
 
 Options:
   --config <path>    Hub config file (default: see Config below)
@@ -206,6 +238,9 @@ Options:
   --no-log-file      Disable the persistent log file
   --url <url>        Base URL for pairing links or the MCP hub endpoint
   --allow-write      Enable write tools in the MCP server (read-only by default)
+  --out <dir>        Backup destination (default: ./oktoso-backup-<timestamp>)
+  --from <dir>       Backup to restore from
+  --force            Replace a non-empty data directory during restore
   --help, -h         Show this help
   --version, -v      Show the version
 

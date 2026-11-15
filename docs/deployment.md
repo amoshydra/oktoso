@@ -118,6 +118,43 @@ Telegram, or webhook sender.
 - If the hub is behind a reverse proxy, terminate TLS there and set `publicUrl`
   so notification links open the external origin.
 
+## Backup and restore
+
+Backups are offline and cover the data directory only. The config file holds the
+owner token and provider credentials, so copy it separately with mode `0600`.
+
+```sh
+oktoso backup --out ./oktoso-backup
+oktoso restore --from ./oktoso-backup --force
+```
+
+- A backup is a directory with `manifest.json` plus a `data/` copy. Every file
+  is hashed; restore refuses a snapshot whose bytes do not match.
+- Included: hub state (`state.json`) with drafts, read markers, automation
+  approvals and allowed shapes; notification subscriptions and VAPID keys;
+  transcripts and the search index; reply feedback.
+- Excluded: `attachments/` (staged uploads), `logs/`, and `*.tmp`.
+- Restore swaps the whole data directory. It refuses to run while the hub
+  answers on its configured host and port, and it refuses a non-empty target
+  unless you pass `--force`. The previous directory is kept as
+  `<dataDir>.before-restore-<timestamp>`.
+- Files are restored owner-only (`0600`); the data directory is `0700`.
+
+What survives a restore:
+
+| Thing | Survives? | Why |
+|---|---|---|
+| Sessions, transcripts, attention | Yes | They live on providers |
+| Automation config and watchers | Yes | Your config file, copied separately |
+| Approvals, allowed shapes, runs | Yes | Hub state |
+| Notification subscriptions | Yes | VAPID keys are in `dataDir` |
+| Paired browsers | Yes, until their token expires | Pairing tokens are stateless and signed with the owner token |
+| Provider health history | No | Rebuilt on the next poll |
+
+If you change the owner token on the new machine, every paired browser and
+notification subscription must be re-created. Set `publicUrl` again if the hub
+moves behind a different TLS origin.
+
 ## Local data
 
 Everything the hub keeps on its own disk, and nothing a provider owns.
