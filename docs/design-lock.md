@@ -22,7 +22,7 @@ Status: **frozen**.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
 - v1.15 scope: the Overview destination and its usage report, the session details Data row for export, and the Settings Local data panel.
-- v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
+- v1.16 scope: the mobile session-scope header, Providers panel head, Inbox toolbar stacking, and row spacing.
 - v1.17 scope: the accessibility semantics and focus pass.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
 - v1.19 scope: session rename across providers and search filter label alignment.
@@ -517,7 +517,7 @@ Routes, type, spacing, color, and focus rings are unchanged.
 ## Accessibility follow-ups (2026-11-16)
 
 No visual, copy, or layout change. This closes the three follow-ups from the
-v1.16 audit.
+v1.17 accessibility audit.
 
 - **Login QR overlay.** The camera overlay is a modal dialog with one focusable
   control. Focus moves to Cancel on open, Tab and Shift+Tab loop inside it,
@@ -548,7 +548,7 @@ radius, or color token.
 - **API.** `PATCH /api/v1/sessions/{ref}` accepts `{ "title": "..." }` and
   returns the updated session. Titles are trimmed, 1–200 characters.
 - **No new tokens.** The field reuses the control border, surface, radius, and
-  the 12px compact value type.
+  the 14px body input role; the displayed name stays 12px.
 - **Search filters.** At 420px and below the `PROVIDER` and `STATUS` labels own
   their line, so wrapped chips align with the label. The chips stay one control
   group; the URL state and choices are unchanged.
@@ -579,4 +579,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).

@@ -350,7 +350,7 @@ have not yet been exercised on G2 hardware.
 | 5 | Home state rows below navigation | Order is Inbox, Unsent, Retry/failure, Recent, Current, Symbols, Settings. |
 | 6 | Chat footer overpacked | One prioritized line: action, line/message, activity, stream, failure, `New below`, then the hint if it fits whole. The 42 px footer cannot fit two lines at G2 type size. |
 | 7 | No visible reply affordance | Footer shows `? Answer` for questions and `Tap reply` otherwise. |
-| 8 | Reply roles not distinct | Model roles sort first; ask is labelled `Ask:` and opposite `Alt:`. |
+| 8 | Reply roles not distinct | Expected answer first, then the other model roles, then canned; ask is labelled `Ask:` and opposite `Alt:`. |
 | 9 | Pairing panel stayed expanded | Phone panel collapses to `Connected · <hub>` with `Pair another`; expires/failures expand it again. |
 | 10 | Inbox count misleading | Header is `ATTENTION <shown>/<total>` whenever items remain hidden. |
 | 11 | Current lost on reload | Last session metadata persists in `oktoso-even-g2-current` and restores the Home `Current` row. |

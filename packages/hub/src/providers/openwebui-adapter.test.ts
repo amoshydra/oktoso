@@ -48,21 +48,38 @@ describe("OpenWebUIAdapter", () => {
     });
   });
 
-  it("renames a chat and keeps the updated title", async () => {
+  it("renames a chat and preserves messages and project", async () => {
     const { adapter } = await createAdapter();
+    const ref = "openwebui:chat_fake_openwebui";
+    const before = await adapter.getSession(ref, AbortSignal.timeout(5_000));
+    const beforeMessages = await adapter.getMessages(
+      ref,
+      { limit: 100, order: "asc" },
+      AbortSignal.timeout(5_000),
+    );
 
     const updated = await adapter.renameSession(
-      "openwebui:chat_fake_openwebui",
+      ref,
       "Renamed chat",
       AbortSignal.timeout(5_000),
     );
     expect(updated.title).toBe("Renamed chat");
 
-    const fetched = await adapter.getSession(
-      "openwebui:chat_fake_openwebui",
+    const afterMessages = await adapter.getMessages(
+      ref,
+      { limit: 100, order: "asc" },
       AbortSignal.timeout(5_000),
     );
-    expect(fetched.title).toBe("Renamed chat");
+    expect(afterMessages.data.map((message) => message.id)).toEqual(
+      beforeMessages.data.map((message) => message.id),
+    );
+    expect(updated.project).toBe(before.project);
+
+    await adapter.renameSession(
+      ref,
+      before.title,
+      AbortSignal.timeout(5_000),
+    );
   });
 
   it("maps Open WebUI folders to project names", async () => {

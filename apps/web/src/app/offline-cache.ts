@@ -88,12 +88,20 @@ export function removeSessionCache(ref: string): void {
   if (!storage) return;
   try {
     const entries = readSessionEntries();
-    if (!(ref in entries)) return;
-    delete entries[ref];
-    storage.setItem(
-      SESSION_KEY,
-      JSON.stringify({ version: 1, entries }),
-    );
+    if (ref in entries) {
+      delete entries[ref];
+      storage.setItem(
+        SESSION_KEY,
+        JSON.stringify({ version: 1, entries }),
+      );
+    }
+    const list = readSessionsCache();
+    if (list?.sessions.some((session) => session.ref === ref)) {
+      writeSessionsCache({
+        sessions: list.sessions.filter((session) => session.ref !== ref),
+        cursor: list.cursor,
+      });
+    }
   } catch {
     // Ignore storage failures.
   }

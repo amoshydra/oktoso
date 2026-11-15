@@ -32,7 +32,7 @@ Screenshot capture and framing are documented in
   `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
   blocking items are shown; the Inbox adds a `More` row when the list is capped.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
-  position, agent activity, stream state, and `? Answer` / `Tap actions`; SSE
+  position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming.
 - **Replies** — canned and model-assisted reply options, numbered choices, voice,
   and a phone keyboard for longer text. The hub classifies the moment first: it

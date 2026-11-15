@@ -360,6 +360,40 @@ export class TranscriptCacheService {
     }
   }
 
+  /** Drop a deleted session from the transcript cache and search index. */
+  async forget(ref: string): Promise<void> {
+    if (!this.enabled) return;
+    await this.remove(ref);
+  }
+
+  /**
+   * Rewrite a cached transcript's title and re-index it. `updatedAt` comes from
+   * the provider so the next read does not treat the cache as stale.
+   */
+  async retitle(ref: string, title: string, updatedAt: number): Promise<void> {
+    if (!this.enabled) return;
+    await this.ensureReady();
+    const transcript = await this.read(ref, { touch: false });
+    if (!transcript) return;
+    const stored = fitToCap({
+      ...transcript,
+      title,
+      updatedAt,
+      storedAt: this.now(),
+    });
+    const bytes = serializedBytes(stored);
+    await writeJsonAtomic(this.pathFor(ref), stored);
+    const entry = this.index.entries[ref];
+    if (entry) {
+      entry.updatedAt = stored.updatedAt;
+      entry.storedAt = stored.storedAt;
+      entry.bytes = bytes;
+      entry.messageCount = stored.messages.length;
+    }
+    await this.persist();
+    await this.search?.update(stored);
+  }
+
   private async remove(ref: string): Promise<void> {
     delete this.index.entries[ref];
     await unlink(this.pathFor(ref)).catch(() => undefined);

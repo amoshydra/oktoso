@@ -329,8 +329,9 @@ export class SessionService {
     } catch (error) {
       if (error instanceof ProviderError && error.code === "not_found") {
         // The provider deleted the session. Do not keep a cached zombie that
-        // still reports its last status forever.
+        // still reports its last status or appears in search forever.
         this.sessions.delete(ref);
+        await this.transcripts?.forget(ref).catch(() => undefined);
         throw error;
       }
       const cached = this.sessions.get(ref);
@@ -352,6 +353,9 @@ export class SessionService {
       operationSignal(this.registry, adapter.id, 15_000, 5_000),
     );
     this.sessions.set(session.ref, session);
+    await this.transcripts
+      ?.retitle(session.ref, session.title, session.updatedAt)
+      .catch(() => undefined);
     return session;
   }
 

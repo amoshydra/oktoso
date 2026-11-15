@@ -19,11 +19,6 @@ export function transcriptionConfigured(
 }
 
 /**
- * Add a local voice action only when the hub has a usable transcription
- * endpoint. The hub does not generate this action because the web client has
- * its own dictation control.
- */
-/**
  * G2 reply pages show three choices. Keep the expected answer first, then the
  * other model suggestions, then the canned utilities. A done fallback answer
  * is canned but still belongs at the top.
@@ -34,6 +29,11 @@ export function orderReplyOptions(options: ReplyOption[]): ReplyOption[] {
   return [...options].sort((left, right) => rank(left) - rank(right));
 }
 
+/**
+ * Add a local voice action only when the hub has a usable transcription
+ * endpoint. The hub does not generate this action because the web client has
+ * its own dictation control.
+ */
 export function withVoiceOption(
   options: ReplyOption[],
   enabled: boolean,
