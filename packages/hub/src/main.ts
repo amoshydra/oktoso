@@ -566,15 +566,21 @@ async function main(): Promise<void> {
     const searchIndex = new SearchIndexService({
       root: join(resolve(config.dataDir), "search"),
       logger,
+      enabled: () => transcripts.enabled,
     });
-    // Load the snapshot now; reconciling against a full cache reads every
-    // transcript, so it runs in the background and leaves boot fast.
+    // Loads the snapshot only. Reconciling reads every transcript, so it runs
+    // in the background and leaves boot fast; search reports ready=false until
+    // it finishes.
     await searchIndex.init([]);
     transcripts.attachSearch(searchIndex);
     if (transcripts.enabled) {
       void transcripts
         .all()
-        .then((cached) => searchIndex.reconcile(cached))
+        .then((cached) => {
+          // The opt-out can land while the read runs.
+          if (!transcripts.enabled) return searchIndex.clear();
+          return searchIndex.reconcile(cached);
+        })
         .catch((error: unknown) => {
           logger.warn("Search index reconcile failed", {
             error: error instanceof Error ? error.message : String(error),
@@ -588,7 +594,11 @@ async function main(): Promise<void> {
       attachments,
       transcripts,
     });
-    const search = new SearchService({ index: searchIndex, sessions });
+    const search = new SearchService({
+      index: searchIndex,
+      sessions,
+      cache: transcripts,
+    });
     attention = new AttentionService(
       registry,
       sessions,
