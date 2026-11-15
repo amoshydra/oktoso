@@ -8,7 +8,7 @@ import type { HubClient } from "@amoshydra/oktoso-client";
 const DEFAULT_SETTINGS: TranscriptCacheSettings = {
   enabled: false,
   ttlDays: 7,
-  maxSessions: 200,
+  maxSessions: 500,
 };
 
 function formatBytes(bytes: number): string {

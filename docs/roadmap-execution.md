@@ -362,11 +362,25 @@ plus an index). The settings panel is the opt-in.
 
 ### C2. Index
 
-- [ ] Choose the index: a pure-JS package or a small hand-rolled inverted
-  index. See open decisions.
-- [ ] Index message text, role, session title, and project.
-- [ ] Update incrementally; rebuild on schema change.
-- [ ] Persist under `dataDir`; bounded memory.
+Status: done. `SearchIndexService` is a hand-rolled inverted index over the
+cached transcripts, in memory as typed arrays with a binary posting snapshot
+under `dataDir/search`.
+
+- [x] Choose the index: hand-rolled. The spike measured a 500-session fixture
+  against MiniSearch and SQLite FTS5 (`/tmp/oktoso-index-spike`): at p95 the
+  hand-rolled index answered in 2.7 ms versus 5.5 ms and 10.3 ms, reloaded in
+  10 ms versus 450 ms and 0.3 ms, and used 5 MB of heap versus 141 MB. FTS5
+  stays the runner-up if phrases and snippets ever justify a database.
+- [x] Index message text, role, session title, and project. Identifiers split on
+  camelCase and snake_case, so `sessionService` matches `session`.
+- [x] Update incrementally; rebuild on schema change. Writes land in a delta
+  layer that compacts into a fresh seal; an unreadable or outdated snapshot
+  rebuilds from the cache.
+- [x] Persist under `dataDir`; bounded memory. `meta.json` plus a binary
+  postings file (14 MB for 500 sessions), one document table of typed arrays,
+  and snippets capped at 200 characters.
+- [x] Snippets survive eviction: each document keeps a bounded excerpt, so a hit
+  stays readable after its transcript leaves the cache.
 
 ### C3. Search route
 
@@ -591,10 +605,11 @@ These need an answer before the task that depends on them.
 3. **Channel scope.** Resolved: Web Push only. No ntfy, Telegram, or webhook
    sender is planned; the settings screen explains the HTTPS/localhost and iOS
    install requirements instead of offering another channel.
-4. **Search index.** Add a pure-JS dependency (for example MiniSearch) or
-   hand-roll a small inverted index? Recommendation: measure with a hand-rolled
-   index on the 500-session fixture; adopt a package only if relevance is poor.
-   Owner: C2.
+4. **Search index.** Resolved: hand-rolled inverted index with a compact
+   posting snapshot. Measured on a 500-session fixture at p95: 2.7 ms
+   hand-rolled, 5.5 ms MiniSearch, 10.3 ms SQLite FTS5, with 5 MB, 141 MB, and
+   3.8 MB of heap respectively. A dependency becomes worth it only if relevance
+   grows past field weighting into stemming, synonyms, or real phrase positions.
 5. **Cache TTL and opt-in.** Default off or default on? Recommendation: default
    off, explicit opt-in, 30-day TTL, visible storage size. Owner: C1.
 6. **Low-risk question shapes.** Recommendation: boolean and single-select with

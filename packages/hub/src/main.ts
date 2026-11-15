@@ -57,6 +57,7 @@ import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { NotificationService } from "./services/notification-service";
 import { TranscriptCacheService } from "./services/transcript-cache";
+import { SearchIndexService } from "./services/search-index";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
@@ -561,6 +562,26 @@ async function main(): Promise<void> {
       logger,
     });
     await transcripts.init();
+    const searchIndex = new SearchIndexService({
+      root: join(resolve(config.dataDir), "search"),
+      logger,
+    });
+    // Load the snapshot now; reconciling against a full cache reads every
+    // transcript, so it runs in the background and leaves boot fast.
+    await searchIndex.init([]);
+    transcripts.attachSearch(searchIndex);
+    if (transcripts.enabled) {
+      void transcripts
+        .all()
+        .then((cached) => searchIndex.reconcile(cached))
+        .catch((error: unknown) => {
+          logger.warn("Search index reconcile failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    } else {
+      await searchIndex.clear();
+    }
     sessions = new SessionService(registry, logger, {
       store,
       attachments,

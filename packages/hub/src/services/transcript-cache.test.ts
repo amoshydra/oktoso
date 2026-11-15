@@ -323,6 +323,50 @@ describe("TranscriptCacheService", () => {
     expect(cached?.truncated).toBe(true);
   });
 
+  it("keeps the search index in step with the cache", async () => {
+    const { service } = await setup({ enabled: true });
+    const updated: string[] = [];
+    const removed: string[] = [];
+    let clears = 0;
+    service.attachSearch({
+      async update(transcript: { ref: string }) {
+        updated.push(transcript.ref);
+      },
+      async remove(ref: string) {
+        removed.push(ref);
+      },
+      async clear() {
+        clears += 1;
+      },
+    } as never);
+
+    await service.record(session(), page([message("m1", 1)]));
+    expect(updated).toEqual(["test:ses_1"]);
+
+    await service.update({ enabled: false });
+    expect(clears).toBe(1);
+    expect(await service.read("test:ses_1")).toBeUndefined();
+  });
+
+  it("tells the search index when a transcript expires", async () => {
+    let now = 1_000;
+    const { service } = await setup({ enabled: true, now: () => now });
+    const removed: string[] = [];
+    service.attachSearch({
+      async update() {},
+      async remove(ref: string) {
+        removed.push(ref);
+      },
+      async clear() {},
+    } as never);
+
+    await service.record(session(), page([message("m1", 1)]));
+    now += 8 * 24 * 60 * 60 * 1_000;
+    await service.read("test:ses_1");
+
+    expect(removed).toEqual(["test:ses_1"]);
+  });
+
   it("ignores a corrupt index instead of failing to start", async () => {
     const store = new MemoryStateStore();
     const directory = await root();

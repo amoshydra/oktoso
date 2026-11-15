@@ -14,6 +14,7 @@ import {
   type TranscriptCacheView,
 } from "@amoshydra/oktoso-contracts";
 import { writeJsonAtomic, type StateStore } from "@amoshydra/oktoso-storage";
+import type { SearchIndexService } from "./search-index";
 import { z } from "zod";
 import type { Logger } from "../lib/logger";
 
@@ -95,12 +96,18 @@ export class TranscriptCacheService {
   private epoch = 0;
   private readonly chains = new Map<string, Promise<void>>();
   private persistTimer?: NodeJS.Timeout;
+  private search?: SearchIndexService;
 
   constructor(options: TranscriptCacheOptions) {
     this.root = options.root;
     this.store = options.store;
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
+  }
+
+  /** Wired by the hub so the index follows the cache. */
+  attachSearch(search: SearchIndexService): void {
+    this.search = search;
   }
 
   async init(): Promise<void> {
@@ -244,6 +251,7 @@ export class TranscriptCacheService {
         .map((name) => unlink(join(this.root, name)).catch(() => undefined)),
     );
     await this.persist();
+    await this.search?.clear();
   }
 
   private async writeEntry(
@@ -298,6 +306,7 @@ export class TranscriptCacheService {
     };
     await this.enforceLimits();
     await this.persist();
+    await this.search?.update(stored);
   }
 
   private async ensureReady(): Promise<void> {
@@ -341,6 +350,7 @@ export class TranscriptCacheService {
     delete this.index.entries[ref];
     await unlink(this.pathFor(ref)).catch(() => undefined);
     await this.persist();
+    await this.search?.remove(ref);
   }
 
   private expired(entry: IndexEntry): boolean {
@@ -352,6 +362,7 @@ export class TranscriptCacheService {
       if (!this.expired(entry)) continue;
       delete this.index.entries[ref];
       await unlink(this.pathFor(ref)).catch(() => undefined);
+      await this.search?.remove(ref);
     }
   }
 
@@ -386,6 +397,7 @@ export class TranscriptCacheService {
       count -= 1;
       total -= entry.bytes;
       await unlink(this.pathFor(ref)).catch(() => undefined);
+      await this.search?.remove(ref);
     }
   }
 

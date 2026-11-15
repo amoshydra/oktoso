@@ -1370,7 +1370,7 @@ describe("hub app", () => {
     expect(initial.status).toBe(200);
     expect(await initial.json()).toMatchObject({
       data: {
-        settings: { enabled: false, ttlDays: 7, maxSessions: 200 },
+        settings: { enabled: false, ttlDays: 7, maxSessions: 500 },
         stats: { sessions: 0, bytes: 0, completeSessions: 0 },
       },
     });
