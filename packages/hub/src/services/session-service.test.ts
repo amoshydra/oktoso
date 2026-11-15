@@ -542,3 +542,106 @@ describe("SessionService search", () => {
   });
 });
 ;
+
+describe("SessionService lineage", () => {
+  function lineageAdapter(sessions: Session[]) {
+    const byRef = new Map(sessions.map((entry) => [entry.ref, entry]));
+    return {
+      id: "test",
+      capabilities: { create: false, send: false, attach: false },
+      async listSessions() {
+        return {
+          data: [...sessions],
+          cursor: { next: null, previous: null },
+        };
+      },
+      async getSession(ref: string) {
+        const found = byRef.get(ref);
+        if (!found) throw new Error("not found");
+        return found;
+      },
+    } as unknown as ProviderAdapter;
+  }
+
+  const base = (ref: string, overrides: Partial<Session> = {}): Session =>
+    makeSession({
+      ref,
+      title: ref,
+      ...overrides,
+    });
+
+  it("resolves ancestors and descendants around the current session", async () => {
+    const root = base("test:a", { createdAt: 1, updatedAt: 1 });
+    const branch = base("test:b", { parentRef: root.ref, createdAt: 2, updatedAt: 2 });
+    const current = base("test:c", { parentRef: branch.ref, createdAt: 3, updatedAt: 3 });
+    const child = base("test:d", { parentRef: current.ref, createdAt: 4, updatedAt: 4 });
+    const sibling = base("test:e", { parentRef: root.ref, createdAt: 5, updatedAt: 5 });
+    const sessions = new SessionService(
+      makeRegistry([lineageAdapter([root, branch, current, child, sibling])]),
+      logger,
+    );
+
+    const lineage = await sessions.lineage(current.ref);
+
+    expect(lineage.root).toBe(root.ref);
+    expect(lineage.current).toBe(current.ref);
+    expect(lineage.truncated).toBe(false);
+    expect(lineage.nodes.map((node) => [node.ref, node.depth, node.current])).toEqual([
+      [root.ref, 0, false],
+      [branch.ref, 1, false],
+      [sibling.ref, 1, false],
+      [current.ref, 2, true],
+      [child.ref, 3, false],
+    ]);
+  });
+
+  it("stops at a cycle instead of looping", async () => {
+    const a = base("test:a", { parentRef: "test:c", createdAt: 1 });
+    const b = base("test:b", { parentRef: a.ref, createdAt: 2 });
+    const c = base("test:c", { parentRef: b.ref, createdAt: 3 });
+    const sessions = new SessionService(
+      makeRegistry([lineageAdapter([a, b, c])]),
+      logger,
+    );
+
+    const lineage = await sessions.lineage(b.ref);
+
+    expect(lineage.nodes.map((node) => node.ref).sort()).toEqual([
+      "test:a",
+      "test:b",
+      "test:c",
+    ]);
+  });
+
+  it("treats a missing ancestor as the root", async () => {
+    const current = base("test:orphan", { parentRef: "test:gone", createdAt: 1 });
+    const sessions = new SessionService(
+      makeRegistry([lineageAdapter([current])]),
+      logger,
+    );
+
+    const lineage = await sessions.lineage(current.ref);
+
+    expect(lineage.root).toBe(current.ref);
+    expect(lineage.nodes).toHaveLength(1);
+  });
+
+  it("caps a huge family and says it is partial", async () => {
+    const root = base("test:root", { createdAt: 0 });
+    const children = Array.from({ length: 120 }, (_, index) =>
+      base(`test:child-${index}`, {
+        parentRef: root.ref,
+        createdAt: index + 1,
+      }),
+    );
+    const sessions = new SessionService(
+      makeRegistry([lineageAdapter([root, ...children])]),
+      logger,
+    );
+
+    const lineage = await sessions.lineage(root.ref);
+
+    expect(lineage.truncated).toBe(true);
+    expect(lineage.nodes).toHaveLength(100);
+  });
+});

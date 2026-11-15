@@ -55,6 +55,7 @@ import type {
   TranscriptCacheView,
   SearchPage,
   SearchQuery,
+  SessionLineage,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -466,6 +467,13 @@ export class HubClient {
     const response = await this.request<{ data: AssistantView }>(
       "/api/v1/settings/assistant",
       { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async lineage(ref: string): Promise<SessionLineage> {
+    const response = await this.request<{ data: SessionLineage }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/lineage`,
     );
     return response.data;
   }

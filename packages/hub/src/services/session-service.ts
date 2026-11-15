@@ -9,6 +9,8 @@ import type {
   SendInput,
   SendResult,
   Session,
+  SessionLineage,
+  SessionLineageNode,
   SessionListQuery,
   SessionPage,
   SessionSelectionInput,
@@ -37,6 +39,25 @@ import {
   waitAtMost,
 } from "./provider-sync";
 
+function toLineageNode(
+  session: Session,
+  depth: number,
+  current: boolean,
+): SessionLineageNode {
+  return {
+    ref: session.ref,
+    title: session.title,
+    ...(session.parentRef ? { parentRef: session.parentRef } : {}),
+    providerID: session.providerID,
+    ...(session.project ? { project: session.project } : {}),
+    status: session.status,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    depth,
+    current,
+  };
+}
+
 export interface SessionServiceOptions {
   ttlMs?: number;
   now?: () => number;
@@ -55,6 +76,8 @@ interface CursorValue {
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
+const MAX_LINEAGE_DEPTH = 25;
+const MAX_LINEAGE_NODES = 100;
 
 export class SessionService {
   private readonly sessions = new Map<string, Session>();
@@ -533,6 +556,102 @@ export class SessionService {
       siblingId,
       operationSignal(this.registry, adapter.id, 15_000, 5_000),
     );
+  }
+
+  /**
+   * Resolves the family of one session: its ancestors up to the root, then
+   * every descendant the hub can see. Cycles and runaway depth are cut, and the
+   * result says when a cap truncated it.
+   */
+  async lineage(ref: string): Promise<SessionLineage> {
+    const current = await this.requireSession(ref);
+    const nodes = new Map<string, SessionLineageNode>();
+    const chain: Session[] = [current];
+    const seen = new Set<string>([current.ref]);
+
+    let cursor = current.parentRef;
+    while (cursor && chain.length < MAX_LINEAGE_DEPTH) {
+      if (seen.has(cursor)) break;
+      seen.add(cursor);
+      const parent = await this.trySession(cursor);
+      if (!parent) break;
+      chain.unshift(parent);
+      cursor = parent.parentRef;
+    }
+
+    for (let depth = 0; depth < chain.length; depth += 1) {
+      const session = chain[depth]!;
+      nodes.set(session.ref, toLineageNode(session, depth, session.ref === current.ref));
+    }
+    const root = chain[0]!;
+
+    // Descendants come from the hub's merged list; a paged provider may hide
+    // some, which is what `truncated` reports.
+    const page = await this.list({ limit: 200 });
+    const known = new Map<string, Session>();
+    for (const session of [...chain, ...page.data]) known.set(session.ref, session);
+    const children = new Map<string, Session[]>();
+    for (const session of known.values()) {
+      if (!session.parentRef) continue;
+      const siblings = children.get(session.parentRef) ?? [];
+      siblings.push(session);
+      children.set(session.parentRef, siblings);
+    }
+    for (const siblings of children.values()) {
+      siblings.sort((left, right) => left.createdAt - right.createdAt);
+    }
+
+    let truncated = page.data.length >= 200;
+    const visited = new Set<string>([root.ref]);
+    const queue: Array<{ session: Session; depth: number }> = [
+      { session: root, depth: 0 },
+    ];
+    while (queue.length > 0) {
+      const entry = queue.shift()!;
+      for (const child of children.get(entry.session.ref) ?? []) {
+        // Walk through ancestors that are already in the tree, so their
+        // children are still reachable, but never revisit a ref.
+        if (visited.has(child.ref)) continue;
+        visited.add(child.ref);
+        if (!nodes.has(child.ref)) {
+          if (nodes.size >= MAX_LINEAGE_NODES) {
+            truncated = true;
+            continue;
+          }
+          nodes.set(
+            child.ref,
+            toLineageNode(child, entry.depth + 1, child.ref === current.ref),
+          );
+        }
+        queue.push({ session: child, depth: entry.depth + 1 });
+      }
+    }
+
+    return {
+      root: root.ref,
+      current: current.ref,
+      nodes: [...nodes.values()].sort(
+        (left, right) =>
+          left.depth - right.depth ||
+          left.createdAt - right.createdAt ||
+          left.ref.localeCompare(right.ref),
+      ),
+      truncated,
+    };
+  }
+
+  private async requireSession(ref: string): Promise<Session> {
+    const cached = this.sessions.get(ref);
+    if (cached) return cached;
+    return this.get(ref);
+  }
+
+  private async trySession(ref: string): Promise<Session | undefined> {
+    try {
+      return await this.requireSession(ref);
+    } catch {
+      return undefined;
+    }
   }
 
   async fork(ref: string, input: ForkInput): Promise<Session> {
