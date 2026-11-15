@@ -1239,7 +1239,36 @@ are unchanged; the fixes are ARIA state, element choice, and focus handling.
 - **Files.** `apps/web/src/app/App.tsx`, `SessionRow.tsx`, `SessionTree.tsx`,
   `settings-notifications.tsx`, `settings-automation.tsx`,
   `tests/e2e/accessibility.e2e.ts`, `docs/ui-ia.md`.
-- **Left for a follow-up.** The login QR overlay is still a `dialog` without a
-  Tab trap, Escape close, or focus return. The provider form and new-session
-  panel are inline panels and do not move focus to their heading on open.
+- **Follow-up.** The login QR overlay still needed a Tab trap, Escape close,
+  and focus return, and the inline provider and new-session panels needed
+  focus-on-open. Both are closed in the pass below.
 
+## Accessibility follow-up: QR overlay, inline panels, and the Inbox live region (2026-11-15)
+
+Semantics and focus only. No visual, copy, or layout change.
+
+- **Login QR overlay.** The overlay is a modal dialog with one focusable
+  control. Focus moves to Cancel when it opens, Tab and Shift+Tab loop inside
+  the overlay, Escape or Cancel closes it, and focus returns to `Scan pairing
+  QR` only while that button is still connected. Closing aborts the scanner,
+  which stops the camera tracks.
+- **Inline panels.** The provider form and the new-session panel are not modal,
+  so they do not trap Tab. On mount they focus their first enabled field (the
+  heading when no field exists); on unmount they return focus to the opener,
+  captured from `document.activeElement` at mount. The focus is queued in a
+  microtask so it lands after the app's push-navigation page-title focus instead
+  of racing it, and a re-render never moves focus.
+- **Inbox live region.** A polite `.sr-only` status region announces a newly
+  arriving blocking attention item or automation approval as `New blocking
+  request: <title>`. The first successful load establishes a silent baseline;
+  later polls and refreshes announce only unseen IDs, and non-blocking items are
+  never announced.
+- **Proof.** `tests/e2e/accessibility.e2e.ts` adds four tests: a stubbed
+  BarcodeDetector/getUserMedia login session covering focus, the Tab loop,
+  Escape, opener restore, and the camera stop; provider-form and new-session
+  focus and restore; and the live region's silence on the first load and for
+  non-blocking arrivals plus its new-blocking announcement. The suite now
+  reserves a free hub port instead of assuming `8801` is available. Typecheck,
+  587 unit tests, and all e2e tests pass.
+- **Files.** `apps/web/src/app/App.tsx`, `tests/e2e/accessibility.e2e.ts`,
+  `docs/ui-ia.md`.
