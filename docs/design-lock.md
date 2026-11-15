@@ -1,11 +1,11 @@
-# Design Lock — v1.13
+# Design Lock — v1.14
 
 Status: **frozen**.
 
-- Version: `design-v1.13`
-- Parent: `design-v1.12`
+- Version: `design-v1.14`
+- Parent: `design-v1.13`
 - Date: 2026-11-15
-- Git tag: `design-v1.13`
+- Git tag: `design-v1.14`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -20,6 +20,7 @@ Status: **frozen**.
 - v1.11 scope: the composer 44px control cluster, the 728px reading column, details value typography, and mobile target fixes.
 - v1.12 scope: the shared icon grid, type-role consistency, provider accents, and one-dot session state.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
+- v1.14 scope: the chat panel and composer aligned to the 640px reading column.
 
 ## What is frozen
 
@@ -436,8 +437,11 @@ unchanged.
   status filter form one wrapping toolbar. They wrap in source order below that.
 - **One chat title.** The transcript no longer repeats the topbar `h1`. The
   context strip carries project, agent, model, and status.
-- **Measure.** The transcript and composer cap at 760px; the reading column caps
-  at 640px, about 88 characters at 14px. This replaces the 728px cap from v1.11.
+- **Measure.** The transcript and composer cap at 672px; with the 16px panel
+  padding and 1px frame, the reading column fills the panel at about 640px, or
+  roughly 88 characters at 14px. This replaces the 728px cap from v1.11. v1.14
+  corrects the first attempt, which kept a 760px panel and left an unused 88px
+  strip inside it.
 - **No new tokens.** The change uses the existing spacing, surface, radius, and
   accent values and no new component.
 
