@@ -2250,9 +2250,10 @@ describe("notification routes", () => {
     expect(response.status).toBe(200);
     expect(body.data.enabled).toBe(false);
     expect(body.data.applicationServerKey).toBe("test-application-server-key");
+    // The channel mirrors the global toggle: it is configured, but not on.
     expect(body.data.channels).toContainEqual({
       kind: "webpush",
-      enabled: true,
+      enabled: false,
       configured: true,
     });
   });

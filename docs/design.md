@@ -561,10 +561,11 @@ Content-Type: application/json
 ```
 
 The hub creates the session first, then sends `text` as the first user message
-through the normal send path, so events, attachments, and cache invalidation
-behave like any other send. If that send fails, the session still exists and the
-error carries `details.ref` so the caller can recover it. Omitting `text` leaves
-an empty session.
+through the session send path. It does not take an idempotency key: the session
+is new, so there is nothing to deduplicate against. If that send fails, the
+session still exists and the error carries `details.ref` so the caller can
+recover it, with the provider's error code preserved. Omitting `text` leaves an
+empty session.
 
 ### Attention
 

@@ -291,7 +291,7 @@ export class NotificationService {
     return [
       {
         kind: "webpush",
-        enabled: true,
+        enabled: this.enabled,
         configured: Boolean(this.applicationServerKey),
       },
     ];

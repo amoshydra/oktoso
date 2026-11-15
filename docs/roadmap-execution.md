@@ -328,9 +328,12 @@ provider form action instead of a chat message, which did not resolve the form.
   escalated form is answered from the approval queue and the `question` tool
   ends `completed`. The answer path uses the provider form action, because a
   plain message leaves the form pending.
-- [x] A form that offers a free-text answer is never auto-answered. OpenCode
-  forms always add that option, so on OpenCode every `answer` watcher escalates;
-  only an approved or always-allowed shape answers.
+- [x] A form that offers a free-text answer is never auto-answered. The hub
+  marks provider questions as free-text capable, so an `answer` watcher
+  escalates on OpenCode; only an approved or always-allowed shape answers.
+- [x] A form no single select field can answer gets an approval with no
+  executable plan: approving records that a human handled it in the provider UI
+  instead of sending a message that would leave the form pending.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
 real session.
