@@ -1,9 +1,9 @@
-# Design Lock — v1.9
+# Design Lock — v1.10
 
 Status: **frozen**.
 
-- Version: `design-v1.9`
-- Parent: `design-v1.8`
+- Version: `design-v1.10`
+- Parent: `design-v1.9`
 - Date: 2026-11-15
 - Git tag: `design-v1.9`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
@@ -16,6 +16,7 @@ Status: **frozen**.
 - v1.7 scope: the composer delivery toggle and the queued-message tray.
 - v1.8 scope: the steer-default send action and the collapsed queue summary.
 - v1.9 scope: the one-row mobile composer, context sheet, and one-line draft.
+- v1.10 scope: transcript edge masks, the floating jump, and the in-transcript background row.
 
 ## What is frozen
 
@@ -316,6 +317,35 @@ the v1.8 mobile bar.
   `Attach`, `Dictate`, `Queue`, and two-line textarea are unchanged.
 - **No new tokens.** The chip uses the pill radius; the sheet uses the existing
   surface, border, 8px controls, 10px labels, and 16px sheet radius.
+
+## Transcript scroll affordances (2026-11-15)
+
+The scroll affordances moved out of the composer so scrolling and live
+background work never change the composer's position.
+
+- **Frame and scroller.** A `.chat-transcript` wrapper owns the panel frame:
+  border, radius, background, and shadow. `.chat-panel` remains the scroll
+  container and owns the mask, padding, and focus. The message DOM is unchanged;
+  the wrapper exists to keep the frame crisp and anchor the floating jump.
+- **Edge mask.** `.chat-panel` uses a 24px linear `mask-image` at an overflowing
+  edge and 0 at the true top or bottom. Registered `<length>` properties ease
+  the fade length over 180ms; scroll updates are rAF-coalesced. The frame and
+  background are not masked.
+- **Floating jump.** A 32px (44px on mobile) pill is absolutely positioned at
+  the transcript's bottom-right, 16px/12px from the right and 12px from the
+  bottom. Hidden uses opacity 0, 8px translate, no pointer events, tabIndex -1,
+  and `aria-hidden`; visible restores all four. It hides at the true 2px bottom,
+  not the 80px autoscroll threshold, and clicking it lets the scroll listener
+  hide it at the end.
+- **Background row.** Live shells and subagents render as one quiet pill at the
+  end of the transcript, after messages and attention cards. It scrolls with
+  the transcript, opens Details, and is content rather than composer chrome.
+  The composer status row is removed. The queue tray remains in flow because it
+  is user content.
+- **Reduced motion.** The mask and jump transitions are removed and
+  `jumpToLatest` scrolls instantly.
+- **No new tokens.** The change uses 24px, 8px, 12px, 16px, the existing pill
+  and control radii, and the existing surfaces and shadows.
 
 ## Change policy
 

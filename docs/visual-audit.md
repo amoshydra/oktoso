@@ -961,3 +961,35 @@ instead of raw fences, without changing the transcript hierarchy.
 - Remembered shapes use the same automation list row: selected label as the
   name, watcher/kind/uses/options as the meta line, Revoke as the only action.
 
+
+## Transcript scroll affordances (2026-11-15)
+
+The jump lived in a composer status row gated by `!atBottom`, so crossing the
+80px threshold mounted a ~52px row and moved the composer. `jumpToLatest` also
+set `atBottom(true)` before the smooth scroll, removing the row mid-animation.
+The transcript hard-cut at its top and bottom with no overflow cue.
+
+- **Frame split.** `.chat-transcript` now owns the border, radius, background,
+  and shadow; `.chat-panel` is the scroll container and owns the mask. Masking
+  the panel directly would also fade its 1px frame and rounded corners. The
+  message DOM is unchanged; the wrapper is the minimum needed to keep the frame
+  and anchor an absolutely positioned jump.
+- **Mask.** A 24px `mask-image` gradient at an overflowing edge, 0 at the true
+  ends. The length uses registered `<length>` properties so it eases over
+  180ms. Scroll and resize updates are rAF-coalesced; the mask never changes
+  layout. The panel frame stays crisp.
+- **Floating jump.** 32px desktop / 44px mobile, bottom-right, 16px/12px inset.
+  Opacity plus an 8px translate, with pointer events, tabIndex, and
+  `aria-hidden` paired. It hides at a 2px true-bottom check, not the 80px
+  autoscroll threshold, and remains visible while the smooth scroll finishes.
+- **Background row.** Live shells and subagents are content: one quiet pill at
+  the end of the transcript, after messages and attention cards. It opens
+  Details, scrolls with the transcript, and removes the composer status row
+  entirely. The queue tray stays in flow because it is user content.
+- **Proof.** On the live session the composer top stayed at 804px at top,
+  middle, and bottom; the jump went from opacity 1 to 0; the mask went from
+  24/24 to 24/0 to 0/24. On the fake session with a live background shell, the
+  `1 shell running` row was inside `.chat-panel`, and the composer did not move.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `docs/prototypes/scroll-fade.html`, `docs/ui-ia.md`,
+  `docs/interaction-contract.md`.
