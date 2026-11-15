@@ -1,8 +1,9 @@
 # Oktoso — naming and roadmap
 
-Status: Phase 0, Phase 1, and Phase 2 complete; `v0.1.28` is published. This
-revision is the 2026-11-14 project audit and re-plan. The phase-level work
-breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
+Status: Phase 0, Phase 1, and Phase 2 complete; Phase 3 complete; Phase 4
+complete except the token budget and real-provider validation. `v0.2.0` is
+published. This revision is the 2026-11-14 project audit and re-plan. The
+phase-level work breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
 
 ## Name
 

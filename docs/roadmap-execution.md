@@ -248,13 +248,14 @@ the branch merges; nothing is published from the worktree.
 
 ## Phase 4 — Supervisor
 
-Target: 4–6 weeks. Release: `v0.3.0`.
+Target: 4–6 weeks. Shipped in `v0.2.0` together with Phase 3.
 
-Status: in progress. Attention, session-idle/error, and schedule watchers are
-implemented, with the low-risk answer policy, dry-run, leases, budgets, quiet
-hours, notify/retry/escalate actions, approvals in the Inbox and Settings,
-always-allow shapes, runs, pause, MCP tools, and the CLI. Remaining: token/day
-budget, start-from-template, G2 approvals, and an in-flight abort.
+Status: complete except the token budget and real-provider validation. Attention,
+session-idle/error, and schedule watchers are implemented, with the low-risk
+answer policy, dry-run, leases, budgets, quiet hours,
+notify/retry/escalate/start actions, approvals in the Inbox and Settings,
+always-allow shapes, runs, pause with an in-flight abort, MCP tools, and the
+CLI. Remaining: token/day budget, and approval execution on a real provider.
 
 ### B1. Contracts
 
@@ -336,7 +337,7 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
 - [x] Quiet hours escalates instead of answering.
 - [x] Session idle/error and schedule triggers fire once.
 - [x] Retry-once and retry-action tests.
-- [ ] Kill switch stops an action mid-flight.
+- [x] Kill switch stops an action mid-flight.
 - [ ] Approval execution on a real provider.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
@@ -344,7 +345,7 @@ real session.
 
 ## Phase 5 — Recall and lineage
 
-Target: 3–4 weeks. Release: `v0.4.0`.
+Target: 3–4 weeks. Release: `v0.3.0`.
 
 ### C1. Transcript cache
 
@@ -401,7 +402,7 @@ fixture; export round-trips; deleting local state leaves the provider untouched.
 
 ## Phase 6 — Provider platform
 
-Target: 6–8 weeks. Release: `v0.5.0`.
+Target: 6–8 weeks. Release: `v0.4.0`.
 
 ### D1. Hermes adapter
 
@@ -438,7 +439,7 @@ passes the suite with no hub changes.
 
 ## Phase 7 — MCP southbound
 
-Target: 6–8 weeks. Release: `v0.6.0`.
+Target: 6–8 weeks. Release: `v0.5.0`.
 
 ### E1. Client registry
 
@@ -471,7 +472,7 @@ Target: 6–8 weeks. Release: `v0.6.0`.
 
 ## Phase 8 — Hardening and observability
 
-Target: 2–3 weeks. Release: `v0.7.0`.
+Target: 2–3 weeks. Release: `v0.6.0`.
 
 ### F1. Metrics
 
@@ -535,12 +536,11 @@ Schedule one bet at a time, each with its own acceptance before it starts.
 |---|---|---|
 | `0.1.29` | Phase 3, slice 1: contracts, notification core, Web Push | e2e push delivery |
 | `0.1.30` | Phase 3, slice 2: channels, quiet hours, settings | routing/quiet-hours tests |
-| `0.2.0` | Phase 3 complete: PWA, offline, deep links | phase acceptance |
-| `0.3.0` | Phase 4: supervisor | safety matrix |
-| `0.4.0` | Phase 5: recall and lineage | search/export acceptance |
-| `0.5.0` | Phase 6: Provider platform and Hermes | conformance suite |
-| `0.6.0` | Phase 7: MCP southbound | policy acceptance |
-| `0.7.0` | Phase 8: hardening | acceptance runs |
+| `0.2.0` | Phases 3 and 4: attention, PWA/offline, supervisor | phase acceptance |
+| `0.3.0` | Phase 5: recall and lineage | search/export acceptance |
+| `0.4.0` | Phase 6: Provider platform and Hermes | conformance suite |
+| `0.5.0` | Phase 7: MCP southbound | policy acceptance |
+| `0.6.0` | Phase 8: hardening | acceptance runs |
 
 Patch releases inside a phase are expected. A phase does not merge to `main`
 until its acceptance passes.
