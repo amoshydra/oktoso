@@ -4597,6 +4597,67 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   text-transform: uppercase;
 }
 
+.chat-details-count {
+  margin-left: var(--space-2);
+  color: var(--faint);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.lineage-tree {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lineage-node {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  margin-left: calc(var(--depth) * 12px);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lineage-node:hover {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.lineage-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.lineage-node.current {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+  cursor: default;
+}
+
+.lineage-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineage-meta {
+  color: var(--faint);
+  font-size: var(--text-2xs);
+}
+
 .chat-details .detail {
   padding-top: var(--space-2);
 }

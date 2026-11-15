@@ -415,10 +415,17 @@ Status: done.
 
 ### C5. Lineage
 
-- [ ] `GET /api/v1/sessions/:ref/lineage` resolving `parentRef` chains with
-  cycle protection.
-- [ ] Show forks, branches, and subagent children.
-- [ ] Open any node from the tree.
+Status: done.
+
+- [x] `GET /api/v1/sessions/:ref/lineage` resolving `parentRef` chains with
+  cycle protection. The walk stops at 25 ancestors, 100 nodes, a repeated ref,
+  or an ancestor the provider no longer knows; `truncated` says when a cap cut
+  it.
+- [x] Show forks, branches, and subagent children. The details panel lists the
+  whole family, indented by depth from the root, with the current session
+  marked. A single-session family renders no section.
+- [x] Open any node from the tree. Each row is a button; the current row is not
+  a link.
 
 ### C6. Cost view
 

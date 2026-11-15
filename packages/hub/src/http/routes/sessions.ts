@@ -56,6 +56,10 @@ export function registerSessionRoutes(
     return c.json(await replies.list(ref, mode.data));
   });
 
+  app.get("/api/v1/sessions/:ref/lineage", async (c) =>
+    c.json({ data: await sessions.lineage(c.req.param("ref")) }),
+  );
+
   app.get("/api/v1/sessions/:ref/branches", async (c) => {
     const ref = c.req.param("ref");
     return c.json({ data: await sessions.listBranches(ref) });

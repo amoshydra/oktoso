@@ -402,6 +402,7 @@ GET    /api/v1/attachments?provider=&url=
 GET    /api/v1/sessions/:ref/files?path=
 GET    /api/v1/events?after=
 GET    /api/v1/search?q=&scope=&provider=&status=&cursor=
+GET    /api/v1/sessions/:ref/lineage
 ```
 
 `GET /api/v1/sessions/:ref/files` reads a file inside the session's working

@@ -815,6 +815,52 @@ describe("transcript cache", () => {
   });
 });
 
+describe("session lineage", () => {
+  it("shows a fork under its parent and opens the parent", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.getByRole("button", { name: "Details", exact: true }).click();
+    await page!.locator(".chat-details").waitFor();
+    await page!.getByRole("button", { name: "Fork session" }).click();
+
+    // Forking opens the new session and closes the sheet. The toggle state can
+    // settle either way, so drive it from the panel and retry once.
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
+    await page!.waitForTimeout(500);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (await page!.locator(".chat-details").isVisible().catch(() => false)) break;
+      await page!
+        .getByRole("button", { name: "Details", exact: true })
+        .click();
+      await page!.waitForTimeout(300);
+    }
+    await page!.locator(".chat-details").waitFor({ timeout: 5_000 });
+
+    // Wait for the panel to switch to the fork before reading the tree, or the
+    // stale render for the parent is what gets clicked.
+    await page!
+      .locator(
+        '.lineage-node[aria-current="true"][title^="desktop-opencode:ses_fake_fork_"]',
+      )
+      .waitFor({ timeout: 10_000 });
+
+    const nodes = page!.locator(".lineage-node");
+    expect(await nodes.count()).toBeGreaterThanOrEqual(2);
+    expect(await page!.locator('.lineage-node[aria-current="true"]').count()).toBe(1);
+
+    await page!
+      .locator('.lineage-node[title="desktop-opencode:ses_auth"]')
+      .click();
+    await page!.waitForURL(/ses_auth(\?|$)/, { timeout: 10_000 });
+    await page!.waitForFunction(
+      () =>
+        document.querySelector(".topbar-title")?.textContent ===
+        "Fix auth race in gateway",
+      undefined,
+      { timeout: 10_000 },
+    );
+  });
+});
+
 describe("message search", () => {
   it("explains when the transcript cache is off", async () => {
     // An earlier settings test leaves the cache on, so turn it off explicitly.

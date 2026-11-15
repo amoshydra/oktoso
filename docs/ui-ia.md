@@ -286,6 +286,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It is the only title in the view.
 - The transcript opens with a quiet context strip: project, agent, model, and the status chip. It has no document title and no second sticky header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
+- Details gains a **Lineage** section when the session belongs to a family: one indented row per session from the root down, the current row marked with the accent inset. Each row is a button that opens that session; the header says how many sessions the tree holds and marks it partial when a cap cut it. A lone session shows no section at all.
 - The topbar theme toggle is a 32px icon control with an outcome label (`Switch to light theme` / `Switch to dark theme`). In chat it is hidden at 420px and below so the title keeps its width; the theme control stays available on the other views.
 - Project, agent, model, and the status chip stay together in the transcript context strip. The provider lives in the topbar subline.
 

@@ -3107,6 +3107,61 @@ components:
         - cursor
         - ready
         - enabled
+    SessionLineage:
+      type: object
+      properties:
+        root:
+          type: string
+        current:
+          type: string
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              ref:
+                type: string
+              title:
+                type: string
+              parentRef:
+                type: string
+              providerID:
+                type: string
+                minLength: 1
+              project:
+                type: string
+              status:
+                type: string
+                enum:
+                  - running
+                  - idle
+                  - error
+                  - offline
+              createdAt:
+                type: integer
+              updatedAt:
+                type: integer
+              depth:
+                type: integer
+                minimum: 0
+              current:
+                type: boolean
+            required:
+              - ref
+              - title
+              - providerID
+              - status
+              - createdAt
+              - updatedAt
+              - depth
+              - current
+        truncated:
+          type: boolean
+      required:
+        - root
+        - current
+        - nodes
+        - truncated
     NotificationChannelKind:
       type: string
       enum:
@@ -5257,6 +5312,36 @@ paths:
                 $ref: "#/components/schemas/Error"
         "502":
           description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/lineage:
+    get:
+      tags:
+        - sessions
+      summary: Resolve a session's family tree
+      description: Walks parentRef to the root, then collects descendants. Cycles, depth, node count, and unknown ancestors all stop the walk; `truncated` reports a cap.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Session lineage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionLineage"
+                required:
+                  - data
+        "404":
+          description: Session not found
           content:
             application/json:
               schema:
