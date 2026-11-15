@@ -1,11 +1,11 @@
-# Design Lock — v1.14
+# Design Lock — v1.15
 
 Status: **frozen**.
 
-- Version: `design-v1.14`
-- Parent: `design-v1.13`
-- Date: 2026-11-15
-- Git tag: `design-v1.14`
+- Version: `design-v1.15`
+- Parent: `design-v1.14`
+- Date: 2026-11-16
+- Git tag: `design-v1.15`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -21,6 +21,7 @@ Status: **frozen**.
 - v1.12 scope: the shared icon grid, type-role consistency, provider accents, and one-dot session state.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
+- v1.15 scope: the Overview destination and its usage report; the session details Data row for export.
 
 ## What is frozen
 
@@ -445,6 +446,30 @@ unchanged.
 - **No new tokens.** The change uses the existing spacing, surface, radius, and
   accent values and no new component.
 
+## Overview and usage (2026-11-16)
+
+- The default destination is renamed **Overview** in the rail, the mobile bottom
+  bar, the page title, and the document title. The route stays `/` and the view
+  id stays `foundation`, so every deep link, e2e selector, and bookmark holds.
+  This is a label change, not a new destination: the rail still has six items
+  and the mobile bar still has five.
+- The usage report is the first section: panel head, a `Group by` chip row
+  (Provider, Project, Model, Day), and a table of group, sessions, tokens, cost.
+  At 1100px and above it is a table; below, rows stack as label and count, then
+  `4.2M tokens · $12.40`.
+- Report figures are sans with tabular numerals and right alignment. Times,
+  costs, and token counts never switch to the mono family. An unreported figure
+  is an em dash, never `0` or `$0.00`, and a note states how many sessions did
+  not report each figure. The last row reads `Reported total`.
+- The phase-0 hero is removed. It repeated roadmap copy under a second 20px
+  heading while `--text-xl` belongs to the chat document title, and its claim
+  about upcoming work is no longer true. Runtime cards, the provider panel, the
+  event stream, and diagnostics remain, after the report.
+- No new tokens, radii, or type roles. The panel reuses the panel head, chip,
+  and table grammar already in the frozen system.
+- The prototype gains the Overview view, the usage panel, and the renamed nav
+  labels in the same revision.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -471,4 +496,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).

@@ -429,10 +429,12 @@ Status: done.
 
 ### C6. Cost view
 
-- [ ] Compute per-provider, project, model, and day from the sessions the client
-  already fetches.
-- [ ] No new aggregation endpoint.
-- [ ] Show tokens and cost with tabular figures.
+- [ ] Compute per-provider, project, model, and day from the existing session
+  list pages, walked client-side; no aggregation endpoint.
+- [ ] Place it as the first section of the Overview destination, with no new
+  route or nav item.
+- [ ] Show tokens and cost with tabular figures; an unreported figure is an em
+  dash and the note names how many sessions reported nothing.
 
 ### C7. Retention and export
 

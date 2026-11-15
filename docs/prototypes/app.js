@@ -10,6 +10,7 @@ const day = 24 * hour;
 
 const icons = {
   inbox: '<path d="M4 5h16v14H4z"/><path d="M4 13h4l2 2h4l2-2h4"/>',
+  activity: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
   sessions: '<path d="M5 5h14v10H9l-4 4V5z"/>',
   search: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/>',
   providers: '<path d="M4 7h16M7 4v6M4 17h16M17 14v6"/>',
@@ -363,7 +364,7 @@ let attention = [
 ];
 
 const state = {
-  view: 'inbox',
+  view: 'overview',
   selectedRef: 'desktop-opencode:ses_auth',
   providerFilter: 'all',
   sessionQuery: '',
@@ -434,6 +435,7 @@ function groupSessions(list) {
 
 function renderRail() {
   const items = [
+    ['overview', 'Overview', 'activity'],
     ['inbox', 'Inbox', 'inbox'],
     ['sessions', 'Sessions', 'sessions'],
     ['search', 'Search', 'search'],
@@ -468,6 +470,7 @@ function renderRail() {
 
 function renderBottomNav() {
   const items = [
+    ['overview', 'Overview', 'activity'],
     ['inbox', 'Inbox', 'inbox'],
     ['sessions', 'Sessions', 'sessions'],
     ['search', 'Search', 'search'],
@@ -571,6 +574,101 @@ function topbar(title, sub, actions = '', back = false) {
       </div>
       <div class="topbar-spacer"></div>
       <div class="topbar-actions">${actions}</div>
+    </div>
+  `;
+}
+
+function parseTokens(value) {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^([0-9.]+)([km])?$/i);
+  if (!match) return null;
+  const base = Number(match[1]);
+  const scale = match[2]?.toLowerCase() === 'm' ? 1_000_000 : match[2]?.toLowerCase() === 'k' ? 1_000 : 1;
+  return Math.round(base * scale);
+}
+
+function compact(value) {
+  if (value === null) return '—';
+  if (value < 1000) return String(Math.round(value));
+  if (value < 999_500) return `${(value / 1000).toFixed(value < 9995 ? 1 : 0)}k`;
+  return `${(value / 1_000_000).toFixed(1)}M`;
+}
+
+function renderOverview() {
+  const rows = new Map();
+  for (const session of sessions) {
+    const key = providerLabel(providerByID(session.providerID));
+    const row = rows.get(key) ?? { label: key, sessions: 0, tokens: 0, cost: 0, tokensSeen: 0, costSeen: 0 };
+    row.sessions += 1;
+    const tokens = parseTokens(session.tokens);
+    if (tokens !== null) {
+      row.tokens += tokens;
+      row.tokensSeen += 1;
+    }
+    if (typeof session.cost === 'number') {
+      row.cost += session.cost;
+      row.costSeen += 1;
+    }
+    rows.set(key, row);
+  }
+  const list = [...rows.values()].sort((left, right) => right.cost - left.cost || right.sessions - left.sessions);
+  const total = list.reduce(
+    (acc, row) => ({
+      sessions: acc.sessions + row.sessions,
+      tokens: acc.tokens + row.tokens,
+      cost: acc.cost + row.cost,
+      tokensSeen: acc.tokensSeen + row.tokensSeen,
+      costSeen: acc.costSeen + row.costSeen,
+    }),
+    { sessions: 0, tokens: 0, cost: 0, tokensSeen: 0, costSeen: 0 },
+  );
+  const missingCost = total.sessions - total.costSeen;
+
+  return `
+    ${topbar('Overview', 'Usage and hub runtime')}
+    <div class="content">
+      <div class="page wide">
+        <section class="usage-panel">
+          <div class="usage-head">
+            <div>
+              <h2>Usage</h2>
+              <p>Tokens and cost the providers reported for ${total.sessions} session${total.sessions === 1 ? '' : 's'}. Unreported figures stay blank.</p>
+            </div>
+          </div>
+          <div class="usage-filter">
+            <span class="filter-label">Group by</span>
+            <button class="chip active" type="button" aria-pressed="true">Provider</button>
+            <button class="chip" type="button" aria-pressed="false">Project</button>
+            <button class="chip" type="button" aria-pressed="false">Model</button>
+            <button class="chip" type="button" aria-pressed="false">Day</button>
+          </div>
+          <table class="usage-table">
+            <thead>
+              <tr><th>Provider</th><th class="num">Sessions</th><th class="num">Tokens</th><th class="num">Cost</th></tr>
+            </thead>
+            <tbody>
+              ${list
+                .map(
+                  (row) => `<tr>
+                    <td>${esc(row.label)}</td>
+                    <td class="num">${row.sessions}</td>
+                    <td class="num">${row.tokensSeen ? compact(row.tokens) : '—'}</td>
+                    <td class="num">${row.costSeen ? `$${row.cost.toFixed(2)}` : '—'}</td>
+                  </tr>`,
+                )
+                .join('')}
+              <tr class="usage-total">
+                <td>Reported total</td>
+                <td class="num">${total.sessions}</td>
+                <td class="num">${total.tokensSeen ? compact(total.tokens) : '—'}</td>
+                <td class="num">${total.costSeen ? `$${total.cost.toFixed(2)}` : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="usage-note">${missingCost > 0 ? `${missingCost} of ${total.sessions} sessions did not report cost. ` : ''}Sessions are read from providers, not stored here.</p>
+        </section>
+      </div>
     </div>
   `;
 }
@@ -1032,6 +1130,7 @@ function renderSearchResults(results, query) {
 }
 
 function renderMain() {
+  if (state.view === 'overview') return renderOverview();
   if (state.view === 'inbox') return renderInbox();
   if (state.view === 'sessions') return renderSessions();
   if (state.view === 'chat') return renderChat();
@@ -1424,6 +1523,9 @@ modalBackdrop.addEventListener('click', (event) => {
   if (event.target === modalBackdrop) closeModal();
 });
 
+if (captureMode === 'inbox') {
+  state.view = 'inbox';
+}
 if (captureMode === 'session') {
   state.view = 'chat';
   state.selectedRef = 'desktop-opencode:ses_auth';
