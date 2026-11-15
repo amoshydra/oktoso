@@ -1,6 +1,6 @@
 # Oktoso UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15, and the reading-column alignment in `design-v1.14`. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
@@ -292,7 +292,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 ### Transcript
 
 - The transcript is its own scroll region inside the chat shell. The composer stays pinned below it; the page itself does not scroll.
-- The transcript panel and composer are capped at 760px. The reading column is capped at 640px inside it, about 88 characters of Inter prose at 14px. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
+- The transcript panel and composer are capped at 672px. With the 16px transcript padding and 1px frame, the reading column fills the panel at about 640px, roughly 88 characters of Inter prose at 14px. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
 - A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and is removed from the tab order and hidden at the bottom.
