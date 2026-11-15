@@ -3,6 +3,7 @@ import type { AssistantView, ReplyOption } from "@amoshydra/oktoso-contracts";
 import {
   GLASSES_PCM,
   pcmChunksToWav,
+  orderReplyOptions,
   pcmToWav,
   transcriptionConfigured,
   withVoiceOption,
@@ -60,6 +61,22 @@ describe("G2 voice helpers", () => {
     ]);
 
     expect([...wav.slice(44)]).toEqual([1, 0, 2, 0, 3, 0]);
+  });
+
+  it("puts the expected answer first on the three-choice screen", () => {
+    const ordered = orderReplyOptions([
+      { id: "continue", label: "Continue", text: "Continue.", source: "canned", action: "send" },
+      { id: "ask", label: "Ask: Which one?", text: "Which one?", source: "model", action: "send", role: "ask" },
+      { id: "ack", label: "Thanks, looks good.", text: "Thanks, looks good.", source: "canned", action: "send", role: "answer" },
+      { id: "next", label: "Next: Show the diff.", text: "Show the diff.", source: "model", action: "send", role: "next" },
+    ]);
+
+    expect(ordered.map((option) => option.id)).toEqual([
+      "ack",
+      "ask",
+      "next",
+      "continue",
+    ]);
   });
 
   it("hides voice when transcription is not configured", () => {
