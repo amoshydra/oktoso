@@ -428,6 +428,7 @@ export function NotificationSettingsPanel(props: { client: HubClient }) {
                     className="btn small"
                     type="button"
                     disabled={busy === item.id}
+                    aria-label={`Revoke ${item.label ?? item.deviceID}`}
                     onClick={() => void revoke(item.id, local)}
                   >
                     {busy === item.id ? "Revoking…" : "Revoke"}

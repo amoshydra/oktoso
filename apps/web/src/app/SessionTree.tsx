@@ -74,6 +74,7 @@ function SessionTreeBranch(props: {
           session={session}
           provider={props.labels.provider(session.providerID)}
           time={props.labels.time(node.latestAt)}
+          timeAt={node.latestAt}
           ariaLabel={props.labels.aria(session, props.parentTitle)}
           active={props.activeRef === session.ref}
           attention={props.labels.attention?.(session)}

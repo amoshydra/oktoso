@@ -214,6 +214,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                     className="btn small"
                     type="button"
                     disabled={busy === `watcher:${watcher.id}`}
+                    aria-label={`${paused ? "Resume" : "Pause"} ${watcher.name ?? watcher.id}`}
                     onClick={() => void toggleWatcher(watcher.id, paused)}
                   >
                     {busy === `watcher:${watcher.id}`
@@ -258,6 +259,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                     className="btn primary small"
                     type="button"
                     disabled={busy === `approval:${approval.id}`}
+                    aria-label={`Approve ${approval.title}`}
                     onClick={() => void decide(approval, "approve")}
                   >
                     Approve
@@ -269,6 +271,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                           className="btn primary small"
                           type="button"
                           disabled={busy === `approval:${approval.id}`}
+                          aria-label={`Confirm always allow for ${approval.title}`}
                           onClick={() => void decide(approval, "always")}
                         >
                           Confirm always
@@ -286,6 +289,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                         className="btn small"
                         type="button"
                         disabled={busy === `approval:${approval.id}`}
+                        aria-label={`Always allow ${approval.title}`}
                         onClick={() => setConfirmShape(approval.id)}
                       >
                         Always allow
@@ -296,6 +300,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                     className="btn small"
                     type="button"
                     disabled={busy === `approval:${approval.id}`}
+                    aria-label={`Deny ${approval.title}`}
                     onClick={() => void decide(approval, "deny")}
                   >
                     Deny
@@ -338,6 +343,7 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                   className="btn small"
                   type="button"
                   disabled={busy === `shape:${shape.id}`}
+                  aria-label={`Revoke ${shape.label}`}
                   onClick={() => void revokeShape(shape.id)}
                 >
                   {busy === `shape:${shape.id}` ? "Revoking…" : "Revoke"}

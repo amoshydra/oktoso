@@ -221,6 +221,7 @@ The inbox is the default screen when something needs attention. It groups items 
 
 - Blocking items always come first.
 - At 420px and below the filter chips take the full toolbar width and wrap; Refresh moves to its own right-aligned row under them. Above that, the tabs and Refresh share one row.
+- Filter chips expose `aria-pressed` for the active filter. Their accessible name includes the count (`Approvals, 2 items`), so the count is never a visual-only cue.
 - At 1200px and above, cards form a two-column grid inside each group. Each card keeps its own height (`align-items: start`); a blocking card is no wider than any other card and is distinguished by its amber edge, not by spanning the grid.
 - Each card shows type, provider, session title, age, a one-line summary, and actions.
 - A card opens the session when the user clicks the title or the Open action.
@@ -260,7 +261,7 @@ The sessions view is the full browsing surface.
 - Provider badge with the provider name.
 - Project or directory basename.
 - Agent and model when available.
-- Relative update time.
+- Relative update time, rendered as a `<time>` element whose `dateTime` carries the absolute update time.
 - Unread is title weight, never another dot.
 - Attention badge when the session is blocked.
 - A subagent row is indented under its parent, carries a 10px `SUBAGENT` tag, and keeps the same dot, title, provider, project, time, and status grammar. A parent row shows `N subagents` in its meta, and `N running` when any child is live.
@@ -314,10 +315,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The transcript panel and composer are capped at 672px. With the 16px transcript padding and 1px frame, the reading column fills the panel at about 640px, roughly 88 characters of Inter prose at 14px. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
-- A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and is removed from the tab order and hidden at the bottom.
+- A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and at the bottom it is removed from the tab order, made inert, and hidden from assistive technology.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
-- Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Markdown headings are capped at 16px for `h1`/`h2` and 14px for `h3`/`h4`, so they never compete with the page title. Links open safely in a new tab.
+- Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Markdown headings shift down one level (`#` renders as `h2`) so a message or preview never competes with the page title and the view keeps exactly one `h1`. The heading rules cap at 16px for `h1`/`h2` and 14px for `h3`/`h4`. Links open safely in a new tab.
 - Relative Markdown links and image sources resolve against the provider base URL. For OpenCode, project-relative file references resolve through the provider filesystem read endpoint with the session directory, so `docs/spec.md` and `docs/concepts/plot.png` open the actual project files rather than a provider-root URL. Absolute links stay absolute; `mailto:` and `tel:` links stay local; unsupported schemes and unsafe data images are removed.
 - Provider-hosted images and files load through the hub attachment proxy, which uses the provider credentials and enforces same-origin, size, redirect, and content-type rules. The browser receives a blob URL for private resources, so prompts and provider tokens stay out of image URLs. File links use the same proxy and download the attachment.
 - File parts use the same URL resolution. Image attachments render inline with a caption; other files keep their name, MIME type, and Open action.
@@ -399,7 +400,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Copy reference.
 - Interrupt and mark read.
 - Provider-specific actions.
-- The overlay traps Tab within the panel, closes on Escape or the scrim, and returns focus to the details toggle.
+- The overlay traps Tab within the panel, re-enters the panel if focus escapes it, closes on Escape or the scrim, and returns focus to the details toggle. Below 1320px it exposes `role="dialog"` and `aria-modal="true"`; above 1320px it is a labelled column.
 
 ## 9. New session
 
@@ -732,7 +733,10 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 
 - All actions are reachable by keyboard.
 - Focus rings use the accent color and remain visible.
+- Modal sheets and dialogs trap Tab, close on Escape, and return focus to the control that opened them. Focus never rests behind a scrim.
+- Icon-only controls carry an explicit accessible name. Toggle and filter chips expose `aria-pressed`; navigation destinations and the active session row expose `aria-current`.
 - Status is not conveyed by color alone. Pair dots with labels.
+- Times use `<time>` elements. Relative labels keep the absolute update time in `dateTime`.
 - Approval and deny actions have distinct labels and confirmation where needed.
 - Message text uses semantic headings and lists.
 - Respect `prefers-reduced-motion`.
