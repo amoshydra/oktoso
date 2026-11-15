@@ -34,6 +34,7 @@ import {
   webUrl,
 } from "./cli/urls";
 import { createLogger, type LogLevel, type LogRecord } from "./lib/logger";
+import { registerSecrets } from "./lib/redact";
 import { ensureConfig } from "./config/bootstrap";
 import { loadConfig, loadHubTarget, loadPairingConfig } from "./config/load";
 import { defaultConfigPath, resolveConfigPath } from "./config/paths";
@@ -533,6 +534,20 @@ async function main(): Promise<void> {
     }
 
     const config = await loadConfig(options.configPath);
+    // Register every secret once so the log redactor can mask it wherever it
+    // appears, including inside provider error messages.
+    registerSecrets([
+      config.token,
+      config.notifications.vapid.privateKey,
+      ...config.mcp.tokens.map((entry) => entry.token),
+      ...config.providers.flatMap((provider) =>
+        provider.auth?.kind === "basic"
+          ? [provider.auth.password]
+          : provider.auth?.kind === "bearer"
+            ? [provider.auth.token]
+            : [],
+      ),
+    ]);
     logger.info("hub config loaded", { path: options.configPath });
     if (options.host) config.host = options.host;
     if (options.port) config.port = options.port;

@@ -1,4 +1,4 @@
-import { redact } from "./redact";
+import { redact, redactText } from "./redact";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
@@ -56,7 +56,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     const record = {
       time: new Date().toISOString(),
       level: messageLevel,
-      msg: message,
+      msg: redactText(message),
       ...(redact({ ...bindings, ...fields }) as Record<string, unknown>),
     };
     sink(record as LogRecord);
