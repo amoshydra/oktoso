@@ -401,7 +401,7 @@ POST   /api/v1/attention/:id/actions/:action
 GET    /api/v1/attachments?provider=&url=
 GET    /api/v1/sessions/:ref/files?path=
 GET    /api/v1/events?after=
-GET    /api/v1/search?q=            (later)
+GET    /api/v1/search?q=&scope=&provider=&status=&cursor=
 ```
 
 `GET /api/v1/sessions/:ref/files` reads a file inside the session's working
@@ -840,7 +840,9 @@ Estimate: a 2k to 4k line TypeScript hub becomes a 3k to 6k line Rust hub. The w
 - **Token storage:** the owner token comes from an environment variable or a config file with `0600`. Paired sessions are stateless and expire after 30 days; per-device revocation is later. A keyring is later.
 - **Multi-user:** the first release has one owner token plus paired device sessions. Per-user identity and leases are later.
 - **Attachments:** later. The canonical message model reserves a file part.
-- **Search:** later. The API reserves `/api/v1/search`.
+- **Search:** the hub searches its own transcript cache, so it only finds what
+  the cache holds. `/api/v1/search` ranks sessions and messages; nothing is
+  sent to a provider.
 - **Android process death:** the hub must recover from restarts and provider disconnects.
 - **Glasses/VR:** clients share the API, but their input models differ. Design them after the web client works.
 

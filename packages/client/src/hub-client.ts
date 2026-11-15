@@ -53,6 +53,8 @@ import type {
   TranscriptionResult,
   TranscriptCacheInput,
   TranscriptCacheView,
+  SearchPage,
+  SearchQuery,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -466,6 +468,16 @@ export class HubClient {
       { method: "PUT", body: input },
     );
     return response.data;
+  }
+
+  async search(query: SearchQuery): Promise<SearchPage> {
+    const params = new URLSearchParams({ q: query.q });
+    if (query.scope) params.set("scope", query.scope);
+    if (query.provider) params.set("provider", query.provider);
+    if (query.status) params.set("status", query.status);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    return this.request<SearchPage>(`/api/v1/search?${params.toString()}`);
   }
 
   async transcriptCache(): Promise<TranscriptCacheView> {

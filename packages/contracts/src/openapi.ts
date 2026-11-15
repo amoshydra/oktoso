@@ -67,6 +67,7 @@ import {
   zReplyFeedbackEntry,
   zReplyFeedbackPage,
   zSearchResult,
+  zSearchPage,
   zSendInput,
   zSendResult,
   zSession,
@@ -237,6 +238,7 @@ const AttentionSummarySchema = registry.register(
 );
 const HubEventSchema = registry.register("HubEvent", zHubEvent);
 const SearchResultSchema = registry.register("SearchResult", zSearchResult);
+const SearchPageSchema = registry.register("SearchPage", zSearchPage);
 const NotificationChannelKindSchema = registry.register(
   "NotificationChannelKind",
   zNotificationChannelKind,
@@ -1175,19 +1177,25 @@ registry.registerPath({
   method: "get",
   path: "/api/v1/search",
   tags: ["search"],
-  summary: "Search sessions",
+  summary: "Search cached transcripts",
+  description:
+    "Ranks sessions and messages from the local transcript cache. Sessions dedupe by ref and keep their best message; the messages scope returns one row per matching message.",
   request: {
     query: z.object({
       q: z.string().min(1),
       scope: z.enum(["sessions", "messages", "all"]).optional(),
+      provider: z.string().min(1).optional(),
+      status: z.enum(["running", "idle", "error", "offline"]).optional(),
       cursor: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(50).optional(),
     }),
   },
   responses: {
     200: {
       description: "Search results",
-      content: json(z.object({ data: z.array(SearchResultSchema), cursor: CursorSchema.optional() })),
+      content: json(SearchPageSchema),
     },
+    400: errorResponse("Invalid query or cursor"),
   },
 });
 
