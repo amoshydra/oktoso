@@ -379,9 +379,44 @@ Use the provider's base URL and a bearer API key:
 - Cloudflare, SSO, or a WAF in front of Open WebUI must allow the API key and
   the `/api/...` routes the adapter uses.
 
-## Running the hub
+## Packaging
+
+### Docker
+
+```sh
+podman build -t oktoso .
+podman run --rm -p 8787:8787 \
+  -v oktoso-data:/data \
+  -v "$PWD/hub.config.json:/data/hub.config.json:ro,Z" \
+  oktoso
+```
+
+The image pins Node 24 and builds the single-port bundle; the config must be
+mounted because the image contains no credentials. `dataDir` should be `/data`
+so state, the cache, and notification keys survive a container replace.
 
 ### systemd
+
+The unit lives in [`packaging/oktoso.service`](../packaging/oktoso.service).
+Copy it to `/etc/systemd/system/oktoso.service`, create the `oktoso` user, the
+config and env files with mode `0600`, and make `/var/lib/oktoso` writable by
+that user.
+
+### Termux
+
+[`packaging/termux-install.sh`](../packaging/termux-install.sh) installs the
+Node runtime, takes a wake lock, and creates the config and state directories.
+Run the hub once with `npx @amoshydra/oktoso`, edit
+`~/.config/oktoso/hub.config.json`, then start it again. Disable battery
+optimisation for Termux.
+
+### Clean Node 24 check
+
+CI runs the full test suite on Node 24 (`.github/workflows/ci.yml`), and the
+Docker image is pinned to `node:24-alpine`, so packaging and tests share one
+supported runtime.
+
+### systemd (reference)
 
 ```ini
 [Unit]
@@ -487,6 +522,72 @@ Prefer a private overlay over public exposure:
   the provider ports directly.
 
 The hub does not manage the VPN, certificates, or DNS.
+
+## Observability
+
+### Metrics
+
+`GET /metrics` returns Prometheus text exposition. It is authenticated with the
+same owner bearer token as the API, because the series name providers.
+
+- `oktoso_up`, `oktoso_build_info`, `oktoso_uptime_seconds`
+- `oktoso_provider_up{provider,type}` and `oktoso_providers{status}`
+- `oktoso_sessions_cached`, `oktoso_event_seq`, `oktoso_event_buffer`,
+  `oktoso_sse_clients`
+- `oktoso_notification_deliveries_recent{status}`,
+  `oktoso_notification_devices`
+- `oktoso_automation_runs_recent{decision}`, `oktoso_automation_approvals_open`,
+  `oktoso_automation_paused`
+
+Series never carry a session title, message body, prompt, or credential. The
+`_recent` suffix marks counters read from bounded logs (500 events), so they are
+not lifetime totals.
+
+```yaml
+scrape_configs:
+  - job_name: oktoso
+    authorization:
+      credentials: <owner token>
+    static_configs:
+      - targets: ["127.0.0.1:8787"]
+```
+
+### Logs and redaction
+
+Logs are one JSON object per line with `time`, `level`, `msg`, and fields. Every
+record passes one central redaction pass before it reaches stdout, stderr, the
+log file, or a test sink:
+
+- keys matching `password`, `token`, `authorization`, `api_key`, `secret`,
+  `cookie`, `credential`, `text`, `body`, `content`, `prompt`, `draft`,
+  `completion`, `transcript`, `messages`, `systemPrompt`, or `context` are
+  replaced with `[REDACTED]`, at any depth;
+- registered secrets — the owner token, provider credentials, the VAPID private
+  key, and MCP tokens — are masked wherever they appear, including inside a
+  provider error message;
+- `Bearer …`, `Basic …`, and `?token=`/`?api_key=`/`?secret=` query values are
+  masked by pattern.
+
+Info level carries request metadata, counts, and provider status, never message
+content. A unit test asserts this for the logger and for the redaction rules.
+
+## Acceptance run
+
+Run this on real hardware before claiming a deployment works. Record the device,
+Android version, Termux version, hub version, and network path.
+
+1. `oktoso backup --out ./pre-upgrade` on the old hub.
+2. Install on Termux with `packaging/termux-install.sh`, edit the config, start
+   the hub, and confirm the printed pairing link opens on the phone.
+3. From the workstation, pair a browser over the LAN or VPN and send one prompt;
+   confirm the phone inbox receives the attention item.
+4. Stop the hub with Ctrl+C and start it again; confirm the browser reconnects
+   the SSE stream without a manual reload and that queued sends land once.
+5. Put the hub behind the TLS proxy, set `publicUrl`, and repeat steps 2–4 from
+   the external origin. Confirm notification deep links open the right session.
+6. Enable the transcript cache, read a session, and confirm search finds a phrase
+   from it.
+7. Record the results here, including anything that needed a retry.
 
 ## Security checklist
 

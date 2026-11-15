@@ -529,14 +529,26 @@ Target: 2–3 weeks. Release: `v0.6.0`.
 
 ### F1. Metrics
 
-- [ ] `/metrics` in Prometheus text format.
-- [ ] Provider health, event lag, SSE clients, notification delivery, action
-  counts, run durations. No message content.
+Status: done.
+
+- [x] `/metrics` in Prometheus text format, behind the owner bearer token.
+- [x] Provider health, event sequence and buffer, SSE clients, notification
+  delivery, automation decisions, open approvals, paused state, device count.
+  No message content, titles, or credentials; bounded-log counters carry a
+  `_recent` suffix. Run durations are not exposed: automation runs record when a
+  decision happened, not how long the action took.
 
 ### F2. Logs and redaction
 
-- [ ] Structured logs with a central redaction pass.
-- [ ] A test that asserts tokens and message bodies never appear at info level.
+Status: done.
+
+- [x] Structured logs with a central redaction pass. One pass covers keys,
+  registered secrets, and token-shaped substrings; it runs before stdout,
+  stderr, the log file, and test sinks.
+- [x] A test that asserts tokens and message bodies never appear at info level.
+  See `packages/hub/src/lib/redact.test.ts`; content-shaped keys are masked and
+  `main.ts` registers the owner token, provider credentials, VAPID key, and MCP
+  tokens at startup.
 
 ### F3. Backup and restore
 
@@ -550,22 +562,40 @@ Target: 2–3 weeks. Release: `v0.6.0`.
 
 ### F4. Packaging
 
-- [ ] Docker image, Termux archive, systemd unit.
-- [ ] Clean Node 24 install check.
+Status: done.
+
+- [x] Docker image (`Dockerfile`), Termux install script
+  (`packaging/termux-install.sh`), and a systemd unit
+  (`packaging/oktoso.service`).
+- [x] Clean Node 24 install check: CI runs Node 24, and the image is pinned to
+  `node:24-alpine`.
 
 ### F5. Acceptance runs
+
+Status: blocked on hardware — a Termux device and a TLS/VPN path. The runbook is
+in `deployment.md` ("Acceptance run"); results go in the same section.
 
 - [ ] Real Termux and cross-host run.
 - [ ] TLS/VPN validation.
 
 ### F6. Load and security
 
-- [ ] SSE fan-out and event-burst load test.
-- [ ] Security review with a written record.
+Status: done.
+
+- [x] SSE fan-out and event-burst load test (`scripts/load-test.ts`): 500
+  events to 200 subscribers, 100k serialized frames, p95 0.099 ms per publish.
+- [x] Security review with a written record (`docs/security-review.md`):
+  fourteen findings, one low-risk gap (no pairing-attempt throttle), residual
+  risks listed.
 
 ### F7. Rust decision
 
-- [ ] Decision record, with contract tests as the gate if the answer is yes.
+Status: done.
+
+- [x] Decision record (`docs/rust-decision.md`): stay on TypeScript; triggers
+  for reopening are throughput, a CPU-bound feature, Termux memory, or a second
+  maintainer; any future port is gated on the contract tests, which do not exist
+  yet.
 
 ## Phase 9 — Surfaces and bets
 
