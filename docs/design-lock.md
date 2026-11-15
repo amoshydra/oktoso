@@ -25,7 +25,7 @@ Status: **frozen**.
 - v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
 - v1.17 scope: the accessibility semantics and focus pass.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
-- v1.19 scope: session rename across providers.
+- v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
 
@@ -549,6 +549,9 @@ radius, or color token.
   returns the updated session. Titles are trimmed, 1–200 characters.
 - **No new tokens.** The field reuses the control border, surface, radius, and
   the 12px compact value type.
+- **Search filters.** At 420px and below the `PROVIDER` and `STATUS` labels own
+  their line, so wrapped chips align with the label. The chips stay one control
+  group; the URL state and choices are unchanged.
 
 ## Change policy
 
