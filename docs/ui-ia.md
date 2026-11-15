@@ -1,6 +1,6 @@
 # Oktoso UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15, and the reading-column alignment in `design-v1.14`. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15, the reading-column alignment in `design-v1.14`, and the mobile collision fixes in `design-v1.15`. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
@@ -220,6 +220,7 @@ The inbox is the default screen when something needs attention. It groups items 
 ### Inbox rules
 
 - Blocking items always come first.
+- At 420px and below the filter chips take the full toolbar width and wrap; Refresh moves to its own right-aligned row under them. Above that, the tabs and Refresh share one row.
 - At 1200px and above, cards form a two-column grid inside each group. Each card keeps its own height (`align-items: start`); a blocking card is no wider than any other card and is distinguished by its amber edge, not by spanning the grid.
 - Each card shows type, provider, session title, age, a one-line summary, and actions.
 - A card opens the session when the user clicks the title or the Open action.
@@ -270,6 +271,7 @@ The sessions view is the full browsing surface.
 
 - The Sessions list defaults to the tree: root sessions first, their subagents nested and collapsed behind the disclosure.
 - `All` is the tree. `Root` is a strict roots-only filter that still shows the child count. `Subagents` is a flat list of children for inspection.
+- The scope chips are one flex group. At 760px and below they move below the session summary on their own row instead of competing with the count text.
 - The header count reads `N sessions · M subagents`. A parent is ordered by the newest update in its branch, so a running child lifts its parent.
 - Subagents whose parent is not in the loaded page appear under `Subagents without a loaded parent`, with the same tag.
 - The chat sidebar uses the same tree inside its day groups. It expands the active session's parent automatically, and keeps a family under the parent's day even when a child updates later.
