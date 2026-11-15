@@ -122,7 +122,9 @@ Telegram, or webhook sender.
 
 Off by default. When enabled in **Settings → Transcript cache**, the hub keeps
 the message text it already read from a provider so search, export, and offline
-views do not need another round trip.
+views do not need another round trip. Only text parts are stored: tool input,
+tool output, and reasoning are dropped, and a single transcript is capped at
+about 1 MB so one huge session cannot fill the disk.
 
 - Files live under `dataDir/transcripts`: one JSON file per session plus
   `index.json`, all mode `0600`.
@@ -131,9 +133,11 @@ views do not need another round trip.
   read.
 - Pages of one session revision merge by message id, so scrolling back builds a
   complete transcript. A new provider `updatedAt` replaces the stored copy.
+  Writes are queued per session and never block the read they follow.
 - `ttlDays` (1–90, default 7) and `maxSessions` (10–2000, default 200) bound the
-  cache. Eviction is least-recently-used, and expired entries are dropped on
-  read and at start-up.
+  cache, with a 200 MB total budget. Eviction is least-recently-used, and
+  expired entries are dropped on read and at start-up. Orphan files and
+  abandoned temp files are removed at start-up.
 - Turning the cache off deletes every stored transcript. **Clear cache** deletes
   them without changing the setting. Deleting `dataDir/transcripts` by hand is
   also safe: nothing in the hub depends on it.
@@ -190,9 +194,14 @@ schedule triggers under a policy.
   question whose explicit choices are all non-destructive and non-sensitive.
   Everything else becomes a pending approval.
 - Answers to provider forms are delivered through the provider's form reply,
-  not as a chat message. A form that offers a free-text answer always escalates;
-  OpenCode adds that option to every form, so its `answer` watchers act only
-  after a human approves or always-allows the shape.
+  not as a chat message. This works when the form has one select field whose
+  option matches the proposed answer. A form with several fields, or with no
+  matching option, still escalates, but approving it only records that a human
+  handled it in the provider UI — the hub will not send a message that leaves
+  the form pending.
+- A form that offers a free-text answer is never auto-answered. The hub marks
+  provider questions as free-text capable, so on OpenCode an `answer` watcher
+  acts only after a human approves or always-allows the shape.
 - Every run is leased per watcher + attention id, so duplicate events cannot
   act twice.
 - Budgets are global and per watcher. Pause everything or one watcher from

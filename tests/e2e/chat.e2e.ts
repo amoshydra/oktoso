@@ -785,7 +785,7 @@ describe("notification settings", () => {
 });
 
 describe("transcript cache", () => {
-  it("turns on, survives a reload, and clears", async () => {
+  it("turns on and survives a reload", async () => {
     await page!.goto(`${BASE_URL}/settings`);
     await page!.getByRole("heading", { name: "Transcript cache" }).waitFor();
 

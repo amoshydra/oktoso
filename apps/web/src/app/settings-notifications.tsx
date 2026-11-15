@@ -144,7 +144,7 @@ export function NotificationSettingsPanel(props: { client: HubClient }) {
       const result = await props.client.testNotification();
       setNotice(
         result.attempted === 0
-          ? "No channel is configured yet."
+          ? "No device is subscribed yet."
           : `Test sent to ${result.delivered} of ${result.attempted} channel${result.attempted === 1 ? "" : "s"}.`,
       );
     });

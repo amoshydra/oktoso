@@ -56,7 +56,6 @@ import {
   zNotificationRouting,
   zNotificationSettings,
   zNotificationSettingsInput,
-  zNotificationTestInput,
   zNotificationTestResult,
   zPushSubscription,
   zPushSubscriptionInput,
@@ -270,10 +269,6 @@ const NotificationDeliverySchema = registry.register(
 const NotificationDeliveryPageSchema = registry.register(
   "NotificationDeliveryPage",
   zNotificationDeliveryPage,
-);
-const NotificationTestInputSchema = registry.register(
-  "NotificationTestInput",
-  zNotificationTestInput,
 );
 const NotificationTestResultSchema = registry.register(
   "NotificationTestResult",
