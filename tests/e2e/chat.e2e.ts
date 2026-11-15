@@ -424,6 +424,27 @@ describe("chat sending", () => {
     }
     expect(rects.more!.right).toBeLessThanOrEqual(rects.stop!.x);
     expect(rects.stop!.right).toBeLessThanOrEqual(rects.send!.x);
+
+    const glyphs = await page!.evaluate(() => {
+      const more = document.querySelector(".composer-tools-toggle");
+      const send = document.querySelector(".composer-send");
+      return {
+        moreText: more?.textContent?.trim() ?? "",
+        moreIcon: Boolean(more?.querySelector("svg")),
+        sendIcon: Boolean(send?.querySelector("svg")),
+        themeVisible: Boolean(
+          document.querySelector(".app-shell.chat-open .topbar-theme")
+            ? getComputedStyle(
+                document.querySelector(".app-shell.chat-open .topbar-theme")!,
+              ).display !== "none"
+            : false,
+        ),
+      };
+    });
+    expect(glyphs.moreText).toBe("");
+    expect(glyphs.moreIcon).toBe(true);
+    expect(glyphs.sendIcon).toBe(true);
+    expect(glyphs.themeVisible).toBe(false);
   });
 
   it("floats the jump and keeps the composer fixed while the transcript fades", async () => {

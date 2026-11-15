@@ -786,7 +786,9 @@ export function App() {
         ) : (
           providers.map((provider) => (
             <div className="provider-row" key={provider.id}>
-              <div className="provider-mark">{providerMark(provider.type)}</div>
+              <div className={`provider-mark provider-mark-${provider.type}`}>
+                {providerMark(provider.type)}
+              </div>
               <div className="provider-main">
                 <strong>{provider.name}</strong>
                 <span className="mono">{provider.baseUrl}</span>
@@ -933,7 +935,13 @@ export function App() {
               {queuedCount} queued
             </span>
           ) : null}
-          <button className="icon-btn" type="button" onClick={toggleTheme} aria-label="Toggle theme">
+          <button
+            className="icon-btn topbar-theme"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          >
             <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
           </button>
           <button className="btn small topbar-disconnect" type="button" onClick={signOut}>
@@ -1241,7 +1249,17 @@ function Login(props: {
 
   return (
     <div className="login-page">
-      <button className="icon-btn login-theme" type="button" onClick={props.onToggleTheme} aria-label="Toggle theme">
+      <button
+        className="icon-btn login-theme"
+        type="button"
+        onClick={props.onToggleTheme}
+        aria-label={
+          props.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+        }
+        title={
+          props.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+        }
+      >
         <Icon name={props.theme === "dark" ? "sun" : "moon"} size={16} />
       </button>
       <div className="login-card">
@@ -2476,7 +2494,6 @@ function SearchView(props: {
                 metaSuffix={
                   session.agent ? <> · {session.agent}</> : undefined
                 }
-                showStatusChip
                 onOpen={() => props.onOpen(session.ref)}
               />
             ))}
@@ -2676,7 +2693,6 @@ function ChatSidebar(props: {
                     onOpen={props.onOpen}
                     labels={labels}
                     activeRef={props.activeRef}
-                    showStatusChip={false}
                   />
                 ) : null}
                 {group.orphans.map((session) => (
@@ -2839,7 +2855,6 @@ function SessionsView(props: {
           <span className="session-subagent-tag">Subagent</span>
         ) : undefined
       }
-      showStatusChip
       onOpen={() => props.onOpen(session.ref)}
     />
   );
@@ -2985,7 +3000,6 @@ function SessionsView(props: {
               onToggle={toggle}
               onOpen={props.onOpen}
               labels={labels}
-              showStatusChip
             />
             {tree.orphans.length > 0 ? (
               <div className="session-tree-orphans">
@@ -3024,7 +3038,6 @@ function SessionsView(props: {
                       </span>
                     ) : undefined
                   }
-                  showStatusChip
                   onOpen={() => props.onOpen(node.session.ref)}
                 />
               ))
@@ -3192,8 +3205,13 @@ function ProviderForm(props: {
             returned by the API.
           </p>
         </div>
-        <button className="btn ghost small" type="button" onClick={props.onClose}>
-          Close
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={props.onClose}
+          aria-label="Close provider form"
+        >
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -3421,8 +3439,13 @@ function NewSessionForm(props: {
           <h2>New session</h2>
           <p>Create an OpenCode session and optionally send the first prompt.</p>
         </div>
-        <button className="btn ghost small" type="button" onClick={props.onClose}>
-          Close
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={props.onClose}
+          aria-label="Close new session"
+        >
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -5723,7 +5746,7 @@ function SessionDetail(props: {
                 onClick={jumpToLatest}
               >
                 {hasBlockingAttention ? "Input needed" : "Jump to latest"}
-                <span aria-hidden="true">↓</span>
+                <Icon name="arrow-down" size={14} />
               </button>
             </div>
 
@@ -5850,7 +5873,7 @@ function SessionDetail(props: {
                               disabled={inboxBusy === item.id}
                               onClick={() => void removeQueued(item)}
                             >
-                              ×
+                              <Icon name="x" size={14} />
                             </button>
                           </div>
                         </div>
@@ -5924,7 +5947,7 @@ function SessionDetail(props: {
                           aria-label="Dismiss suggestions"
                           onClick={dismissSuggestions}
                         >
-                          ×
+                          <Icon name="x" size={14} />
                         </button>
                       ) : null}
                     </div>
@@ -6119,7 +6142,7 @@ function SessionDetail(props: {
                           aria-controls="composer-tools-menu"
                           onClick={() => setToolsOpen((open) => !open)}
                         >
-                          ⋯
+                          <Icon name="ellipsis" size={16} />
                         </button>
                         {toolsOpen ? (
                           <div
@@ -6253,21 +6276,11 @@ function SessionDetail(props: {
                               ? "Sending…"
                               : "Send"}
                       </span>
-                      <svg
+                      <Icon
+                        name="arrow-up"
+                        size={16}
                         className="composer-send-icon"
-                        viewBox="0 0 16 16"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <path
-                          d="M8 13V3M4 7l4-4 4 4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      />
                     </button>
                   </div>
                 </div>
