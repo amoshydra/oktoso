@@ -3,6 +3,7 @@ import type { Session, SessionListQuery } from "@amoshydra/oktoso-contracts";
 import { ProviderError, type ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
+import { notImplemented } from "../domain/errors";
 import type { ProviderRegistry } from "./provider-registry";
 import type { TranscriptCacheService } from "./transcript-cache";
 import { SessionService } from "./session-service";
@@ -27,6 +28,10 @@ function makeRegistry(adapters: ProviderAdapter[]): ProviderRegistry {
   return {
     adapters: () => adapters,
     adapter: (id: string) => adapters.find((adapter) => adapter.id === id),
+    get: (id: string) =>
+      adapters.some((adapter) => adapter.id === id)
+        ? { id, enabled: true, status: "online" }
+        : undefined,
     timeoutMs: () => 15_000,
   } as unknown as ProviderRegistry;
 }
@@ -263,8 +268,47 @@ describe("SessionService create", () => {
     expect(failure).toMatchObject({
       code: "rate_limited",
       status: 429,
+      retryable: false,
       details: { ref: "test:ses_created" },
       message: expect.stringContaining("test:ses_created"),
+    });
+  });
+
+  it("marks a created session's prompt failure as not retryable", async () => {
+    const { adapter } = createAdapter({
+      async sendMessage() {
+        throw notImplemented("This provider stopped mid-send");
+      },
+    });
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    const failure = await sessions
+      .create({
+        providerID: "test",
+        title: "Partial failure",
+        text: "Hello",
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      code: "not_implemented",
+      status: 501,
+      retryable: false,
+      details: { ref: "test:ses_created" },
+    });
+    expect((await sessions.list({})).data).toHaveLength(1);
+  });
+
+  it("names an unknown provider instead of blaming its capabilities", async () => {
+    const { adapter } = createAdapter();
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    await expect(
+      sessions.create({ providerID: "ghost", title: "Unknown provider" }),
+    ).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+      message: "Provider not found: ghost",
     });
   });
 

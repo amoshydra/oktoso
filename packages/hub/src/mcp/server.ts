@@ -281,7 +281,7 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       {
         title: "Automation",
         description:
-          "Watchers, dry-run/pause state, recent runs, and pending approvals.",
+          "Watchers, start templates, dry-run/pause state, recent runs, and pending approvals.",
         mimeType: "application/json",
       },
       async (uri) => {
@@ -763,7 +763,7 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       {
         title: "Read automation",
         description:
-          "List watchers, dry-run/pause state, recent runs, and pending approvals.",
+          "List watchers, start templates, dry-run/pause state, recent runs, and pending approvals.",
         inputSchema: {
           runs: z
             .number()

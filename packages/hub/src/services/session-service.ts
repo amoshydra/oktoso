@@ -731,7 +731,15 @@ export class SessionService {
     signal?: AbortSignal,
   ): Promise<Session> {
     const adapter = this.registry.adapter(input.providerID);
-    if (!adapter?.capabilities.create) {
+    if (!adapter) {
+      // An unknown id and a provider type without a session adapter both land
+      // here, but only one of them is the caller's mistake.
+      if (!this.registry.get(input.providerID)) {
+        throw notFound(`Provider not found: ${input.providerID}`);
+      }
+      throw notImplemented("This provider does not support creating sessions");
+    }
+    if (!adapter.capabilities.create) {
       throw notImplemented("This provider does not support creating sessions");
     }
     this.assertProviderAvailable(adapter.id);
@@ -763,9 +771,10 @@ export class SessionService {
       const failure = error instanceof Error ? error.message : String(error);
       const message = `Session ${session.ref} was created, but the first prompt failed: ${failure}`;
       if (error instanceof AppError) {
-        // Keep the original status code (400/501/504/...) and add the ref.
+        // Keep the original status code (400/501/504/...) and add the ref. The
+        // session exists now, so retrying would create a second one.
         throw new AppError(error.code, message, error.status, {
-          retryable: error.retryable,
+          retryable: false,
           details: { ...error.details, ref: session.ref },
           cause: error,
         });

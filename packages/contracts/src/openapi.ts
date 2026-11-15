@@ -581,6 +581,7 @@ registry.registerPath({
   responses: {
     201: { description: "Session created", content: json(SessionSchema) },
     400: errorResponse("Invalid request"),
+    404: errorResponse("Provider not found"),
     409: errorResponse("Conflict"),
     502: errorResponse("Provider failure"),
   },
@@ -1455,7 +1456,7 @@ registry.registerPath({
   method: "get",
   path: "/api/v1/automation",
   tags: ["automation"],
-  summary: "Read automation watchers, runs, and approvals",
+  summary: "Read automation watchers, templates, runs, and approvals",
   responses: {
     200: {
       description: "Automation view",
@@ -1470,13 +1471,13 @@ registry.registerPath({
   tags: ["automation"],
   summary: "Start a configured template",
   description:
-    "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run.",
+    "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run. Returns the session object directly, like `POST /api/v1/sessions`.",
   request: {
     params: z.object({ id: z.string().min(1) }),
   },
   responses: {
     201: { description: "Created session", content: json(SessionSchema) },
-    404: errorResponse("Unknown template"),
+    404: errorResponse("Unknown template or provider"),
     501: errorResponse("Provider cannot create or send"),
     502: errorResponse("Provider failure"),
   },

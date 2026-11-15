@@ -215,6 +215,10 @@ export function parseArgs(
     }
   }
 
+  if (templateID && (command !== "template" || templateAction !== "start")) {
+    throw new Error("--id only applies to template start");
+  }
+
   return {
     command,
     automationAction,
@@ -251,7 +255,8 @@ Usage:
   oktoso status [--config <path>]
   oktoso mcp [--allow-write] [--url <url>] [--config <path>]
   oktoso automation status|pause|resume [--watcher <id>] [--url <url>] [--config <path>]
-  oktoso template list|start --id <id> [--url <url>] [--config <path>]
+  oktoso template list [--url <url>] [--config <path>]
+  oktoso template start --id <id> [--url <url>] [--config <path>]
   oktoso backup [--out <dir>] [--config <path>]
   oktoso restore --from <dir> [--force] [--config <path>]
 
@@ -268,6 +273,7 @@ Options:
   --no-log-file      Disable the persistent log file
   --url <url>        Base URL for pairing links or the MCP hub endpoint
   --allow-write      Enable write tools in the MCP server (read-only by default)
+  --id <id>          Template to start (template start only)
   --out <dir>        Backup destination (default: ./oktoso-backup-<timestamp>)
   --from <dir>       Backup to restore from
   --force            Replace a non-empty data directory during restore

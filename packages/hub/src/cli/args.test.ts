@@ -45,6 +45,13 @@ describe("CLI arguments", () => {
     expect(start.command).toBe("template");
     expect(start.templateAction).toBe("start");
     expect(start.templateID).toBe("nightly");
+
+    expect(() => parseArgs(["template", "list", "--id", "nightly"])).toThrow(
+      /--id only applies to template start/,
+    );
+    expect(() => parseArgs(["--id", "nightly"])).toThrow(
+      /--id only applies to template start/,
+    );
   });
 
   it("parses backup and restore with their flags", () => {

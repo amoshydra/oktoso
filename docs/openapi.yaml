@@ -4536,6 +4536,7 @@ components:
               - id
               - providerID
               - title
+          default: []
         pausedWatchers:
           type: array
           items:
@@ -4740,7 +4741,6 @@ components:
         - paused
         - dryRun
         - watchers
-        - templates
         - pausedWatchers
         - runs
         - approvals
@@ -5124,6 +5124,12 @@ paths:
                 $ref: "#/components/schemas/Session"
         "400":
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Provider not found
           content:
             application/json:
               schema:
@@ -6748,7 +6754,7 @@ paths:
     get:
       tags:
         - automation
-      summary: Read automation watchers, runs, and approvals
+      summary: Read automation watchers, templates, runs, and approvals
       responses:
         "200":
           description: Automation view
@@ -6794,7 +6800,7 @@ paths:
       tags:
         - automation
       summary: Start a configured template
-      description: "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run."
+      description: "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run. Returns the session object directly, like `POST /api/v1/sessions`."
       parameters:
         - schema:
             type: string
@@ -6810,7 +6816,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Session"
         "404":
-          description: Unknown template
+          description: Unknown template or provider
           content:
             application/json:
               schema:

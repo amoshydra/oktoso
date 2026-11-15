@@ -113,6 +113,9 @@ export function withProviderPolicy(
         allowedShapes: view.allowedShapes.filter((shape) =>
           visibleWatchers.has(shape.watcherID),
         ),
+        templates: view.templates.filter((template) =>
+          allowed.has(template.providerID),
+        ),
       };
     },
     async automationRuns(limit) {
