@@ -447,6 +447,15 @@ describe("chat sending", () => {
     expect(glyphs.themeVisible).toBe(false);
   });
 
+  it("keeps the topbar as the only page title", async () => {
+    await openSession("Fix auth race in gateway");
+    expect(await page!.locator("h1").count()).toBe(1);
+    expect(await page!.locator(".chat-doc-title").count()).toBe(0);
+    expect(
+      await page!.locator(".topbar-title").textContent(),
+    ).toContain("Fix auth race in gateway");
+  });
+
   it("floats the jump and keeps the composer fixed while the transcript fades", async () => {
     await openSession("Refactor session index");
     const composerTop = await page!
@@ -488,7 +497,7 @@ describe("chat sending", () => {
     expect(middle.jumpOpacity).toBe("1");
     expect(middle.jumpAria).toBeNull();
     expect(middle.jumpText.length).toBeGreaterThan(0);
-    expect(middle.measure).toBe("728px");
+    expect(middle.measure).toBe("640px");
     expect(middle.fadeTop).toBe("24px");
     expect(middle.fadeBottom).toBe("24px");
     expect(middle.masked).toBe(true);
@@ -578,7 +587,7 @@ describe("chat sending", () => {
       undefined,
       { timeout: 5_000 },
     );
-    expect(await page!.locator(".chat-doc-title").textContent()).toContain("fork");
+    expect(await page!.locator(".topbar-title").textContent()).toContain("fork");
   });
 });
 

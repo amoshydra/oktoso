@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
@@ -1082,3 +1082,41 @@ consolidates both.
 - **Follow-ups.** The page-level balance questions remain: unused right field on
   list pages, Inbox row width, the duplicated chat title, and the 728px measure
   when details is open.
+
+## Layout revision: use the wide field (2026-11-15)
+
+The remaining audit findings were page-level: list pages stopped at 1120px,
+leaving about 280px unused at 1440px; the chat repeated the title in the
+transcript; and the 728px measure still produced about 104 characters per line.
+This pass spends the space on the content already on the page.
+
+- **Content field.** `.page` is `min(1320px, 100%)`. The 24px gutter is
+  unchanged and the field stays left-aligned.
+- **Sessions table.** At 1100px and above the page row is a five-column grid:
+  dot, title, provider, project and agent, time. At 1440px the provider column
+  starts at 729px and time sits at the far right, so the row reads as a table
+  instead of a title followed by a wide empty field. The 300px chat sidebar
+  keeps the stacked layout because its rows are too narrow for columns.
+- **Inbox.** At 1200px and above groups are two-column grids with
+  `align-items: start`. A blocking card is half-width, like any other card, and
+  keeps priority through order and the amber edge. This avoids 1272px-wide
+  question forms and roughly halves the page length.
+- **Providers.** At 1100px and above the provider list and diagnostics sit side
+  by side (1.45fr / 1fr). Diagnostics reflows to two columns in its 512px panel.
+- **Search.** At 1100px and above the input, provider filter, and status filter
+  share one wrapping toolbar. The input caps at 640px instead of spanning the
+  whole page.
+- **One title.** The transcript's 20px `h2` was removed. The topbar `h1` is the
+  only page title, satisfying the design contract. The transcript now opens
+  with a 11px context strip (project, agent, model, status) and a subtle rule.
+- **Measure.** The transcript and composer cap at 760px and the reading column
+  at 640px. Measured on the fixture transcript: 640px at 14px Inter is about 88
+  characters, down from about 104. The panel no longer looks like a wide card
+  with a narrow text strip inside it.
+- **Proof.** The chat e2e asserts the 640px measure and keeps one `h1` in the
+  view; the fork test now reads the topbar title. Screenshots were reviewed at
+  1440, 1024, 390, and 320px in the dark theme, and the earlier icon and type
+  checks still hold. No horizontal overflow at 320px; the page scroller and
+  every session row report `scrollWidth === clientWidth`.
+- **Not changed.** Routes, navigation order, the mobile bottom bar, the composer
+  controls, the details panel breakpoints, and the type scale.
