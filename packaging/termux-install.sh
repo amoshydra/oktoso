@@ -5,6 +5,14 @@ set -eu
 pkg install -y nodejs-lts
 termux-wake-lock
 
+node -e '
+  const major = Number(process.versions.node.split(".")[0]);
+  if (major < 24) {
+    console.error(`Oktoso needs Node 24 or newer; found ${process.versions.node}.`);
+    process.exit(1);
+  }
+' || exit 1
+
 mkdir -p "$HOME/.config/oktoso" "$HOME/.local/state/oktoso"
 chmod 700 "$HOME/.config/oktoso" "$HOME/.local/state/oktoso"
 

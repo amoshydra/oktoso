@@ -9,3 +9,6 @@ data
 docs/prototypes
 docs/screenshots
 docs/brand
+hub.config.json
+.env
+.env.*
