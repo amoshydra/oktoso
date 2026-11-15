@@ -615,11 +615,17 @@ Status: done.
 
 Schedule one bet at a time, each with its own acceptance before it starts.
 
-- [ ] G1. Cross-provider handoff.
-- [ ] G2. Templates and recipes.
-- [ ] G3. G2 ambient mode and hardware acceptance.
-- [ ] G4. Local reply drafting through Ollama.
-- [ ] G5. Multi-user decision. Default answer: defer.
+- [ ] G1. Cross-provider handoff. Skipped until a third provider exists.
+- [ ] G2. Templates and recipes. Next bet; slice 1 is the list-and-start API.
+- [ ] G3. G2 ambient mode and hardware acceptance. Ambient is impossible on SDK
+  0.0.16; run the hardware checklist when the glasses are in hand.
+- [x] G4. Local reply drafting through Ollama. No code was needed: the reply
+  surface already speaks OpenAI-compatible `/chat/completions`. Verified
+  2026-11-16 against a local llama.cpp router: five to six options per fixture
+  in ~1.6 s, valid JSON, no `response_format` fallback needed. The recipe uses
+  placeholders for the host and model id in `wearables.md`.
+- [x] G5. Multi-user decision. Deferred; owned by
+  `docs/multi-user-decision.md`.
 
 ## Cross-cutting work
 

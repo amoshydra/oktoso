@@ -44,7 +44,7 @@ The first slice is deliberately narrow:
 - unchanged attention lists are not rebuilt, so the G2 selection index is preserved across polls
 - a glass-content signature skips page rebuilds and text upgrades when the visible header, body, footer, and list are unchanged
 
-Voice capture, suggested answers, and full session management are follow-ups. The screen and interaction contract is in [`glass-ux.md`](glass-ux.md); the full design is in [`g2-question-flow.md`](g2-question-flow.md); the hardware acceptance run is in [`g2-hardware-validation.md`](g2-hardware-validation.md).
+Voice capture and suggested answers ship; full session management and hardware acceptance are the follow-ups. The screen and interaction contract is in [`glass-ux.md`](glass-ux.md); the full design is in [`g2-question-flow.md`](g2-question-flow.md); the hardware acceptance run is in [`g2-hardware-validation.md`](g2-hardware-validation.md).
 
 ## Run locally
 
@@ -108,6 +108,22 @@ The repository defaults are examples; set your own endpoint and model in Setting
 - Reply model: configure the model served by that endpoint
 - Thinking disabled through `chat_template_kwargs.enable_thinking = false`
 - Voice transcription disabled until an STT endpoint is configured
+
+A local llama.cpp router works without code changes. Point the base URL at the
+router prefix (the settings screen appends `/models` and `/chat/completions`),
+then set the model id that endpoint serves:
+
+```
+Base URL  https://<model-host>/llamacpp
+Model     <model-id-from-that-endpoint>
+Timeout   60000
+```
+
+Verified on 2026-11-16 with `scripts/reply-prompt-check.ts` against a local
+router: five to six options per fixture in about 1.6 s, valid JSON every time.
+Ollama exposes the same OpenAI-compatible shape at `/v1`, so it is a base-URL
+change too; the default `gemma-3-4b-it` is a llama.cpp-style name, so set the
+Ollama tag (for example `gemma3:4b`) explicitly.
 
 Settings are hub-owned. API keys are write-only from the browser and are not returned by the settings API or included in the glasses package.
 
