@@ -51,6 +51,8 @@ import type {
   SessionPage,
   SessionSelectionInput,
   TranscriptionResult,
+  TranscriptCacheInput,
+  TranscriptCacheView,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -462,6 +464,31 @@ export class HubClient {
     const response = await this.request<{ data: AssistantView }>(
       "/api/v1/settings/assistant",
       { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async transcriptCache(): Promise<TranscriptCacheView> {
+    const response = await this.request<{ data: TranscriptCacheView }>(
+      "/api/v1/settings/transcripts",
+    );
+    return response.data;
+  }
+
+  async saveTranscriptCache(
+    input: TranscriptCacheInput,
+  ): Promise<TranscriptCacheView> {
+    const response = await this.request<{ data: TranscriptCacheView }>(
+      "/api/v1/settings/transcripts",
+      { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async clearTranscriptCache(): Promise<TranscriptCacheView> {
+    const response = await this.request<{ data: TranscriptCacheView }>(
+      "/api/v1/settings/transcripts",
+      { method: "DELETE" },
     );
     return response.data;
   }

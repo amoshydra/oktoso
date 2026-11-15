@@ -784,6 +784,37 @@ describe("notification settings", () => {
   });
 });
 
+describe("transcript cache", () => {
+  it("turns on, survives a reload, and clears", async () => {
+    await page!.goto(`${BASE_URL}/settings`);
+    await page!.getByRole("heading", { name: "Transcript cache" }).waitFor();
+
+    const enabled = page!.getByLabel("Cache transcripts on the hub");
+    if (!(await enabled.isChecked())) await enabled.check();
+    await page!.getByLabel("Maximum sessions").fill("40");
+    await page!.getByRole("button", { name: "Save cache settings" }).click();
+    await page!
+      .getByText("Transcript cache saved.")
+      .waitFor({ state: "visible" });
+
+    await page!.reload();
+    await page!.getByRole("heading", { name: "Transcript cache" }).waitFor();
+    // The panel loads its settings after mount, so wait for the saved state
+    // before asserting on the controls.
+    await page!.locator(".settings-transcripts .mode-badge", { hasText: "on" }).waitFor();
+
+    await expect(
+      page!.getByLabel("Cache transcripts on the hub").isChecked(),
+    ).resolves.toBe(true);
+    await expect(
+      page!.getByLabel("Maximum sessions").inputValue(),
+    ).resolves.toBe("40");
+    await expect(
+      page!.getByRole("button", { name: "Clear cache" }).isDisabled(),
+    ).resolves.toBe(true);
+  });
+});
+
 describe("offline queue", () => {
   it("queues a send offline, survives a reload, and lands once", async () => {
     await openSession("Fix auth race in gateway");

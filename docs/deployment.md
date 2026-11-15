@@ -118,6 +118,27 @@ Telegram, or webhook sender.
 - If the hub is behind a reverse proxy, terminate TLS there and set `publicUrl`
   so notification links open the external origin.
 
+## Transcript cache
+
+Off by default. When enabled in **Settings → Transcript cache**, the hub keeps
+the message text it already read from a provider so search, export, and offline
+views do not need another round trip.
+
+- Files live under `dataDir/transcripts`: one JSON file per session plus
+  `index.json`, all mode `0600`.
+- The provider stays authoritative. Opening a session always reads from the
+  provider; the cache is write-through only, and a failed write never fails the
+  read.
+- Pages of one session revision merge by message id, so scrolling back builds a
+  complete transcript. A new provider `updatedAt` replaces the stored copy.
+- `ttlDays` (1–90, default 7) and `maxSessions` (10–2000, default 200) bound the
+  cache. Eviction is least-recently-used, and expired entries are dropped on
+  read and at start-up.
+- Turning the cache off deletes every stored transcript. **Clear cache** deletes
+  them without changing the setting. Deleting `dataDir/transcripts` by hand is
+  also safe: nothing in the hub depends on it.
+- Everything else in `dataDir` is untouched by these actions.
+
 ## Automation
 
 `automation` is off by default. Watchers react to attention, session, or

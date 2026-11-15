@@ -341,11 +341,21 @@ Target: 3–4 weeks. Release: `v0.3.0`.
 
 ### C1. Transcript cache
 
-- [ ] Write-through on message reads; keyed by session ref and provider
-  `updatedAt`.
-- [ ] TTL and size cap; evict least recently used.
-- [ ] Opt-in in settings, with a clear privacy note.
-- [ ] Never serve cache as authoritative when the provider is reachable.
+Status: done. `TranscriptCacheService` keeps a JSON copy of what the hub already
+read from a provider, under `dataDir/transcripts` (`0600`, one file per session
+plus an index). The settings panel is the opt-in.
+
+- [x] Write-through on message reads; keyed by session ref and provider
+  `updatedAt`. Pages of the same revision merge by message id, so a paginated
+  read builds one transcript instead of replacing it. A new `updatedAt`
+  replaces the stored copy.
+- [x] TTL and size cap; evict least recently used. TTL is checked on read and at
+  start-up; the session cap evicts the oldest `lastUsedAt` first.
+- [x] Opt-in in settings, with a clear privacy note. Turning it off deletes every
+  stored transcript; **Clear cache** does the same without disabling it.
+- [x] Never serve cache as authoritative when the provider is reachable. Reads
+  always go to the provider; the cache is write-through only and a failed write
+  never fails the read.
 
 ### C2. Index
 

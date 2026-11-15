@@ -8,6 +8,7 @@ import {
   zSendAnswer,
   zNotificationDelivery,
   zNotificationRouting,
+  zTranscriptCacheSettings,
 } from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
@@ -92,6 +93,11 @@ export const zHubState = z.object({
   automationPaused: z.boolean().default(false),
   automationDryRun: z.boolean().optional(),
   automationWatcherPause: z.record(z.string(), z.boolean()).default({}),
+  transcriptCache: zTranscriptCacheSettings.default({
+    enabled: false,
+    ttlDays: 7,
+    maxSessions: 200,
+  }),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -121,6 +127,7 @@ export function createInitialState(): HubState {
     automationLeases: {},
     automationPaused: false,
     automationWatcherPause: {},
+    transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 200 },
   };
 }
 

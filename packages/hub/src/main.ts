@@ -56,6 +56,7 @@ import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
 import { QuestionService } from "./services/question-service";
 import { NotificationService } from "./services/notification-service";
+import { TranscriptCacheService } from "./services/transcript-cache";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
@@ -554,7 +555,17 @@ async function main(): Promise<void> {
       root: join(resolve(config.dataDir), "attachments"),
     });
     await attachments.init();
-    sessions = new SessionService(registry, logger, { store, attachments });
+    const transcripts = new TranscriptCacheService({
+      root: join(resolve(config.dataDir), "transcripts"),
+      store,
+      logger,
+    });
+    await transcripts.init();
+    sessions = new SessionService(registry, logger, {
+      store,
+      attachments,
+      transcripts,
+    });
     attention = new AttentionService(
       registry,
       sessions,
@@ -652,6 +663,7 @@ async function main(): Promise<void> {
       drafts,
       attachments,
       settings: assistantSettings,
+      transcripts,
       replies,
       replyFeedback,
       transcription,
