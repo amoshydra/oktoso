@@ -5,6 +5,8 @@ export interface SessionRowProps {
   session: Session;
   provider: string;
   time: string;
+  /** Absolute update time, so the visible relative label is machine-readable. */
+  timeAt?: number;
   ariaLabel: string;
   active?: boolean;
   attention?: { type: string; label: string };
@@ -60,7 +62,13 @@ export function SessionRow(props: SessionRowProps) {
           </span>
         ) : null}
         {session.unread ? <span className="sr-only">Unread</span> : null}
-        <span className="mono">{props.time}</span>
+        {props.timeAt !== undefined ? (
+          <time className="mono" dateTime={new Date(props.timeAt).toISOString()}>
+            {props.time}
+          </time>
+        ) : (
+          <span className="mono">{props.time}</span>
+        )}
       </span>
     </button>
   );
