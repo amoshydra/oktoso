@@ -3829,6 +3829,9 @@ function SessionDetail(props: {
   const [narrow, setNarrow] = useState(() =>
     window.matchMedia("(max-width: 360px)").matches,
   );
+  const [compact, setCompact] = useState(() =>
+    window.matchMedia("(max-width: 420px)").matches,
+  );
   const prefetchedSuggestKey = useRef("");
   const suggestPrefetchTimer = useRef<number | undefined>(undefined);
   const [documentVisible, setDocumentVisible] = useState(
@@ -3927,6 +3930,13 @@ function SessionDetail(props: {
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 360px)");
     const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 420px)");
+    const onChange = () => setCompact(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -5212,7 +5222,7 @@ function SessionDetail(props: {
   );
   const selectionDisabled =
     selectionSaving || sending || session?.status === "running";
-  const attachInTools = running && attachSupported && narrow;
+  const attachInTools = attachSupported && (narrow || (compact && running));
   const hasComposerTools =
     dictationSupported ||
     (running && canSteer && canQueue) ||
@@ -5224,8 +5234,7 @@ function SessionDetail(props: {
   const contextChipTitle = [selectedAgentLabel, selectedModelLabel]
     .filter(Boolean)
     .join(" · ");
-  const contextChipLabel =
-    selectedAgentLabel || selectedModelLabel || "Setup";
+  const contextChipLabel = selectedAgentLabel || "Model";
   const renderSelection = (layout: "inline" | "sheet") => {
     const fieldClass =
       layout === "inline" ? "composer-option" : "composer-sheet-field";
@@ -5709,7 +5718,6 @@ function SessionDetail(props: {
                 className="chat-jump-float"
                 type="button"
                 data-visible={showJump}
-                aria-label="Jump to latest"
                 aria-hidden={!showJump}
                 tabIndex={showJump ? 0 : -1}
                 onClick={jumpToLatest}
@@ -7658,8 +7666,8 @@ function SessionDetails(props: {
               {statusLabel(session.status)}
             </span>
           </div>
-          <Detail label="Created" value={formatDateTime(session.createdAt)} />
-          <Detail label="Updated" value={formatDateTime(session.updatedAt)} />
+          <Detail label="Created" value={formatDateTime(session.createdAt)} mono={false} />
+          <Detail label="Updated" value={formatDateTime(session.updatedAt)} mono={false} />
         </section>
 
         {props.background.length > 0 ? (
@@ -7692,10 +7700,10 @@ function SessionDetails(props: {
           <section className="chat-details-section">
             <div className="chat-details-label">Usage</div>
             {session.cost !== undefined ? (
-              <Detail label="Cost" value={`$${session.cost.toFixed(2)}`} />
+              <Detail label="Cost" value={`$${session.cost.toFixed(2)}`} mono={false} />
             ) : null}
             {totalTokens !== undefined ? (
-              <Detail label="Tokens" value={formatTokenSummary(tokens, totalTokens)} />
+              <Detail label="Tokens" value={formatTokenSummary(tokens, totalTokens)} mono={false} />
             ) : null}
           </section>
         ) : null}

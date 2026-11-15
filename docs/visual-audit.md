@@ -300,7 +300,7 @@ The desktop chat now includes the prototype’s session sidebar.
 - The sidebar is 300px, sits between the rail and the transcript, and uses the panel surface with a right border.
 - It has search, provider and status filters, Today/Yesterday/Earlier groups, session rows, status dots, attention badges, and an active row with the raised surface, strong border, and 2px accent inset.
 - The list loads the newest 100 sessions and refreshes after session events. The active session is injected and sorted into the list if it falls outside the loaded page.
-- The transcript now has a readable measure: 728px at 1440px and 612px at 1024px, instead of 920px.
+- The transcript reading column is capped at 728px inside the panel. The panel frame may be 920px, but the prose measure stays at 728px; the 48px bottom inset gives the floating jump a clear gutter.
 - The sidebar is hidden and unmounted at 760px and below; mobile chat keeps the full-width route.
 - The All sessions action returns to the full list.
 
@@ -993,3 +993,44 @@ The transcript hard-cut at its top and bottom with no overflow cue.
 - **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
   `docs/prototypes/scroll-fade.html`, `docs/ui-ia.md`,
   `docs/interaction-contract.md`.
+
+## Audit batch one: targets and measure (2026-11-15)
+
+The typography and iconography audits found functional overlap in the mobile
+composer and a lost reading measure. This pass fixes the first, highest-impact
+group.
+
+- **Hit areas.** The `⋯`, Stop, and Send cluster used 32px visuals with `-6px`
+  pseudo targets and 4px gaps, so adjacent boxes overlapped by 8px. A tap on the
+  right edge of `⋯` could hit Stop; the right edge of Stop could hit Send. The
+  cluster is now three actual 44×44 controls with no expansion. Measured at
+  320/390/421px: all three are 44×44 and their right/left edges do not cross.
+- **Chip.** The context chip is 64px at 360px and below and 96px above. The
+  visible label is the agent, or `Model` when no agent is set; the full pair
+  stays in the accessible name and the sheet. This removes the `Deep…` model
+  fallback.
+- **Attach.** Inline above 420px, in `⋯` while running at 361–420px, and in `⋯`
+  at all states at 360px and below. The 390 and 320 running rows measure 292px
+  and 268px of content, inside their 342px and 296px bars.
+- **Jump name.** The button no longer has an `aria-label` that contradicts the
+  visible `Input needed` state; the visible text is the accessible name.
+- **Targets.** Suggestion Dismiss and queue Remove are 32px desktop and 44px
+  mobile, not 20×28 and 16×28.
+- **Reading column.** Transcript children are capped at 728px inside the
+  panel. The 920px panel frame remains; the right gutter holds the floating
+  jump. A constant 48px bottom inset keeps the jump off the last line on
+  narrower panels.
+- **Details values.** `.detail strong` is 500 with tabular figures. Created,
+  Updated, Cost, and Tokens are sans; references and endpoints remain mono.
+  `font-synthesis: none` prevents Plex Mono faux bold.
+- **Mobile inputs.** Question fields and the custom answer input join the 16px
+  mobile text rule.
+- **Rendering.** `font-synthesis: none` and `text-size-adjust: 100%` are set on
+  the root.
+- **Proof.** Details values measured: Created Inter 500, Session reference Plex
+  Mono 500, Agent Inter 500. The scroll e2e test asserts the 728px measure, the
+  visible-text jump name, the mask classes, and the fixed composer. The new
+  composer e2e test asserts three 44px controls with no overlap.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `packages/ui/src/base.css`, `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`,
+  `docs/design-lock.md`.
