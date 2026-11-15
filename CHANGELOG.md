@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.31](https://github.com/amoshydra/oktoso/compare/v0.1.30...v0.1.31) (2026-11-15)
+
+
+### Features
+
+* **web:** render mermaid diagrams in the transcript ([5330245](https://github.com/amoshydra/oktoso/commit/53302451e32bec409d07406899b654edf3f465ca))
+
 ## [0.1.30](https://github.com/amoshydra/oktoso/compare/v0.1.29...v0.1.30) (2026-11-14)
 
 
