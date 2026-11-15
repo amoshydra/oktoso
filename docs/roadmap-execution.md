@@ -54,7 +54,7 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
 
 Target: 2–3 weeks. Release: `v0.2.0` at phase completion, patches per slice.
 
-Status: complete. A1–A6, A8, and A9 are done; A7 (outbound channels) is deferred local-first. `0.1.29` is ready for release-please on merge.
+Status: complete and shipped in `v0.2.0`. A1–A6, A8, and A9 are done. Web Push is the only outbound channel; there is no ntfy, Telegram, or webhook sender.
 
 ### A1. Contracts and configuration
 
@@ -185,24 +185,6 @@ Status: implemented. The panel lives in
 `/api/v1/notifications`, and uses the existing panel/form/button grammar.
 An e2e saves routing and verifies it survives a reload.
 
-### A7. Outbound channels (deferred)
-
-Status: deferred on 2026-11-15. Keep notifications local-first: no ntfy,
-Telegram, or webhook until a local consumer exists. The transport seam,
-config schema, and settings channel view are already in place; add the generic
-webhook first when something on the LAN is ready to receive it.
-
-- [ ] `packages/hub/src/services/channels/ntfy.ts`, `telegram.ts`,
-  `webhook.ts`.
-- [ ] Plain `fetch`, no new runtime dependency, bounded timeout.
-- [ ] Redact tokens in errors; respect the same routing and quiet hours.
-- [ ] Document the payload shape for the generic webhook.
-
-**Touch:** `packages/hub/src/services/channels/*`,
-`docs/deployment.md`.
-**Done:** each channel has a unit test against a local fake server; a failed
-channel does not block Web Push.
-
 ### A8. Offline shell and queued sends
 
 - [x] Cache the shell and the last session list.
@@ -248,13 +230,14 @@ the branch merges; nothing is published from the worktree.
 
 ## Phase 4 — Supervisor
 
-Target: 4–6 weeks. Release: `v0.3.0`.
+Target: 4–6 weeks. Shipped in `v0.2.0` together with Phase 3.
 
-Status: in progress. Attention, session-idle/error, and schedule watchers are
-implemented, with the low-risk answer policy, dry-run, leases, budgets, quiet
-hours, notify/retry/escalate actions, approvals in the Inbox and Settings,
-always-allow shapes, runs, pause, MCP tools, and the CLI. Remaining: token/day
-budget, start-from-template, G2 approvals, and an in-flight abort.
+Status: complete except real-provider validation. Attention,
+session-idle/error, and schedule watchers are implemented, with the low-risk
+answer policy, dry-run, leases, budgets, quiet hours,
+notify/retry/escalate/start actions, approvals in the Inbox and Settings,
+always-allow shapes, runs, pause with an in-flight abort, MCP tools, and the
+CLI. Remaining: approval execution on a real provider.
 
 ### B1. Contracts
 
@@ -284,7 +267,10 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
 - [x] Enforce actions/hour and actions/day, globally and per watcher.
 - [x] Quiet hours: answer and retry escalate instead of acting.
 - [x] Record the policy decision on every run.
-- [ ] Token/day budget.
+- [x] No token budget. A per-action token charge cannot be computed before an
+  action: `sendMessage` returns only `accepted` and a message id, and session
+  usage arrives after the provider's reply. Actions/hour and actions/day are
+  the enforced cost guards; see `deployment.md`.
 
 ### B4. Actions
 
@@ -336,7 +322,7 @@ budget, start-from-template, G2 approvals, and an in-flight abort.
 - [x] Quiet hours escalates instead of answering.
 - [x] Session idle/error and schedule triggers fire once.
 - [x] Retry-once and retry-action tests.
-- [ ] Kill switch stops an action mid-flight.
+- [x] Kill switch stops an action mid-flight.
 - [ ] Approval execution on a real provider.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
@@ -344,7 +330,7 @@ real session.
 
 ## Phase 5 — Recall and lineage
 
-Target: 3–4 weeks. Release: `v0.4.0`.
+Target: 3–4 weeks. Release: `v0.3.0`.
 
 ### C1. Transcript cache
 
@@ -401,7 +387,7 @@ fixture; export round-trips; deleting local state leaves the provider untouched.
 
 ## Phase 6 — Provider platform
 
-Target: 6–8 weeks. Release: `v0.5.0`.
+Target: 6–8 weeks. Release: `v0.4.0`.
 
 ### D1. Hermes adapter
 
@@ -438,7 +424,7 @@ passes the suite with no hub changes.
 
 ## Phase 7 — MCP southbound
 
-Target: 6–8 weeks. Release: `v0.6.0`.
+Target: 6–8 weeks. Release: `v0.5.0`.
 
 ### E1. Client registry
 
@@ -471,7 +457,7 @@ Target: 6–8 weeks. Release: `v0.6.0`.
 
 ## Phase 8 — Hardening and observability
 
-Target: 2–3 weeks. Release: `v0.7.0`.
+Target: 2–3 weeks. Release: `v0.6.0`.
 
 ### F1. Metrics
 
@@ -535,12 +521,11 @@ Schedule one bet at a time, each with its own acceptance before it starts.
 |---|---|---|
 | `0.1.29` | Phase 3, slice 1: contracts, notification core, Web Push | e2e push delivery |
 | `0.1.30` | Phase 3, slice 2: channels, quiet hours, settings | routing/quiet-hours tests |
-| `0.2.0` | Phase 3 complete: PWA, offline, deep links | phase acceptance |
-| `0.3.0` | Phase 4: supervisor | safety matrix |
-| `0.4.0` | Phase 5: recall and lineage | search/export acceptance |
-| `0.5.0` | Phase 6: Provider platform and Hermes | conformance suite |
-| `0.6.0` | Phase 7: MCP southbound | policy acceptance |
-| `0.7.0` | Phase 8: hardening | acceptance runs |
+| `0.2.0` | Phases 3 and 4: attention, PWA/offline, supervisor | phase acceptance |
+| `0.3.0` | Phase 5: recall and lineage | search/export acceptance |
+| `0.4.0` | Phase 6: Provider platform and Hermes | conformance suite |
+| `0.5.0` | Phase 7: MCP southbound | policy acceptance |
+| `0.6.0` | Phase 8: hardening | acceptance runs |
 
 Patch releases inside a phase are expected. A phase does not merge to `main`
 until its acceptance passes.
@@ -562,7 +547,7 @@ A task is done when:
 
 | Risk | Mitigation |
 |---|---|
-| iOS requires an installed PWA for push and shows no silent push | Detect and explain; keep ntfy/Telegram as the fallback |
+| iOS requires an installed PWA for push and shows no silent push | Detect and explain in Settings → Notifications |
 | Push encryption and VAPID are easy to get wrong | Use a pinned, pure-JS implementation; test against a fake receiver |
 | Notifications become noise | Coalesce by session, default digest for non-blocking, quiet hours |
 | Auto-answer does something wrong | Dry-run default, allowlist only, approval queue, kill switch, audit |
@@ -583,9 +568,9 @@ These need an answer before the task that depends on them.
 2. **VAPID key location.** Resolved: generated at
    `dataDir/notifications/vapid.json` (mode `0600`) on first start, with a
    config override for operators who keep keys elsewhere.
-3. **Channel scope.** Web Push only, or Web Push plus ntfy/Telegram/webhook?
-   Recommendation: Web Push first, ntfy in the same phase as the escape hatch.
-   Owner: A7.
+3. **Channel scope.** Resolved: Web Push only. No ntfy, Telegram, or webhook
+   sender is planned; the settings screen explains the HTTPS/localhost and iOS
+   install requirements instead of offering another channel.
 4. **Search index.** Add a pure-JS dependency (for example MiniSearch) or
    hand-roll a small inverted index? Recommendation: measure with a hand-rolled
    index on the 500-session fixture; adopt a package only if relevance is poor.
