@@ -859,8 +859,8 @@ describe("ReplyService role generation and lint", () => {
           opposite: "Hold off for now.",
           next: "Check the hit/miss logs.",
           verify: "Check the hit/miss ratios.",
-          extend: "Should I add more tests?",
-          ask: "Should the cache bound grow?",
+          extend: "Acknowledge the successful cache repair and delivery.",
+          ask: "Should we also update every documentation page that mentions the cache bound and the API?",
         }),
       )
       .mockResolvedValueOnce(
@@ -1087,6 +1087,129 @@ describe("ReplyService live gate cases", () => {
     expect(audit.moment.state).toBe("wait");
     expect(audit.context).toContain("latest_turn: user");
     expect(audit.context).not.toContain("running: shell");
+  });
+});
+
+describe("ReplyService G2 reply usability", () => {
+  it("keeps a one-word acknowledgement on a finished turn", async () => {
+    const data = [
+      textMessage("m1", "user", "Fix the auth race"),
+      textMessage("m2", "assistant", "Done. Fixed the auth race and pushed it."),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Done.",
+          opposite: "Thanks, looks good.",
+          next: "Show me the diff.",
+          verify: "Rerun the tests.",
+          extend: "Add a regression test.",
+          ask: "Should I tag it?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const texts = audit.options
+      .filter((option) => option.source === "model")
+      .map((option) => option.text);
+
+    expect(texts).toContain("Done.");
+    expect(audit.rejected.some((item) => item.text === "Done.")).toBe(false);
+  });
+
+  it("adds a usable acknowledgement when the model writes meta for done", async () => {
+    const data = [
+      textMessage("m1", "user", "Ship the provider limit fix"),
+      textMessage("m2", "assistant", "Done. The provider limit is fixed and pushed."),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Acknowledge the successful fix and delivery.",
+          opposite: "Revert the change.",
+          next: "Run the provider smoke test.",
+          verify: "Check the provider status output.",
+          extend: "Add a limit regression test.",
+          ask: "Should I tag the release?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const ack = audit.options.find((option) => option.id === "ack");
+
+    expect(ack?.text).toBe("Thanks, looks good.");
+    expect(ack?.role).toBe("answer");
+    expect(audit.rejected.some((item) => item.role === "answer")).toBe(true);
+  });
+
+  it("keeps a natural question in extend", async () => {
+    const data = [
+      textMessage("m1", "user", "Pick the better deploy option"),
+      textMessage(
+        "m2",
+        "assistant",
+        "TREK is the better choice. Say the word and that goes too.",
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Yes, use TREK.",
+          opposite: "Stick with AdventureLog.",
+          next: "Rewrite the installer.",
+          verify: "Show the installer diff.",
+          extend: "Can you show me the script first?",
+          ask: "What makes TREK better?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const texts = audit.options
+      .filter((option) => option.source === "model")
+      .map((option) => option.text);
+
+    expect(texts).toContain("Can you show me the script first?");
+    expect(audit.rejected.some((item) => item.role === "extend")).toBe(false);
+  });
+
+  it("anchors an ask to the task when pending is an offer", async () => {
+    const data = [
+      textMessage("m1", "user", "Use TREK for the deployment"),
+      textMessage(
+        "m2",
+        "assistant",
+        "TREK is the better choice. Say the word and that goes too.",
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Yes, use TREK.",
+          opposite: "Stick with AdventureLog.",
+          next: "Rewrite the installer.",
+          verify: "Show the installer diff.",
+          extend: "Show the TREK installer script.",
+          ask: "What makes TREK better?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const ask = audit.options.find((option) => option.role === "ask");
+
+    expect(ask?.text).toBe("What makes TREK better?");
+    expect(audit.rejected.some((item) => item.role === "ask")).toBe(false);
   });
 });
 

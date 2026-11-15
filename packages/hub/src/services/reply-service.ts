@@ -52,6 +52,7 @@ interface RoleTexts {
 
 interface LintContext {
   running?: string;
+  task?: string;
 }
 
 interface MomentContext {
@@ -221,7 +222,7 @@ Rules:
 - Never contradict a constraint.
 - Never bypass an approval, permission, or safety check.
 - Ground every message in a real entity from MOMENT. No invented files, versions, or options.
-- 2-10 words. Plain text. Write what you would type, not a specification. Only "ask" may be a question; every other field is a statement. No quotes, no numbering, no meta commentary, and no "Acknowledge / Propose / Confirm the ...".
+- 2-10 words. Plain text. Write what you would type, not a specification. Answer and opposite are statements; ask and extend may be questions. No quotes, no numbering, no meta commentary, and no "Acknowledge / Propose / Confirm the ...".
 - For a finished fix, bad: "Acknowledge the successful fix and delivery." Good: "Thanks, looks good." / "Show me the diff." / "Add a regression test for the auth race."
 Return only JSON.`;
 
@@ -445,11 +446,14 @@ export class ReplyService {
     }
     const value: ReplyOptions = {
       ...base,
-      data: [
-        ...canned.slice(0, 1),
-        ...linted.options,
-        ...canned.slice(1),
-      ],
+      data: withDoneAcknowledgement(
+        [
+          ...canned.slice(0, 1),
+          ...linted.options,
+          ...canned.slice(1),
+        ],
+        moment,
+      ),
       confidence: linted.confidence,
     };
     this.cache.set(cacheKey, {
@@ -546,10 +550,12 @@ export class ReplyService {
       config,
       lintContext(momentContext),
     );
-    const options =
+    const options = withDoneAcknowledgement(
       linted.options.length > 0
         ? [...canned.slice(0, 1), ...linted.options, ...canned.slice(1)]
-        : canned;
+        : canned,
+      moment,
+    );
     return {
       sessionRef: ref,
       ...(session?.title ? { sessionTitle: session.title } : {}),
@@ -888,6 +894,29 @@ function replyModelReady(config: AssistantConfig): boolean {
     config.reply.baseUrl.trim().length > 0 &&
     config.reply.model.trim().length > 0
   );
+}
+
+function withDoneAcknowledgement(
+  options: ReplyOption[],
+  moment: ReplyMoment,
+): ReplyOption[] {
+  if (
+    moment.state !== "done" ||
+    options.some((option) => option.role === "answer")
+  ) {
+    return options;
+  }
+  return [
+    {
+      id: "ack",
+      label: "Thanks, looks good.",
+      text: "Thanks, looks good.",
+      source: "canned",
+      action: "send",
+      role: "answer",
+    },
+    ...options,
+  ];
 }
 
 function cannedOptions(): ReplyOption[] {
@@ -1468,7 +1497,16 @@ function lintSuggestion(
   const text = raw.trim();
   if (!text) return role === "ask" ? undefined : "empty";
   const words = text.split(/\s+/).filter(Boolean).length;
-  if (words < MIN_ROLE_WORDS || words > MAX_ROLE_WORDS) return "length";
+  const doneAcknowledgement =
+    moment.state === "done" &&
+    (role === "answer" || role === "opposite") &&
+    /^(?:done|acknowledged|thanks|thank you|ok|okay|yes|lgtm|ship it)[.!]*$/i.test(text);
+  if (
+    (words < MIN_ROLE_WORDS && !doneAcknowledgement) ||
+    words > MAX_ROLE_WORDS
+  ) {
+    return "length";
+  }
   if (text.length > MAX_SUGGESTION_CHARS) return "too long";
   if (META_TEXT.test(text)) return "meta";
   if (UNSAFE_TEXT.test(text) || UNSAFE_TEXT_ALT.test(text)) return "unsafe";
@@ -1486,7 +1524,12 @@ function lintSuggestion(
     return "stale";
   }
   if (role === "ask" && !/\?\s*$/.test(text)) return "not a question";
-  if (role !== "ask" && /\?\s*$/.test(text)) return "not a statement";
+  if (
+    (role === "answer" || role === "opposite") &&
+    /\?\s*$/.test(text)
+  ) {
+    return "not a statement";
+  }
   if (META_ACT.test(text)) return "meta";
   // A finished turn can legitimately be closed with "Thanks, looks good."
   const closing =
@@ -1499,25 +1542,20 @@ function lintSuggestion(
   ) {
     return "not an interrupt";
   }
-  if (
-    role === "ask" &&
-    moment.pending !== undefined &&
-    tokenSet(moment.pending).size >= 2 &&
-    !sharesToken(text, moment.pending)
-  ) {
-    return "off-topic";
-  }
-  // Without a pending question the ask still has to hang off the task itself,
-  // not just share a work verb like "fix" or "build".
-  if (
-    role === "ask" &&
-    (moment.pending === undefined || tokenSet(moment.pending).size < 2) &&
-    !sharesContentToken(text, grounding)
-  ) {
-    return "off-topic";
-  }
-  if (role === "ask" && lint.running && !sharesToken(text, lint.running)) {
-    return "off-topic";
+  if (role === "ask") {
+    const anchored =
+      (moment.pending !== undefined &&
+        sharesToken(text, moment.pending)) ||
+      sharesContentToken(text, lint.task ?? grounding) ||
+      (lint.running !== undefined && sharesToken(text, lint.running));
+    if (!anchored) return "off-topic";
+    if (
+      lint.running &&
+      !sharesToken(text, lint.running) &&
+      !sharesContentToken(text, lint.task ?? lint.running)
+    ) {
+      return "off-topic";
+    }
   }
   const invented = inventedEntity(text, grounding);
   if (invented) return `ungrounded: ${invented}`;
@@ -1704,7 +1742,10 @@ function sharesContentToken(left: string, right: string): boolean {
 }
 
 function lintContext(context: MomentContext): LintContext {
-  return context.running ? { running: context.running } : {};
+  return {
+    ...(context.running ? { running: context.running } : {}),
+    task: `${context.userGoal} ${context.lastAssistantTail}`.trim(),
+  };
 }
 
 function sharesToken(left: string, right: string): boolean {

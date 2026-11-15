@@ -71,6 +71,11 @@ task. The clients show those suggestions instead of a "no reply needed" notice.
 If the reply model is disabled or unreachable, the endpoint returns the canned
 actions plus the state, and the clients fall back to that list.
 
+A finished turn always gets a usable acknowledgement. If the model writes a meta
+description or no `answer` survives lint, the hub adds the canned
+`Thanks, looks good.` option with the `answer` role. On G2 it sorts first, so the
+no-keyboard user always has a one-tap close.
+
 ## Context policy
 
 The model gets a compact MOMENT block, not the whole transcript:
@@ -171,13 +176,16 @@ The lint rejects:
 - meta descriptions ("Acknowledge the successful fix…"), procedural text, and
   generic continuations. A short acknowledgement is allowed as the `done`
   answer or close, because "Thanks, looks good." is a real message.
-- wrong length, a question that is not a question, a statement that ends in `?`,
-  and text that rewords an accepted suggestion. Duplicate detection compares
-  Jaccard overlap, and folds action verbs ("run/retry/execute", "use/change")
-  when checking whether `next` restates `answer`.
+- wrong length, a question that is not a question, and text that rewords an
+  accepted suggestion. `answer` and `opposite` must be statements; `next`,
+  `verify`, and `extend` may be questions because a natural question is a valid
+  reply. Duplicate detection compares Jaccard overlap, and folds action verbs
+  ("run/retry/execute", "use/change") when checking whether `next` restates
+  `answer`.
 - a question that restates the pending question, or one with no content noun in
-  the moment. Sharing only a work verb ("fix", "build", "check") is not enough;
-  in `wait`, the question must also touch the running command.
+  the task. The ask may anchor to the pending decision, the current request and
+  assistant tail, or the running command. Sharing only a work verb ("fix",
+  "build", "check") is not enough.
 - an invented concrete entity: every number, version, PR, path, filename, or
   backticked token must appear in the MOMENT block. Ordinary new words are
   allowed, so a suggestion is not punished for describing an unmentioned action.
@@ -185,6 +193,20 @@ The lint rejects:
 A rejected role is dropped; the remaining options still show. Only an empty set
 falls back to canned options. Rejections are recorded on the audit page and are
 not cached.
+
+### G2 reply usability
+
+The glasses show three choices per page and clamp each label to 54 characters,
+so the result is judged as a tappable message, not an analysis:
+
+- The expected `answer` sorts first, then the other model roles, then the canned
+  utilities. A done fallback acknowledgement also sorts first.
+- `answer` and `opposite` are the accept/decline pair. `next`, `verify`, and
+  `extend` may be questions when that is what a person would type.
+- The G2 reserves a voice action when transcription is configured and keeps
+  `← Previous choices` / `More choices →` at the page edges.
+- A suggestion that only names the agent's internal shell command is not a G2
+  reply; read-only inspection commands are filtered from `running`.
 
 ## Prompt check harness
 
