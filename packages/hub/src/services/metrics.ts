@@ -20,7 +20,7 @@ export interface MetricsSources {
  * credential, or session title: the scrape endpoint is authenticated, but the
  * series are safe to forward to a long-lived metrics store.
  *
- * Counters that read from bounded logs say `recent_` in the name so nobody
+ * Counters that read from bounded logs say `_recent` in the name so nobody
  * mistakes them for lifetime totals.
  */
 export function renderMetrics(sources: MetricsSources): string {
@@ -42,6 +42,9 @@ export function renderMetrics(sources: MetricsSources): string {
   emit(`oktoso_uptime_seconds ${Math.max(0, (now - sources.startedAt) / 1000)}`);
 
   const providers = sources.registry.list();
+  const deliveries = state.notificationDeliveries ?? [];
+  const runs = state.automationRuns ?? [];
+  const approvals = state.automationApprovals ?? [];
   emit("# HELP oktoso_provider_up Provider health: 1 online, 0 otherwise.");
   emit("# TYPE oktoso_provider_up gauge");
   for (const provider of providers) {
@@ -53,8 +56,9 @@ export function renderMetrics(sources: MetricsSources): string {
   }
   emit("# HELP oktoso_providers Number of configured providers by status.");
   emit("# TYPE oktoso_providers gauge");
-  for (const [status, count] of countBy(providers.map((provider) => provider.status))) {
-    emit(`oktoso_providers{status="${escape(status)}"} ${count}`);
+  const providerStatuses = countBy(providers.map((provider) => provider.status));
+  for (const status of ["online", "offline", "auth-error", "unknown"]) {
+    emit(`oktoso_providers{status="${status}"} ${providerStatuses.get(status) ?? 0}`);
   }
 
   emit("# HELP oktoso_sessions_cached Sessions the hub currently holds in memory.");
@@ -75,21 +79,23 @@ export function renderMetrics(sources: MetricsSources): string {
 
   emit("# HELP oktoso_notification_deliveries_recent Delivery outcomes in the bounded log.");
   emit("# TYPE oktoso_notification_deliveries_recent gauge");
-  for (const [status, count] of countBy(
-    state.notificationDeliveries.map((delivery) => delivery.status),
-  )) {
+  const deliveryStatuses = countBy(deliveries.map((delivery) => delivery.status));
+  for (const status of ["queued", "sent", "failed", "skipped"]) {
     emit(
-      `oktoso_notification_deliveries_recent{status="${escape(status)}"} ${count}`,
+      `oktoso_notification_deliveries_recent{status="${status}"} ${
+        deliveryStatuses.get(status) ?? 0
+      }`,
     );
   }
 
   emit("# HELP oktoso_automation_runs_recent Supervisor decisions in the bounded audit log.");
   emit("# TYPE oktoso_automation_runs_recent gauge");
-  for (const [decision, count] of countBy(
-    state.automationRuns.map((run) => run.decision),
-  )) {
+  const decisions = countBy(runs.map((run) => run.decision));
+  for (const decision of ["acted", "escalated", "dry_run", "skipped", "failed"]) {
     emit(
-      `oktoso_automation_runs_recent{decision="${escape(decision)}"} ${count}`,
+      `oktoso_automation_runs_recent{decision="${decision}"} ${
+        decisions.get(decision) ?? 0
+      }`,
     );
   }
 
@@ -97,8 +103,7 @@ export function renderMetrics(sources: MetricsSources): string {
   emit("# TYPE oktoso_automation_approvals_open gauge");
   emit(
     `oktoso_automation_approvals_open ${
-      state.automationApprovals.filter((approval) => approval.status === "pending")
-        .length
+      approvals.filter((approval) => approval.status === "pending").length
     }`,
   );
 
@@ -110,7 +115,7 @@ export function renderMetrics(sources: MetricsSources): string {
   emit("# TYPE oktoso_notification_devices gauge");
   emit(
     `oktoso_notification_devices ${
-      Object.keys(state.notificationSubscriptions).length
+      Object.keys(state.notificationSubscriptions ?? {}).length
     }`,
   );
 
