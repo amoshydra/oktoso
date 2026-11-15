@@ -4499,6 +4499,43 @@ components:
               - id
               - trigger
               - action
+        templates:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                minLength: 1
+                maxLength: 64
+                pattern: ^[a-zA-Z0-9._-]+$
+              name:
+                type: string
+                minLength: 1
+                maxLength: 80
+              providerID:
+                type: string
+                minLength: 1
+              title:
+                type: string
+                minLength: 1
+                maxLength: 120
+              directory:
+                type: string
+                minLength: 1
+              agent:
+                type: string
+                minLength: 1
+              model:
+                type: string
+                minLength: 1
+              text:
+                type: string
+                minLength: 1
+            required:
+              - id
+              - providerID
+              - title
         pausedWatchers:
           type: array
           items:
@@ -4703,6 +4740,7 @@ components:
         - paused
         - dryRun
         - watchers
+        - templates
         - pausedWatchers
         - runs
         - approvals
@@ -6747,6 +6785,44 @@ paths:
                   - data
         "400":
           description: Invalid automation settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/automation/templates/{id}/start:
+    post:
+      tags:
+        - automation
+      summary: Start a configured template
+      description: "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+          required: true
+          name: id
+          in: path
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Unknown template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider cannot create or send
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
           content:
             application/json:
               schema:

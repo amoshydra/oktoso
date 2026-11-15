@@ -1441,6 +1441,22 @@ describe("hub app", () => {
     expect(other.status).toBe(401);
   });
 
+  it("lists templates and rejects an unknown template start", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const view = (await (
+      await app.request("/api/v1/automation", { headers })
+    ).json()) as { data: { templates: unknown[] } };
+    expect(Array.isArray(view.data.templates)).toBe(true);
+
+    const missing = await app.request(
+      "/api/v1/automation/templates/nope/start",
+      { method: "POST", headers },
+    );
+    expect(missing.status).toBe(404);
+  });
+
   it("exposes Prometheus metrics behind the owner credential", async () => {
     const { app } = await createTestApp();
 

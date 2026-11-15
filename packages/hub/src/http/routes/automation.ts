@@ -42,6 +42,11 @@ export function registerAutomationRoutes(
     });
   });
 
+  app.post("/api/v1/automation/templates/:id/start", async (c) => {
+    const session = await automation.startTemplate(c.req.param("id"));
+    return c.json(session, 201);
+  });
+
   app.get("/api/v1/automation/runs", (c) => {
     const raw = Number(c.req.query("limit") ?? 50);
     const limit = Number.isFinite(raw) ? Math.min(Math.max(raw, 1), 200) : 50;

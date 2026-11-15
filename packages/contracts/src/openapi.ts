@@ -1465,6 +1465,24 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "post",
+  path: "/api/v1/automation/templates/{id}/start",
+  tags: ["automation"],
+  summary: "Start a configured template",
+  description:
+    "A human action: it ignores pause, dry run, budgets, and quiet hours, and records no automation run.",
+  request: {
+    params: z.object({ id: z.string().min(1) }),
+  },
+  responses: {
+    201: { description: "Created session", content: json(SessionSchema) },
+    404: errorResponse("Unknown template"),
+    501: errorResponse("Provider cannot create or send"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
   method: "put",
   path: "/api/v1/automation",
   tags: ["automation"],

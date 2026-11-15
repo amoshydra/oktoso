@@ -555,6 +555,14 @@ export class HubClient {
     return this.request<SearchPage>(`/api/v1/search?${params.toString()}`);
   }
 
+  /** Starts a configured template as a human action, not through the supervisor. */
+  async startTemplate(id: string): Promise<Session> {
+    return this.request<Session>(
+      `/api/v1/automation/templates/${encodeURIComponent(id)}/start`,
+      { method: "POST" },
+    );
+  }
+
   async transcriptCache(): Promise<TranscriptCacheView> {
     const response = await this.request<{ data: TranscriptCacheView }>(
       "/api/v1/settings/transcripts",

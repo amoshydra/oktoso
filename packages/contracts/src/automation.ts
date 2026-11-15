@@ -189,6 +189,8 @@ export const zAutomationView = z.object({
   paused: z.boolean(),
   dryRun: z.boolean(),
   watchers: z.array(zAutomationWatcher),
+  /** Configured start templates, so a human can start one without the file. */
+  templates: z.array(zAutomationTemplate),
   pausedWatchers: z.array(z.string()),
   runs: z.array(zAutomationRun),
   approvals: z.array(zAutomationApproval),
