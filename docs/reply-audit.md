@@ -154,7 +154,10 @@ If a full six-field draft still lints down to fewer than four usable options,
 the hub makes one bounded repair call for just the missing or rejected roles and
 merges the results. The accepted roles are kept unchanged, and the audit raw
 output shows both attempts separated by `--- retry ---`. A sparse draft is not
-repaired: it is treated as a model failure and falls back to what survived.
+repaired: it is treated as a model failure and falls back to what survived. A
+`reply` moment that still has four or more chips but no `answer` gets the same
+one-shot repair for the answer alone, so an approval or failure never loses its
+primary chip to a lint rejection.
 
 The prompt asks for five usable fields and six when every field is distinct. In
 `done`, `answer` is a short acknowledgement, `opposite` closes the loop, and
@@ -164,6 +167,12 @@ the other fields suggest what to queue, add, or check when the run lands. When
 `latest_turn` is `user`, the prompt asks for steering or queued messages that
 refine the new instruction instead of repeating the previous answer. The model
 phrases; it does not decide whether to suggest or what the state is.
+
+The prompt also carries a short style example for each state. These are shapes,
+not content: approval ("Go ahead and merge it." / "Hold off until the checks
+pass."), failure ("Use the cached 12.0.0." / "Revert the dependency bump."), and
+challenge ("You're right, fix the remount."). They exist because the small reply
+model follows examples more reliably than abstract rules.
 
 The lint rejects:
 
@@ -179,7 +188,11 @@ The lint rejects:
 - wrong length, a question that is not a question, and text that rewords an
   accepted suggestion. `answer` and `opposite` must be statements; `next`,
   `verify`, and `extend` may be questions because a natural question is a valid
-  reply. Duplicate detection compares Jaccard overlap, and folds action verbs
+  reply. A short approval acceptance such as "Go ahead and merge it." is allowed
+  even though the generic guard would otherwise reject "go ahead". A challenge
+  `answer` that only restates the corrected diagnosis ("The drawer remounts on
+  every event.") is rejected; it must acknowledge the correction and ask for
+  action. Duplicate detection compares Jaccard overlap, and folds action verbs
   ("run/retry/execute", "use/change") when checking whether `next` restates
   `answer`.
 - a question that restates the pending question, or one with no content noun in

@@ -231,8 +231,8 @@ Write JSON with six fields:
 
 Rules:
 - Always offer five usable suggestions, and six when every field is genuinely distinct. Never return all empty strings.
-- In state "failure", answer must be a route out, not acceptance of the failure. The opposite must be a route the environment can still take.
-- In state "challenge" the user corrected the agent: answer acknowledges the correction in a statement, opposite defends the old diagnosis or names a different cause, and neither asks the question back.
+- In state "failure", answer must be a route out that MOMENT already names, not acceptance of the failure and not an invented technique. Bad: "Force Gradle to resolve the dependency." Good: "Use the cached 12.0.0." The opposite must be a route the environment can still take.
+- In state "challenge" the user corrected the agent: answer acknowledges the correction and asks for action; never restate the corrected diagnosis as a new claim. Bad: "The drawer remounts on every event." Good: "You're right, fix the remount." Opposite defends the old diagnosis or names a different cause, and neither asks the question back.
 - A finished turn is still a conversation. In state "done", answer is a short acknowledgement, opposite closes the loop, and next, verify, extend, and ask are all required.
 - In state "wait" the run is still going: answer is the natural wait message ("Let it finish.", "Ping me when the tests pass."), opposite is an interrupt ("Stop it, the cache assumption is wrong."), and next must not repeat the running command.
 - If latest_turn is "user", the user has just sent a new instruction. Suggest steering or queued messages that refine it. Do not repeat a line from last_assistant_tail or suggest inspecting an internal command.
@@ -246,6 +246,10 @@ Rules:
 - Ground every message in a real entity from MOMENT. No invented files, versions, or options.
 - 2-10 words. Plain text. Write what you would type, not a specification. Answer and opposite are statements; ask and extend may be questions. No quotes, no numbering, no meta commentary, and no "Acknowledge / Propose / Confirm the ...".
 - For a finished fix, bad: "Acknowledge the successful fix and delivery." Good: "Thanks, looks good." / "Show me the diff." / "Add a regression test for the auth race."
+Style examples (these are shapes, not content; use MOMENT entities):
+- approval: "Go ahead and merge it." / "Hold off until the checks pass." / "Run the integration tests first." / "Check the diff." / "Add a changelog note." / "Should I tag the release?"
+- failure: "Use the cached 12.0.0." / "Revert the dependency bump." / "Rerun the build." / "Check the full error log." / "Pin the working version." / "Which versions are installed?"
+- challenge: "You're right, fix the remount." / "The list refetch is still the cause." / "Check the lifecycle hooks." / "Rerun the profiler." / "Add a regression test." / "What triggers the remount?"
 Return only JSON.`;
 
 const REPLY_SCHEMA = {
@@ -647,12 +651,22 @@ export class ReplyService {
     ).length;
     // A sparse draft is a model failure worth another call; a nearly full draft
     // is the case the repair exists for. Both only retry once.
-    if (linted.options.length >= MIN_SUGGESTIONS || draftFields < 5) {
+    const accepted = new Set(linted.options.map((option) => option.role));
+    const needsAnswer =
+      moment.state === "reply" && !accepted.has("answer");
+    // A reply moment without an answer is missing its primary chip even when
+    // the other roles are full. Rewrite only that role in that case; when the
+    // whole draft is sparse, rewrite every gap.
+    if (draftFields < 5) {
       return { generation, linted };
     }
-
-    const accepted = new Set(linted.options.map((option) => option.role));
-    const gap = ALL_ROLES.filter((role) => !accepted.has(role));
+    if (!needsAnswer && linted.options.length >= MIN_SUGGESTIONS) {
+      return { generation, linted };
+    }
+    const gap =
+      needsAnswer && linted.options.length >= MIN_SUGGESTIONS
+        ? (["answer"] as ReplyRole[])
+        : ALL_ROLES.filter((role) => !accepted.has(role));
     const reasons = new Map(
       linted.rejected
         .filter((item) => item.role !== undefined)
@@ -1582,10 +1596,25 @@ function lintSuggestion(
     return "not a statement";
   }
   if (META_ACT.test(text)) return "meta";
-  // A finished turn can legitimately be closed with "Thanks, looks good."
+  // A finished turn can legitimately be closed with "Thanks, looks good.",
+  // and an approval can be accepted with "Go ahead".
   const closing =
     moment.state === "done" && (role === "answer" || role === "opposite");
-  if (GENERIC.test(text) && !closing) return "generic";
+  const accepting =
+    moment.state === "reply" &&
+    moment.kind === "approval" &&
+    role === "answer" &&
+    /^(?:go ahead|do it|proceed|approved|yes|lgtm|ship it)\b/i.test(text);
+  if (GENERIC.test(text) && !closing && !accepting) return "generic";
+  const restatesDiagnosis =
+    moment.state === "reply" &&
+    moment.kind === "challenge" &&
+    role === "answer" &&
+    /^(?:the|this|that)\b[^.]*\b(?:is|are|was|were|remounts?|refetches?|causes?)\b/i.test(
+      text,
+    ) &&
+    !/\b(?:right|fix|check|look|address|act|proceed|go ahead)\b/i.test(text);
+  if (restatesDiagnosis) return "restates diagnosis";
   if (
     moment.state === "wait" &&
     role === "opposite" &&
