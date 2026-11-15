@@ -6133,6 +6133,14 @@ paths:
           required: false
           name: mode
           in: query
+        - schema:
+            type: string
+            enum:
+              - web
+              - g2
+          required: false
+          name: surface
+          in: query
       responses:
         "200":
           description: Reply options
@@ -6171,6 +6179,14 @@ paths:
               - choices
           required: false
           name: mode
+          in: query
+        - schema:
+            type: string
+            enum:
+              - web
+              - g2
+          required: false
+          name: surface
           in: query
       responses:
         "200":

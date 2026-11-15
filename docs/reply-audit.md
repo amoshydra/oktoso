@@ -194,6 +194,15 @@ A rejected role is dropped; the remaining options still show. Only an empty set
 falls back to canned options. Rejections are recorded on the audit page and are
 not cached.
 
+### Surfaces and compact mode
+
+`reply-options` and `reply-audit` accept `surface=g2`. The G2 client requests it;
+the web client omits it. In compact mode the prompt asks for 2-8 words and at
+most 46 characters, and the lint enforces both. The cache key includes the
+surface, so the web and glasses do not share a generated set. The G2 shows
+three choices per page and clamps labels at 54 characters; a 46-character
+message leaves room for the `Alt:`/`Next:`/`Check:` prefix.
+
 ### G2 reply usability
 
 The glasses show three choices per page and clamp each label to 54 characters,
@@ -274,7 +283,8 @@ downloads the full file.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/sessions/:ref/reply-audit?mode=reply\|choices` | Fresh generation plus prompt, context, and raw output. |
+| `GET` | `/api/v1/sessions/:ref/reply-options?mode=reply\|choices&surface=web\|g2` | Cached reply options; `g2` uses the compact prompt and lint. |
+| `GET` | `/api/v1/sessions/:ref/reply-audit?mode=reply\|choices&surface=web\|g2` | Fresh generation plus prompt, context, and raw output. |
 | `GET` | `/api/v1/reply-feedback?limit=100` | Recent feedback, newest first. |
 | `POST` | `/api/v1/reply-feedback` | Save one feedback entry. |
 | `GET` | `/api/v1/reply-feedback/export` | Download the JSONL file. |

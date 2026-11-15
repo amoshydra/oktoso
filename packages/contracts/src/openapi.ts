@@ -1114,7 +1114,10 @@ registry.registerPath({
   summary: "List short reply options for a session",
   request: {
     params,
-    query: z.object({ mode: z.enum(["reply", "choices"]).optional() }),
+    query: z.object({
+      mode: z.enum(["reply", "choices"]).optional(),
+      surface: z.enum(["web", "g2"]).optional(),
+    }),
   },
   responses: {
     200: { description: "Reply options", content: json(ReplyOptionsSchema) },
@@ -1132,7 +1135,10 @@ registry.registerPath({
     "Bypasses the reply cache and returns the exact system prompt, transcript context, generated options, and raw model output. Intended for the reply audit page.",
   request: {
     params,
-    query: z.object({ mode: z.enum(["reply", "choices"]).optional() }),
+    query: z.object({
+      mode: z.enum(["reply", "choices"]).optional(),
+      surface: z.enum(["web", "g2"]).optional(),
+    }),
   },
   responses: {
     200: {
