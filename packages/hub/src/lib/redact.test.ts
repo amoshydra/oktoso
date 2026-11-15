@@ -67,6 +67,44 @@ describe("redact", () => {
     expect(redactText("GET /v1?api_key=abcd1234&x=1")).toContain("x=1");
   });
 
+  it("keeps diagnostic keys that merely contain a content word", () => {
+    const output = redact({
+      contextTokens: 42,
+      statusText: "Bad Gateway",
+      contentType: "application/json",
+      bodyBytes: 120,
+      messageCount: 3,
+    }) as Record<string, unknown>;
+
+    expect(output).toEqual({
+      contextTokens: 42,
+      statusText: "Bad Gateway",
+      contentType: "application/json",
+      bodyBytes: 120,
+      messageCount: 3,
+    });
+  });
+
+  it("preserves errors, dates, maps, and sets instead of logging {}", () => {
+    const cause = new Error("inner");
+    const error = new Error("provider said no", { cause });
+    const output = redact({
+      error,
+      at: new Date(1_793_000_000_000),
+      tags: new Map([["a", 1]]),
+      ids: new Set(["x"]),
+    }) as Record<string, unknown>;
+
+    expect(output.error).toMatchObject({
+      name: "Error",
+      message: "provider said no",
+    });
+    expect(JSON.stringify(output.error)).toContain("inner");
+    expect(output.at).toBe(new Date(1_793_000_000_000).toISOString());
+    expect(output.tags).toEqual({ a: 1 });
+    expect(output.ids).toEqual(["x"]);
+  });
+
   it("survives cycles and deep nesting", () => {
     const cyclic: Record<string, unknown> = { name: "root" };
     cyclic.self = cyclic;
