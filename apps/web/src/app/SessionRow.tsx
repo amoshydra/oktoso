@@ -10,7 +10,6 @@ export interface SessionRowProps {
   attention?: { type: string; label: string };
   metaPrefix?: ReactNode;
   metaSuffix?: ReactNode;
-  showStatusChip?: boolean;
   reserveTrailing?: boolean;
   onOpen: () => void;
 }
@@ -53,12 +52,6 @@ export function SessionRow(props: SessionRowProps) {
         ) : null}
         {session.unread ? <span className="sr-only">Unread</span> : null}
         <span className="mono">{props.time}</span>
-        {props.showStatusChip ? (
-          <span className={`status-chip ${session.status}`}>
-            <i />
-            {session.status}
-          </span>
-        ) : null}
       </span>
     </button>
   );

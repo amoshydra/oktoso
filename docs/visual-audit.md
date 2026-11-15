@@ -1034,3 +1034,51 @@ group.
 - **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
   `packages/ui/src/base.css`, `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`,
   `docs/design-lock.md`.
+
+## Audit batch two: icon grid and type roles (2026-11-15)
+
+The iconography and typography audits found that a few controls still drew
+their own glyphs or SVG and that 10/11/12px roles had drifted. This pass
+consolidates both.
+
+- **One icon grid.** `arrow-up`, `arrow-down`, and `ellipsis` were added to
+  `Icon.tsx`. The composer Send arrow, the jump-pill arrow, the composer `⋯`,
+  suggestion Dismiss, queue Remove, and the session disclosure now use the
+  shared 1.7px-stroke set. The old Send SVG was a 16px viewBox with a 1.8px
+  stroke; it was the only control off the grid.
+- **Send and jump.** Send renders the same 16px arrow at all widths. The jump
+  pill keeps `Input needed` / `Jump to latest` as its visible, accessible name
+  and appends a 14px down arrow.
+- **Size roles.** `.btn.small` is 12px. The second `.form-note` rule no longer
+  drops notes to 11px. Question option descriptions are 12px. Background shell
+  run titles are 12px and their status pills 11px. Message role times are 11px
+  while the uppercase role label stays 10px. Markdown headings cap at 16/14px,
+  so a document heading no longer matches the 20px page title.
+- **Search.** The search input is 14px on desktop and 16px on mobile; it was
+  18px on both.
+- **Labels.** Detail and section labels moved from `faint` to `muted`; faint is
+  now reserved for timestamps and hints. The uppercase tracking scale collapses
+  to 0.06em and 0.08em.
+- **Session state.** Rows render one status dot. The optional status pill was a
+  second encoding of the same state and was removed; the accessible name still
+  includes the status word.
+- **Provider identity.** The Providers screen tints the 30px mark with the
+  existing `--opencode` and `--openwebui` accents. Session lists and inbox cards
+  stay neutral, which is what the contract already specified but did not
+  implement.
+- **Navigation.** Rail labels ellipsize inside the 64px rail; `Foundation`
+  previously overflowed its 42px content box. The active rail mark uses the
+  accent, matching the bottom navigation. The attention badge is clamped to
+  30px and moved in 2px so a three-digit count stays inside the rail item. In
+  chat the theme toggle hides at 420px and below, giving the 320px title more
+  room. Theme buttons now name the outcome, not the mechanism.
+- **Panel heads.** New session and the provider form use the shared close icon
+  with `Close new session` / `Close provider form`, matching details, preview,
+  the context sheet, and activity steps.
+- **Proof.** Typecheck, 587 unit tests, and 22 e2e tests pass. The composer e2e
+  test now asserts SVG Send/More, no text in `⋯`, and the hidden chat theme
+  toggle at 390px. Screenshots were reviewed at 1440, 390, and 320px in both
+  dark and light themes.
+- **Follow-ups.** The page-level balance questions remain: unused right field on
+  list pages, Inbox row width, the duplicated chat title, and the 728px measure
+  when details is open.

@@ -1,11 +1,11 @@
-# Design Lock — v1.11
+# Design Lock — v1.12
 
 Status: **frozen**.
 
-- Version: `design-v1.11`
-- Parent: `design-v1.10`
+- Version: `design-v1.12`
+- Parent: `design-v1.11`
 - Date: 2026-11-15
-- Git tag: `design-v1.9`
+- Git tag: `design-v1.12`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -18,6 +18,7 @@ Status: **frozen**.
 - v1.9 scope: the one-row mobile composer, context sheet, and one-line draft.
 - v1.10 scope: transcript edge masks, the floating jump, and the in-transcript background row.
 - v1.11 scope: the composer 44px control cluster, the 728px reading column, details value typography, and mobile target fixes.
+- v1.12 scope: the shared icon grid, type-role consistency, provider accents, and one-dot session state.
 
 ## What is frozen
 
@@ -377,6 +378,40 @@ v1.10.
   44px mobile targets.
 - **No new tokens.** The change uses 44px, 64/96px, 728px, 48px, and existing
   surfaces, radii, and shadows.
+
+## Audit fixes: icon grid and type roles (2026-11-15)
+
+The second audit pass removes text glyphs from controls and collapses the
+remaining 10/11/12px drift. It does not add a token, a family, or a screen.
+
+- **Icon grid.** `arrow-up`, `arrow-down`, and `ellipsis` join the shared
+  24px-grid icon set. Send, the jump pill, the composer `⋯`, suggestion
+  Dismiss, queue Remove, and the session disclosure use it. No control relies on
+  `×`, `⋯`, or `↓` as a text glyph.
+- **Send and jump.** Send is the same 16px arrow at every width. The jump pill
+  keeps its visible text as the accessible name and adds a 14px down arrow.
+- **Small controls.** `.btn.small` is 12px, matching the other compact controls.
+  The duplicate 11px `.form-note` rule is gone; notes stay 12px.
+- **Transcript roles.** Message role times are 11px; role labels stay 10px
+  uppercase. Markdown headings cap at 16px (`h1`/`h2`) and 14px (`h3`/`h4`).
+- **Question choices.** Option descriptions are 12px, not 11px.
+- **Shell runs.** The background run title is 12px and its status pill is 11px.
+- **Search.** The search field is 14px on desktop and 16px on mobile.
+- **Details labels.** Section and detail labels use `muted`, not `faint`.
+  Faint remains for timestamps and hints.
+- **Session state.** Rows show one status dot and no duplicate status pill. The
+  accessible name keeps the status word.
+- **Provider accent.** The Providers screen tints the 30px provider mark with
+  the provider accent. Session lists and inbox cards stay neutral.
+- **Navigation.** Rail labels ellipsize inside the 64px rail. The active rail
+  icon uses the accent while its label stays text, matching the bottom
+  navigation. The attention badge is clamped so a three-digit count cannot
+  escape the item. In chat the topbar theme toggle hides at 420px and below.
+- **Labels.** Theme controls name their outcome (`Switch to light theme` /
+  `Switch to dark theme`). The New session panel uses the shared close icon
+  with `Close new session`.
+- **No new tokens.** The change uses existing sizes, surfaces, radii, and
+  accent colors.
 
 ## Change policy
 
