@@ -97,13 +97,26 @@ moment:
 - `last_assistant_tail` keeps the first 200 and last 700 characters, cut on
   sentence boundaries. The ask and caveats are at the end of long reports.
 - `done` comes from sentences that start with a completed-work word or end with
-  one (`fixed`, `pushed`, `passed`, `green`); fenced code is removed first and
-  multi-sentence lines are split so a later instruction is not swallowed.
+  one (`fixed`, `pushed`, `passed`, `green`), including a copula form such as
+  "the build is green". Fenced code is removed first and multi-sentence lines
+  are split so a later instruction is not swallowed. Headings and imperatives
+  are not completed work, even when they contain a word like `merged` or
+  `passed`.
 - `constraints` are full user sentences containing do-not/never/only/keep/
   without. The lint enforces the negative constraints.
 - `running` names the live shell or tool and its command, clipped to 120
   characters. It is present only while the session is running, so a `wait`
-  moment knows what it is waiting for instead of guessing.
+  moment knows what it is waiting for instead of guessing. Read-only inspection
+  commands (`jq`, `grep`, `rg`, `cat`, `sed`, `git status/diff/log`) are
+  omitted: they are the agent's internal tooling, not the user's task.
+- `latest_turn` is `user` or `assistant`, based on the newest message. A `user`
+  turn means the user has just sent an instruction while the run continued; the
+  prompt asks for steering or queued messages that refine it, not a repeat of
+  `last_assistant_tail`.
+- `recommendation` is a short extraction from the assistant's latest text when
+  it says "the answer is", "I recommend", "go with", or "that's the answer".
+  The prompt treats it as the current plan and asks the model not to replace it
+  with a different provider or option unless the user asks.
 - Up to three prior text messages are included at 400 characters each as
   evidence. No raw tool output is sent; only the running command.
 - `user_goal` is the current request, not the session's first turn. A terse
@@ -111,6 +124,9 @@ moment:
   substantive user turn, then to the original request. The original request is
   still paged for that fallback and for constraints, so a long session that
   moved on does not keep proposing work on the first turn's files.
+- The pending-question scan looks back six sentences, not two, and prefers the
+  last question before a later completed-work sentence. A question followed by
+  two sentences of explanation is still pending.
 - The original and latest user request are paged; subagent prompts are compacted
   to their task line, worktree paths become `<path>`, and request lines clip on
   sentence boundaries.
@@ -139,8 +155,10 @@ The prompt asks for five usable fields and six when every field is distinct. In
 `done`, `answer` is a short acknowledgement, `opposite` closes the loop, and
 `next`, `verify`, `extend`, and `ask` move the work forward. In `wait`, `answer`
 is the natural wait message ("Let it finish."), `opposite` is an interrupt, and
-the other fields suggest what to queue, add, or check when the run lands. The
-model phrases; it does not decide whether to suggest or what the state is.
+the other fields suggest what to queue, add, or check when the run lands. When
+`latest_turn` is `user`, the prompt asks for steering or queued messages that
+refine the new instruction instead of repeating the previous answer. The model
+phrases; it does not decide whether to suggest or what the state is.
 
 The lint rejects:
 
