@@ -1161,7 +1161,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.16 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.17 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
