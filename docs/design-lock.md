@@ -1,11 +1,11 @@
-# Design Lock — v1.12
+# Design Lock — v1.13
 
 Status: **frozen**.
 
-- Version: `design-v1.12`
-- Parent: `design-v1.11`
+- Version: `design-v1.13`
+- Parent: `design-v1.12`
 - Date: 2026-11-15
-- Git tag: `design-v1.12`
+- Git tag: `design-v1.13`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -19,6 +19,7 @@ Status: **frozen**.
 - v1.10 scope: transcript edge masks, the floating jump, and the in-transcript background row.
 - v1.11 scope: the composer 44px control cluster, the 728px reading column, details value typography, and mobile target fixes.
 - v1.12 scope: the shared icon grid, type-role consistency, provider accents, and one-dot session state.
+- v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 
 ## What is frozen
 
@@ -412,6 +413,33 @@ remaining 10/11/12px drift. It does not add a token, a family, or a screen.
   with `Close new session`.
 - **No new tokens.** The change uses existing sizes, surfaces, radii, and
   accent colors.
+
+## Layout revision: use the wide field (2026-11-15)
+
+The audit found that list pages left about 280px of the 1440px field unused
+while the chat repeated its title. This revision spends that space on content
+that was already there instead of adding new panels. Routes and navigation are
+unchanged.
+
+- **Content field.** Product pages use `min(1320px, 100%)`; the topbar gutter is
+  unchanged. Content stays left-aligned.
+- **Sessions table.** At 1100px and above, a page session row is a five-column
+  grid: status dot, title, provider, project and agent, time. The row keeps one
+  line for roots and an extra tag line for subagents. The 300px chat sidebar
+  keeps the stacked title-and-facts layout at every width.
+- **Inbox.** At 1200px and above each Inbox group is a two-column grid with
+  `align-items: start`. Cards size to their content. Blocking priority stays in
+  the amber edge and ordering, not in a full-width span.
+- **Providers.** At 1100px and above Providers and Diagnostics sit side by side,
+  about 1.45fr and 1fr.
+- **Search.** At 1100px and above the input (max 640px), provider filter, and
+  status filter form one wrapping toolbar. They wrap in source order below that.
+- **One chat title.** The transcript no longer repeats the topbar `h1`. The
+  context strip carries project, agent, model, and status.
+- **Measure.** The transcript and composer cap at 760px; the reading column caps
+  at 640px, about 88 characters at 14px. This replaces the 728px cap from v1.11.
+- **No new tokens.** The change uses the existing spacing, surface, radius, and
+  accent values and no new component.
 
 ## Change policy
 

@@ -1,6 +1,6 @@
 # Oktoso UI and Information Architecture
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27 and the chat shell alignment on 2026-11-02. Changes to this document follow the design lock policy.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26, with the `design-v1.1` session transcript revision on 2026-10-27, the chat shell alignment on 2026-11-02, and the wide-field layout revision in `design-v1.13` on 2026-11-15. Changes to this document follow the design lock policy.
 
 This document defines what the hub looks like, how it is organized, and how the same information architecture adapts to desktop, mobile, glasses, and VR.
 
@@ -163,11 +163,12 @@ Every screen, session, overlay, and filter change that represents navigation is 
 - Session sidebar: 300 to 360 px, resizable.
 - Details panel: 280 to 340 px, collapsible.
 - Main area minimum width: about 400 px.
-- The topbar and page content share one horizontal gutter: 24 px on desktop and 16 px on mobile. The topbar owns the page title; product pages do not repeat it in a hero card.
+- The topbar and page content share one horizontal gutter: 24 px on desktop and 16 px on mobile. The topbar owns the page title; product pages do not repeat it in a hero card or in the transcript.
+- List pages use a 1320px content field. Sessions and search results become a table at 1100px and above: status dot, title, provider, project and agent, then time. Inbox and Providers use two columns at wide widths; below their breakpoints they collapse to one.
 - Where a screen has page-level actions, they sit with a compact page lead in a toolbar above the first panel, not in a separate card.
 - At widths below 1320 px, details becomes a right-side overlay behind a button. At 1320 px and above it is a column.
 - At widths below 761 px, use the mobile layout: single column, bottom navigation, and full-screen chat.
-- At 761–1100 px, the session sidebar narrows to 300 px and the project column drops from the sessions table.
+- At 761–1100 px, the session sidebar narrows to 300 px and session rows return to the two-line title-and-facts layout.
 
 ## 5. Inbox
 
@@ -204,6 +205,7 @@ The inbox is the default screen when something needs attention. It groups items 
 ### Inbox rules
 
 - Blocking items always come first.
+- At 1200px and above, cards form a two-column grid inside each group. Each card keeps its own height (`align-items: start`); a blocking card is no wider than any other card and is distinguished by its amber edge, not by spanning the grid.
 - Each card shows type, provider, session title, age, a one-line summary, and actions.
 - A card opens the session when the user clicks the title or the Open action.
 - Approval actions complete in place. A successful action removes the card with a short transition and updates the badge.
@@ -277,18 +279,20 @@ The session view is the core reading and reply surface.
 
 On desktop, a 300px session sidebar sits between the rail and the transcript. It carries search, provider and status filters, day groups, the parent/subagent tree, the active row, and an All sessions action. It is hidden at 760px and below, where Sessions remains the home list.
 
+The Sessions view and the chat sidebar share one row component. Above 1100px the page list switches it to a table; the 300px sidebar always keeps the stacked title-and-facts layout.
+
 ### Header
 
-- The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle.
-- The transcript repeats the title once as a 20px document title. There is no second sticky transcript header.
+- The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It is the only title in the view.
+- The transcript opens with a quiet context strip: project, agent, model, and the status chip. It has no document title and no second sticky header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
 - The topbar theme toggle is a 32px icon control with an outcome label (`Switch to light theme` / `Switch to dark theme`). In chat it is hidden at 420px and below so the title keeps its width; the theme control stays available on the other views.
-- Project, agent, model, and the status chip stay together in the document header. The provider lives in the topbar subline.
+- Project, agent, model, and the status chip stay together in the transcript context strip. The provider lives in the topbar subline.
 
 ### Transcript
 
 - The transcript is its own scroll region inside the chat shell. The composer stays pinned below it; the page itself does not scroll.
-- The reading column is capped at 728px inside the transcript panel; the panel frame can be wider. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
+- The transcript panel and composer are capped at 760px. The reading column is capped at 640px inside it, about 88 characters of Inter prose at 14px. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
 - A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and is removed from the tab order and hidden at the bottom.
@@ -433,6 +437,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 ## 10. Search
 
 - Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
+- At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
 - First release searches session titles, projects, directories, and agents through the hub session cache.
 - Provider and status filters mirror the Sessions view.
 - Results show title, provider, project or directory, status, and unread or attention cues.
