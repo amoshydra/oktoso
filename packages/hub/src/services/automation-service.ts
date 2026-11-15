@@ -202,6 +202,7 @@ export class AutomationService {
       paused: state.automationPaused,
       dryRun: state.automationDryRun ?? this.config.dryRun,
       watchers: this.config.watchers,
+      templates: this.config.templates,
       pausedWatchers: Object.entries(state.automationWatcherPause)
         .filter(([, paused]) => paused)
         .map(([id]) => id),
@@ -214,6 +215,29 @@ export class AutomationService {
         .map(toPublicApproval),
       allowedShapes: state.automationAllowedShapes,
     };
+  }
+
+  /**
+   * Starts a template as a human action.
+   *
+   * This bypasses the supervisor entirely: pause, dry run, budgets, and quiet
+   * hours govern automation, not a person pressing Start. No run is recorded,
+   * because nothing was decided autonomously.
+   */
+  async startTemplate(id: string, signal?: AbortSignal): Promise<Session> {
+    const template = this.config.templates.find((entry) => entry.id === id);
+    if (!template) throw notFound(`Template ${id} is not configured`);
+    return this.sessions.create(
+      {
+        providerID: template.providerID,
+        title: template.title,
+        ...(template.directory ? { directory: template.directory } : {}),
+        ...(template.agent ? { agent: template.agent } : {}),
+        ...(template.model ? { model: template.model } : {}),
+        ...(template.text ? { text: template.text } : {}),
+      },
+      signal,
+    );
   }
 
   runs(limit = 50): AutomationRun[] {

@@ -1,7 +1,15 @@
 import { defaultConfigPath } from "../config/paths";
 
 export interface CliOptions {
-  command: "serve" | "pair" | "status" | "mcp" | "automation" | "backup" | "restore";
+  command:
+    | "serve"
+    | "pair"
+    | "status"
+    | "mcp"
+    | "automation"
+    | "template"
+    | "backup"
+    | "restore";
   automationAction: "status" | "pause" | "resume";
   automationWatcher?: string;
   configPath: string;
@@ -19,6 +27,8 @@ export interface CliOptions {
   out?: string;
   from?: string;
   force: boolean;
+  templateAction: "list" | "start";
+  templateID?: string;
   noLogFile: boolean;
   help: boolean;
   version: boolean;
@@ -61,6 +71,8 @@ export function parseArgs(
   let noLogFile = false;
   let help = false;
   let version = false;
+  let templateAction: "list" | "start" = "list";
+  let templateID: string | undefined;
   let out: string | undefined;
   let from: string | undefined;
   let force = false;
@@ -72,6 +84,21 @@ export function parseArgs(
       case "--pair":
         command = "pair";
         break;
+      case "template": {
+        command = "template";
+        const next = argv[index + 1];
+        if (next === "list" || next === "start") {
+          templateAction = next;
+          index += 1;
+        }
+        break;
+      }
+      case "--id": {
+        const read = readValue(argv, index, arg);
+        templateID = read.value;
+        index = read.next;
+        break;
+      }
       case "backup":
         command = "backup";
         break;
@@ -210,6 +237,8 @@ export function parseArgs(
     out,
     from,
     force,
+    templateAction,
+    templateID,
   };
 }
 
@@ -222,6 +251,7 @@ Usage:
   oktoso status [--config <path>]
   oktoso mcp [--allow-write] [--url <url>] [--config <path>]
   oktoso automation status|pause|resume [--watcher <id>] [--url <url>] [--config <path>]
+  oktoso template list|start --id <id> [--url <url>] [--config <path>]
   oktoso backup [--out <dir>] [--config <path>]
   oktoso restore --from <dir> [--force] [--config <path>]
 

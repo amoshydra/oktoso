@@ -122,6 +122,7 @@ async function setup(
     notify?: (item: Attention) => Promise<void>;
     actOnAttention?: (id: string, action: string, input: unknown) => Promise<void>;
     attentionItem?: () => Attention | undefined;
+    onCreate?: (input: CreateSessionInput) => Promise<void>;
   } = {},
 ) {
   const clock = options.clock ?? { now };
@@ -160,7 +161,8 @@ async function setup(
     async retryMessage() {
       return { accepted: true };
     },
-    async create() {
+    async create(input: CreateSessionInput) {
+      if (options.onCreate) await options.onCreate(input);
       return { ref: "opencode:ses_new" } as Session;
     },
     ...options.sessions,
@@ -1116,4 +1118,71 @@ describe("AutomationService triggers and actions", () => {
       decision: "escalated",
     });
   });
+
+describe("AutomationService templates", () => {
+  it("exposes configured templates in the view", async () => {
+    const { service } = await setup({
+      config: {
+        templates: [
+          {
+            id: "nightly",
+            providerID: "local-opencode",
+            title: "Nightly review",
+          },
+        ],
+      },
+    });
+
+    expect(service.view().templates).toEqual([
+      { id: "nightly", providerID: "local-opencode", title: "Nightly review" },
+    ]);
+  });
+
+  it("starts a template with its exact fields, ignoring pause and dry run", async () => {
+    const created: CreateSessionInput[] = [];
+    const { service } = await setup({
+      config: {
+        dryRun: true,
+        templates: [
+          {
+            id: "nightly",
+            providerID: "local-opencode",
+            title: "Nightly review",
+            directory: "/home/me/oktoso",
+            agent: "build",
+            model: "claude-sonnet",
+            text: "Review the repository.",
+          },
+        ],
+      },
+      onCreate: async (input) => {
+        created.push(input);
+      },
+    });
+    await service.updateSettings({ paused: true });
+
+    const session = await service.startTemplate("nightly");
+
+    expect(session.ref).toBe("opencode:ses_new");
+    expect(created).toEqual([
+      {
+        providerID: "local-opencode",
+        title: "Nightly review",
+        directory: "/home/me/oktoso",
+        agent: "build",
+        model: "claude-sonnet",
+        text: "Review the repository.",
+      },
+    ]);
+    // A human start is not an automation decision.
+    expect(service.runs()).toHaveLength(0);
+  });
+
+  it("returns not found for an unknown template", async () => {
+    const { service } = await setup();
+    await expect(service.startTemplate("missing")).rejects.toThrow(
+      /not configured/,
+    );
+  });
+});
 });

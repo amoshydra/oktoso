@@ -36,6 +36,17 @@ describe("CLI arguments", () => {
     expect(options.verbose).toBe(true);
   });
 
+  it("parses template list and start", () => {
+    const list = parseArgs(["template"]);
+    expect(list.command).toBe("template");
+    expect(list.templateAction).toBe("list");
+
+    const start = parseArgs(["template", "start", "--id", "nightly"]);
+    expect(start.command).toBe("template");
+    expect(start.templateAction).toBe("start");
+    expect(start.templateID).toBe("nightly");
+  });
+
   it("parses backup and restore with their flags", () => {
     const backup = parseArgs(["backup", "--out", "./snapshots/a"]);
     expect(backup.command).toBe("backup");

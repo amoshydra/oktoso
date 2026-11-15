@@ -616,7 +616,11 @@ Status: done.
 Schedule one bet at a time, each with its own acceptance before it starts.
 
 - [ ] G1. Cross-provider handoff. Skipped until a third provider exists.
-- [ ] G2. Templates and recipes. Next bet; slice 1 is the list-and-start API.
+- [~] G2. Templates and recipes. Slice 1 done: `AutomationView` carries
+  `templates`, `POST /api/v1/automation/templates/:id/start` and
+  `oktoso template list|start` start one as a human action, ignoring pause, dry
+  run, budgets, and quiet hours. Slice 2 is the Settings/New-session UI and
+  needs a design bump.
 - [ ] G3. G2 ambient mode and hardware acceptance. Ambient is impossible on SDK
   0.0.16; run the hardware checklist when the glasses are in hand.
 - [x] G4. Local reply drafting through Ollama. No code was needed: the reply

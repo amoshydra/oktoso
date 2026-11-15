@@ -33,6 +33,7 @@ const automationView: AutomationView = {
   enabled: true,
   paused: false,
   dryRun: true,
+  templates: [],
   watchers: [
     {
       id: "global",
