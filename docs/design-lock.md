@@ -538,9 +538,9 @@ One new provider capability and one inline details action. No new type, spacing,
 radius, or color token.
 
 - **Capability.** `ProviderCapabilities.rename` is exposed through the provider
-  API. OpenCode renames with `PATCH /api/session/{id}`; Open WebUI and Hermes use
-  the existing chat update endpoint. A provider without the capability hides the
-  action.
+  API. OpenCode renames with `PATCH /api/session/{id}`; Open WebUI uses the existing
+  chat update endpoint. Hermes is not wired into the registry yet; when it is,
+  it inherits that adapter. A provider without the capability hides the action.
 - **UI.** The details panel adds a Name section with the current title and a
   `Rename` action. Rename opens an inline field with Save/Cancel; Enter saves,
   Escape cancels without closing the panel, and the panel stays open on error.
