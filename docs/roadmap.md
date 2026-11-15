@@ -1,7 +1,8 @@
 # Oktoso — naming and roadmap
 
-Status: Phase 0, Phase 1, and Phase 2 complete; Phase 3 complete; Phase 4
-complete except real-provider validation. `v0.2.0` is published. This revision is the 2026-11-14 project audit and re-plan. The
+Status: phases 0–5 complete; phase 6 (providers) and phase 7 (MCP southbound)
+skipped by the owner; phase 8 (hardening) complete except the hardware-gated F5
+exception. `0.2.2` is published. This revision is the 2026-11-16 audit; the
 phase-level work breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
 
 ## Name
@@ -76,19 +77,55 @@ Publish a scoped package publicly with:
 
 ## Where the project is
 
-The 2026-11-14 audit read the repository at `199624a` plus the reply slice that
-followed it. It was static: source, tests, contracts, and docs. No load test and
-no real-hardware run.
+The 2026-11-16 audit read the repository at `88df0e8`. Unlike the previous
+static pass it includes a load test, an internal security review, and a packaged
+image, but still no real-hardware run (phase 8 F5).
 
 ### Snapshot
 
-- 46k lines of TypeScript across `packages/` and `apps/`.
-- 54 HTTP endpoints in 16 route files, plus the hosted `/mcp` surface.
-- 63 test files, 459 unit tests, and 14 Playwright end-to-end tests against fake
+- 77 HTTP handlers in 22 route files, plus the hosted `/mcp` surface and
+  `/metrics`.
+- 72 unit test files (700 tests) and 31 Playwright end-to-end tests against fake
   providers.
 - Three live surfaces over one API: web, Even G2, and the terminal dashboard.
-- `v0.1.28`, published to npm with release-please and OIDC provenance.
+- `0.2.2`, published to npm with release-please and OIDC provenance.
 - 17 capability flags negotiated per provider.
+- A Prometheus endpoint, a hashed backup/restore CLI, a Docker image, and a
+  written security review.
+
+### Strengths
+
+| Strength | Why it matters |
+|---|---|
+| Contracts-first (`zod` → generated OpenAPI, CI-checked) | New fields stay safe; clients can version independently |
+| Capabilities over assumptions | A partially capable provider does not break the UI |
+| Thin clients, hub-owned credentials | Surfaces are replaceable; secrets live in one place |
+| Deterministic fake providers plus e2e | Rare regression safety for a project this size |
+| Three shipping surfaces | G2 is a real differentiator, not a mockup |
+| MCP northbound already done | Scopes, allowlists, rate limits, audit, and resource subscriptions |
+| Design-lock and interaction contract | Objective UI review and no silent redesign |
+
+### Gaps, ranked by user impact
+
+Closed since the 2026-11-14 audit: push notifications and the offline PWA
+(phase 3), the supervisor (phase 4), message search and the session-family tree
+(phase 5), cost rollups (Overview), local retention and export (C7), and
+`/metrics` plus log redaction (phase 8).
+
+What remains:
+
+1. **The Android and external-origin paths are unvalidated.** The hub is not
+   proven on Termux or behind TLS/VPN; the runbook exists but has not run
+   (phase 8 F5, documented exception).
+2. **Hermes and MCP southbound are skipped.** No third provider adapter and no
+   tool broker. Revisit on a real need, not on schedule.
+3. **`App.tsx` is 8,859 lines** and `styles.css` 5,537. New UI lands in its own
+   module; the monolith keeps growing anyway.
+4. **No per-user identity.** One owner token is the whole auth model; multi-user
+   is a deliberate non-goal.
+5. **Advisory body caps.** Request limits read `content-length`; chunked bodies
+   are not enforced (`docs/security-review.md`).
+6. **No external security audit.** The written review is a self-assessment.
 
 ### Strengths
 
@@ -119,8 +156,7 @@ no real-hardware run.
    lineage view. Still an open Milestone 1 item.
 6. **No cost or token rollups.** Every session carries cost and tokens; nothing
    aggregates them.
-7. **`App.tsx` is 7,219 lines** and `styles.css` is 4,094. `reply-service.ts` is
-   1,740. Not urgent, but every UI change pays the tax.
+
 8. **No metrics endpoint.** `/api/v1/diagnostics` is not a substitute for
    `/metrics`.
 9. **Local state grows without retention.** Drafts, read markers, and reply
@@ -355,7 +391,7 @@ Acceptance:
 - An agent can call a provider tool through Oktoso.
 - A denied tool never reaches the provider and appears in the audit log.
 
-### Phase 8 — Hardening and observability (planned)
+### Phase 8 — Hardening and observability (complete except F5)
 
 Goal: production confidence, not new surface area.
 
