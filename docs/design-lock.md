@@ -1,11 +1,11 @@
-# Design Lock — v1.15
+# Design Lock — v1.16
 
 Status: **frozen**.
 
-- Version: `design-v1.15`
-- Parent: `design-v1.14`
+- Version: `design-v1.16`
+- Parent: `design-v1.15`
 - Date: 2026-11-15
-- Git tag: `design-v1.15`
+- Git tag: `design-v1.16`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -22,6 +22,7 @@ Status: **frozen**.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
 - v1.15 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
+- v1.16 scope: mobile Providers navigation, Runtime naming, search filter alignment, and the accessibility semantics/focus pass.
 
 ## What is frozen
 
@@ -464,6 +465,36 @@ wrapping content.
   4px tag offset, so a parent with a child count no longer reads as one tight
   block.
 - **No new tokens.** The change uses the existing 4/8/12px spacing steps.
+
+## Navigation and accessibility pass (2026-11-15)
+
+This revision closes the remaining IA warts and the semantics gaps found in the
+accessibility audit. Routes, type, spacing, color, and focus rings are unchanged.
+
+- **Mobile navigation.** The bottom bar keeps five destinations: Inbox,
+  Sessions, Search, Providers, Settings. Providers replaces Runtime, which moves
+  to Settings → Runtime. Runtime is an operator screen, and the fifth item keeps
+  every target at 64px inside a 320px viewport. While Runtime is open, no bottom
+  tab is current; the route is outside the five destinations.
+- **Runtime naming.** `Foundation` is now `Runtime` in the rail, topbar, and
+  placeholder. The view id and `/foundation` route are unchanged. The 10px rail
+  label measures 38px in its 42px box, so it no longer ellipsizes.
+- **Search filters.** At 420px and below the `PROVIDER` / `STATUS` labels own
+  their line, so wrapped chips align with the label. The chips stay a chip
+  group; no select fork.
+- **Inbox grid.** Two columns keep `align-items: start`; cards size to their
+  content and row-major order preserves "blocking first" in both reading and
+  focus order.
+- **Headings.** Transcript, reasoning, and subagent Markdown use the same
+  heading offset as the summary and file cards, so a `#` in a message renders as
+  `h2`. Every view has one `h1`.
+- **Filters and dialogs.** Inbox chips expose `aria-pressed` and include the
+  count in the name. Details is a labelled column on desktop and a
+  `role="dialog"` sheet below 1320px, with one shared Tab trap, scoped Escape,
+  and focus restore. The model/agent sheet and file preview use the same trap.
+- **Targets.** The chat-sidebar disclosure is 32px on desktop, matching the
+  session-list contract, with 34px trailing padding.
+- **No new tokens or routes.**
 
 ## Change policy
 
