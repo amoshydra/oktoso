@@ -174,6 +174,13 @@ export class HubClient {
     return this.request<Session>(`/api/v1/sessions/${encodeURIComponent(ref)}`);
   }
 
+  async renameSession(ref: string, title: string): Promise<Session> {
+    return this.request<Session>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}`,
+      { method: "PATCH", body: { title } },
+    );
+  }
+
   async attachment(providerID: string, url: string): Promise<Blob> {
     const params = new URLSearchParams({ provider: providerID, url });
     return this.blob(`/api/v1/attachments?${params.toString()}`);

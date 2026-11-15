@@ -40,6 +40,7 @@ import {
   zPairingExchange,
   zPairingSession,
   zSessionRefresh,
+  zSessionRenameInput,
   zProvider,
   zProviderCapabilities,
   zProviderInput,
@@ -146,6 +147,10 @@ const CreateSessionInputSchema = registry.register(
 const SessionSelectionInputSchema = registry.register(
   "SessionSelectionInput",
   zSessionSelectionInput,
+);
+const SessionRenameInputSchema = registry.register(
+  "SessionRenameInput",
+  zSessionRenameInput,
 );
 const DraftSchema = registry.register("Draft", zDraft);
 const DraftInputSchema = registry.register("DraftInput", zDraftInput);
@@ -590,6 +595,24 @@ registry.registerPath({
   responses: {
     200: { description: "Session", content: json(SessionSchema) },
     404: errorResponse("Session not found"),
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/sessions/{ref}",
+  tags: ["sessions"],
+  summary: "Rename a session",
+  request: {
+    params,
+    body: { content: json(SessionRenameInputSchema), required: true },
+  },
+  responses: {
+    200: { description: "Renamed session", content: json(SessionSchema) },
+    400: errorResponse("Invalid title"),
+    404: errorResponse("Session not found"),
+    501: errorResponse("Provider does not support renaming sessions"),
+    502: errorResponse("Provider failure"),
   },
 });
 

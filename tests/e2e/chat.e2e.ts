@@ -667,6 +667,39 @@ describe("navigation history", () => {
     expect(currentPath()).toContain("details=1");
   });
 
+  it("renames a session from the details panel", async () => {
+    await page!.setViewportSize({ width: 1440, height: 900 });
+    await openSession("Fix auth race in gateway");
+    await page!.locator("#session-details").waitFor();
+    try {
+      await page!.getByRole("button", { name: "Rename" }).click();
+      const input = page!.locator("#session-rename-input");
+      await input.fill("Renamed from e2e");
+      await page!.getByRole("button", { name: "Save", exact: true }).click();
+      await page!.waitForFunction(
+        () =>
+          document.querySelector(".topbar-title")?.textContent ===
+          "Renamed from e2e",
+        undefined,
+        { timeout: 5_000 },
+      );
+      expect(
+        await page!.locator(".session-rename-row strong").textContent(),
+      ).toBe("Renamed from e2e");
+    } finally {
+      const token = await page!.evaluate(() =>
+        sessionStorage.getItem("oktoso-token"),
+      );
+      await page!.request.patch(
+        `${BASE_URL}/api/v1/sessions/${encodeURIComponent("desktop-opencode:ses_auth")}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { title: "Fix auth race in gateway" },
+        },
+      );
+    }
+  });
+
   it("closes the desktop details column with Escape", async () => {
     await page!.setViewportSize({ width: 1440, height: 900 });
     await openSession("Fix auth race in gateway");

@@ -1,11 +1,11 @@
-# Design Lock — v1.18
+# Design Lock — v1.19
 
 Status: **frozen**.
 
-- Version: `design-v1.18`
-- Parent: `design-v1.17`
+- Version: `design-v1.19`
+- Parent: `design-v1.18`
 - Date: 2026-11-16
-- Git tag: `design-v1.18`
+- Git tag: `design-v1.19`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -25,6 +25,7 @@ Status: **frozen**.
 - v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
 - v1.17 scope: the accessibility semantics and focus pass.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
+- v1.19 scope: session rename across providers.
 
 ## What is frozen
 
@@ -530,6 +531,24 @@ v1.16 audit.
   blocking items that arrive after the first load. The initial list, ordinary
   refreshes, and non-blocking items stay silent.
 - **No new tokens or routes.** The change is focus and ARIA behavior only.
+
+## Session rename (2026-11-16)
+
+One new provider capability and one inline details action. No new type, spacing,
+radius, or color token.
+
+- **Capability.** `ProviderCapabilities.rename` is exposed through the provider
+  API. OpenCode renames with `PATCH /api/session/{id}`; Open WebUI and Hermes use
+  the existing chat update endpoint. A provider without the capability hides the
+  action.
+- **UI.** The details panel adds a Name section with the current title and a
+  `Rename` action. Rename opens an inline field with Save/Cancel; Enter saves,
+  Escape cancels without closing the panel, and the panel stays open on error.
+  Saving updates the topbar title, details name, and local session cache.
+- **API.** `PATCH /api/v1/sessions/{ref}` accepts `{ "title": "..." }` and
+  returns the updated session. Titles are trimmed, 1–200 characters.
+- **No new tokens.** The field reuses the control border, surface, radius, and
+  the 12px compact value type.
 
 ## Change policy
 

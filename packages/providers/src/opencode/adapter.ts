@@ -195,6 +195,7 @@ const openCodeCapabilities: ProviderCapabilities = {
   search: false,
   options: true,
   markRead: true,
+  rename: true,
 };
 
 export class OpenCodeAdapter implements ProviderAdapter {
@@ -751,6 +752,22 @@ export class OpenCodeAdapter implements ProviderAdapter {
       ...resource,
       filename: resource.filename ?? path.split("/").at(-1),
     };
+  }
+
+  async renameSession(
+    ref: string,
+    title: string,
+    signal: AbortSignal,
+  ): Promise<Session> {
+    const nativeID = this.nativeID(ref);
+    await this.request<void>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "PATCH",
+      { title },
+    );
+    return this.getSession(ref, signal);
   }
 
   async markRead(ref: string, signal: AbortSignal): Promise<void> {
@@ -1320,17 +1337,10 @@ export function openCodeSessionStatus(
       return "running";
     }
     if (busy > idle) return "running";
-  } else if (raw.fork !== undefined) {
-    // A fork has no busy/idle history. Its later `updated` timestamp is the
-    // fork creation, not a run, so the legacy first-run fallback does not apply.
-  } else if (
-    idle === undefined &&
-    raw.outcome === undefined &&
-    raw.time.updated > raw.time.created
-  ) {
-    // Older providers do not expose `busy`; only a first run is detectable.
-    return "running";
   }
+  // No busy marker means no active run. A session may update its title,
+  // metadata, folder, or fork pointer without ever setting busy; treating
+  // `updated > created` as running made renamed and forked sessions stick.
   if (raw.outcome === "failed") return "error";
   return "idle";
 }

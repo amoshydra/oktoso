@@ -350,6 +350,56 @@ describe("OpenCodeAdapter delivery and inbox", () => {
   });
 });
 
+describe("OpenCodeAdapter.renameSession", () => {
+  it("patches the session title and returns the updated session", async () => {
+    let patched: unknown;
+    let title = "Test session";
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://localhost");
+      let raw = "";
+      request.on("data", (chunk) => {
+        raw += chunk;
+      });
+      request.on("end", () => {
+        if (url.pathname === "/api/session/ses_test" && request.method === "PATCH") {
+          const body = raw ? (JSON.parse(raw) as { title?: string }) : {};
+          patched = body;
+          title = body.title ?? title;
+          response.writeHead(204);
+          response.end();
+          return;
+        }
+        if (url.pathname === "/api/session/ses_test") {
+          json(response, 200, {
+            data: { ...session({ updated: 2000 }), title },
+          });
+          return;
+        }
+        json(response, 404, { _tag: "SessionNotFoundError" });
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const adapter = new OpenCodeAdapter({
+      id: "opencode",
+      baseUrl: `http://127.0.0.1:${port}`,
+      username: "opencode",
+      password: "secret",
+    });
+
+    const updated = await adapter.renameSession(
+      "opencode:ses_test",
+      "Renamed session",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(patched).toEqual({ title: "Renamed session" });
+    expect(updated.ref).toBe("opencode:ses_test");
+    expect(updated.title).toBe("Renamed session");
+  });
+});
+
 describe("openCodeSessionStatus", () => {
   it("stays idle after a completed run", () => {
     expect(
@@ -409,8 +459,14 @@ describe("openCodeSessionStatus", () => {
     ).toBe("idle");
   });
 
-  it("treats an older provider's first run as running", () => {
-    expect(openCodeSessionStatus(session({ updated: 2_000 }))).toBe("running");
+  it("treats a session without a busy marker as idle", () => {
+    expect(openCodeSessionStatus(session({ updated: 2_000 }))).toBe("idle");
+  });
+
+  it("keeps a metadata update idle when no run is busy", () => {
+    expect(
+      openCodeSessionStatus(session({ updated: 3_000, created: 1_000 })),
+    ).toBe("idle");
   });
 
   it("treats a fork with no busy or idle as idle", () => {

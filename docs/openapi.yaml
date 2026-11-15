@@ -283,6 +283,8 @@ components:
           type: boolean
         markRead:
           type: boolean
+        rename:
+          type: boolean
       required:
         - list
         - read
@@ -303,6 +305,7 @@ components:
         - search
         - options
         - markRead
+        - rename
     Provider:
       type: object
       properties:
@@ -377,6 +380,8 @@ components:
               type: boolean
             markRead:
               type: boolean
+            rename:
+              type: boolean
           required:
             - list
             - read
@@ -397,6 +402,7 @@ components:
             - search
             - options
             - markRead
+            - rename
       required:
         - id
         - type
@@ -858,6 +864,15 @@ components:
         agent:
           type: string
           minLength: 1
+    SessionRenameInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required:
+        - title
     Draft:
       type: object
       properties:
@@ -5107,6 +5122,53 @@ paths:
                 $ref: "#/components/schemas/Session"
         "404":
           description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags:
+        - sessions
+      summary: Rename a session
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRenameInput"
+      responses:
+        "200":
+          description: Renamed session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          description: Invalid title
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support renaming sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
           content:
             application/json:
               schema:

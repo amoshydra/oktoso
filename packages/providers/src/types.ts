@@ -134,6 +134,7 @@ export interface ProviderAdapter {
     signal: AbortSignal,
   ): Promise<void>;
   markRead?(ref: string, signal: AbortSignal): Promise<void>;
+  renameSession?(ref: string, title: string, signal: AbortSignal): Promise<Session>;
   readResource?(url: string, signal: AbortSignal): Promise<ProviderResource>;
   readFile?(
     input: ProviderFileRequest,
@@ -165,4 +166,5 @@ export const emptyCapabilities: ProviderCapabilities = {
   search: false,
   options: false,
   markRead: false,
+  rename: false,
 };
