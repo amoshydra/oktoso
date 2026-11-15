@@ -461,6 +461,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 ## 11. Search
 
 - Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
+- At 420px and below the `PROVIDER` and `STATUS` labels own their line, so wrapped chips align with the label instead of starting under its right edge.
 - At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
 - A `Scope` control selects **Sessions** or **Messages**; the choice lives in the URL (`?scope=messages`) so the back stack restores it.
 - Sessions searches titles, projects, directories, and agents through the hub session cache. Provider and status filters mirror the Sessions view; results show title, provider, project or directory, status, and unread or attention cues.
