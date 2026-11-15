@@ -21,6 +21,7 @@ import type {
 import type { AutomationConfig } from "../config/schema";
 import { conflict, notFound } from "../domain/errors";
 import type { Logger } from "../lib/logger";
+import type { AttentionService } from "./attention-service";
 import type { EventBus } from "./event-bus";
 import type { NotificationService } from "./notification-service";
 import { isQuietHours } from "./notification-service";
@@ -36,6 +37,11 @@ export interface AutomationServiceOptions {
   questions: QuestionService;
   actions: SessionActions;
   sessions: SessionService;
+  /**
+   * Provider question forms are answered through the attention surface. A plain
+   * message does not resolve a pending form, so this is required.
+   */
+  attention: AttentionService;
   notifications?: NotificationService;
   now?: () => number;
   leaseTtlMs?: number;
@@ -47,6 +53,8 @@ interface AnswerPlan {
   question: PendingQuestion;
   choice: AnswerChoice;
   answer: SendAnswer;
+  /** Form field values, set when the attention item is a provider form. */
+  fields?: Record<string, string>;
   /** Set when a remembered shape, rather than the low-risk allowlist, allowed it. */
   viaShape?: boolean;
   shapeID?: string;
@@ -78,6 +86,7 @@ export class AutomationService {
   private readonly questions: QuestionService;
   private readonly actions: SessionActions;
   private readonly sessions: SessionService;
+  private readonly attention: AttentionService;
   private readonly notifications?: NotificationService;
   private readonly now: () => number;
   private readonly leaseTtlMs: number;
@@ -104,6 +113,7 @@ export class AutomationService {
     this.questions = options.questions;
     this.actions = options.actions;
     this.sessions = options.sessions;
+    this.attention = options.attention;
     this.notifications = options.notifications;
     this.now = options.now ?? Date.now;
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
@@ -295,19 +305,26 @@ export class AutomationService {
     }
 
     try {
-      await this.actions.send(
-        approval.sessionRef,
-        { text, answers },
-        `approval:${approval.id}`,
-      );
+      if (plan.fields) {
+        await this.attention.act(approval.attentionID, "answer", {
+          fields: plan.fields,
+        });
+      } else {
+        await this.actions.send(
+          approval.sessionRef,
+          { text, answers },
+          `approval:${approval.id}`,
+        );
+      }
     } catch (error) {
-      if (error instanceof Error && (error as { status?: number }).status === 409) {
+      const status = (error as { status?: number }).status;
+      if (status === 409 || status === 404) {
         await this.updateApproval(id, "expired", now);
         await this.recordApprovalRun(
           approval,
           "failed",
           "question_changed",
-          error.message,
+          error instanceof Error ? error.message : "The question is gone",
         );
         throw conflict("The question changed; refresh and try again");
       }
@@ -601,16 +618,22 @@ export class AutomationService {
       }
 
       await this.runAction(watcher, item, "send", async (signal) => {
-        await this.withRetry(
-          () =>
-            this.actions.send(
-              item.sessionRef,
-              { text: plan.choice.text, answers: [plan.answer] },
-              `automation:${watcher.id}:${item.id}`,
-              signal,
-            ),
-          signal,
-        );
+        if (plan.fields) {
+          // A form reply is a single provider call; retrying it could answer
+          // twice, so it does not go through withRetry.
+          await this.attention.act(item.id, "answer", { fields: plan.fields });
+        } else {
+          await this.withRetry(
+            () =>
+              this.actions.send(
+                item.sessionRef,
+                { text: plan.choice.text, answers: [plan.answer] },
+                `automation:${watcher.id}:${item.id}`,
+                signal,
+              ),
+            signal,
+          );
+        }
         if (plan.viaShape && plan.shapeID) {
           await this.touchShape(plan.shapeID);
         }
@@ -779,6 +802,7 @@ export class AutomationService {
       return { ok: false, reason: "not_low_risk" };
     }
 
+    const fields = formAnswerFields(item, choice);
     return {
       ok: true,
       question,
@@ -790,6 +814,7 @@ export class AutomationService {
         choiceId: choice.id,
         source: "choice",
       },
+      ...(fields ? { fields } : {}),
       ...(shapeID ? { viaShape: true, shapeID } : {}),
     };
   }
@@ -810,6 +835,7 @@ export class AutomationService {
     const question = prompt.questions[0]!;
     const choice = pickProposalChoice(question, watcher.action);
     if (!choice) return undefined;
+    const fields = formAnswerFields(item, choice);
     return {
       ok: true,
       question,
@@ -821,6 +847,7 @@ export class AutomationService {
         choiceId: choice.id,
         source: "choice",
       },
+      ...(fields ? { fields } : {}),
     };
   }
 
@@ -863,6 +890,7 @@ export class AutomationService {
               text: plan.choice.text,
               answers: [plan.answer],
               label: plan.choice.label,
+              ...(plan.fields ? { fields: plan.fields } : {}),
             },
           }
         : {}),
@@ -1177,6 +1205,30 @@ function isChoiceSafe(choice: AnswerChoice): boolean {
     !choice.sensitive &&
     !choice.requiresConfirmation
   );
+}
+
+/**
+ * A provider form is answered with field values. A chat message does not
+ * resolve it, so map the chosen option onto the single select/boolean field.
+ * Anything else (free text, several fields, no matching option) keeps the
+ * message path, which normally escalates before reaching here.
+ */
+function formAnswerFields(
+  item: Attention,
+  choice: AnswerChoice,
+): Record<string, string> | undefined {
+  if (item.type !== "question") return undefined;
+  const fields = item.fields;
+  if (!fields || fields.length !== 1) return undefined;
+  const field = fields[0]!;
+  if (field.type !== "select" && field.type !== "boolean") return undefined;
+  const option = field.options?.find(
+    (candidate) =>
+      normalizeLabel(candidate.label) === normalizeLabel(choice.label) ||
+      candidate.value === choice.id,
+  );
+  if (!option) return undefined;
+  return { [field.id]: option.value };
 }
 
 function normalizeLabel(value: string): string {

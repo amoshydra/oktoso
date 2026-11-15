@@ -16,6 +16,7 @@ import {
   isLowRiskQuestion,
   pickSafeChoice,
 } from "./automation-service";
+import type { AttentionService } from "./attention-service";
 import { EventBus } from "./event-bus";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
@@ -119,6 +120,8 @@ async function setup(
     clock?: { now: number };
     sessions?: Record<string, unknown>;
     notify?: (item: Attention) => Promise<void>;
+    actOnAttention?: (id: string, action: string, input: unknown) => Promise<void>;
+    attentionItem?: () => Attention | undefined;
   } = {},
 ) {
   const clock = options.clock ?? { now };
@@ -168,6 +171,16 @@ async function setup(
         notify: options.notify,
       } as unknown as NotificationService)
     : undefined;
+  const answers: Array<{ id: string; action: string; input: unknown }> = [];
+  const attention = {
+    async act(id: string, action: string, input?: unknown) {
+      answers.push({ id, action, input });
+      if (options.actOnAttention) await options.actOnAttention(id, action, input);
+    },
+    async get() {
+      return options.attentionItem?.() ?? undefined;
+    },
+  } as unknown as AttentionService;
   const service = new AutomationService({
     config: config(options.config),
     store,
@@ -176,12 +189,13 @@ async function setup(
     questions,
     actions,
     sessions,
+    attention,
     ...(notifications ? { notifications } : {}),
     retryDelayMs: 0,
     now: () => clock.now,
   });
   service.start();
-  return { store, bus, service, sends };
+  return { store, bus, service, sends, answers };
 }
 
 async function publish(bus: EventBus, item: Attention): Promise<void> {
@@ -264,6 +278,167 @@ describe("AutomationService", () => {
     expect(service.runs()[0]).toMatchObject({
       decision: "acted",
       detail: "Answered: Yes",
+    });
+  });
+
+  it("answers a provider form through the attention action", async () => {
+    const { bus, service, sends, answers } = await setup();
+
+    await publish(
+      bus,
+      attention({
+        fields: [
+          {
+            id: "choice",
+            label: "Proceed?",
+            type: "select",
+            options: [
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ],
+          },
+        ],
+      }),
+    );
+    await service.whenIdle();
+
+    expect(sends).toHaveLength(0);
+    expect(answers).toEqual([
+      { id: "att_1", action: "answer", input: { fields: { choice: "yes" } } },
+    ]);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      detail: "Answered: Yes",
+    });
+  });
+
+  it("answers an approved form through the attention action", async () => {
+    const destructive = question({
+      choices: [
+        {
+          id: "delete",
+          label: "Delete everything",
+          text: "Delete everything",
+          kind: "choice",
+          source: "explicit",
+          destructive: true,
+        },
+      ],
+    });
+    const { bus, service, sends, answers } = await setup({
+      prompt: prompt(destructive),
+      config: {
+        watchers: [
+          {
+            id: "w1",
+            enabled: true,
+            trigger: { kind: "attention", types: ["question"] },
+            action: { kind: "answer", choice: "id", value: "delete" },
+            dryRun: false,
+            limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+          },
+        ],
+      },
+    });
+
+    await publish(
+      bus,
+      attention({
+        fields: [
+          {
+            id: "choice",
+            label: "Proceed?",
+            type: "select",
+            options: [
+              { value: "yes", label: "Keep the migration" },
+              { value: "delete", label: "Delete everything" },
+            ],
+          },
+        ],
+      }),
+    );
+    await service.whenIdle();
+
+    const approval = service.approvals()[0]!;
+    expect(sends).toHaveLength(0);
+    await service.actOnApproval(approval.id, "approve");
+
+    expect(sends).toHaveLength(0);
+    expect(answers).toEqual([
+      {
+        id: "att_1",
+        action: "answer",
+        input: { fields: { choice: "delete" } },
+      },
+    ]);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "acted",
+      approved: true,
+    });
+  });
+
+  it("expires an approval whose form is gone", async () => {
+    const destructive = question({
+      choices: [
+        {
+          id: "delete",
+          label: "Delete everything",
+          text: "Delete everything",
+          kind: "choice",
+          source: "explicit",
+          destructive: true,
+        },
+      ],
+    });
+    const { bus, service, answers } = await setup({
+      prompt: prompt(destructive),
+      config: {
+        watchers: [
+          {
+            id: "w1",
+            enabled: true,
+            trigger: { kind: "attention", types: ["question"] },
+            action: { kind: "answer", choice: "id", value: "delete" },
+            dryRun: false,
+            limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+          },
+        ],
+      },
+      actOnAttention: async () => {
+        throw Object.assign(new Error("Attention item not found"), {
+          status: 404,
+        });
+      },
+    });
+
+    await publish(
+      bus,
+      attention({
+        fields: [
+          {
+            id: "choice",
+            label: "Proceed?",
+            type: "select",
+            options: [
+              { value: "yes", label: "Keep the migration" },
+              { value: "delete", label: "Delete everything" },
+            ],
+          },
+        ],
+      }),
+    );
+    await service.whenIdle();
+
+    const approval = service.approvals()[0]!;
+    await expect(service.actOnApproval(approval.id, "approve")).rejects.toThrow(
+      /question changed/,
+    );
+
+    expect(answers).toHaveLength(1);
+    expect(service.approvals()).toHaveLength(0);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "failed",
+      reason: "question_changed",
     });
   });
 
