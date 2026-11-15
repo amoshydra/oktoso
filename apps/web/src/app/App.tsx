@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -57,6 +58,11 @@ import {
 } from "./chat-actions";
 import { createID } from "./ids";
 import { renderMarkdown } from "./markdown";
+import {
+  getMermaidTheme,
+  renderMermaidIn,
+  subscribeMermaidTheme,
+} from "./mermaid";
 import { groupModelOptions } from "./model-options";
 import { mergeLatestPage, mergeMessageUpdates } from "./message-order";
 import {
@@ -7437,6 +7443,26 @@ function Markdown(props: {
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const providerID = props.resource.providerID;
+  const theme = useSyncExternalStore(
+    subscribeMermaidTheme,
+    getMermaidTheme,
+    () => "dark" as const,
+  );
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let cancelled = false;
+    // Wait for a pause in streaming before parsing diagrams; an incomplete
+    // fence fails and would otherwise re-render on every delta.
+    const timer = window.setTimeout(() => {
+      void renderMermaidIn(container, { cancelled: () => cancelled });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [html, theme]);
 
   useEffect(() => {
     const container = containerRef.current;
