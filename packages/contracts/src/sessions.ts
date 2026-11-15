@@ -91,6 +91,10 @@ export const zSessionSelectionInput = z.object({
   agent: z.string().min(1).optional(),
 });
 
+export const zSessionRenameInput = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+
 export type SessionStatus = z.infer<typeof zSessionStatus>;
 export type TokenUsage = z.infer<typeof zTokenUsage>;
 export type Session = z.infer<typeof zSession>;
@@ -100,3 +104,4 @@ export type SessionLineage = z.infer<typeof zSessionLineage>;
 export type SessionListQuery = z.infer<typeof zSessionListQuery>;
 export type CreateSessionInput = z.infer<typeof zCreateSessionInput>;
 export type SessionSelectionInput = z.infer<typeof zSessionSelectionInput>;
+export type SessionRenameInput = z.infer<typeof zSessionRenameInput>;

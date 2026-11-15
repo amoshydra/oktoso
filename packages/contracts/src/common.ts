@@ -95,6 +95,7 @@ export const zProviderCapabilities = z.object({
   search: z.boolean(),
   options: z.boolean(),
   markRead: z.boolean(),
+  rename: z.boolean(),
 });
 
 export const zProvider = z.object({

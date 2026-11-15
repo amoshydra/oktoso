@@ -9,6 +9,7 @@ import {
   zRetryInput,
   zSendInput,
   zSessionListQuery,
+  zSessionRenameInput,
   zSessionSelectionInput,
   type Message,
 } from "@amoshydra/oktoso-contracts";
@@ -86,6 +87,17 @@ export function registerSessionRoutes(
 
   app.get("/api/v1/sessions/:ref", async (c) => {
     return c.json(await sessions.get(c.req.param("ref")));
+  });
+
+  app.patch("/api/v1/sessions/:ref", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zSessionRenameInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid session rename input", {
+        issues: parsed.error.issues,
+      });
+    }
+    return c.json(await sessions.rename(c.req.param("ref"), parsed.data.title));
   });
 
   app.get("/api/v1/sessions/:ref/reply-options", async (c) => {

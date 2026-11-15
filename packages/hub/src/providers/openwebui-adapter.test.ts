@@ -48,6 +48,23 @@ describe("OpenWebUIAdapter", () => {
     });
   });
 
+  it("renames a chat and keeps the updated title", async () => {
+    const { adapter } = await createAdapter();
+
+    const updated = await adapter.renameSession(
+      "openwebui:chat_fake_openwebui",
+      "Renamed chat",
+      AbortSignal.timeout(5_000),
+    );
+    expect(updated.title).toBe("Renamed chat");
+
+    const fetched = await adapter.getSession(
+      "openwebui:chat_fake_openwebui",
+      AbortSignal.timeout(5_000),
+    );
+    expect(fetched.title).toBe("Renamed chat");
+  });
+
   it("maps Open WebUI folders to project names", async () => {
     const { adapter } = await createAdapter();
     const page = await adapter.listSessions(

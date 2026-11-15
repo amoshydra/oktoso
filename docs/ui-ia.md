@@ -393,6 +393,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Provider, base URL label, project, directory, branch when available.
 - Native session ID and reference.
 - Parent session reference and an `Open parent` action when the session is a fork.
+- Session name with a `Rename` action when the provider exposes the `rename` capability. The inline field saves on Enter, cancels on Escape without closing the panel, updates the topbar title and details name, and is disabled while saving. All current adapters expose it: OpenCode uses `PATCH /api/session/{id}`, Open WebUI (and Hermes) use the chat update endpoint.
 - `Fork session` when the provider exposes session forks. The action opens the new child session and keeps the parent reference visible.
 - Agent, model, status, created, updated. Detail values are 12px/500; IDs, paths, references, and endpoints use mono. Times, costs, and token counts use sans with tabular figures.
 - Cost and tokens when available.

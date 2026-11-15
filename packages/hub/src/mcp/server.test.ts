@@ -48,6 +48,7 @@ const provider: Provider = {
     search: false,
     options: true,
     markRead: true,
+    rename: true,
   },
 };
 

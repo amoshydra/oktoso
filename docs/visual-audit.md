@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, given the mobile collision fixes in `design-v1.15`, closed with the navigation/accessibility pass in `design-v1.16`, and given the accessibility follow-ups in `design-v1.17`.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, given the mobile collision fixes in `design-v1.15`, closed with the navigation/accessibility pass in `design-v1.16`, given the accessibility follow-ups in `design-v1.17`, and adding session rename in `design-v1.18`.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows are recorded in `docs/ui-ia.md`; the v1.16 pass changes the mobile destination set and the Runtime label.
 
@@ -1272,3 +1272,19 @@ Semantics and focus only. No visual, copy, or layout change.
   587 unit tests, and all e2e tests pass.
 - **Files.** `apps/web/src/app/App.tsx`, `tests/e2e/accessibility.e2e.ts`,
   `docs/ui-ia.md`.
+
+
+## Session rename (2026-11-16)
+
+The details panel gained one capability-gated action rather than a new dialog or
+a global page. The title stays the page `h1`; rename edits that title in place.
+
+- The Name section shows the current title at the 12px detail value role.
+- `Rename` swaps it for a single-line field and Save/Cancel. Enter submits,
+  Escape cancels without closing the details sheet, and a failed save leaves the
+  field open with the error.
+- The action is hidden when the provider does not expose `rename`. OpenCode uses
+  `PATCH /api/session/{id}`; Open WebUI and Hermes use the chat update endpoint.
+- Saving updates the topbar title and the local session cache, so the page title
+  and the session row do not disagree.
+- No new token, route beyond the PATCH session endpoint, or layout surface.

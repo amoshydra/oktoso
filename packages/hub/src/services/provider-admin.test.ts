@@ -69,6 +69,7 @@ function provider(config: ProviderConfig): Provider {
       search: false,
       options: false,
       markRead: false,
+      rename: false,
     },
   };
 }
