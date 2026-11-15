@@ -471,6 +471,7 @@ function renderBottomNav() {
     ['inbox', 'Inbox', 'inbox'],
     ['sessions', 'Sessions', 'sessions'],
     ['search', 'Search', 'search'],
+    ['providers', 'Providers', 'providers'],
     ['settings', 'Settings', 'settings'],
   ];
   const count = attention.filter((item) => item.priority === 'blocking').length;
