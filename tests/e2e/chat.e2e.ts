@@ -696,7 +696,8 @@ describe("navigation history", () => {
   it("updates the search URL without adding a history step per keystroke", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();
-    await page.getByRole("button", { name: "Search" }).click();
+    // Session rows can contain "search" in their title; match the rail control.
+    await page.getByRole("button", { name: "Search", exact: true }).click();
     const input = page.locator("#session-search");
     await input.waitFor();
     await input.fill("auth");

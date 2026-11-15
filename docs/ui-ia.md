@@ -426,6 +426,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Projects and models load asynchronously with a skeleton state.
 - Create is disabled until the provider is online and required fields are valid.
 - After creation, the client opens the session and shows the first prompt in the transcript.
+- The panel is inline, not modal: Tab is not trapped. Opening it focuses the first field (the provider select); closing it, with Cancel or the close control, returns focus to **New session**.
 
 ## 10. Providers
 
@@ -453,6 +454,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Check runs a health request and updates the row.
 - Capability chips explain why an action is hidden.
 - Provider credentials never render after save. Editing leaves the secret blank to keep the existing credential.
+- The add and edit form is inline, not modal: Tab is not trapped. Opening it focuses the first enabled field (Provider ID, or Type when editing) and closing it returns focus to **+ Add** or the row's **Edit** control.
 
 ## 11. Search
 
@@ -498,7 +500,7 @@ Every screen needs these states:
 - **No attention:** calm empty inbox with a link to sessions.
 - **No usage:** the Overview report renders em dashes and states how many sessions reported nothing.
 - **Partial usage:** the report keeps the rows it has and the note names the sessions that did not report cost or tokens.
-- **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error.
+- **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error. It is a modal `dialog`: focus moves to Cancel on open, Tab stays inside it, Escape or Cancel closes it and stops the camera, and focus returns to **Scan pairing QR**.
 - **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Oktoso** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal. It uses the same self-hosted Inter and IBM Plex Mono stacks as the app so it does not depend on the web build or an external CDN.
 
 ## 14. Visual language
@@ -734,6 +736,8 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 - All actions are reachable by keyboard.
 - Focus rings use the accent color and remain visible.
 - Modal sheets and dialogs trap Tab, close on Escape, and return focus to the control that opened them. Focus never rests behind a scrim.
+- Inline panels are not modal and do not trap Tab. They move focus to their first field when they open and return it to the opener when they close.
+- A polite, visually hidden live region announces only blocking Inbox items that arrive after the first load. The initial list, ordinary refreshes, and non-blocking items stay silent.
 - Icon-only controls carry an explicit accessible name. Toggle and filter chips expose `aria-pressed`; navigation destinations and the active session row expose `aria-current`.
 - Status is not conveyed by color alone. Pair dots with labels.
 - Times use `<time>` elements. Relative labels keep the absolute update time in `dateTime`.

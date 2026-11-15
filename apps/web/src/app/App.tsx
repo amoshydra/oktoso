@@ -10,6 +10,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -1224,6 +1225,8 @@ function Login(props: {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string>();
   const scanVideo = useRef<HTMLVideoElement | null>(null);
+  const scanOverlayRef = useRef<HTMLDivElement | null>(null);
+  const scanCloseRef = useRef<HTMLButtonElement | null>(null);
   const canScan = useMemo(() => canScanPairingQr(), []);
 
   useEffect(() => {
@@ -1251,6 +1254,26 @@ function Login(props: {
       });
 
     return () => controller.abort();
+  }, [scanning]);
+
+  useEffect(() => {
+    if (!scanning) return;
+    const opener = document.activeElement;
+    scanCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setScanning(false);
+        return;
+      }
+      trapTabKey(event, scanOverlayRef.current);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
   }, [scanning]);
 
   return (
@@ -1330,6 +1353,7 @@ function Login(props: {
           role="dialog"
           aria-modal="true"
           aria-label="Scan pairing QR code"
+          ref={scanOverlayRef}
         >
           <div className="qr-scan-panel">
             <h2>Scan pairing QR</h2>
@@ -1349,6 +1373,7 @@ function Login(props: {
             <button
               className="btn login-scan"
               type="button"
+              ref={scanCloseRef}
               onClick={() => setScanning(false)}
             >
               Cancel
@@ -1691,6 +1716,40 @@ function InboxView(props: {
   const [loading, setLoading] = useState(true);
   const [busyID, setBusyID] = useState<string>();
   const [error, setError] = useState<string>();
+  const [announcement, setAnnouncement] = useState("");
+  const seenBlocking = useRef<Set<string> | null>(null);
+
+  /**
+   * Announce only blocking work that arrives after the first successful load.
+   * The baseline is captured from the first page, so the initial render and
+   * every ordinary refresh stay silent.
+   */
+  const announceNewBlocking = (
+    nextItems: Attention[],
+    nextApprovals: AutomationApproval[],
+  ) => {
+    const blocking = [
+      ...nextItems
+        .filter((item) => item.priority === "blocking")
+        .map((item) => ({ key: `attention:${item.id}`, title: item.title })),
+      ...nextApprovals.map((approval) => ({
+        key: `approval:${approval.id}`,
+        title: approval.title,
+      })),
+    ];
+    const previous = seenBlocking.current;
+    seenBlocking.current = new Set(blocking.map((item) => item.key));
+    if (!previous) return;
+    const fresh = blocking.filter((item) => !previous.has(item.key));
+    if (fresh.length === 0) return;
+    setAnnouncement(
+      fresh.length === 1
+        ? `New blocking request: ${fresh[0]!.title}`
+        : `${fresh.length} new blocking requests: ${fresh
+            .map((item) => item.title)
+            .join("; ")}`,
+    );
+  };
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -1702,6 +1761,7 @@ function InboxView(props: {
       ]);
       setItems(page.data);
       setApprovals(nextApprovals);
+      announceNewBlocking(page.data, nextApprovals);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load attention");
     } finally {
@@ -1804,6 +1864,9 @@ function InboxView(props: {
 
   return (
     <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </span>
       {error ? (
         <div className="alert" role="alert">
           {error}
@@ -3263,6 +3326,9 @@ function ProviderForm(props: {
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  useInlinePanelFocus(formRef, headingRef);
 
   const authChanged = Boolean(editing) && editing?.authKind !== authKind;
   const secretRequired =
@@ -3365,6 +3431,7 @@ function ProviderForm(props: {
   return (
     <form
       className="provider-form"
+      ref={formRef}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -3372,7 +3439,9 @@ function ProviderForm(props: {
     >
       <div className="panel-head">
         <div>
-          <h3>{editing ? "Edit provider" : "Add provider"}</h3>
+          <h3 ref={headingRef} tabIndex={-1}>
+            {editing ? "Edit provider" : "Add provider"}
+          </h3>
           <p>
             Stored in the hub config file. Credentials are write-only and never
             returned by the API.
@@ -3534,6 +3603,9 @@ function NewSessionForm(props: {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const panelRef = useRef<HTMLElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  useInlinePanelFocus(panelRef, headingRef);
 
   useEffect(() => {
     const available = props.providers.filter(
@@ -3609,10 +3681,12 @@ function NewSessionForm(props: {
   };
 
   return (
-    <section className="panel new-session-panel">
+    <section className="panel new-session-panel" ref={panelRef}>
       <div className="panel-head">
         <div>
-          <h2>New session</h2>
+          <h2 ref={headingRef} tabIndex={-1}>
+            New session
+          </h2>
           <p>Create an OpenCode session and optionally send the first prompt.</p>
         </div>
         <button
@@ -8745,6 +8819,35 @@ function microphoneErrorMessage(error: unknown): string {
     }
   }
   return "Unable to start recording. Check the microphone and try again.";
+}
+
+/**
+ * Inline panels are not modal. They move focus to their first field when they
+ * open, and hand focus back to the opener when they close. Tab stays free.
+ * The opener is captured on mount, so no extra prop is needed.
+ */
+function useInlinePanelFocus(
+  rootRef: RefObject<HTMLElement | null>,
+  headingRef: RefObject<HTMLElement | null>,
+): void {
+  useEffect(() => {
+    const opener = document.activeElement;
+    // The app focuses the page title for push navigations. A panel is the real
+    // content of that navigation, so queue this focus after the parent effect
+    // (children run first) instead of racing it.
+    queueMicrotask(() => {
+      const field = rootRef.current?.querySelector<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+      );
+      (field ?? headingRef.current)?.focus();
+    });
+    return () => {
+      queueMicrotask(() => {
+        if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      });
+    };
+    // Mount and unmount only; re-renders must not steal focus.
+  }, []);
 }
 
 const FOCUSABLE_SELECTOR =
