@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.2.0](https://github.com/amoshydra/oktoso/compare/v0.1.31...v0.2.0) (2026-11-15)
+
+
+### Features
+
+* **automation:** abort in-flight actions on pause ([321a687](https://github.com/amoshydra/oktoso/commit/321a687b69c53c970491b1665d5fbc485ace6696))
+* **automation:** add MCP tools and CLI controls ([f12bc4c](https://github.com/amoshydra/oktoso/commit/f12bc4c1754837968863ac48c5f9d6c8c192a59c))
+* **automation:** add session, schedule, notify, and retry ([5c9c414](https://github.com/amoshydra/oktoso/commit/5c9c4140c607ebf40676917fd263e215d6b8297c))
+* **automation:** add the supervisor slice ([01c700d](https://github.com/amoshydra/oktoso/commit/01c700d8b9c3e9d6248d87e639cfb59bdcd5f01b))
+* **automation:** remember approved shapes ([4a7e7fd](https://github.com/amoshydra/oktoso/commit/4a7e7fd69f4abf6a5e659f76b883fe9a3cbe5d16))
+* **automation:** start sessions from templates ([2a03936](https://github.com/amoshydra/oktoso/commit/2a03936f85a4b7f7925eecaf2f515e9c3730afb4))
+* **g2:** show automation approvals in the inbox ([02284fc](https://github.com/amoshydra/oktoso/commit/02284fc0e6dc52bf28b9b17311700b3784425ec9))
+* **mcp:** expose oktoso://automation with subscriptions ([cf5a688](https://github.com/amoshydra/oktoso/commit/cf5a688dd0a06b4172fb68186a008c6b3c991239))
+* **notifications:** add contracts and config ([f5e2dce](https://github.com/amoshydra/oktoso/commit/f5e2dce2abc399560fbb26fbddba686118031201))
+* **notifications:** add subscription and settings routes ([1c401bb](https://github.com/amoshydra/oktoso/commit/1c401bbc15077c9265d9ddf546bed8dddd75b783))
+* **notifications:** deliver through Web Push ([6fe7506](https://github.com/amoshydra/oktoso/commit/6fe7506bb182bf018318f672412f33a102355f7e))
+* **notifications:** route attention events to channels ([a707371](https://github.com/amoshydra/oktoso/commit/a7073712f47953bd31824c57f26c74adb3fe308e))
+* **settings:** add the notification panel ([8bea9ce](https://github.com/amoshydra/oktoso/commit/8bea9ce297daad149e7584f3e4fb75aecb46567c))
+* **web:** add the notification service worker and deep links ([cd031d2](https://github.com/amoshydra/oktoso/commit/cd031d20071d7ce47c3c0d81512b66a0ae8ee629))
+* **web:** queue sends while offline and cache the last session list ([329a2a2](https://github.com/amoshydra/oktoso/commit/329a2a290fe05a4b21dd60c86ce06efec2992ea5))
+
+
+### Bug Fixes
+
+* **automation:** make approvals actionable without exposing the plan ([b387545](https://github.com/amoshydra/oktoso/commit/b387545f4026affb30fa542a69f16929ffb7822c))
+* **mcp:** bound and scope automation_list ([4cca8b4](https://github.com/amoshydra/oktoso/commit/4cca8b446cea358cfa4d44b2f72400307689773a))
+* **web:** keep the offline note outside the composer status branch ([17f9f98](https://github.com/amoshydra/oktoso/commit/17f9f98b5d01c2350838316bc25b7ef367b6a59f))
+
+
+### Miscellaneous Chores
+
+* release 0.2.0 ([8c886cb](https://github.com/amoshydra/oktoso/commit/8c886cb712c855a5f1e7f4f333902b7d15fe2f91))
+
 ## [0.1.31](https://github.com/amoshydra/oktoso/compare/v0.1.30...v0.1.31) (2026-11-15)
 
 
