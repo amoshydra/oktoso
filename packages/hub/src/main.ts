@@ -59,6 +59,7 @@ import { NotificationService } from "./services/notification-service";
 import { TranscriptCacheService } from "./services/transcript-cache";
 import { SearchIndexService } from "./services/search-index";
 import { SearchService } from "./services/search-service";
+import { LocalDataService } from "./services/local-data";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
@@ -613,6 +614,13 @@ async function main(): Promise<void> {
       filePath: join(resolve(config.dataDir), "reply-feedback.jsonl"),
     });
     await replyFeedback.init();
+
+    const localData = new LocalDataService({
+      store,
+      feedback: replyFeedback,
+      transcripts,
+    });
+    await localData.prune();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
     const idempotency = new IdempotencyService(store);
@@ -699,6 +707,7 @@ async function main(): Promise<void> {
       settings: assistantSettings,
       transcripts,
       search,
+      localData,
       replies,
       replyFeedback,
       transcription,

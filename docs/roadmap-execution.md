@@ -438,9 +438,17 @@ Status: done.
 
 ### C7. Retention and export
 
-- [ ] `GET /api/v1/sessions/:ref/export?format=md|json`.
-- [ ] TTL and delete for drafts, read markers, reply feedback, and cache.
-- [ ] Document what is local and what is provider-owned.
+Status: done.
+
+- [x] `GET /api/v1/sessions/:ref/export?format=md|json`. Markdown carries a
+  header block and one section per message; JSON carries the session, the
+  transcript, and the export time. Attachment files are listed, not embedded.
+- [x] TTL and delete for drafts, read markers, reply feedback, and cache.
+  Retention is per store (`0` = never): cache 7 days, markers and feedback 30,
+  drafts never. `DELETE /api/v1/settings/local-data/:store` clears one;
+  deleting the collection clears all, including the cache and its index.
+- [x] Document what is local and what is provider-owned. See the Local data
+  table in `deployment.md`; clearing local data never calls a provider.
 
 **Phase done:** search finds an old phrase in under 200 ms on a 500-session
 fixture; export round-trips; deleting local state leaves the provider untouched.

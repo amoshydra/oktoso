@@ -26,6 +26,7 @@ import { NotificationService } from "./services/notification-service";
 import { TranscriptCacheService } from "./services/transcript-cache";
 import { SearchIndexService } from "./services/search-index";
 import { SearchService } from "./services/search-service";
+import { LocalDataService } from "./services/local-data";
 import { VERSION } from "./version";
 import {
   JsonStateStore,
@@ -134,6 +135,11 @@ async function createTestApp(options: {
     filePath: join(await tempRoot(), "reply-feedback.jsonl"),
   });
   await replyFeedback.init();
+  const localData = new LocalDataService({
+    store,
+    feedback: replyFeedback,
+    transcripts,
+  });
   const transcription = new TranscriptionService(
     settings,
     logger,
@@ -212,6 +218,7 @@ async function createTestApp(options: {
     settings,
     transcripts,
     search,
+    localData,
     replies,
     replyFeedback,
     transcription,
@@ -241,6 +248,7 @@ async function createTestApp(options: {
     notifications,
     automation,
     searchIndex,
+    localData,
     fake,
     openwebui,
   };
@@ -1367,6 +1375,97 @@ describe("hub app", () => {
     );
     expect(exportResponse.status).toBe(200);
     expect(await exportResponse.text()).toContain("Looks useful.");
+  });
+
+  it("exports a session as markdown or json", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const markdown = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/export?format=md",
+      { headers },
+    );
+    expect(markdown.status).toBe(200);
+    expect(markdown.headers.get("Content-Type")).toContain("text/markdown");
+    expect(markdown.headers.get("Content-Disposition")).toContain(
+      "desktop-opencode-fix-auth-race-in-gateway",
+    );
+    const body = await markdown.text();
+    expect(body).toContain("# Fix auth race in gateway");
+    expect(body).toContain("- Session: `desktop-opencode:ses_auth`");
+
+    const json = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/export?format=json",
+      { headers },
+    );
+    expect(json.status).toBe(200);
+    expect(json.headers.get("Content-Type")).toContain("application/json");
+    const payload = (await json.json()) as {
+      exportedAt: string;
+      session: { ref: string };
+      messages: unknown[];
+    };
+    expect(payload.session.ref).toBe("desktop-opencode:ses_auth");
+    expect(payload.messages.length).toBeGreaterThan(0);
+
+    const missing = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_missing/export",
+      { headers },
+    );
+    expect(missing.status).toBeGreaterThanOrEqual(404);
+  });
+
+  it("reports and clears local data", async () => {
+    const { app, store } = await createTestApp();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    const now = Date.now();
+    await store.update((state) => {
+      state.drafts["desktop-opencode:ses_auth"] = { text: "hi", updatedAt: now };
+      state.readMarkers["desktop-opencode:ses_auth"] = {
+        readAt: now,
+        updatedAt: now,
+      };
+    });
+
+    const initial = await app.request("/api/v1/settings/local-data", { headers });
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({
+      data: {
+        drafts: 1,
+        markers: 1,
+        retention: { draftsDays: 0, markersDays: 30, feedbackDays: 30 },
+      },
+    });
+
+    const saved = await app.request("/api/v1/settings/local-data", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ draftsDays: 7 }),
+    });
+    expect(await saved.json()).toMatchObject({
+      data: { retention: { draftsDays: 7 } },
+    });
+
+    const cleared = await app.request("/api/v1/settings/local-data/drafts", {
+      method: "DELETE",
+      headers,
+    });
+    expect(await cleared.json()).toMatchObject({ data: { drafts: 0, markers: 1 } });
+
+    const all = await app.request("/api/v1/settings/local-data", {
+      method: "DELETE",
+      headers,
+    });
+    expect(await all.json()).toMatchObject({ data: { drafts: 0, markers: 0 } });
+
+    const unknown = await app.request("/api/v1/settings/local-data/nope", {
+      method: "DELETE",
+      headers,
+    });
+    expect(unknown.status).toBe(400);
   });
 
   it("searches indexed transcripts with pagination", async () => {
