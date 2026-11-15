@@ -57,6 +57,29 @@ export function renderMarkdown(
     }
   }
 
+  // Mermaid fences become a source block plus an empty diagram target. The
+  // client renders the SVG after markdown is in the document and keeps the
+  // source visible when parsing fails.
+  const mermaidFences = [
+    ...template.content.querySelectorAll<HTMLElement>(
+      "pre > code.language-mermaid, pre > code.language-mmd",
+    ),
+  ];
+  for (const code of mermaidFences) {
+    const pre = code.parentElement;
+    if (!pre || pre.tagName !== "PRE") continue;
+    const block = document.createElement("div");
+    block.className = "mermaid-block";
+    const diagram = document.createElement("div");
+    diagram.className = "mermaid-diagram";
+    const hint = document.createElement("div");
+    hint.className = "mermaid-hint";
+    hint.textContent = "Scroll to see the full diagram";
+    pre.classList.add("mermaid-source");
+    pre.before(block);
+    block.append(diagram, hint, pre);
+  }
+
   if (context?.fileRead && context.sessionRef) {
     const mentions = [...template.content.querySelectorAll("code")];
     for (const code of mentions) {

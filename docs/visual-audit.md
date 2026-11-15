@@ -881,3 +881,30 @@ tap on a common action. This revision supersedes the mobile bar.
   padding drops to 8px and the row gap to 4px.
 - **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
   `tests/e2e/chat.e2e.ts`, `docs/ui-ia.md`.
+
+## Diagram rendering (2026-11-15)
+
+Assistant answers sometimes include Mermaid flowcharts. They now render as diagrams
+instead of raw fences, without changing the transcript hierarchy.
+
+- **Natural size, not fit-to-width.** A 1976px flowchart squeezed into a 700px
+  message turns 16px labels into ~6px text. The diagram panel keeps the SVG at
+  its natural width and scrolls horizontally inside the message. A 10px faint
+  `Scroll to see the full diagram` hint appears only when the SVG is wider than
+  the panel.
+- **Surface.** The diagram uses the existing `surface-2` panel, 12px padding,
+  8px radius, 12px vertical margin, and the current `surface-3` node fill,
+  border, text, and line tokens. No new color, radius, type, or spacing token
+  was added.
+- **Theme.** Mermaid is initialized from the resolved CSS tokens for the active
+  theme. Switching dark/light re-renders visible diagrams; the source is kept in
+  a hidden block for that re-render.
+- **Safety.** Mermaid runs with `securityLevel: "strict"` and HTML labels off.
+  The generated SVG is sanitized with DOMPurify's SVG profile before insertion.
+  Click handlers and raw HTML labels are not admitted.
+- **Loading and failure.** The source fence stays visible until the SVG is
+  ready, and remains as the fallback when parsing fails. Rendering waits 250ms
+  for streaming to pause. Mermaid is a lazy dynamic import, so the main bundle
+  is unchanged when a session has no diagrams.
+- **Files.** `apps/web/src/app/mermaid.ts`, `markdown.ts`, `App.tsx`,
+  `styles.css`, `apps/web/package.json`.

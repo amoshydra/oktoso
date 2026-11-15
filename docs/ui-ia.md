@@ -324,6 +324,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - The assistant error card carries two quiet actions when the provider allows them: **Retry turn** (undo the failed turn and replay its user message on the current model) and **Continue** (append a continuation turn and keep partial work). Retry is hidden for providers without `retry`; Continue is hidden without `send`.
 - Streaming text appends into the current assistant message. The transcript stays anchored near the bottom only when the reader is already there.
 - Code blocks use a monospace font with horizontal scrolling; syntax highlighting and per-code-block copy remain follow-ups. Message-level Copy includes the fences.
+- A fenced `mermaid` or `mmd` block renders as a diagram in place of the source. The diagram sits in a bordered `surface-2` panel with 12px padding, 8px radius, and 12px vertical margin; nodes use `surface-3` and the panel follows the active theme. The source stays visible while the diagram loads and when Mermaid rejects it. Wide diagrams render at their natural width in a horizontally scrollable panel, with a `Scroll to see the full diagram` hint when it overflows. Mermaid loads lazily only when a diagram is present.
 
 ### Composer
 
