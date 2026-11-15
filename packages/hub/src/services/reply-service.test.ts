@@ -986,6 +986,110 @@ describe("ReplyService caching", () => {
   });
 });
 
+describe("ReplyService live gate cases", () => {
+  it("finds a pending question before two explanatory sentences", async () => {
+    const data = [
+      textMessage("m1", "user", "Deploy the app"),
+      textMessage(
+        "m2",
+        "assistant",
+        "OVHcloud VPS-1 in Singapore. That's the answer. One thing I need from you before you paste: a domain, or not? A real domain gives your wife a link she can tap. Say which and I'll pin the config.",
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Use a domain.",
+          opposite: "Use Tailscale.",
+          next: "Buy a domain.",
+          verify: "Check the DNS record.",
+          extend: "Add Caddy TLS.",
+          ask: "Which domain?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(audit.moment.state).toBe("reply");
+    expect(audit.moment.kind).toBe("question");
+    expect(audit.moment.pending).toContain("a domain, or not?");
+    expect(audit.context).toContain(
+      "recommendation: OVHcloud VPS-1 in Singapore.",
+    );
+  });
+
+  it("does not treat headings or imperatives as completed work", async () => {
+    const data = [
+      textMessage("m1", "user", "Finish the release"),
+      textMessage(
+        "m2",
+        "assistant",
+        "**Accessibility pass**\nRun the full suite on the merged `main` commit.\nThe build passed.",
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Thanks, looks good.",
+          opposite: "Nothing else for now.",
+          next: "Show me the diff.",
+          verify: "Rerun the tests.",
+          extend: "Add a regression test.",
+          ask: "Should I tag it?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(audit.moment.done).toContain("The build passed.");
+    expect(audit.moment.done).not.toContain("Accessibility pass");
+    expect(audit.moment.done).not.toContain(
+      "Run the full suite on the merged `main` commit.",
+    );
+  });
+
+  it("marks the latest user turn and ignores internal running commands", async () => {
+    const data = [
+      textMessage("m3", "user", "Do the new task"),
+      textMessage("m2", "assistant", "Working on it."),
+      textMessage("m1", "user", "Do the first task"),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Let it finish.",
+          opposite: "Stop it, focus on the new task.",
+          next: "Also check the second audit.",
+          verify: "Check the combined diff.",
+          extend: "Keep the worktrees separate.",
+          ask: "Should both audits land together?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(
+      settings(),
+      sessions(
+        data,
+        session({ status: "running" }),
+      ),
+      logger,
+    );
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+
+    expect(audit.moment.state).toBe("wait");
+    expect(audit.context).toContain("latest_turn: user");
+    expect(audit.context).not.toContain("running: shell");
+  });
+});
+
 describe("ReplyService audit", () => {
   it("returns the moment, context, raw output, and lint results", async () => {
     const data = [
