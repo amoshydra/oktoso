@@ -748,7 +748,7 @@ export function App() {
   }
 
   const providerPanel = (
-    <article className="panel">
+    <article className="panel providers-panel">
       <div className="panel-head">
         <div>
           <h2>Providers</h2>
@@ -1160,7 +1160,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.14 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.15 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -2959,7 +2959,7 @@ function SessionsView(props: {
         )
       ) : null}
 
-      <section className="panel">
+      <section className="panel sessions-panel">
         <div className="panel-head">
           <div>
             <h2>All sessions</h2>

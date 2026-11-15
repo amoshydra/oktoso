@@ -1,6 +1,6 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15 and aligned to the reading column in `design-v1.14`.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, and given the mobile collision fixes in `design-v1.15`.
 
 Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows in `docs/ui-ia.md` did not change.
 
@@ -1120,3 +1120,27 @@ This pass spends the space on the content already on the page.
   every session row report `scrollWidth === clientWidth`.
 - **Not changed.** Routes, navigation order, the mobile bottom bar, the composer
   controls, the details panel breakpoints, and the type scale.
+
+
+## Mobile collision audit (2026-11-15)
+
+A 390/320px pass found two headers where a side action competed with wrapping
+content, plus one tight row rhythm.
+
+- **Session scope.** The `All`/`Root`/`Subagents` group was inline without a
+  flex container. On mobile it wrapped into two rows beside the summary, and the
+  summary's `newest first` text sat under the chips. The head now stacks at
+  760px and below and the chips form one 32px row at 390px. The new e2e test
+  asserts the scope top is below the summary and all chip tops match.
+- **Inbox toolbar.** At 420px and below the chips occupy the full width and
+  Refresh moves to its own row. At 390px the chips take two rows and Refresh one;
+  at 320px the chips take two rows and Refresh one. Nothing overlaps.
+- **Providers head.** The provider description no longer shares a row with
+  `+ Add` and `Recheck` on mobile; the actions move below the copy.
+- **Session rows.** A parent row's title, `N subagents`, and provider/project
+  lines were separated by 2px. They now use the 4px space step, so a three-line
+  parent row reads as a stack rather than a block.
+- **Kept as designed.** Search status chips still wrap under their label below
+  420px, per the filter rule. The 44px topbar theme button keeps its 44px target
+  inside the 52px bar. The details sheet keeps its pinned footer and 12px bottom
+  breathing room.

@@ -384,6 +384,26 @@ describe("chat sending", () => {
     ).toBe(true);
   });
 
+  it("stacks the session scope under the summary on a narrow screen", async () => {
+    await page!.setViewportSize({ width: 390, height: 844 });
+    await page!.getByRole("button", { name: "Sessions" }).click();
+    const panel = page!.locator(".sessions-panel");
+    await panel.locator(".session-scope").waitFor();
+    const geometry = await panel.evaluate((element) => {
+      const summary = element.querySelector(".panel-head p")!;
+      const scope = element.querySelector(".session-scope")!;
+      return {
+        summaryBottom: summary.getBoundingClientRect().bottom,
+        scopeTop: scope.getBoundingClientRect().top,
+        chipTops: Array.from(scope.querySelectorAll(".chip")).map((chip) =>
+          Math.round(chip.getBoundingClientRect().top),
+        ),
+      };
+    });
+    expect(geometry.scopeTop).toBeGreaterThanOrEqual(geometry.summaryBottom);
+    expect(new Set(geometry.chipTops).size).toBe(1);
+  });
+
   it("keeps the running mobile composer controls at 44px without overlap", async () => {
     await openSession("Port hub to Rust");
     await page!.setViewportSize({ width: 390, height: 844 });
