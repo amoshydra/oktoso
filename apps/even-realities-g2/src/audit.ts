@@ -188,7 +188,7 @@ async function generate(): Promise<void> {
   generateStatus.textContent = "Generating…";
   generateStatus.classList.remove("error");
   try {
-    currentAudit = await client.replyAudit(ref, mode);
+    currentAudit = await client.replyAudit(ref, mode, "g2");
     ratings.clear();
     overall = undefined;
     noteInput.value = "";

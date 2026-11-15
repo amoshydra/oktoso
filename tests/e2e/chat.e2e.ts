@@ -675,6 +675,12 @@ describe("navigation history", () => {
       await page!.getByRole("button", { name: "Rename" }).click();
       const input = page!.locator("#session-rename-input");
       await input.fill("Renamed from e2e");
+      await page!.getByRole("button", { name: "Save", exact: true }).focus();
+      await page!.keyboard.press("Escape");
+      await page!.locator("#session-details").waitFor({ state: "visible" });
+      await page!.getByRole("button", { name: "Rename" }).waitFor();
+      await page!.getByRole("button", { name: "Rename" }).click();
+      await page!.locator("#session-rename-input").fill("Renamed from e2e");
       await page!.getByRole("button", { name: "Save", exact: true }).click();
       await page!.waitForFunction(
         () =>
@@ -700,13 +706,22 @@ describe("navigation history", () => {
     }
   });
 
-  it("closes the desktop details column with Escape", async () => {
+  it("closes the desktop details column with Escape and restores focus", async () => {
     await page!.setViewportSize({ width: 1440, height: 900 });
     await openSession("Fix auth race in gateway");
     // Above 1320px the column opens automatically with the session.
     await page!.locator("#session-details").waitFor();
+    await page!.getByRole("button", { name: "Details", exact: true }).click();
+    await page!.locator("#session-details").waitFor({ state: "hidden" });
+    await page!.getByRole("button", { name: "Details", exact: true }).click();
+    await page!.locator("#session-details").waitFor();
     await page!.keyboard.press("Escape");
     await page!.locator("#session-details").waitFor({ state: "hidden" });
+    expect(
+      await page!.evaluate(() =>
+        document.activeElement?.classList.contains("topbar-details"),
+      ),
+    ).toBe(true);
   });
 
   it("opens and closes the new-session panel with history", async () => {

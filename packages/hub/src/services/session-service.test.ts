@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Session, SessionListQuery } from "@amoshydra/oktoso-contracts";
 import { ProviderError, type ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
 import type { ProviderRegistry } from "./provider-registry";
+import type { TranscriptCacheService } from "./transcript-cache";
 import { SessionService } from "./session-service";
 
 const logger = createLogger({ level: "silent" });
@@ -49,7 +50,12 @@ describe("SessionService session cache", () => {
         return { ...session };
       },
     } as unknown as ProviderAdapter;
-    const sessions = new SessionService(makeRegistry([adapter]), logger);
+    const transcripts = {
+      forget: vi.fn(async () => undefined),
+    } as unknown as TranscriptCacheService;
+    const sessions = new SessionService(makeRegistry([adapter]), logger, {
+      transcripts,
+    });
 
     await expect(sessions.get(session.ref)).resolves.toMatchObject({
       ref: session.ref,
@@ -61,6 +67,39 @@ describe("SessionService session cache", () => {
       code: "not_found",
     });
     expect(sessions.cachedSession(session.ref)).toBeUndefined();
+    expect(transcripts.forget).toHaveBeenCalledWith(session.ref);
+  });
+});
+
+describe("SessionService rename", () => {
+  it("updates the session and retitles the cached transcript", async () => {
+    const session = makeSession({
+      ref: "test:ses_rename",
+      providerID: "test",
+      title: "Old title",
+    });
+    const renamed = { ...session, title: "New title", updatedAt: 200 };
+    const adapter = {
+      id: "test",
+      capabilities: { rename: true },
+      renameSession: async () => renamed,
+    } as unknown as ProviderAdapter;
+    const transcripts = {
+      retitle: vi.fn(async () => undefined),
+    } as unknown as TranscriptCacheService;
+    const sessions = new SessionService(makeRegistry([adapter]), logger, {
+      transcripts,
+    });
+
+    await expect(sessions.rename(session.ref, "New title")).resolves.toMatchObject(
+      { title: "New title", updatedAt: 200 },
+    );
+    expect(sessions.cachedSession(session.ref)?.title).toBe("New title");
+    expect(transcripts.retitle).toHaveBeenCalledWith(
+      session.ref,
+      "New title",
+      200,
+    );
   });
 });
 

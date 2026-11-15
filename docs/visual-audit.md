@@ -1,8 +1,8 @@
 # Visual Design Audit
 
-> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, given the mobile collision fixes in `design-v1.15`, closed with the navigation/accessibility pass in `design-v1.16`, given the accessibility follow-ups in `design-v1.17`, and adding session rename in `design-v1.18`.
+> Status: frozen in [`design-v1`](design-lock.md) on 2026-10-26. Session transcript revision `design-v1.1` applied 2026-10-27; chat shell alignment applied 2026-11-02; wide-field layout revision applied in `design-v1.13` on 2026-11-15, aligned to the reading column in `design-v1.14`, given the mobile collision fixes in `design-v1.16`, the accessibility pass in `design-v1.17`, the accessibility follow-ups in `design-v1.18`, and session rename plus search label alignment in `design-v1.19`.
 
-Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows are recorded in `docs/ui-ia.md`; the v1.16 pass changes the mobile destination set and the Runtime label.
+Scope: the web prototype and the design tokens in `docs/prototypes/styles.css`. The information architecture and flows are recorded in `docs/ui-ia.md`; the shipped IA is Overview + Providers-in-Settings.
 
 ## What was wrong
 
@@ -262,7 +262,7 @@ Verified at 1440, 1024, 390, and 320px in dark and light themes. Changing reason
 
 The remaining Phase 0 page chrome was removed from the product screens so the topbar is the only page header again. No routes, tokens, type roles, spacing steps, radii, or semantic color rules were added.
 
-- Inbox, Sessions, Search, and Providers no longer open with a hero card. Inbox keeps its filters and one quiet Refresh action in a toolbar; Sessions keeps a compact page lead with Refresh and New session; Search and Providers start directly with their first panel. Foundation keeps its status hero.
+- Inbox, Sessions, Search, and Providers no longer open with a hero card. Inbox keeps its filters and one quiet Refresh action in a toolbar; Sessions keeps a compact page lead with Refresh and New session; Search and Providers start directly with their first panel. Overview keeps its usage report and runtime cards.
 - The hero gradient was removed. The hero is now a normal `surface` card.
 - The topbar and page content share one gutter: 24px on desktop and 16px on mobile. The topbar title, filters, panels, and page actions now start on the same x-axis.
 - The rail and mobile bottom navigation use the shared 16/18px line-icon set instead of lettermarks. Back, theme, close, branch, and disclosure controls use the same set instead of text glyphs. The attention badge is 10px/700, not 9px/800.
@@ -935,7 +935,7 @@ instead of raw fences, without changing the transcript hierarchy.
 - The default destination is renamed Overview; the route does not change. The
   phase-0 hero is removed because it carried a second 20px heading (the chat
   document title owns `--text-xl`) and repeated roadmap copy that had gone
-  stale. Runtime cards, the provider panel, the event stream, and diagnostics
+  stale. Runtime status cards, the provider panel, the event stream, and diagnostics
   stay, after the usage report.
 - Usage is a table above 1100px and stacked rows below. Group, sessions,
   tokens, and cost align right with tabular numerals in the sans family; the
@@ -1119,7 +1119,7 @@ consolidates both.
   existing `--opencode` and `--openwebui` accents. Session lists and inbox cards
   stay neutral, which is what the contract already specified but did not
   implement.
-- **Navigation.** Rail labels ellipsize inside the 64px rail; `Foundation`
+- **Navigation.** Rail labels ellipsize inside the 64px rail; `Overview`
   previously overflowed its 42px content box. The active rail mark uses the
   accent, matching the bottom navigation. The attention badge is clamped to
   30px and moved in 2px so a three-digit count stays inside the rail item. In
@@ -1128,7 +1128,7 @@ consolidates both.
 - **Panel heads.** New session and the provider form use the shared close icon
   with `Close new session` / `Close provider form`, matching details, preview,
   the context sheet, and activity steps.
-- **Proof.** Typecheck, 587 unit tests, and 22 e2e tests pass. The composer e2e
+- **Proof.** Typecheck, 721 unit tests, and 46 e2e tests pass. The composer e2e
   test now asserts SVG Send/More, no text in `⋯`, and the hidden chat theme
   toggle at 390px. Screenshots were reviewed at 1440, 390, and 320px in both
   dark and light themes.
@@ -1235,7 +1235,7 @@ are unchanged; the fixes are ARIA state, element choice, and focus handling.
   Markdown heading in a mocked message, Inbox `aria-pressed` and count names,
   details/context sheet Tab traps and focus restore, a scan for unnamed
   icon-only controls across list, chat, and details, and the hidden pill's tab
-  order. Typecheck, 587 unit tests, and all e2e tests pass.
+  order. Typecheck, 721 unit tests, and all e2e tests pass.
 - **Files.** `apps/web/src/app/App.tsx`, `SessionRow.tsx`, `SessionTree.tsx`,
   `settings-notifications.tsx`, `settings-automation.tsx`,
   `tests/e2e/accessibility.e2e.ts`, `docs/ui-ia.md`.
@@ -1269,7 +1269,7 @@ Semantics and focus only. No visual, copy, or layout change.
   focus and restore; and the live region's silence on the first load and for
   non-blocking arrivals plus its new-blocking announcement. The suite now
   reserves a free hub port instead of assuming `8801` is available. Typecheck,
-  587 unit tests, and all e2e tests pass.
+  721 unit tests, and all e2e tests pass.
 - **Files.** `apps/web/src/app/App.tsx`, `tests/e2e/accessibility.e2e.ts`,
   `docs/ui-ia.md`.
 
@@ -1284,7 +1284,7 @@ a global page. The title stays the page `h1`; rename edits that title in place.
   Escape cancels without closing the details sheet, and a failed save leaves the
   field open with the error.
 - The action is hidden when the provider does not expose `rename`. OpenCode uses
-  `PATCH /api/session/{id}`; Open WebUI and Hermes use the chat update endpoint.
+  `PATCH /api/session/{id}`; Open WebUI uses the chat update endpoint. Hermes is not wired yet.
 - Saving updates the topbar title and the local session cache, so the page title
   and the session row do not disagree.
 - No new token, route beyond the PATCH session endpoint, or layout surface.
