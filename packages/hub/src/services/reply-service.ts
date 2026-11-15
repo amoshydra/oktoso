@@ -62,6 +62,8 @@ interface MomentContext {
   lastAssistantTail: string;
   running?: string;
   evidence: string;
+  latestTurn?: "user" | "assistant";
+  recommendation?: string;
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1_000;
@@ -108,7 +110,7 @@ const ACTION_NEEDED =
 const DONE_START =
   /^(done|delivered|committed|merged|published|verified|fixed|installed|released|updated|passed|all green)\b/i;
 const DONE_END =
-  /\b(fixed|pushed|merged|committed|published|verified|installed|released|updated|pass(?:ed|es|ing)?|green|shipped|deployed)\b/i;
+  /\b(?:is|are|was|were|has been|have been|got|now)\s+(?:fixed|pushed|merged|committed|published|verified|installed|released|updated|passed|passing|green|shipped|deployed)\b|\b(?:fixed|pushed|merged|committed|published|verified|installed|released|updated|passed|passing|green|shipped|deployed)\s*[.!]*$/i;
 const CONSTRAINT_WORD = /\b(do not|don't|never|only|keep|without)\b/i;
 const META_TEXT =
   /\b(contrast|alt|alternative role|restatement|audit|evaluation|system prompt|context policy|json|moment|suggestion)\b/i;
@@ -118,6 +120,9 @@ const UNSAFE_TEXT =
   /\b(?:skip|bypass|ignore|circumvent)\b[^.]*\b(?:approval|review|permission|guard|check|auth|security)\b/i;
 const UNSAFE_TEXT_ALT =
   /\bwithout\b[^.]*\b(?:approval|review|permission|guard|check)\b/i;
+const INTERNAL_RUNNING =
+  /(?:^|&&|;|\|)\s*(?:jq|grep|rg|cat|sed|awk|head|tail|ls|find|pwd|echo|printf|which|stat|file|git\s+(?:status|diff|log|show|grep))\b/i;
+
 const GENERIC =
   /^(?:proceed with the current approach|continue with the current approach|keep going|sounds good|looks good|that works|do it|go ahead|carry on|great|perfect|nice|thanks|i accept|accepted|approved|lgtm|ship it)(?=[\s,.]|$)/i;
 
@@ -207,6 +212,8 @@ Rules:
 - In state "challenge" the user corrected the agent: answer acknowledges the correction in a statement, opposite defends the old diagnosis or names a different cause, and neither asks the question back.
 - A finished turn is still a conversation. In state "done", answer is a short acknowledgement, opposite closes the loop, and next, verify, extend, and ask are all required.
 - In state "wait" the run is still going: answer is the natural wait message ("Let it finish.", "Ping me when the tests pass."), opposite is an interrupt ("Stop it, the cache assumption is wrong."), and next must not repeat the running command.
+- If latest_turn is "user", the user has just sent a new instruction. Suggest steering or queued messages that refine it. Do not repeat a line from last_assistant_tail or suggest inspecting an internal command.
+- If recommendation is present, treat it as the current plan. Do not replace it with a different provider, option, or approach unless the user asks; answer and opposite should build on it or name the real alternative.
 - Answer the assistant's own question; never repeat it back as a suggestion.
 - Keep every field a distinct intent. Never reword another field, and never restate the same object with a different verb: "Switch to the mirror" and "Execute the pull using the mirror" are one chip.
 - Never name a file, version, PR, or option that is not in MOMENT. If unsure, describe the action without naming it.
@@ -1019,6 +1026,12 @@ function buildMomentContext(input: {
   );
   const lastUser = latestUserText;
   const latestMessage = messages.at(-1);
+  const latestTurn =
+    latestMessage?.role === "user"
+      ? "user"
+      : latestMessage
+        ? "assistant"
+        : undefined;
   const isRunning =
     session?.status === "running" ||
     latestMessage?.streaming === true ||
@@ -1027,7 +1040,7 @@ function buildMomentContext(input: {
   const sentences = splitSentences(sanitized);
   const firstSentence = sentences[0] ?? "";
   const lastSentence = sentences.at(-1) ?? "";
-  const askText = sentences.slice(-2).join(" ");
+  const askText = sentences.slice(-6).join(" ");
   const recentText = sentences.slice(-4).join(" ");
   const deliveredHeadline =
     /^(done|delivered|committed|merged|published|fixed|installed|verified)\b/i.test(
@@ -1064,12 +1077,12 @@ function buildMomentContext(input: {
   if (question) {
     state = "reply";
     kind = approval ? "approval" : "question";
-  } else if (isRunning) {
-    state = "wait";
-    kind = "running";
   } else if (pendingFromText) {
     state = "reply";
     kind = approval ? "approval" : "question";
+  } else if (isRunning) {
+    state = "wait";
+    kind = "running";
   } else if (actionNeeded) {
     state = "reply";
     kind = approval ? "approval" : "delivery";
@@ -1096,6 +1109,7 @@ function buildMomentContext(input: {
       ? (pendingFromText ?? actionSentence)
       : undefined);
   const done = extractDone(lastAssistantText);
+  const recommendation = extractRecommendation(lastAssistantText);
   const constraints = extractConstraints([
     ...userTexts,
     ...(input.originalRequest ? [input.originalRequest] : []),
@@ -1123,6 +1137,8 @@ function buildMomentContext(input: {
     lastAssistantTail,
     ...(isRunning ? { running: runningSummary(messages) } : {}),
     evidence,
+    ...(latestTurn ? { latestTurn } : {}),
+    ...(recommendation ? { recommendation } : {}),
   };
 }
 
@@ -1143,6 +1159,10 @@ function buildMomentPrompt(context: MomentContext): string {
       ? ["  constraints:", ...moment.constraints.map((item) => `    - ${item}`)]
       : []),
     `  user_goal: ${context.userGoal || "(unknown)"}`,
+    ...(context.latestTurn ? [`  latest_turn: ${context.latestTurn}`] : []),
+    ...(context.recommendation
+      ? [`  recommendation: ${context.recommendation}`]
+      : []),
     `  last_user: ${context.lastUser || "(none)"}`,
     `  last_assistant_tail: ${context.lastAssistantTail || "(none)"}`,
     ...(context.running ? [`  running: ${context.running}`] : []),
@@ -1175,6 +1195,7 @@ function runningSummary(messages: Message[]): string | undefined {
   for (const message of [...messages].reverse()) {
     for (const part of message.parts) {
       if (part.type === "shell" && part.status === "running") {
+        if (INTERNAL_RUNNING.test(part.command)) continue;
         return clip(`shell ${part.command}`, 120);
       }
       if (part.type === "tool" && part.status === "running") {
@@ -1183,6 +1204,7 @@ function runningSummary(messages: Message[]): string | undefined {
           input && typeof input.command === "string"
             ? input.command
             : part.name;
+        if (INTERNAL_RUNNING.test(detail)) continue;
         return clip(`${part.name} ${detail}`, 120);
       }
     }
@@ -1213,13 +1235,39 @@ function sanitizeGateText(text: string): string {
     .trim();
 }
 
+function extractRecommendation(text: string): string | undefined {
+  const prose = text.replace(/```[\s\S]*?```/g, " ").replace(/\*\*/g, "");
+  const sentences = splitSentences(prose);
+  const cue =
+    /\b(that'?s the answer|the answer is|i recommend|i'?d recommend|my recommendation|i'?d go with|go with|the best (?:option|choice)|pick)\b/i;
+  for (let index = 0; index < sentences.length; index += 1) {
+    const sentence = sentences[index]!;
+    if (/\?\s*$/.test(sentence)) continue;
+    if (!cue.test(sentence)) continue;
+    const candidate =
+      sentence.length < 40 &&
+      /that'?s the answer|the answer is/i.test(sentence) &&
+      index > 0
+        ? sentences[index - 1]!
+        : sentence;
+    return clip(candidate, 200);
+  }
+  return undefined;
+}
+
 function extractAsk(text: string): string | undefined {
   const sentences = splitSentences(text);
+  let sawDoneAfter = false;
   for (let index = sentences.length - 1; index >= 0; index -= 1) {
     const sentence = sentences[index]!.trim();
     if (!sentence || COURTESY.test(sentence)) continue;
-    if (/\?\s*$/.test(sentence)) return clip(sentence, MAX_PENDING_CHARS);
-    if (ASK_OFFER.test(sentence)) return clip(sentence, MAX_PENDING_CHARS);
+    const isQuestion = /\?\s*$/.test(sentence);
+    if ((isQuestion || ASK_OFFER.test(sentence)) && !sawDoneAfter) {
+      return clip(sentence, MAX_PENDING_CHARS);
+    }
+    if (!isQuestion && (DONE_START.test(sentence) || DONE_END.test(sentence))) {
+      sawDoneAfter = true;
+    }
   }
   return undefined;
 }
