@@ -909,6 +909,19 @@ instead of raw fences, without changing the transcript hierarchy.
 - **Files.** `apps/web/src/app/mermaid.ts`, `markdown.ts`, `App.tsx`,
   `styles.css`, `apps/web/package.json`.
 
+## Message search (2026-11-16)
+
+- Results are a flat list of rows inside one panel, not cards. Rows separate on
+  `--border-subtle` and the whole row is the click target, matching the session
+  list grammar.
+- A match is marked with the accent at 24% behind unchanged `--text`. No second
+  accent, no underline; the mark is the only colour in the row.
+- Metadata stays quiet: title at 14px/600, provider and role at 11px muted,
+  time at 10px mono with tabular figures, snippet at 14px with the 1.5 UI line
+  height.
+- The scope control reuses the filter chip row and sits above Provider, so the
+  three filter groups keep source order when they wrap.
+
 ## Notification focus (2026-11-15)
 
 - A notification deep link scrolls the matching inline attention card into

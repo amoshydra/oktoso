@@ -438,10 +438,11 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 
 - Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
 - At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
-- First release searches session titles, projects, directories, and agents through the hub session cache.
-- Provider and status filters mirror the Sessions view.
-- Results show title, provider, project or directory, status, and unread or attention cues.
-- Message-content search is not implemented yet; it is not implied by the session search copy.
+- A `Scope` control selects **Sessions** or **Messages**; the choice lives in the URL (`?scope=messages`) so the back stack restores it.
+- Sessions searches titles, projects, directories, and agents through the hub session cache. Provider and status filters mirror the Sessions view; results show title, provider, project or directory, status, and unread or attention cues.
+- Messages searches the transcript cache through `GET /api/v1/search`. Provider and status filters apply. Results show the session title, provider, project, role, and the matching excerpt with the query highlighted in `<mark>`.
+- Message search needs the transcript cache: when it is off, the view says so and points at Settings → Transcript cache. While the index catches up, the summary says so and an empty result explains it.
+- Both scopes keep the query, provider, and status in the URL. Typing replaces the history entry; changing a filter or the scope adds one.
 - Keyboard: `Cmd/Ctrl+K` opens search from any signed-in screen, Tab moves through filters and results, and Escape clears the query.
 
 ## 11. Settings

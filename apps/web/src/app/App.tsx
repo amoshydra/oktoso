@@ -28,6 +28,7 @@ import type {
   InboxItem,
   Message,
   MessagePart,
+  SearchResult,
   ModelOption,
   Provider,
   ProviderAuthKind,
@@ -79,11 +80,13 @@ import {
   isInternalNext,
   parseRouteHref,
   type Route,
+  type SearchScope,
 } from "./router";
 import { readRouteCache, writeRouteCache } from "./route-cache";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
+import { highlightParts } from "./search-highlight";
 import { TranscriptCacheSettingsPanel } from "./settings-transcripts";
 import {
   readSessionCache,
@@ -237,7 +240,13 @@ function routeForView(view: View): Route {
     case "sessions":
       return { name: "sessions", newSession: false };
     case "search":
-      return { name: "search", query: "", provider: "all", status: "all" };
+      return {
+        name: "search",
+        query: "",
+        provider: "all",
+        status: "all",
+        scope: "sessions",
+      };
     case "providers":
       return { name: "providers" };
     case "settings":
@@ -381,7 +390,13 @@ export function App() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (routeRef.current.name === "search") return;
-        navigate({ name: "search", query: "", provider: "all", status: "all" });
+        navigate({
+          name: "search",
+          query: "",
+          provider: "all",
+          status: "all",
+          scope: "sessions",
+        });
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1110,6 +1125,7 @@ export function App() {
                 query={route.name === "search" ? route.query : ""}
                 provider={route.name === "search" ? route.provider : "all"}
                 status={route.name === "search" ? route.status : "all"}
+                scope={route.name === "search" ? route.scope : "sessions"}
                 onNavigate={navigateSearch}
                 onOpen={openSession}
               />
@@ -2262,28 +2278,34 @@ function SearchView(props: {
   query: string;
   provider: string;
   status: SessionStatus | "all";
+  scope: SearchScope;
   onNavigate: (next: SearchState, options?: NavigateOptions) => void;
   onOpen: (ref: string) => void;
 }) {
   const { key } = useHistoryLocation();
   const [draft, setDraft] = useState(props.query);
-  const [results, setResults] = useState<Session[]>(
-    () => readRouteCache<Session[]>(key, "search-results") ?? [],
+  const [sessions, setSessions] = useState<Session[]>(() =>
+    props.scope === "sessions"
+      ? readRouteCache<Session[]>(key, "search-results") ?? []
+      : [],
   );
+  const [hits, setHits] = useState<SearchResult[]>([]);
+  const [indexed, setIndexed] = useState({ enabled: true, ready: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef(0);
   const sentQuery = useRef(props.query);
-  const { provider, status } = props;
+  const { provider, status, scope } = props;
 
   const trimmed = draft.trim();
   const hasFilters = provider !== "all" || status !== "all";
+  const messages = scope === "messages";
 
   useEffect(() => {
-    writeRouteCache(key, "search-results", results);
-  }, [key, results]);
+    if (scope === "sessions") writeRouteCache(key, "search-results", sessions);
+  }, [key, scope, sessions]);
 
   useEffect(() => {
     if (props.query === sentQuery.current) return;
@@ -2295,19 +2317,27 @@ function SearchView(props: {
     if (draft === sentQuery.current) return;
     const timer = window.setTimeout(() => {
       sentQuery.current = draft;
-      props.onNavigate({ query: draft, provider, status }, { replace: true });
+      props.onNavigate(
+        { query: draft, provider, status, scope },
+        { replace: true },
+      );
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [draft, provider, status, props.onNavigate]);
+  }, [draft, provider, status, scope, props.onNavigate]);
 
   const selectProvider = (value: string) => {
     sentQuery.current = draft;
-    props.onNavigate({ query: draft, provider: value, status });
+    props.onNavigate({ query: draft, provider: value, status, scope });
   };
 
   const selectStatus = (value: SessionStatus | "all") => {
     sentQuery.current = draft;
-    props.onNavigate({ query: draft, provider, status: value });
+    props.onNavigate({ query: draft, provider, status: value, scope });
+  };
+
+  const selectScope = (value: SearchScope) => {
+    sentQuery.current = draft;
+    props.onNavigate({ query: draft, provider, status, scope: value });
   };
 
   useEffect(() => {
@@ -2329,14 +2359,49 @@ function SearchView(props: {
     const request = ++requestRef.current;
     setError(undefined);
 
-    if (!trimmed && !hasFilters) {
-      setResults([]);
+    if (messages ? !trimmed : !trimmed && !hasFilters) {
+      setSessions([]);
+      setHits([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     const timer = setTimeout(() => {
+      const done = (run: () => void) => {
+        if (request !== requestRef.current) return;
+        run();
+        setLoading(false);
+      };
+
+      if (messages) {
+        props.client
+          .search({
+            q: trimmed,
+            scope: "messages",
+            ...(provider !== "all" ? { provider } : {}),
+            ...(status !== "all" ? { status } : {}),
+            limit: 50,
+          })
+          .then((page) =>
+            done(() => {
+              setHits(page.data);
+              setIndexed({ enabled: page.enabled, ready: page.ready });
+            }),
+          )
+          .catch((reason: unknown) =>
+            done(() => {
+              setHits([]);
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Unable to search messages",
+              );
+            }),
+          );
+        return;
+      }
+
       props.client
         .sessions({
           ...(trimmed ? { q: trimmed } : {}),
@@ -2344,35 +2409,53 @@ function SearchView(props: {
           ...(status !== "all" ? { status } : {}),
           limit: 100,
         })
-        .then((page) => {
-          if (request !== requestRef.current) return;
-          setResults(page.data);
-        })
-        .catch((reason) => {
-          if (request !== requestRef.current) return;
-          setResults([]);
-          setError(
-            reason instanceof Error ? reason.message : "Unable to search sessions",
-          );
-        })
-        .finally(() => {
-          if (request !== requestRef.current) return;
-          setLoading(false);
-        });
+        .then((page) => done(() => setSessions(page.data)))
+        .catch((reason: unknown) =>
+          done(() => {
+            setSessions([]);
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "Unable to search sessions",
+            );
+          }),
+        );
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [props.client, trimmed, provider, status, hasFilters, attempt]);
+  }, [
+    props.client,
+    messages,
+    trimmed,
+    provider,
+    status,
+    hasFilters,
+    attempt,
+  ]);
 
+  const sessionCount = sessions.length;
+  const messageCount = hits.length;
   const resultSummary = loading
-    ? "Searching sessions…"
-    : `${results.length} session${results.length === 1 ? "" : "s"} matched`;
+    ? messages
+      ? "Searching messages…"
+      : "Searching sessions…"
+    : messages
+      ? `${messageCount} message${messageCount === 1 ? "" : "s"} matched${
+          indexed.ready ? "" : " · index catching up"
+        }`
+      : `${sessionCount} session${sessionCount === 1 ? "" : "s"} matched`;
+
+  const emptyPrompt = messages
+    ? indexed.enabled
+      ? "Type a query to search message text in cached transcripts."
+      : "Message search needs the transcript cache. Turn it on in Settings → Transcript cache."
+    : "Type a query or choose a provider or status filter to search sessions across providers.";
 
   return (
     <>
       <section className="panel search-panel">
         <label className="sr-only" htmlFor="session-search">
-          Search sessions
+          {messages ? "Search messages" : "Search sessions"}
         </label>
         <input
           id="session-search"
@@ -2380,7 +2463,7 @@ function SearchView(props: {
           className="search-input"
           type="search"
           value={draft}
-          placeholder="Search sessions…"
+          placeholder={messages ? "Search messages…" : "Search sessions…"}
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => setDraft(event.currentTarget.value)}
@@ -2391,6 +2474,26 @@ function SearchView(props: {
             }
           }}
         />
+
+        <div className="search-filters" role="group" aria-label="Search scope">
+          <span className="search-filter-label">Scope</span>
+          <button
+            className={`chip ${scope === "sessions" ? "active" : ""}`}
+            type="button"
+            aria-pressed={scope === "sessions"}
+            onClick={() => selectScope("sessions")}
+          >
+            Sessions
+          </button>
+          <button
+            className={`chip ${scope === "messages" ? "active" : ""}`}
+            type="button"
+            aria-pressed={scope === "messages"}
+            onClick={() => selectScope("messages")}
+          >
+            Messages
+          </button>
+        </div>
 
         <div className="search-filters" role="group" aria-label="Provider filter">
           <span className="search-filter-label">Provider</span>
@@ -2452,18 +2555,71 @@ function SearchView(props: {
         </div>
       ) : null}
 
-      {!trimmed && !hasFilters ? (
+      {(messages ? !trimmed : !trimmed && !hasFilters) ? (
+        <div className="empty">{emptyPrompt}</div>
+      ) : loading && (messages ? hits : sessions).length === 0 ? (
         <div className="empty">
-          Type a query or choose a provider or status filter to search sessions
-          across providers.
+          {messages ? "Searching messages…" : "Searching sessions…"}
         </div>
-      ) : loading && results.length === 0 ? (
-        <div className="empty">Searching sessions…</div>
-      ) : !loading && results.length === 0 && !error ? (
-        <div className="empty">
-          No sessions match {trimmed ? `“${trimmed}”` : "these filters"}.
-        </div>
-      ) : results.length > 0 ? (
+      ) : !loading && (messages ? hits : sessions).length === 0 && !error ? (
+        messages && !indexed.enabled ? (
+          <div className="empty">{emptyPrompt}</div>
+        ) : messages && !indexed.ready ? (
+          <div className="empty">
+            The message index is still catching up with the transcript cache.
+            Try again in a moment.
+          </div>
+        ) : (
+          <div className="empty">
+            No {messages ? "messages" : "sessions"} match{" "}
+            {trimmed ? `“${trimmed}”` : "these filters"}.
+          </div>
+        )
+      ) : messages && hits.length > 0 ? (
+        <section className="panel search-results-panel" aria-busy={loading}>
+          <div className="panel-head">
+            <div>
+              <h2>Results</h2>
+              <p role="status">{resultSummary}</p>
+            </div>
+            <span className="mode-badge">Cached transcripts</span>
+          </div>
+          <ul className={`search-hits ${loading ? "search-loading" : ""}`}>
+            {hits.map((hit) => (
+              <li key={`${hit.ref}:${hit.messageID ?? hit.createdAt}`}>
+                <button
+                  className="search-hit"
+                  type="button"
+                  onClick={() => props.onOpen(hit.ref)}
+                >
+                  <span className="search-hit-head">
+                    <span className="search-hit-title">{hit.title}</span>
+                    <span className="search-hit-time">
+                      {relativeTime(hit.createdAt ?? hit.updatedAt)}
+                    </span>
+                  </span>
+                  <span className="search-hit-meta">
+                    {providerLabel(hit.providerID)}
+                    {hit.project ? ` · ${hit.project}` : ""}
+                    {hit.role ? ` · ${hit.role}` : ""}
+                  </span>
+                  {hit.snippet ? (
+                    <span className="search-hit-snippet">
+                      {highlightParts(hit.snippet, trimmed).map((part, index) =>
+                        part.match ? (
+                          <mark key={index}>{part.text}</mark>
+                        ) : (
+                          <span key={index}>{part.text}</span>
+                        ),
+                      )}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : sessions.length > 0 ? (
         <section className="panel search-results-panel" aria-busy={loading}>
           <div className="panel-head">
             <div>
@@ -2473,7 +2629,7 @@ function SearchView(props: {
             <span className="mode-badge">Session metadata</span>
           </div>
           <div className={`session-list ${loading ? "search-loading" : ""}`}>
-            {results.map((session) => (
+            {sessions.map((session) => (
               <SessionRow
                 key={session.ref}
                 session={session}

@@ -3100,10 +3100,13 @@ components:
             - next
         ready:
           type: boolean
+        enabled:
+          type: boolean
       required:
         - data
         - cursor
         - ready
+        - enabled
     NotificationChannelKind:
       type: string
       enum:

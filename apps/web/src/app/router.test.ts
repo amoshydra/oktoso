@@ -31,6 +31,7 @@ describe("parseRoute", () => {
       query: "",
       provider: "all",
       status: "all",
+      scope: "sessions",
     });
     expect(parseRoute("/providers")).toEqual({ name: "providers" });
     expect(parseRoute("/settings")).toEqual({ name: "settings" });
@@ -115,12 +116,24 @@ describe("parseRoute", () => {
       query: "auth race",
       provider: "desktop-opencode",
       status: "running",
+      scope: "sessions",
+    });
+    expect(parseRoute("/search", "?q=token&scope=messages")).toEqual({
+      name: "search",
+      query: "token",
+      provider: "all",
+      status: "all",
+      scope: "messages",
+    });
+    expect(parseRoute("/search", "?scope=bogus")).toMatchObject({
+      scope: "sessions",
     });
     expect(parseRoute("/search", "?status=bogus")).toEqual({
       name: "search",
       query: "",
       provider: "all",
       status: "all",
+      scope: "sessions",
     });
   });
 
@@ -168,6 +181,14 @@ describe("routeHref", () => {
         query: "auth race",
         provider: "openwebui",
         status: "idle",
+        scope: "sessions",
+      },
+      {
+        name: "search",
+        query: "token rotation",
+        provider: "all",
+        status: "all",
+        scope: "messages",
       },
       { name: "providers" },
       { name: "providers", editor: { mode: "add" } },
@@ -189,6 +210,7 @@ describe("routeHref", () => {
         query: "",
         provider: "all",
         status: "all",
+        scope: "sessions",
       }),
     ).toBe("/search");
     expect(routeHref({ name: "inbox", filter: "all" })).toBe("/inbox");
