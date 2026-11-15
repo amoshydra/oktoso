@@ -391,7 +391,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Copy reference.
 - Interrupt and mark read.
 - Provider-specific actions.
-- The overlay traps Tab within the panel, re-enters the panel if focus escapes it, closes on Escape or the scrim, and returns focus to the details toggle. Below 1320px it exposes `role="dialog"` and `aria-modal="true"`; above 1320px it is a labelled column.
+- The overlay traps Tab within the panel, re-enters the panel if focus escapes it, closes on Escape or the scrim, and returns focus to the details toggle. Below 1320px it exposes `role="dialog"` and `aria-modal="true"`; above 1320px it is a labelled column, and Escape still closes it as a shortcut.
 
 ## 8. New session
 

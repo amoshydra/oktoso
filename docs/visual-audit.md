@@ -1257,9 +1257,9 @@ are unchanged; the fixes are ARIA state, element choice, and focus handling.
   The active chip now exposes its pressed state and the count joins the
   accessible name (`Approvals, 2 items`) instead of being visual text only.
 - **Details overlay.** Below 1320px the panel now exposes `role="dialog"` and
-  `aria-modal="true"`; above 1320px it remains a labelled column. Escape only
-  closes the overlay. Focus returns to the details toggle, and only when the
-  opener is still connected.
+  `aria-modal="true"`; above 1320px it remains a labelled column. Escape closes
+  the overlay and remains a shortcut for the desktop column. Focus returns to
+  the details toggle, and only when the opener is still connected.
 - **Tab trapping.** Details, the model/agent sheet, and the file preview share
   one Tab loop. If focus has escaped a sheet, the next Tab re-enters it instead
   of walking the page behind the scrim. The file preview stops its Escape from

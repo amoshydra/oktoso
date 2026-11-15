@@ -490,8 +490,9 @@ accessibility audit. Routes, type, spacing, color, and focus rings are unchanged
   `h2`. Every view has one `h1`.
 - **Filters and dialogs.** Inbox chips expose `aria-pressed` and include the
   count in the name. Details is a labelled column on desktop and a
-  `role="dialog"` sheet below 1320px, with one shared Tab trap, scoped Escape,
-  and focus restore. The model/agent sheet and file preview use the same trap.
+  `role="dialog"` sheet below 1320px, with one shared Tab trap and focus
+  restore. Escape closes the sheet and remains a shortcut for the desktop
+  column. The model/agent sheet and file preview use the same trap.
 - **Targets.** The chat-sidebar disclosure is 32px on desktop, matching the
   session-list contract, with 34px trailing padding.
 - **No new tokens or routes.**
