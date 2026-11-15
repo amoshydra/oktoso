@@ -68,6 +68,7 @@ import {
   zReplyFeedbackPage,
   zSearchResult,
   zSearchPage,
+  zSessionLineage,
   zSendInput,
   zSendResult,
   zSession,
@@ -239,6 +240,10 @@ const AttentionSummarySchema = registry.register(
 const HubEventSchema = registry.register("HubEvent", zHubEvent);
 const SearchResultSchema = registry.register("SearchResult", zSearchResult);
 const SearchPageSchema = registry.register("SearchPage", zSearchPage);
+const SessionLineageSchema = registry.register(
+  "SessionLineage",
+  zSessionLineage,
+);
 const NotificationChannelKindSchema = registry.register(
   "NotificationChannelKind",
   zNotificationChannelKind,
@@ -682,6 +687,23 @@ registry.registerPath({
     404: errorResponse("Session or queued message not found"),
     501: errorResponse("Provider cannot cancel queued messages"),
     502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/lineage",
+  tags: ["sessions"],
+  summary: "Resolve a session's family tree",
+  description:
+    "Walks parentRef to the root, then collects descendants. Cycles, depth, node count, and unknown ancestors all stop the walk; `truncated` reports a cap.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Session lineage",
+      content: json(z.object({ data: SessionLineageSchema })),
+    },
+    404: errorResponse("Session not found"),
   },
 });
 

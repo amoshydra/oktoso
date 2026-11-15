@@ -29,6 +29,7 @@ import type {
   Message,
   MessagePart,
   SearchResult,
+  SessionLineage,
   ModelOption,
   Provider,
   ProviderAuthKind,
@@ -7705,6 +7706,7 @@ function SessionDetails(props: {
   const [notice, setNotice] = useState<string>();
   const [forking, setForking] = useState(false);
   const [forkError, setForkError] = useState<string>();
+  const [lineage, setLineage] = useState<SessionLineage>();
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const providerUrl =
@@ -7715,6 +7717,22 @@ function SessionDetails(props: {
     (tokens?.input !== undefined || tokens?.output !== undefined
       ? (tokens.input ?? 0) + (tokens.output ?? 0)
       : undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLineage(undefined);
+    props.client
+      .lineage(session.ref)
+      .then((next) => {
+        if (!cancelled) setLineage(next);
+      })
+      .catch(() => {
+        // Lineage is optional context; the rest of the panel stays usable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, session.ref]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -7824,6 +7842,42 @@ function SessionDetails(props: {
           <Detail label="Parent session" value={session.parentRef} />
         ) : null}
         </section>
+
+        {lineage && lineage.nodes.length > 1 ? (
+          <section className="chat-details-section">
+            <div className="chat-details-label">
+              Lineage
+              <span className="chat-details-count">
+                {lineage.nodes.length} session{lineage.nodes.length === 1 ? "" : "s"}
+                {lineage.truncated ? " · partial" : ""}
+              </span>
+            </div>
+            <ul className="lineage-tree">
+              {lineage.nodes.map((node) => (
+                <li
+                  key={node.ref}
+                  style={{ "--depth": node.depth } as React.CSSProperties}
+                >
+                  <button
+                    className={`lineage-node ${node.current ? "current" : ""}`}
+                    type="button"
+                    aria-current={node.current ? "true" : undefined}
+                    title={node.ref}
+                    onClick={() => {
+                      if (!node.current) props.onOpenSession(node.ref);
+                    }}
+                  >
+                    <span className="lineage-title">{node.title}</span>
+                    <span className="lineage-meta">
+                      {node.depth === 0 ? "root" : `depth ${node.depth}`}
+                      {node.project ? ` · ${node.project}` : ""}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className="chat-details-section">
           <div className="chat-details-label">State</div>

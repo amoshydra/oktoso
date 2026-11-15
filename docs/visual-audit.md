@@ -909,6 +909,16 @@ instead of raw fences, without changing the transcript hierarchy.
 - **Files.** `apps/web/src/app/mermaid.ts`, `markdown.ts`, `App.tsx`,
   `styles.css`, `apps/web/package.json`.
 
+## Lineage tree (2026-11-16)
+
+- Rows indent 12px per depth inside the details panel, so a fork reads as a
+  child of the session above it without a connector line.
+- The current row uses the existing active grammar: raised surface, strong
+  border, 2px accent inset. It is a button for every other row only, so the
+  affordance matches the behaviour.
+- Titles are 12px and truncate on one line; the depth label stays at 10px faint.
+  The section header carries the count and the word `partial` when capped.
+
 ## Message search (2026-11-16)
 
 - Results are a flat list of rows inside one panel, not cards. Rows separate on
