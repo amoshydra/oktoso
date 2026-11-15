@@ -9,6 +9,7 @@ import {
   zNotificationDelivery,
   zNotificationRouting,
   zTranscriptCacheSettings,
+  zLocalRetention,
 } from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
@@ -98,6 +99,11 @@ export const zHubState = z.object({
     ttlDays: 7,
     maxSessions: 500,
   }),
+  localRetention: zLocalRetention.default({
+    draftsDays: 0,
+    markersDays: 30,
+    feedbackDays: 30,
+  }),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -128,6 +134,7 @@ export function createInitialState(): HubState {
     automationPaused: false,
     automationWatcherPause: {},
     transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 500 },
+    localRetention: { draftsDays: 0, markersDays: 30, feedbackDays: 30 },
   };
 }
 

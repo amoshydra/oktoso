@@ -919,6 +919,17 @@ instead of raw fences, without changing the transcript hierarchy.
 - Titles are 12px and truncate on one line; the depth label stays at 10px faint.
   The section header carries the count and the word `partial` when capped.
 
+## Local data and export (2026-11-16)
+
+- Local data is one Settings panel with four rows. Each row is name and count
+  on the left, a retention select and Clear on the right; the cache keeps its
+  toggle, keep-for days, and session cap because those are its controls.
+- Destructive scope gets a second click: `Clear all local data` becomes
+  `Confirm clear all local data` plus `Cancel`.
+- Export is two text links under a `Data` heading in details, not another
+  button in the pinned action bar. Format is the choice.
+- Numbers and sizes use tabular figures; nothing new in the palette.
+
 ## Overview usage (2026-11-16)
 
 - The default destination is renamed Overview; the route does not change. The

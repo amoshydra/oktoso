@@ -89,7 +89,7 @@ import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
 import { highlightParts } from "./search-highlight";
 import { OverviewUsage } from "./overview-usage";
-import { TranscriptCacheSettingsPanel } from "./settings-transcripts";
+import { LocalDataSettingsPanel } from "./settings-local-data";
 import {
   readSessionCache,
   readSessionsCache,
@@ -1169,7 +1169,7 @@ export function App() {
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
-                <TranscriptCacheSettingsPanel client={client as HubClient} />
+                <LocalDataSettingsPanel client={client as HubClient} />
                 <NotificationSettingsPanel client={client as HubClient} />
                 <AutomationSettingsPanel client={client as HubClient} />
                 {diagnosticsPanel}
@@ -7694,6 +7694,8 @@ function SessionDetails(props: {
   const [forking, setForking] = useState(false);
   const [forkError, setForkError] = useState<string>();
   const [lineage, setLineage] = useState<SessionLineage>();
+  const [exporting, setExporting] = useState<"md" | "json">();
+  const [exportError, setExportError] = useState<string>();
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const providerUrl =
@@ -7772,6 +7774,32 @@ function SessionDetails(props: {
     }
   };
 
+  const downloadExport = async (format: "md" | "json") => {
+    if (exporting) return;
+    setExporting(format);
+    setExportError(undefined);
+    try {
+      const { text, filename } = await props.client.exportSession(session.ref, format);
+      const blob = new Blob([text], {
+        type: format === "json" ? "application/json" : "text/markdown",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (reason) {
+      setExportError(
+        reason instanceof Error ? reason.message : "Unable to export the session",
+      );
+    } finally {
+      setExporting(undefined);
+    }
+  };
+
   const forkSession = async () => {
     if (forking) return;
     setForking(true);
@@ -7828,6 +7856,32 @@ function SessionDetails(props: {
           {session.parentRef ? (
           <Detail label="Parent session" value={session.parentRef} />
         ) : null}
+        </section>
+
+        <section className="chat-details-section">
+          <div className="chat-details-label">Data</div>
+          <div className="details-links">
+            <button
+              className="text-button"
+              type="button"
+              disabled={exporting !== undefined}
+              onClick={() => void downloadExport("md")}
+            >
+              {exporting === "md" ? "Exporting…" : "Export Markdown"}
+            </button>
+            <button
+              className="text-button"
+              type="button"
+              disabled={exporting !== undefined}
+              onClick={() => void downloadExport("json")}
+            >
+              {exporting === "json" ? "Exporting…" : "Export JSON"}
+            </button>
+          </div>
+          <p className="form-note">
+            Transcript and session facts. Attachment files are listed, not
+            embedded.
+          </p>
         </section>
 
         {lineage && lineage.nodes.length > 1 ? (
@@ -7965,7 +8019,7 @@ function SessionDetails(props: {
           </button>
         ) : null}
         <span className="chat-details-notice" aria-live="polite">
-          {forkError ?? notice ?? ""}
+          {exportError ?? forkError ?? notice ?? ""}
         </span>
       </div>
     </aside>

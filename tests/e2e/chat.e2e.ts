@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -784,10 +785,10 @@ describe("notification settings", () => {
   });
 });
 
-describe("transcript cache", () => {
-  it("turns on and survives a reload", async () => {
+describe("local data", () => {
+  it("keeps the cache controls and survives a reload", async () => {
     await page!.goto(`${BASE_URL}/settings`);
-    await page!.getByRole("heading", { name: "Transcript cache" }).waitFor();
+    await page!.getByRole("heading", { name: "Local data" }).waitFor();
 
     const enabled = page!.getByLabel("Cache transcripts on the hub");
     if (!(await enabled.isChecked())) await enabled.check();
@@ -798,10 +799,14 @@ describe("transcript cache", () => {
       .waitFor({ state: "visible" });
 
     await page!.reload();
-    await page!.getByRole("heading", { name: "Transcript cache" }).waitFor();
-    // The panel loads its settings after mount, so wait for the saved state
-    // before asserting on the controls.
-    await page!.locator(".settings-transcripts .mode-badge", { hasText: "on" }).waitFor();
+    await page!.getByRole("heading", { name: "Local data" }).waitFor();
+    await page!
+      .locator(".settings-local .mode-badge", { hasText: "hub disk" })
+      .waitFor();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if ((await page!.getByLabel("Maximum sessions").inputValue()) === "40") break;
+      await page!.waitForTimeout(100);
+    }
 
     await expect(
       page!.getByLabel("Cache transcripts on the hub").isChecked(),
@@ -809,9 +814,44 @@ describe("transcript cache", () => {
     await expect(
       page!.getByLabel("Maximum sessions").inputValue(),
     ).resolves.toBe("40");
-    await expect(
-      page!.getByRole("button", { name: "Clear cache" }).isDisabled(),
-    ).resolves.toBe(true);
+  });
+
+  it("requires a second click to clear everything", async () => {
+    await page!.goto(`${BASE_URL}/settings`);
+    await page!.getByRole("heading", { name: "Local data" }).waitFor();
+
+    await page!
+      .getByRole("button", { name: "Clear all local data" })
+      .click();
+    const confirm = page!.getByRole("button", {
+      name: "Confirm clear all local data",
+    });
+    await confirm.waitFor();
+    await page!.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page!
+      .getByRole("button", { name: "Clear all local data" })
+      .waitFor();
+  });
+});
+
+describe("session export", () => {
+  it("downloads a markdown transcript from the details panel", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.getByRole("button", { name: "Details", exact: true }).click();
+    await page!.locator(".chat-details").waitFor();
+
+    const [download] = await Promise.all([
+      page!.waitForEvent("download"),
+      page!.getByRole("button", { name: "Export Markdown" }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(
+      /^desktop-opencode-fix-auth-race-in-gateway-\d{4}-\d{2}-\d{2}\.md$/,
+    );
+    const path = await download.path();
+    expect(path).toBeTruthy();
+    const body = await readFile(path!, "utf8");
+    expect(body).toContain("# Fix auth race in gateway");
   });
 });
 

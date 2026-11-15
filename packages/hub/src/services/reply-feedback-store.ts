@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   zReplyFeedbackEntry,
@@ -63,6 +63,59 @@ export class ReplyFeedbackStore {
       }
     }
     return entries.reverse().slice(0, bounded);
+  }
+
+  /** Entry count and file size, for the Local data panel. */
+  async stats(): Promise<{ entries: number; bytes: number }> {
+    const raw = await this.read().catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+    return {
+      entries: raw.split("\n").filter((line) => line.trim().length > 0).length,
+      bytes: Buffer.byteLength(raw),
+    };
+  }
+
+  /** Drops entries older than the cutoff. `retainMs <= 0` keeps everything. */
+  async pruneBefore(cutoff: number): Promise<number> {
+    if (cutoff <= 0) return 0;
+    const raw = await this.read().catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+    if (!raw) return 0;
+    const kept: string[] = [];
+    let removed = 0;
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = zReplyFeedbackEntry.parse(JSON.parse(trimmed));
+        if (entry.createdAt < cutoff) {
+          removed += 1;
+          continue;
+        }
+        kept.push(trimmed);
+      } catch {
+        // Keep unreadable lines; they are not this feature's data to drop.
+        kept.push(trimmed);
+      }
+    }
+    if (removed === 0) return 0;
+    await writeFile(this.filePath, kept.length > 0 ? `${kept.join("\n")}\n` : "", {
+      mode: 0o600,
+    });
+    return removed;
+  }
+
+  async clear(): Promise<void> {
+    await writeFile(this.filePath, "", { mode: 0o600 }).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return;
+        throw error;
+      },
+    );
   }
 
   async export(): Promise<string> {

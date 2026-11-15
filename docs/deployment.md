@@ -118,6 +118,26 @@ Telegram, or webhook sender.
 - If the hub is behind a reverse proxy, terminate TLS there and set `publicUrl`
   so notification links open the external origin.
 
+## Local data
+
+Everything the hub keeps on its own disk, and nothing a provider owns.
+
+| Store | Location | What it is | Default retention |
+|---|---|---|---|
+| Transcript cache | `dataDir/transcripts` + `dataDir/search` | Message text read from a provider, and its index | 7 days, max 500 sessions |
+| Reply feedback | `dataDir/reply-feedback.jsonl` | Ratings on generated reply options | 30 days |
+| Drafts | hub state (`state.json`) | Unsent composer text | Never |
+| Read markers | hub state (`state.json`) | Per-session read position | 30 days |
+
+`GET /api/v1/settings/local-data` reports counts and retention; `PUT` sets
+retention per store (`0` = never); `DELETE /api/v1/settings/local-data/:store`
+clears one store; `DELETE /api/v1/settings/local-data` clears all of them,
+including the cache and its index. Clearing never calls a provider.
+
+Providers own the conversations themselves. Deleting local data leaves the
+provider transcript, attention state, and session list untouched; the hub
+re-reads them on the next request.
+
 ## Transcript cache
 
 Off by default. When enabled in **Settings → Transcript cache**, the hub keeps

@@ -19,6 +19,7 @@ import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import type { NotificationService } from "./services/notification-service";
+import type { LocalDataService } from "./services/local-data";
 import type { SearchService } from "./services/search-service";
 import type { TranscriptCacheService } from "./services/transcript-cache";
 import type { AutomationService } from "./services/automation-service";
@@ -46,6 +47,7 @@ import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerSettingsRoutes } from "./http/routes/settings";
 import { registerTranscriptCacheRoutes } from "./http/routes/transcript-cache";
 import { registerSearchRoutes } from "./http/routes/search";
+import { registerLocalDataRoutes } from "./http/routes/local-data";
 import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
@@ -71,6 +73,8 @@ export interface AppDependencies {
   transcripts?: TranscriptCacheService;
   /** Cross-session search over the transcript cache. */
   search?: SearchService;
+  /** Drafts, read markers, feedback, and cache retention. */
+  localData?: LocalDataService;
   replies: ReplyService;
   replyFeedback: ReplyFeedbackStore;
   transcription: TranscriptionService;
@@ -143,6 +147,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   }
   if (deps.search) {
     registerSearchRoutes(app, deps.search);
+  }
+  if (deps.localData) {
+    registerLocalDataRoutes(app, deps.localData);
   }
   registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);
