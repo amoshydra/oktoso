@@ -15,6 +15,7 @@ import type {
 } from "@amoshydra/oktoso-contracts";
 import {
   isAbsoluteSessionPath,
+  ProviderError,
   relativeSessionPath,
   type ProviderAdapter,
   type ProviderInboxItem,
@@ -577,6 +578,30 @@ export class SessionService {
       signal ? AbortSignal.any([operation, signal]) : operation,
     );
     this.sessions.set(session.ref, session);
+
+    // Adapters create an empty session, so the optional first prompt goes
+    // through the normal send path: attachments, events, and idempotency stay
+    // identical to a message sent from a client.
+    const text = input.text?.trim();
+    if (!text) return session;
+    try {
+      await this.sendMessage(session.ref, { text }, signal);
+    } catch (error) {
+      throw new ProviderError(
+        error instanceof ProviderError ? error.code : "internal",
+        `Session ${session.ref} was created, but the first prompt failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        {
+          retryable: false,
+          ...(error instanceof ProviderError && error.status !== undefined
+            ? { status: error.status }
+            : {}),
+          details: { ref: session.ref },
+          cause: error,
+        },
+      );
+    }
     return session;
   }
 
