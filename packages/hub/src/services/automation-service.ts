@@ -103,6 +103,8 @@ export class AutomationService {
     string,
     { watcherID: string; controller: AbortController }
   >();
+  /** Approvals being executed, so a double click cannot act twice. */
+  private readonly claiming = new Set<string>();
   private work: Promise<void> = Promise.resolve();
 
   constructor(options: AutomationServiceOptions) {
@@ -264,6 +266,22 @@ export class AutomationService {
     if (approval.status !== "pending") {
       throw conflict("Approval is not pending");
     }
+    if (this.claiming.has(id)) {
+      throw conflict("Approval is already being handled");
+    }
+    this.claiming.add(id);
+    try {
+      await this.actOnClaimedApproval(id, action, approval);
+    } finally {
+      this.claiming.delete(id);
+    }
+  }
+
+  private async actOnClaimedApproval(
+    id: string,
+    action: "approve" | "deny" | "always",
+    approval: AutomationApprovalState,
+  ): Promise<void> {
     const now = this.now();
     if (approval.expiresAt <= now) {
       await this.updateApproval(id, "expired", now);
@@ -299,7 +317,7 @@ export class AutomationService {
         approval,
         "skipped",
         "no_plan",
-        "Approved without an automated action",
+        "Approved without an automated action; answer it in the provider UI",
       );
       return;
     }
@@ -803,6 +821,11 @@ export class AutomationService {
     }
 
     const fields = formAnswerFields(item, choice);
+    if (item.fields && item.fields.length > 0 && !fields) {
+      // A provider form that no single field can answer must be handled by a
+      // human in the provider UI, never by falling back to a chat message.
+      return { ok: false, reason: "form_unmapped" };
+    }
     return {
       ok: true,
       question,
@@ -819,12 +842,22 @@ export class AutomationService {
     };
   }
 
-  /** A concrete answer to offer in the approval queue, ignoring risk gates. */
+  /**
+   * A concrete answer to offer in the approval queue, ignoring risk gates.
+   *
+   * A provider form that cannot be answered by its own field values gets no
+   * plan: approving it must not fall back to a chat message, which would leave
+   * the form pending while the run claimed success.
+   */
   private async proposal(
     watcher: AutomationWatcher,
     item: Attention,
   ): Promise<AnswerPlan | undefined> {
     if (watcher.action.kind !== "answer") return undefined;
+    if (item.fields && item.fields.length > 0) {
+      const mapped = await this.mappedFormPlan(watcher, item);
+      return mapped;
+    }
     let prompt;
     try {
       prompt = await this.questions.get(item.sessionRef);
@@ -835,7 +868,6 @@ export class AutomationService {
     const question = prompt.questions[0]!;
     const choice = pickProposalChoice(question, watcher.action);
     if (!choice) return undefined;
-    const fields = formAnswerFields(item, choice);
     return {
       ok: true,
       question,
@@ -847,7 +879,41 @@ export class AutomationService {
         choiceId: choice.id,
         source: "choice",
       },
-      ...(fields ? { fields } : {}),
+    };
+  }
+
+  /** Builds a plan only when a form field can carry the chosen option. */
+  private async mappedFormPlan(
+    watcher: AutomationWatcher,
+    item: Attention,
+  ): Promise<AnswerPlan | undefined> {
+    const action =
+      watcher.action.kind === "answer" ? watcher.action : undefined;
+    if (!action) return undefined;
+    let prompt;
+    try {
+      prompt = await this.questions.get(item.sessionRef);
+    } catch {
+      return undefined;
+    }
+    if (!prompt || prompt.questions.length !== 1) return undefined;
+    const question = prompt.questions[0]!;
+    const choice = pickProposalChoice(question, action);
+    if (!choice) return undefined;
+    const fields = formAnswerFields(item, choice);
+    if (!fields) return undefined;
+    return {
+      ok: true,
+      question,
+      choice,
+      answer: {
+        questionId: question.id,
+        messageId: prompt.messageId,
+        revision: prompt.revision,
+        choiceId: choice.id,
+        source: "choice",
+      },
+      fields,
     };
   }
 
@@ -1221,11 +1287,10 @@ function formAnswerFields(
   const fields = item.fields;
   if (!fields || fields.length !== 1) return undefined;
   const field = fields[0]!;
-  if (field.type !== "select" && field.type !== "boolean") return undefined;
+  if (field.type !== "select") return undefined;
   const option = field.options?.find(
     (candidate) =>
-      normalizeLabel(candidate.label) === normalizeLabel(choice.label) ||
-      candidate.value === choice.id,
+      normalizeLabel(candidate.label) === normalizeLabel(choice.label),
   );
   if (!option) return undefined;
   return { [field.id]: option.value };
