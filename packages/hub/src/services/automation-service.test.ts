@@ -377,6 +377,106 @@ describe("AutomationService", () => {
     });
   });
 
+  it("offers no plan for a form no single field can answer", async () => {
+    const { bus, service, sends, answers } = await setup();
+
+    await publish(
+      bus,
+      attention({
+        fields: [
+          {
+            id: "choice",
+            label: "Proceed?",
+            type: "select",
+            options: [{ value: "yes", label: "Yes" }],
+          },
+          {
+            id: "remember",
+            label: "Remember this choice",
+            type: "boolean",
+          },
+        ],
+      }),
+    );
+    await service.whenIdle();
+
+    const approval = service.approvals()[0]!;
+    expect(approval.actionable).toBe(false);
+    expect(approval).not.toHaveProperty("proposed");
+
+    await service.actOnApproval(approval.id, "approve");
+
+    // A chat message cannot resolve a form, so nothing is sent at all.
+    expect(sends).toHaveLength(0);
+    expect(answers).toHaveLength(0);
+    expect(service.runs()[0]).toMatchObject({
+      decision: "skipped",
+      reason: "no_plan",
+    });
+  });
+
+  it("refuses two concurrent approvals of the same item", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const destructive = question({
+      choices: [
+        {
+          id: "delete",
+          label: "Delete everything",
+          text: "Delete everything",
+          kind: "choice",
+          source: "explicit",
+          destructive: true,
+        },
+      ],
+    });
+    const { bus, service, answers } = await setup({
+      prompt: prompt(destructive),
+      config: {
+        watchers: [
+          {
+            id: "w1",
+            enabled: true,
+            trigger: { kind: "attention", types: ["question"] },
+            action: { kind: "answer", choice: "id", value: "delete" },
+            dryRun: false,
+            limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
+          },
+        ],
+      },
+      actOnAttention: async () => {
+        await gate;
+      },
+    });
+
+    await publish(
+      bus,
+      attention({
+        fields: [
+          {
+            id: "choice",
+            label: "Proceed?",
+            type: "select",
+            options: [{ value: "delete", label: "Delete everything" }],
+          },
+        ],
+      }),
+    );
+    await service.whenIdle();
+    const approval = service.approvals()[0]!;
+
+    const first = service.actOnApproval(approval.id, "approve");
+    await expect(
+      service.actOnApproval(approval.id, "approve"),
+    ).rejects.toThrow(/already being handled/);
+    release?.();
+    await first;
+
+    expect(answers).toHaveLength(1);
+  });
+
   it("expires an approval whose form is gone", async () => {
     const destructive = question({
       choices: [

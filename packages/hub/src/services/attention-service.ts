@@ -291,11 +291,6 @@ export class AttentionService {
     return { data };
   }
 
-  async get(id: string): Promise<Attention | undefined> {
-    await this.ensureReady();
-    return this.items.get(id);
-  }
-
   async act(
     id: string,
     action: string,
