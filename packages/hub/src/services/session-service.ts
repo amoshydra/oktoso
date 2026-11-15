@@ -21,7 +21,7 @@ import {
   type ProviderInboxItem,
   type ProviderResource,
 } from "@amoshydra/oktoso-providers";
-import { badRequest, notFound, notImplemented } from "../domain/errors";
+import { AppError, badRequest, notFound, notImplemented } from "../domain/errors";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AttachmentStore } from "./attachment-store";
@@ -330,14 +330,13 @@ export class SessionService {
     // and the provider response is what the client sees.
     const session = this.sessions.get(ref);
     if (this.transcripts && session) {
-      try {
-        await this.transcripts.record(session, page);
-      } catch (error) {
+      // Fire and forget: the provider response is what the client waits for.
+      void this.transcripts.record(session, page, query).catch((error: unknown) => {
         this.logger.warn("Transcript cache write failed", {
           ref,
           error: error instanceof Error ? error.message : String(error),
         });
-      }
+      });
     }
     return page;
   }
@@ -592,36 +591,52 @@ export class SessionService {
       30_000,
       5_000,
     );
+    const text = input.text?.trim();
+    if (text && !adapter.capabilities.send) {
+      throw notImplemented(
+        "This provider can create sessions but cannot send messages",
+      );
+    }
+    // Adapters never see `text`; the hub sends it, so an adapter that starts
+    // honouring the field cannot send the first prompt twice.
+    const { text: _text, ...rest } = input;
     const session = await adapter.createSession(
-      input,
+      rest,
       signal ? AbortSignal.any([operation, signal]) : operation,
     );
     this.sessions.set(session.ref, session);
-
-    // Adapters create an empty session, so the optional first prompt goes
-    // through the normal send path: attachments, events, and idempotency stay
-    // identical to a message sent from a client.
-    const text = input.text?.trim();
     if (!text) return session;
+
     try {
       await this.sendMessage(session.ref, { text }, signal);
     } catch (error) {
-      throw new ProviderError(
-        error instanceof ProviderError ? error.code : "internal",
-        `Session ${session.ref} was created, but the first prompt failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        {
-          retryable: false,
-          ...(error instanceof ProviderError && error.status !== undefined
-            ? { status: error.status }
-            : {}),
-          details: { ref: session.ref },
+      const failure = error instanceof Error ? error.message : String(error);
+      const message = `Session ${session.ref} was created, but the first prompt failed: ${failure}`;
+      if (error instanceof AppError) {
+        // Keep the original status code (400/501/504/...) and add the ref.
+        throw new AppError(error.code, message, error.status, {
+          retryable: error.retryable,
+          details: { ...error.details, ref: session.ref },
           cause: error,
-        },
-      );
+        });
+      }
+      if (error instanceof ProviderError) {
+        throw new ProviderError(error.code, message, {
+          retryable: false,
+          ...(error.status !== undefined ? { status: error.status } : {}),
+          details: { ...error.details, ref: session.ref },
+          cause: error,
+        });
+      }
+      throw new AppError("internal", message, 502, {
+        retryable: false,
+        details: { ref: session.ref },
+        cause: error,
+      });
     }
-    return session;
+    // The send flips the cached copy to `running`; return that, not the
+    // pre-send object.
+    return this.sessions.get(session.ref) ?? session;
   }
 
   async interrupt(ref: string): Promise<void> {
