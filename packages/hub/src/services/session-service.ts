@@ -274,6 +274,11 @@ export class SessionService {
     };
   }
 
+  /** Cached session metadata; never asks the provider. */
+  peek(ref: string): Session | undefined {
+    return this.sessions.get(ref);
+  }
+
   async get(ref: string): Promise<Session> {
     const adapter = this.adapterForRef(ref);
     if (!adapter) {

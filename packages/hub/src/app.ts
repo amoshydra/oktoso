@@ -19,6 +19,7 @@ import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import type { NotificationService } from "./services/notification-service";
+import type { SearchService } from "./services/search-service";
 import type { TranscriptCacheService } from "./services/transcript-cache";
 import type { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
@@ -44,6 +45,7 @@ import { registerQuestionRoutes } from "./http/routes/questions";
 import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerSettingsRoutes } from "./http/routes/settings";
 import { registerTranscriptCacheRoutes } from "./http/routes/transcript-cache";
+import { registerSearchRoutes } from "./http/routes/search";
 import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
@@ -67,6 +69,8 @@ export interface AppDependencies {
   settings: AssistantSettingsService;
   /** Opt-in local transcript cache; absent in tests that do not need it. */
   transcripts?: TranscriptCacheService;
+  /** Cross-session search over the transcript cache. */
+  search?: SearchService;
   replies: ReplyService;
   replyFeedback: ReplyFeedbackStore;
   transcription: TranscriptionService;
@@ -136,6 +140,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerSettingsRoutes(app, deps.settings);
   if (deps.transcripts) {
     registerTranscriptCacheRoutes(app, deps.transcripts);
+  }
+  if (deps.search) {
+    registerSearchRoutes(app, deps.search);
   }
   registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);

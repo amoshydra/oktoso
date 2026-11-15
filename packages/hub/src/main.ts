@@ -58,6 +58,7 @@ import { QuestionService } from "./services/question-service";
 import { NotificationService } from "./services/notification-service";
 import { TranscriptCacheService } from "./services/transcript-cache";
 import { SearchIndexService } from "./services/search-index";
+import { SearchService } from "./services/search-service";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
@@ -587,6 +588,7 @@ async function main(): Promise<void> {
       attachments,
       transcripts,
     });
+    const search = new SearchService({ index: searchIndex, sessions });
     attention = new AttentionService(
       registry,
       sessions,
@@ -685,6 +687,7 @@ async function main(): Promise<void> {
       attachments,
       settings: assistantSettings,
       transcripts,
+      search,
       replies,
       replyFeedback,
       transcription,
