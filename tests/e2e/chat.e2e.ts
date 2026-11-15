@@ -384,6 +384,86 @@ describe("chat sending", () => {
     ).toBe(true);
   });
 
+  it("floats the jump and keeps the composer fixed while the transcript fades", async () => {
+    await openSession("Refactor session index");
+    const composerTop = await page!
+      .locator(".chat-composer-wrap")
+      .evaluate((element) => Math.round(element.getBoundingClientRect().top));
+
+    await page!.locator(".chat-panel").evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+    });
+    await page!.waitForTimeout(400);
+
+    const middle = await page!.evaluate(() => {
+      const panel = document.querySelector(".chat-panel")!;
+      const jump = document.querySelector(".chat-jump-float")!;
+      const row = document.querySelector(".chat-background-row");
+      const style = getComputedStyle(panel);
+      return {
+        classes: panel.className,
+        jumpOpacity: getComputedStyle(jump).opacity,
+        jumpHidden: jump.getAttribute("aria-hidden"),
+        fadeTop: style.getPropertyValue("--fade-top").trim(),
+        fadeBottom: style.getPropertyValue("--fade-bottom").trim(),
+        masked: style.maskImage !== "none",
+        composerTop: Math.round(
+          document
+            .querySelector(".chat-composer-wrap")!
+            .getBoundingClientRect().top,
+        ),
+        rowInPanel: row ? panel.contains(row) : false,
+        rowText: row?.textContent?.trim() ?? "",
+      };
+    });
+
+    expect(middle.classes).toContain("has-above");
+    expect(middle.classes).toContain("has-below");
+    expect(middle.jumpOpacity).toBe("1");
+    expect(middle.fadeTop).toBe("24px");
+    expect(middle.fadeBottom).toBe("24px");
+    expect(middle.masked).toBe(true);
+    expect(middle.composerTop).toBe(composerTop);
+    expect(middle.rowInPanel).toBe(true);
+    expect(middle.rowText).toContain("1 shell running");
+
+    await page!.locator(".chat-jump-float").click();
+    await page!.waitForFunction(
+      () => {
+        const panel = document.querySelector(".chat-panel")!;
+        const jump = document.querySelector(".chat-jump-float")!;
+        return (
+          panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 2 &&
+          getComputedStyle(jump).opacity === "0"
+        );
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
+
+    const bottom = await page!.evaluate(() => {
+      const panel = document.querySelector(".chat-panel")!;
+      const jump = document.querySelector(".chat-jump-float")!;
+      const style = getComputedStyle(panel);
+      return {
+        classes: panel.className,
+        jumpHidden: jump.getAttribute("aria-hidden"),
+        fadeBottom: style.getPropertyValue("--fade-bottom").trim(),
+        composerTop: Math.round(
+          document
+            .querySelector(".chat-composer-wrap")!
+            .getBoundingClientRect().top,
+        ),
+      };
+    });
+
+    expect(bottom.classes).toContain("has-above");
+    expect(bottom.classes).not.toContain("has-below");
+    expect(bottom.fadeBottom).toBe("0px");
+    expect(bottom.jumpHidden).toBe("true");
+    expect(bottom.composerTop).toBe(composerTop);
+  });
+
   it("shows Open WebUI folders and sends an attachment", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();

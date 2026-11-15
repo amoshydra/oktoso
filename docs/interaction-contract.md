@@ -173,9 +173,14 @@ Activity is derived from the transcript, not a new endpoint.
   the tile or the Background list.
 - The Details panel lists live background shells and subagents for the open
   session. Tracking work across sessions is a separate slice.
-- The composer status row is in flow above the composer. It names live work
-  (`1 subagent running`, `1 shell running`, or `N running`) and shares the row
-  with Jump to latest. It wraps instead of overlapping at narrow widths.
+- Live background work appears as a row at the end of the transcript, after
+  all messages and attention cards. It names live work (`1 subagent running`,
+  `1 shell running`, or `N running`) and opens Details. It scrolls with the
+  transcript and never moves the composer.
+- Jump to latest is a floating pill at the transcript's bottom-right. It fades
+  in only when the reader is away from the true bottom and never occupies
+  layout. The transcript content fades at overflowing edges through a 24px
+  mask; the panel frame stays crisp.
 
 ### Action
 

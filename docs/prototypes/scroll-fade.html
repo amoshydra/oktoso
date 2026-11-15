@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Oktoso · scroll fade prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      @property --fade-top {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 0px;
+      }
+
+      @property --fade-bottom {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 0px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: var(--text-base);
+        line-height: 1.5;
+      }
+
+      .sf-page {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-3);
+        min-height: 100dvh;
+        padding: var(--space-4);
+      }
+
+      .sf-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        width: min(980px, 100%);
+      }
+
+      .sf-toolbar-title {
+        margin-right: auto;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .sf-kicker {
+        width: 100%;
+        margin: 0;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+
+      .sf-button {
+        min-height: 32px;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--text);
+        font: inherit;
+        font-size: var(--text-xs);
+        cursor: pointer;
+      }
+
+      .sf-button:hover {
+        background: var(--surface-3);
+      }
+
+      .sf-button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .sf-state {
+        min-width: 190px;
+        color: var(--faint);
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      .sf-frame {
+        display: flex;
+        flex-direction: column;
+        width: min(980px, 100%);
+        height: min(720px, calc(100dvh - 150px));
+        min-height: 520px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .sf-topbar {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: var(--space-3);
+        height: 54px;
+        padding: 0 var(--space-4);
+        border-bottom: 1px solid var(--border-subtle);
+        background: var(--surface);
+      }
+
+      .sf-back {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--muted);
+      }
+
+      .sf-back svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .sf-titles {
+        min-width: 0;
+      }
+
+      .sf-titles h1 {
+        overflow: hidden;
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sf-titles span {
+        display: block;
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+
+      .sf-details {
+        margin-left: auto;
+      }
+
+      .sf-chat {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: var(--space-3);
+        min-height: 0;
+        padding: var(--space-4);
+      }
+
+      .sf-wrap {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .sf-scroller {
+        position: absolute;
+        inset: 0;
+        padding: var(--space-2) var(--space-2) var(--space-6);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        --fade-top: 0px;
+        --fade-bottom: 0px;
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          transparent 0,
+          #000 var(--fade-top),
+          #000 calc(100% - var(--fade-bottom)),
+          transparent 100%
+        );
+        mask-image: linear-gradient(
+          to bottom,
+          transparent 0,
+          #000 var(--fade-top),
+          #000 calc(100% - var(--fade-bottom)),
+          transparent 100%
+        );
+        transition:
+          --fade-top 180ms ease,
+          --fade-bottom 180ms ease;
+      }
+
+      .sf-scroller.has-above {
+        --fade-top: 24px;
+      }
+
+      .sf-scroller.has-below {
+        --fade-bottom: 24px;
+      }
+
+      .sf-messages {
+        display: grid;
+        gap: var(--space-5);
+      }
+
+      .sf-message {
+        min-width: 0;
+      }
+
+      .sf-role {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-2);
+        margin-bottom: 6px;
+        color: var(--faint);
+        font-size: var(--text-2xs);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .sf-role time {
+        color: var(--faint);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0;
+        text-transform: none;
+        font-weight: 400;
+      }
+
+      .sf-prose {
+        color: var(--text);
+        font-size: var(--text-base);
+        line-height: 1.6;
+      }
+
+      .sf-prose p {
+        margin: 0 0 0.7em;
+      }
+
+      .sf-prose p:last-child {
+        margin-bottom: 0;
+      }
+
+      .sf-prose ul {
+        margin: 0.4em 0 0.7em;
+        padding-left: 1.4em;
+      }
+
+      .sf-user .sf-prose {
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--border);
+        border-left: 2px solid var(--accent);
+        border-radius: var(--radius-md);
+        background: var(--surface-2);
+      }
+
+      .sf-code {
+        margin: var(--space-3) 0 var(--space-2);
+        padding: var(--space-3);
+        overflow-x: auto;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        background: var(--bg);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        line-height: 1.55;
+        white-space: pre;
+      }
+
+      .sf-tool {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+        padding: var(--space-2) 0;
+        border-top: 1px solid var(--border-subtle);
+        border-bottom: 1px solid var(--border-subtle);
+        color: var(--faint);
+        font-size: var(--text-xs);
+      }
+
+      .sf-tool strong {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .sf-tool code {
+        overflow: hidden;
+        max-width: 100%;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sf-pill {
+        margin-left: auto;
+        padding: 1px 7px;
+        border: 1px solid color-mix(in srgb, var(--success) 42%, var(--border));
+        border-radius: var(--radius-pill);
+        color: var(--success);
+        font-size: var(--text-2xs);
+      }
+
+      .sf-background-row {
+        margin-top: var(--space-3);
+      }
+
+      .sf-background-row[hidden] {
+        display: none;
+      }
+
+      .sf-background-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid color-mix(in srgb, var(--success) 38%, var(--border));
+        border-radius: var(--radius-pill);
+        background: var(--surface-2);
+        color: var(--muted);
+        font: inherit;
+        font-size: var(--text-xs);
+        cursor: pointer;
+      }
+
+      .sf-background-chip:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .sf-dot {
+        flex: none;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+
+      .sf-jump {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        background: var(--surface-2);
+        color: var(--text);
+        box-shadow: var(--shadow-md);
+        font: inherit;
+        font-size: var(--text-xs);
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(8px);
+        transition:
+          opacity 180ms ease,
+          transform 180ms ease;
+      }
+
+      .sf-jump[data-visible="true"] {
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+      }
+
+      .sf-jump:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .sf-jump span {
+        color: var(--muted);
+      }
+
+      .sf-composer {
+        flex: none;
+        padding: var(--space-3);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface-2);
+        box-shadow: var(--shadow-md);
+      }
+
+      .sf-placeholder {
+        padding: var(--space-1) var(--space-2) var(--space-4);
+        color: var(--faint);
+        font-size: var(--text-base);
+      }
+
+      .sf-composer-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .sf-context {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        min-height: 32px;
+        max-width: 72px;
+        padding: 0 var(--space-2);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-pill);
+        color: var(--muted);
+        font-size: var(--text-xs);
+      }
+
+      .sf-context span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sf-composer-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        margin-left: auto;
+      }
+
+      .sf-quiet {
+        min-height: 32px;
+        padding: 0 var(--space-2);
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: var(--text-xs);
+      }
+
+      .sf-send {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+
+      .sf-send svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .sf-note {
+        width: min(980px, 100%);
+        margin: 0;
+        color: var(--muted);
+        font-size: var(--text-xs);
+        line-height: 1.5;
+      }
+
+      .sf-note code {
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+      }
+
+      @media (max-width: 760px) {
+        .sf-page {
+          gap: 0;
+          height: 100dvh;
+          min-height: 0;
+          padding: 0;
+          overflow: hidden;
+        }
+
+        .sf-toolbar {
+          flex: none;
+        }
+
+        .sf-toolbar {
+          width: 100%;
+          padding: var(--space-3) var(--space-4);
+          border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .sf-kicker {
+          display: none;
+        }
+
+        .sf-state {
+          min-width: 0;
+          margin-left: auto;
+        }
+
+        .sf-frame {
+          flex: 1;
+          width: 100%;
+          height: auto;
+          min-height: 0;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+
+        .sf-chat {
+          padding: var(--space-3);
+        }
+
+        .sf-scroller {
+          padding: var(--space-1) var(--space-1) var(--space-6);
+        }
+
+        .sf-jump {
+          min-height: 44px;
+        }
+
+        .sf-note {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sf-scroller {
+          transition: none;
+        }
+
+        .sf-jump {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sf-page">
+      <div class="sf-toolbar">
+        <div class="sf-toolbar-title">Scroll fade &amp; floating jump</div>
+        <button class="sf-button" type="button" data-scroll="top">Top</button>
+        <button class="sf-button" type="button" data-scroll="middle">Middle</button>
+        <button class="sf-button" type="button" data-scroll="bottom">Bottom</button>
+        <button class="sf-button" type="button" id="theme">Light theme</button>
+        <button class="sf-button" type="button" id="background">Background row: off</button>
+        <span class="sf-state" id="state">middle · above + below</span>
+        <p class="sf-kicker">
+          Scroll the transcript, or use the buttons. The composer does not move;
+          the mask fades only the overflowing edges; the jump floats.
+        </p>
+      </div>
+
+      <div class="sf-frame">
+        <header class="sf-topbar">
+          <button class="sf-back" type="button" aria-label="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+          <div class="sf-titles">
+            <h1>Refactor session index</h1>
+            <span>OpenCode · Running</span>
+          </div>
+          <button class="sf-button sf-details" type="button">Details</button>
+        </header>
+
+        <main class="sf-chat">
+          <div class="sf-wrap">
+            <div class="sf-scroller" id="scroller">
+              <div class="sf-messages">
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:41</time></div>
+                  <div class="sf-prose">
+                    <p>Reviewed the queue path end to end. The hub passes delivery through, and the web keeps one composer row.</p>
+                  </div>
+                </article>
+
+                <article class="sf-message sf-user">
+                  <div class="sf-role">You <time>09:42</time></div>
+                  <div class="sf-prose"><p>Keep steer as the default. Queue should be one quiet action beside it.</p></div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:42</time></div>
+                  <div class="sf-prose">
+                    <p>Agreed. Send stays steer while the turn runs. Queue is a separate action, so there is no mode to remember.</p>
+                    <ul>
+                      <li>Queue waits for the idle boundary.</li>
+                      <li>Send now promotes a queued message.</li>
+                      <li>The tray collapses to one line.</li>
+                    </ul>
+                  </div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:43</time></div>
+                  <div class="sf-prose">
+                    <p>Checks passed:</p>
+                    <pre class="sf-code">pnpm typecheck
+pnpm test
+pnpm test:e2e:run</pre>
+                    <p>The queue summary now announces its count and the composer stays at one row on mobile.</p>
+                  </div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">You <time>09:45</time></div>
+                  <div class="sf-prose"><p>Now look at the scroll-to-bottom behaviour. The jump should float, and the transcript should fade at the edges.</p></div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:45</time></div>
+                  <div class="sf-tool">
+                    <strong>Shell</strong>
+                    <code>pnpm test:e2e:run</code>
+                    <span class="sf-pill">exit 0</span>
+                  </div>
+                  <div class="sf-prose">
+                    <p>The transcript is the only scroll region. The composer is fixed below it, and the floating jump is anchored to the transcript’s bottom-right.</p>
+                    <p>A 24px mask fades the top edge when content is above and the bottom edge when content is below. At the ends, that edge returns to a hard edge so the first and last lines are fully readable.</p>
+                    <p>The jump fades and lifts in with opacity and transform only. It never takes space, so the composer and transcript never shift.</p>
+                  </div>
+                </article>
+
+                <article class="sf-message sf-user">
+                  <div class="sf-role">You <time>09:46</time></div>
+                  <div class="sf-prose"><p>What happens when a background shell is running?</p></div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:46</time></div>
+                  <div class="sf-prose">
+                    <p>The background row now sits at the end of the transcript, after all messages and attention cards. It is content, not a scroll affordance.</p>
+                    <p>When the row appears, the transcript grows and the composer keeps its position. Only the jump floats above the transcript.</p>
+                  </div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:47</time></div>
+                  <div class="sf-prose">
+                    <p>One more long answer so the transcript is taller than the frame:</p>
+                    <ul>
+                      <li>The mask is a linear-gradient on the scroll container.</li>
+                      <li>The fade length is a registered length property, so it eases.</li>
+                      <li>Scroll updates are coalesced with requestAnimationFrame.</li>
+                      <li>The jump is absolute, with pointer-events off while hidden.</li>
+                      <li>Reduced motion removes both transitions.</li>
+                    </ul>
+                  </div>
+                </article>
+
+                <article class="sf-message sf-user">
+                  <div class="sf-role">You <time>09:48</time></div>
+                  <div class="sf-prose"><p>Good. Scroll to the bottom and show the last line fully visible.</p></div>
+                </article>
+
+                <article class="sf-message">
+                  <div class="sf-role">Assistant <time>09:48</time></div>
+                  <div class="sf-prose">
+                    <p>At the bottom, the bottom fade goes to zero and the jump fades out. The last message ends cleanly against the composer gap.</p>
+                  </div>
+                </article>
+              </div>
+              <div class="sf-background-row" id="backgroundRow" hidden>
+                <button class="sf-background-chip" type="button">
+                  <span class="sf-dot" aria-hidden="true"></span> 1 shell running
+                </button>
+              </div>
+            </div>
+
+            <button class="sf-jump" id="jump" type="button" data-visible="true" aria-label="Jump to latest">
+              Jump to latest <span aria-hidden="true">↓</span>
+            </button>
+          </div>
+
+          <div class="sf-composer">
+            <div class="sf-placeholder">Reply…</div>
+            <div class="sf-composer-row">
+              <span class="sf-context"><span>Build</span> <span aria-hidden="true">›</span></span>
+              <div class="sf-composer-actions">
+                <button class="sf-quiet" type="button">Suggest</button>
+                <button class="sf-quiet" type="button">Attach</button>
+                <button class="sf-send" type="button" aria-label="Send message">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 13V3M4 7l4-4 4 4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <p class="sf-note">
+        Design notes: the <code>mask-image</code> fade is 24px on an overflowing
+        edge and 0 at the end. Only the jump floats; the live background row
+        and the queue tray stay in flow because they are content. The composer
+        is outside the scroll container. Try
+        <code>Background row: on</code>. The source is
+        <code>docs/prototypes/scroll-fade.html</code>.
+      </p>
+    </div>
+
+    <script>
+      const scroller = document.getElementById("scroller");
+      const jump = document.getElementById("jump");
+      const stateLabel = document.getElementById("state");
+      const themeButton = document.getElementById("theme");
+      const backgroundButton = document.getElementById("background");
+      const backgroundRow = document.getElementById("backgroundRow");
+      let frame = 0;
+      let backgroundOn = false;
+
+      function update() {
+        frame = 0;
+        const top = scroller.scrollTop;
+        const max = scroller.scrollHeight - scroller.clientHeight;
+        const hasOverflow = max > 2;
+        const atTop = top <= 2;
+        const atBottom = top >= max - 2;
+        const showJump = hasOverflow && !atBottom;
+
+        scroller.classList.toggle("has-above", hasOverflow && !atTop);
+        scroller.classList.toggle("has-below", hasOverflow && !atBottom);
+        jump.dataset.visible = String(showJump);
+        jump.tabIndex = showJump ? 0 : -1;
+        jump.setAttribute("aria-hidden", String(!showJump));
+
+        if (!hasOverflow) stateLabel.textContent = "fits · no fade";
+        else if (atTop) stateLabel.textContent = "top · below";
+        else if (atBottom) stateLabel.textContent = "bottom · above";
+        else stateLabel.textContent = "middle · above + below";
+      }
+
+      function queueUpdate() {
+        if (frame) return;
+        frame = requestAnimationFrame(update);
+      }
+
+      scroller.addEventListener("scroll", queueUpdate, { passive: true });
+      new ResizeObserver(queueUpdate).observe(scroller);
+
+      jump.addEventListener("click", () => {
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        scroller.scrollTo({
+          top: scroller.scrollHeight,
+          behavior: reduced ? "auto" : "smooth",
+        });
+      });
+
+      for (const button of document.querySelectorAll("[data-scroll]")) {
+        button.addEventListener("click", () => {
+          const where = button.dataset.scroll;
+          const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          scroller.scrollTo({
+            top:
+              where === "top"
+                ? 0
+                : where === "bottom"
+                  ? scroller.scrollHeight
+                  : Math.round((scroller.scrollHeight - scroller.clientHeight) / 2),
+            behavior: reduced ? "auto" : "smooth",
+          });
+        });
+      }
+
+      themeButton.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+        document.documentElement.dataset.theme = next;
+        themeButton.textContent = next === "light" ? "Dark theme" : "Light theme";
+      });
+
+      backgroundButton.addEventListener("click", () => {
+        backgroundOn = !backgroundOn;
+        backgroundRow.hidden = !backgroundOn;
+        backgroundButton.textContent = `Background row: ${backgroundOn ? "on" : "off"}`;
+        if (backgroundOn) {
+          const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          scroller.scrollTo({
+            top: scroller.scrollHeight,
+            behavior: reduced ? "auto" : "smooth",
+          });
+        }
+      });
+
+      requestAnimationFrame(() => {
+        scroller.scrollTop = Math.round(
+          (scroller.scrollHeight - scroller.clientHeight) * 0.42,
+        );
+        update();
+      });
+    </script>
+  </body>
+</html>

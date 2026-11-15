@@ -3722,6 +3722,7 @@ function SessionDetail(props: {
   const [markingRead, setMarkingRead] = useState(false);
   const restoreScroll = useRef(hasSavedScroll("transcript"));
   const [atBottom, setAtBottom] = useState(() => !restoreScroll.current);
+  const [showJump, setShowJump] = useState(false);
   const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
   const attentionSignature = useMemo(
     () =>
@@ -4034,10 +4035,26 @@ function SessionDetail(props: {
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
   };
 
+  const updateScrollState = useCallback(() => {
+    const scroller = getScroller();
+    if (!scroller) return;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    const overflows = max > 2;
+    const atTop = scroller.scrollTop <= 2;
+    const atEnd = scroller.scrollTop >= max - 2;
+    scroller.classList.toggle("has-above", overflows && !atTop);
+    scroller.classList.toggle("has-below", overflows && !atEnd);
+    setShowJump(overflows && !atEnd);
+    if (!stepPanelOpen) {
+      setAtBottom(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80,
+      );
+    }
+  }, [stepPanelOpen]);
+
   const jumpToLatest = () => {
     const scroller = getScroller();
     if (!scroller) return;
-    setAtBottom(true);
     scroller.scrollTo({
       top: scroller.scrollHeight,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -5022,7 +5039,7 @@ function SessionDetail(props: {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (!stepPanelOpen) setAtBottom(isAtBottom());
+        updateScrollState();
       });
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
@@ -5030,17 +5047,29 @@ function SessionDetail(props: {
       cancelAnimationFrame(frame);
       scroller.removeEventListener("scroll", onScroll);
     };
-  }, [session, stepPanelOpen]);
+  }, [session, updateScrollState]);
 
   useEffect(() => {
     const scroller = getScroller();
     if (!scroller) return;
     const observer = new ResizeObserver(() => {
       if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      updateScrollState();
     });
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [session, atBottom, stepPanelOpen]);
+  }, [session, atBottom, stepPanelOpen, updateScrollState]);
+
+  useEffect(() => {
+    if (loading) return;
+    const scroller = getScroller();
+    if (!scroller) return;
+    const frame = requestAnimationFrame(() => {
+      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      updateScrollState();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [atBottom, loading, messages, stepPanelOpen, updateScrollState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5441,6 +5470,22 @@ function SessionDetail(props: {
         ? `${backgroundShells} shell${backgroundShells === 1 ? "" : "s"} running`
         : `${backgroundItems.length} running`;
 
+  useEffect(() => {
+    if (loading) return;
+    const scroller = getScroller();
+    if (!scroller) return;
+    const frame = requestAnimationFrame(() => {
+      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      updateScrollState();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    atBottom,
+    backgroundItems.length,
+    loading,
+    stepPanelOpen,
+    updateScrollState,
+  ]);
 
   return (
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
@@ -5465,12 +5510,13 @@ function SessionDetail(props: {
               </div>
             ) : null}
 
-            <section
-              className="chat-panel"
-              aria-label="Session transcript"
-              ref={transcriptRef}
-              tabIndex={0}
-            >
+            <div className="chat-transcript">
+              <section
+                className="chat-panel"
+                aria-label="Session transcript"
+                ref={transcriptRef}
+                tabIndex={0}
+              >
               <header className="chat-doc-head">
                 <div className="chat-doc-title">{session.title}</div>
                 <div className="chat-meta">
@@ -5642,7 +5688,36 @@ function SessionDetail(props: {
                   </button>
                 </div>
               ) : null}
-            </section>
+
+              {backgroundItems.length > 0 ? (
+                <div className="chat-background-row">
+                  <button
+                    className="chat-background-chip"
+                    type="button"
+                    aria-label={`${backgroundLabel}. Open details.`}
+                    onClick={() => props.onDetailsOpenChange(true)}
+                  >
+                    <span className="chat-background-dot" aria-hidden="true" />
+                    <span className="chat-background-label">
+                      {backgroundLabel}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+              </section>
+              <button
+                className="chat-jump-float"
+                type="button"
+                data-visible={showJump}
+                aria-label="Jump to latest"
+                aria-hidden={!showJump}
+                tabIndex={showJump ? 0 : -1}
+                onClick={jumpToLatest}
+              >
+                {hasBlockingAttention ? "Input needed" : "Jump to latest"}
+                <span aria-hidden="true">↓</span>
+              </button>
+            </div>
 
             {sendError ? (
               <div className="alert" role="alert">
@@ -5708,33 +5783,6 @@ function SessionDetail(props: {
                 <p className="composer-offline-note" role="status">
                   Offline · sends will be queued.
                 </p>
-              ) : null}
-              {backgroundItems.length > 0 || !atBottom ? (
-                <div className="composer-status">
-                  {backgroundItems.length > 0 ? (
-                    <button
-                      className="chat-background-chip"
-                      type="button"
-                      aria-label={`${backgroundLabel}. Open details.`}
-                      onClick={() => props.onDetailsOpenChange(true)}
-                    >
-                      <span className="chat-background-dot" aria-hidden="true" />
-                      <span className="chat-background-label">
-                        {backgroundLabel}
-                      </span>
-                    </button>
-                  ) : null}
-                  {!atBottom ? (
-                    <button
-                      className="chat-jump"
-                      type="button"
-                      onClick={jumpToLatest}
-                    >
-                      {hasBlockingAttention ? "Input needed" : "Jump to latest"}
-                      <span aria-hidden="true">↓</span>
-                    </button>
-                  ) : null}
-                </div>
               ) : null}
               {queuedItems.length > 0 ? (
                 <div
