@@ -540,8 +540,13 @@ Target: 2–3 weeks. Release: `v0.6.0`.
 
 ### F3. Backup and restore
 
-- [ ] Snapshot `dataDir` and restore it into a fresh hub.
-- [ ] Document what is safe to copy and what must be re-paired.
+- [x] Snapshot `dataDir` and restore it into a fresh hub.
+  `oktoso backup --out <dir>` writes a hashed manifest plus a copy of the data
+  directory; `oktoso restore --from <dir> --force` verifies every hash, refuses
+  a running hub, and keeps the replaced directory.
+- [x] Document what is safe to copy and what must be re-paired. See the Backup
+  and restore table in `deployment.md`: config separately, pairing survives with
+  the same owner token, notification keys travel with `dataDir`.
 
 ### F4. Packaging
 
