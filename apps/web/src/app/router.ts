@@ -1,6 +1,7 @@
 import type { SessionStatus } from "@amoshydra/oktoso-contracts";
 
 export type SearchStatus = SessionStatus | "all";
+export type SearchScope = "sessions" | "messages";
 
 export type Route =
   | { name: "foundation" }
@@ -18,6 +19,7 @@ export type Route =
       query: string;
       provider: string;
       status: SearchStatus;
+      scope: SearchScope;
     }
   | {
       name: "providers";
@@ -99,6 +101,7 @@ export function parseRoute(pathname: string, search = ""): Route | null {
         query: params.get("q") ?? "",
         provider: params.get("provider") ?? "all",
         status: searchStatus(params.get("status")),
+        scope: params.get("scope") === "messages" ? "messages" : "sessions",
       };
 
     case "providers": {
@@ -155,6 +158,7 @@ export function routeHref(route: Route): string {
       if (route.query) params.set("q", route.query);
       if (route.provider !== "all") params.set("provider", route.provider);
       if (route.status !== "all") params.set("status", route.status);
+      if (route.scope === "messages") params.set("scope", "messages");
       return withQuery("/search", params);
     }
     case "providers": {

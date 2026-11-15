@@ -151,6 +151,7 @@ export class TranscriptCacheService {
    * deletes everything, so a disabled cache never keeps message text on disk.
    */
   async update(input: TranscriptCacheInput): Promise<TranscriptCacheView> {
+    const wasEnabled = this.enabled;
     const next: TranscriptCacheSettings = {
       ...this.settings(),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
@@ -168,6 +169,10 @@ export class TranscriptCacheService {
       this.epoch += 1;
       await this.enforceLimits();
       await this.persist();
+      if (!wasEnabled) {
+        // Turning the cache on after boot still owes the index a full pass.
+        await this.search?.reconcile(await this.all());
+      }
     }
     return this.view();
   }

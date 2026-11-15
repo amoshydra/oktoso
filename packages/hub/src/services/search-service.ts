@@ -16,6 +16,8 @@ export interface SearchServiceOptions {
   sessions: SessionService;
   /** Optional: used to re-snippet a deep match whose stored excerpt misses it. */
   cache?: TranscriptCacheService;
+  /** Whether the transcript cache is on; the UI uses it to explain empties. */
+  enabled?: () => boolean;
 }
 
 /**
@@ -89,6 +91,7 @@ export class SearchService {
         next: offset + limit < rows.length ? encodeCursor(offset + limit) : null,
       },
       ready: this.options.index.stats().ready,
+      enabled: this.options.enabled ? this.options.enabled() : true,
     };
   }
 

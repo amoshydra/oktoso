@@ -815,6 +815,69 @@ describe("transcript cache", () => {
   });
 });
 
+describe("message search", () => {
+  it("explains when the transcript cache is off", async () => {
+    // An earlier settings test leaves the cache on, so turn it off explicitly.
+    await fetch(`${BASE_URL}/api/v1/settings/transcripts`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled: false }),
+    });
+
+    await page!.goto(`${BASE_URL}/search?q=refresh&scope=messages`);
+    await page!
+      .getByText("Message search needs the transcript cache.")
+      .waitFor({ timeout: 10_000 });
+  });
+
+  it("searches cached transcripts and highlights the match", async () => {
+    await fetch(`${BASE_URL}/api/v1/settings/transcripts`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled: true }),
+    });
+
+    // Reading a session is what writes the transcript the index covers.
+    await openSession("Fix auth race in gateway");
+    await page!.waitForTimeout(1_500);
+
+    await page!.goto(`${BASE_URL}/search?q=refresh&scope=messages`);
+    await page!.locator(".search-hit").first().waitFor({ timeout: 10_000 });
+
+    const hits = await page!.locator(".search-hit").count();
+    expect(hits).toBeGreaterThan(0);
+    expect(await page!.locator(".search-hit-snippet mark").count()).toBeGreaterThan(0);
+    expect(
+      (await page!.locator(".search-hit-snippet").first().innerText()).toLowerCase(),
+    ).toContain("refresh");
+
+    // Opening a hit lands in the session that owns the message.
+    await page!.locator(".search-hit").first().click();
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
+  });
+
+  it("keeps the scope in the URL and the back stack", async () => {
+    await page!.goto(`${BASE_URL}/search?q=token`);
+    await page!.getByRole("button", { name: "Messages" }).click();
+    await page!.waitForURL(/scope=messages/);
+
+    await page!.goBack();
+    await page!.waitForURL(/\/search\?q=token$/);
+    await expect(
+      page!
+        .getByRole("group", { name: "Search scope" })
+        .getByRole("button", { name: "Sessions" })
+        .getAttribute("aria-pressed"),
+    ).resolves.toBe("true");
+  });
+});
+
 describe("offline queue", () => {
   it("queues a send offline, survives a reload, and lands once", async () => {
     await openSession("Fix auth race in gateway");

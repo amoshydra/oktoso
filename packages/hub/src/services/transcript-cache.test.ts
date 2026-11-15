@@ -348,6 +348,23 @@ describe("TranscriptCacheService", () => {
     expect(await service.read("test:ses_1")).toBeUndefined();
   });
 
+  it("hands the index a full pass when the cache is enabled", async () => {
+    const { service } = await setup();
+    let reconciled = 0;
+    service.attachSearch({
+      async update() {},
+      async remove() {},
+      async clear() {},
+      async reconcile() {
+        reconciled += 1;
+      },
+    } as never);
+
+    await service.update({ enabled: true });
+
+    expect(reconciled).toBe(1);
+  });
+
   it("tells the search index when a transcript expires", async () => {
     let now = 1_000;
     const { service } = await setup({ enabled: true, now: () => now });

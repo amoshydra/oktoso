@@ -402,9 +402,16 @@ C4.
 
 ### C4. Search UI
 
-- [ ] Add the messages scope to `SearchView`.
-- [ ] Show snippets with the matched term highlighted.
-- [ ] Keep filters and the back stack intact.
+Status: done.
+
+- [x] Add the messages scope to `SearchView`. A `Scope` control switches
+  Sessions (session metadata, provider-backed) and Messages (cached
+  transcripts), and the choice lives in the URL.
+- [x] Show snippets with the matched term highlighted. Whole-word,
+  case-insensitive matching, rendered as `<mark>`; a deep match is re-cut from
+  the cache when the transcript is still there.
+- [x] Keep filters and the back stack intact. Provider and status apply to both
+  scopes; typing replaces the history entry, filters and scope add one.
 
 ### C5. Lineage
 
