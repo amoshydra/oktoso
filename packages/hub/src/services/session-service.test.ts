@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session, SessionListQuery } from "@amoshydra/oktoso-contracts";
-import { ProviderError } from "@amoshydra/oktoso-providers";
-import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
+import { ProviderError, type ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
 import type { ProviderRegistry } from "./provider-registry";
@@ -30,6 +29,40 @@ function makeRegistry(adapters: ProviderAdapter[]): ProviderRegistry {
     timeoutMs: () => 15_000,
   } as unknown as ProviderRegistry;
 }
+
+describe("SessionService session cache", () => {
+  it("drops a cached session when the provider returns not found", async () => {
+    const session = makeSession({
+      ref: "test:ses_gone",
+      providerID: "test",
+      title: "Deleted session",
+    });
+    let missing = false;
+    const adapter = {
+      id: "test",
+      getSession: async () => {
+        if (missing) {
+          throw new ProviderError("not_found", "Session not found", {
+            status: 404,
+          });
+        }
+        return { ...session };
+      },
+    } as unknown as ProviderAdapter;
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    await expect(sessions.get(session.ref)).resolves.toMatchObject({
+      ref: session.ref,
+    });
+    expect(sessions.cachedSession(session.ref)).toBeDefined();
+
+    missing = true;
+    await expect(sessions.get(session.ref)).rejects.toMatchObject({
+      code: "not_found",
+    });
+    expect(sessions.cachedSession(session.ref)).toBeUndefined();
+  });
+});
 
 describe("SessionService read markers", () => {  it("keeps a session read across provider refreshes until new activity", async () => {
     const session: Session = {

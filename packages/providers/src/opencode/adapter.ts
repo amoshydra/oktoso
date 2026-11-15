@@ -49,6 +49,7 @@ export interface OpenCodeSessionRaw {
     reasoning?: number;
   };
   outcome?: "succeeded" | "failed" | "interrupted";
+  fork?: { sessionID?: string; boundary?: unknown };
   time: {
     created: number;
     updated: number;
@@ -1301,10 +1302,27 @@ function parseModel(
  * active and marks the new run with `busy`. Presence of `idle` alone therefore
  * does not mean the session is idle.
  */
-export function openCodeSessionStatus(raw: OpenCodeSessionRaw): SessionStatus {
+export const STALE_RUNNING_MS = 30 * 60_000;
+
+export function openCodeSessionStatus(
+  raw: OpenCodeSessionRaw,
+  now = Date.now(),
+): SessionStatus {
   const { busy, idle } = raw.time;
   if (busy !== undefined) {
-    if (idle === undefined || busy > idle) return "running";
+    if (idle === undefined) {
+      // A busy run that has not updated for half an hour is stuck. OpenCode can
+      // leave `busy` set after a failed form/question tool; without this, the
+      // session never leaves running and the composer only offers Steer.
+      if (now - raw.time.updated > STALE_RUNNING_MS) {
+        return raw.outcome === "failed" ? "error" : "idle";
+      }
+      return "running";
+    }
+    if (busy > idle) return "running";
+  } else if (raw.fork !== undefined) {
+    // A fork has no busy/idle history. Its later `updated` timestamp is the
+    // fork creation, not a run, so the legacy first-run fallback does not apply.
   } else if (
     idle === undefined &&
     raw.outcome === undefined &&

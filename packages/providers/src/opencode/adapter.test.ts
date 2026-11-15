@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   OpenCodeAdapter,
+  STALE_RUNNING_MS,
   openCodeSessionStatus,
   type OpenCodeSessionRaw,
 } from "./adapter";
@@ -10,12 +11,14 @@ import {
 function session(
   time: Partial<OpenCodeSessionRaw["time"]>,
   outcome?: OpenCodeSessionRaw["outcome"],
+  fork?: OpenCodeSessionRaw["fork"],
 ): OpenCodeSessionRaw {
   return {
     id: "ses_test",
     title: "Test session",
     time: { created: 1_000, updated: 1_000, ...time },
     ...(outcome ? { outcome } : {}),
+    ...(fork ? { fork } : {}),
   };
 }
 
@@ -366,7 +369,7 @@ describe("openCodeSessionStatus", () => {
 
   it("is running for the first execution", () => {
     expect(
-      openCodeSessionStatus(session({ updated: 2_000, busy: 1_500 })),
+      openCodeSessionStatus(session({ updated: 2_000, busy: 1_500 }), 2_000),
     ).toBe("running");
   });
 
@@ -408,5 +411,31 @@ describe("openCodeSessionStatus", () => {
 
   it("treats an older provider's first run as running", () => {
     expect(openCodeSessionStatus(session({ updated: 2_000 }))).toBe("running");
+  });
+
+  it("treats a fork with no busy or idle as idle", () => {
+    expect(
+      openCodeSessionStatus(
+        session({ updated: 2_000 }, undefined, { sessionID: "ses_parent" }),
+      ),
+    ).toBe("idle");
+  });
+
+  it("treats a stale busy run as idle", () => {
+    expect(
+      openCodeSessionStatus(
+        session({ updated: 2_000, busy: 1_500 }),
+        2_000 + STALE_RUNNING_MS + 1,
+      ),
+    ).toBe("idle");
+  });
+
+  it("keeps a recent busy run running", () => {
+    expect(
+      openCodeSessionStatus(
+        session({ updated: 2_000, busy: 1_500 }),
+        2_000 + 60_000,
+      ),
+    ).toBe("running");
   });
 });

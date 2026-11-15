@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Session } from "@amoshydra/oktoso-contracts";
-import { readSessionsCache, writeSessionsCache, readSessionCache, writeSessionCache } from "./offline-cache";
+import {
+  readSessionCache,
+  readSessionsCache,
+  removeSessionCache,
+  writeSessionCache,
+  writeSessionsCache,
+} from "./offline-cache";
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -79,5 +85,12 @@ describe("offline session cache", () => {
 
     expect(readSessionCache(session.ref)).toEqual(session);
     expect(readSessionCache("desktop-opencode:missing")).toBeUndefined();
+  });
+
+  it("drops a deleted session header", () => {
+    writeSessionCache(session);
+    removeSessionCache(session.ref);
+
+    expect(readSessionCache(session.ref)).toBeUndefined();
   });
 });
