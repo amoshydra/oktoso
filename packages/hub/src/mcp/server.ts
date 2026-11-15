@@ -632,7 +632,8 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       "sessions_create",
       {
         title: "Create a session",
-        description: "Create a session on a provider.",
+        description:
+          "Create a session on a provider. Pass text to send the first prompt after creation.",
         inputSchema: {
           providerID: z.string(),
           title: z.string().min(1),

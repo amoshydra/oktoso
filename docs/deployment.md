@@ -186,8 +186,9 @@ schedule triggers under a policy.
 - Quiet hours escalate answer and retry actions instead of acting.
 - Actions: `answer`, `escalate`, `notify`, `retry`, and `start`. A `start`
   action references a template (`providerID`, `title`, optional directory,
-  agent, model, and prompt text) and creates a new session. A schedule `start`
-  watcher does not need `condition.sessionRef`; other schedule actions do.
+  agent, model, and prompt text) and creates a new session, then sends the
+  template prompt as its first message. A schedule `start` watcher does not need
+  `condition.sessionRef`; other schedule actions do.
 - Always-allow stores a bounded shape (watcher, question kind, options, and the
   chosen label) after a second confirmation in Settings → Automation. Only
   boolean and single-choice questions are eligible; free-text, multi-select,

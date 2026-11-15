@@ -845,6 +845,7 @@ components:
           type: string
         text:
           type: string
+          description: First user message, sent after the session is created
       required:
         - providerID
         - title

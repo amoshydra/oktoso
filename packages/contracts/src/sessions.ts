@@ -50,7 +50,15 @@ export const zCreateSessionInput = z.object({
   directory: z.string().optional(),
   agent: z.string().optional(),
   model: z.string().optional(),
-  text: z.string().optional(),
+  /**
+   * Sent as the first user message once the session exists. The hub creates the
+   * session first, so a send failure leaves a real session behind and reports
+   * its ref in the error details.
+   */
+  text: z
+    .string()
+    .optional()
+    .describe("First user message, sent after the session is created"),
 });
 
 export const zSessionSelectionInput = z.object({

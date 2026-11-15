@@ -118,6 +118,81 @@ describe("SessionService read markers", () => {  it("keeps a session read across
   });
 });
 
+describe("SessionService create", () => {
+  function createAdapter(overrides: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    const adapter = {
+      id: "test",
+      capabilities: { create: true, send: true, attach: false },
+      async createSession(input: { title: string }) {
+        calls.push(`create:${input.title}`);
+        return makeSession({ ref: "test:ses_created", title: input.title });
+      },
+      async sendMessage(ref: string, input: { text: string }) {
+        calls.push(`send:${ref}:${input.text}`);
+        return { accepted: true, messageID: "msg_1" };
+      },
+      ...overrides,
+    } as unknown as ProviderAdapter;
+    return { adapter, calls };
+  }
+
+  it("creates a session without sending when there is no text", async () => {
+    const { adapter, calls } = createAdapter();
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    const created = await sessions.create({
+      providerID: "test",
+      title: "Empty session",
+    });
+
+    expect(created.ref).toBe("test:ses_created");
+    expect(calls).toEqual(["create:Empty session"]);
+  });
+
+  it("sends the first prompt after creating the session", async () => {
+    const { adapter, calls } = createAdapter();
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    const created = await sessions.create({
+      providerID: "test",
+      title: "Nightly review",
+      text: "  Review the repository.  ",
+    });
+
+    expect(created.ref).toBe("test:ses_created");
+    expect(calls).toEqual([
+      "create:Nightly review",
+      "send:test:ses_created:Review the repository.",
+    ]);
+    expect((await sessions.list({})).data).toHaveLength(1);
+  });
+
+  it("keeps the session and names it when the first prompt fails", async () => {
+    const { adapter } = createAdapter({
+      async sendMessage() {
+        throw Object.assign(new Error("provider said no"), {
+          name: "ProviderError",
+          code: "invalid_request",
+          status: 400,
+        });
+      },
+    });
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    await expect(
+      sessions.create({
+        providerID: "test",
+        title: "First prompt fails",
+        text: "Hello",
+      }),
+    ).rejects.toMatchObject({
+      details: { ref: "test:ses_created" },
+      message: expect.stringContaining("test:ses_created"),
+    });
+  });
+});
+
 describe("SessionService resilience", () => {
   it("returns cached sessions immediately while a stale refresh is slow", async () => {
     const cached = makeSession({
