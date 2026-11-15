@@ -7,6 +7,7 @@ import {
 } from "../auth-cookie";
 import { isSameOriginRequest, requestHost } from "../origin";
 import type { AppEnv } from "../types";
+import { FixedWindowRateLimiter } from "../../mcp/rate-limit";
 import {
   IBM_PLEX_MONO_400_LATIN_BASE64,
   INTER_VARIABLE_LATIN_BASE64,
@@ -146,6 +147,21 @@ export function registerPairRoutes(
   app: Hono<AppEnv>,
   deps: PairRouteDeps,
 ): void {
+  // Pairing codes are short-lived and single use, but the endpoint is public.
+  // A generous fixed window stops a brute-force loop without hurting a person
+  // who mistypes a code twice.
+  const limiter = new FixedWindowRateLimiter({ maxKeys: 500 });
+  const policy = { max: 20, windowMs: 60_000 };
+  const clientKey = (c: Context<AppEnv>): string => {
+    const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+    return (
+      forwarded ||
+      c.req.header("x-real-ip") ||
+      c.req.header("cf-connecting-ip") ||
+      "local"
+    );
+  };
+
   app.get("/pair/:code", (c) => {
     noStore(c);
     const pairing = deps.auth.inspectPairing(c.req.param("code"));
@@ -167,6 +183,11 @@ export function registerPairRoutes(
 
   app.post("/pair/:code", (c) => {
     noStore(c);
+    const limit = limiter.consume(clientKey(c), policy);
+    if (!limit.allowed) {
+      c.header("Retry-After", String(Math.ceil(limit.retryAfterMs / 1000)));
+      return c.text("Too many pairing attempts. Wait a minute and try again.", 429);
+    }
     // A pairing code is a single-use capability, not a cookie. Embedded
     // webviews and QR handoffs can report a different Origin, so the POST is
     // accepted as long as the code is valid. The GET page still prevents link
