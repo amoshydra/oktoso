@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -38,6 +39,10 @@ async function seed(dataDir: string): Promise<void> {
   await writeFile(join(dataDir, "state.json.tmp"), "partial", { mode: 0o600 });
 }
 
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 describe("createBackup", () => {
   it("copies state and transcripts, skipping uploads and temp files", async () => {
     const base = await root();
@@ -68,6 +73,32 @@ describe("createBackup", () => {
     await expect(stat(join(out, "data", "attachments"))).rejects.toThrow();
   });
 
+  it("refuses a non-empty destination", async () => {
+    const base = await root();
+    const dataDir = join(base, "data");
+    await seed(dataDir);
+    const out = join(base, "snapshot");
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, "leftover"), "x");
+
+    await expect(
+      createBackup({ dataDir, outDir: out, version: "0" }),
+    ).rejects.toThrow(/not empty/);
+  });
+
+  it("refuses to follow a symlink out of the data directory", async () => {
+    const base = await root();
+    const dataDir = join(base, "data");
+    await seed(dataDir);
+    const outside = join(base, "outside.txt");
+    await writeFile(outside, "secret");
+    await symlink(outside, join(dataDir, "linked.txt"));
+
+    await expect(
+      createBackup({ dataDir, outDir: join(base, "snap"), version: "0" }),
+    ).rejects.toThrow(/symlink/);
+  });
+
   it("refuses to write inside the data directory", async () => {
     const base = await root();
     const dataDir = join(base, "data");
@@ -76,6 +107,59 @@ describe("createBackup", () => {
     await expect(
       createBackup({ dataDir, outDir: join(dataDir, "backup"), version: "0" }),
     ).rejects.toThrow(/outside the hub data directory/);
+  });
+});
+
+describe("backup path safety", () => {
+  it("refuses a manifest that climbs out of the snapshot", async () => {
+    const base = await root();
+    const snapshot = join(base, "snapshot");
+    await mkdir(join(snapshot, "data"), { recursive: true });
+    await writeFile(join(snapshot, "data", "state.json"), "x", { mode: 0o600 });
+    await mkdir(join(base, "pwn"), { recursive: true });
+    await writeFile(join(base, "pwn", "evil.txt"), "owned", { mode: 0o600 });
+    await writeFile(
+      join(snapshot, "manifest.json"),
+      JSON.stringify({
+        format: 1,
+        createdAt: new Date().toISOString(),
+        version: "0",
+        dataDir: "data",
+        excluded: [],
+        files: [
+          { path: "state.json", bytes: 1, sha256: sha256("x") },
+          { path: "../pwn/evil.txt", bytes: 5, sha256: sha256("owned") },
+        ],
+      }),
+    );
+    const target = join(base, "target");
+
+    await expect(
+      restoreBackup({ fromDir: snapshot, dataDir: target }),
+    ).rejects.toThrow();
+    await expect(stat(join(base, "pwn", "evil.txt"))).resolves.toBeTruthy();
+    await expect(stat(target)).rejects.toThrow();
+  });
+
+  it("refuses an absolute path in a manifest", async () => {
+    const base = await root();
+    const snapshot = join(base, "snapshot");
+    await mkdir(join(snapshot, "data"), { recursive: true });
+    await writeFile(
+      join(snapshot, "manifest.json"),
+      JSON.stringify({
+        format: 1,
+        createdAt: new Date().toISOString(),
+        version: "0",
+        dataDir: "data",
+        excluded: [],
+        files: [{ path: "/tmp/evil", bytes: 0, sha256: sha256("") }],
+      }),
+    );
+
+    await expect(
+      restoreBackup({ fromDir: snapshot, dataDir: join(base, "target") }),
+    ).rejects.toThrow();
   });
 });
 
@@ -149,14 +233,33 @@ describe("dataDirFromConfig", () => {
     const base = await root();
     const withData = join(base, "a.json");
     await writeFile(withData, JSON.stringify({ dataDir: "./state" }));
-    expect(await dataDirFromConfig(withData, join(base, "fallback"))).toBe(
+    expect(await dataDirFromConfig(withData, join(base, "fallback"), {})).toBe(
       join(process.cwd(), "state"),
     );
 
     const without = join(base, "b.json");
     await writeFile(without, JSON.stringify({}));
-    expect(await dataDirFromConfig(without, join(base, "fallback"))).toBe(
+    expect(await dataDirFromConfig(without, join(base, "fallback"), {})).toBe(
       join(base, "fallback"),
     );
+  });
+
+  it("interpolates env references and honours HUB_DATA_DIR", async () => {
+    const base = await root();
+    const configPath = join(base, "hub.json");
+    await writeFile(configPath, JSON.stringify({ dataDir: "${HUB_STATE}/data" }));
+
+    expect(
+      await dataDirFromConfig(configPath, join(base, "fallback"), {
+        HUB_STATE: base,
+      }),
+    ).toBe(join(base, "data"));
+
+    expect(
+      await dataDirFromConfig(configPath, join(base, "fallback"), {
+        HUB_STATE: base,
+        HUB_DATA_DIR: join(base, "override"),
+      }),
+    ).toBe(join(base, "override"));
   });
 });
