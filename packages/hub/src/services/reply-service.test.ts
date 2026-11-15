@@ -1120,6 +1120,44 @@ describe("ReplyService G2 reply usability", () => {
     expect(audit.rejected.some((item) => item.text === "Done.")).toBe(false);
   });
 
+  it("applies the G2 compact length limit", async () => {
+    const data = [
+      textMessage("m1", "user", "Fix the docker pull failure"),
+      textMessage(
+        "m2",
+        "assistant",
+        "The pull failed. Should I switch to the mirror?",
+      ),
+    ];
+    const longNext = "Run the configured mirror pull command again now.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Switch to the mirror.",
+          opposite: "Retry the pull first.",
+          next: longNext,
+          verify: "Check the logs.",
+          extend: "Add a retry test.",
+          ask: "Which mirror?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply", "g2");
+
+    expect(audit.systemPrompt).toContain("at most 46 characters");
+    expect(
+      audit.rejected.some(
+        (item) => item.role === "next" && item.reason === "too long",
+      ),
+    ).toBe(true);
+    expect(
+      audit.options.some((option) => option.text === longNext),
+    ).toBe(false);
+  });
+
   it("adds a usable acknowledgement when the model writes meta for done", async () => {
     const data = [
       textMessage("m1", "user", "Ship the provider limit fix"),

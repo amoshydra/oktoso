@@ -16,7 +16,8 @@ export function registerReplyAuditRoutes(
   app.get("/api/v1/sessions/:ref/reply-audit", async (c) => {
     const mode = zReplyMode.safeParse(c.req.query("mode") ?? "reply");
     if (!mode.success) throw badRequest("Invalid reply-audit mode");
-    return c.json(await replies.audit(c.req.param("ref"), mode.data));
+    const surface = c.req.query("surface") === "g2" ? "g2" : "web";
+    return c.json(await replies.audit(c.req.param("ref"), mode.data, surface));
   });
 
   app.get("/api/v1/reply-feedback", async (c) => {

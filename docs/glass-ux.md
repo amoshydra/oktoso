@@ -85,7 +85,7 @@ does not expose.
 - Newlines and paragraph breaks are preserved. Multiple spaces within a line are
   collapsed.
 - The footer is one line. The 42 px footer container fits one line at G2 type
-  size, so it prioritizes `? Answer` or `Tap actions`, then the line range,
+  size, so it prioritizes `? Answer` or `Tap reply`, then the line range,
   readable-message range, compact agent activity, non-live connection state,
   failure, `New below`, and the swipe/back hint. The hint is dropped whole when
   the line is full; it is never cut mid-word. The action affordance and position
@@ -95,6 +95,9 @@ does not expose.
   model configured it opens `REPLY` for every moment, including a running or
   finished turn. Without one, it opens `SESSION`, a short action list: `Stop`
   while running and `Phone keyboard`.
+- The glasses request `surface=g2`. The hub caps model suggestions at 8 words
+  and 46 characters so every label fits the 54-character row, and the reply
+  page puts the expected answer first.
 
 ## Question reply
 

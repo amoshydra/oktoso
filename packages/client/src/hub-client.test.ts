@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { HubClient } from "./hub-client";
 
+describe("HubClient.replyOptions", () => {
+  it("asks for compact options only when a G2 surface is given", async () => {
+    let captured = "";
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      captured = String(input);
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const hub = new HubClient({ baseUrl: "http://hub", fetchImpl });
+
+    await hub.replyOptions("desktop-opencode:ses_auth", "reply", "g2");
+    expect(captured).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=reply&surface=g2",
+    );
+
+    await hub.replyOptions("desktop-opencode:ses_auth");
+    expect(captured).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=reply",
+    );
+  });
+});
+
 describe("HubClient.sendMessage", () => {
   it("sends answer metadata and an idempotency key", async () => {
     let captured: { url: string; init: RequestInit | undefined } | undefined;

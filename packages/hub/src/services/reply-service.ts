@@ -94,6 +94,28 @@ const MAX_CONSTRAINT_CHARS = 200;
 const MAX_SUGGESTION_CHARS = 80;
 const MAX_ROLE_WORDS = 12;
 const MIN_ROLE_WORDS = 2;
+const COMPACT_SUGGESTION_CHARS = 46;
+const COMPACT_ROLE_WORDS = 8;
+
+export type ReplySurface = "web" | "g2";
+
+interface LintLimits {
+  minWords: number;
+  maxWords: number;
+  maxChars: number;
+}
+
+const WEB_LIMITS: LintLimits = {
+  minWords: MIN_ROLE_WORDS,
+  maxWords: MAX_ROLE_WORDS,
+  maxChars: MAX_SUGGESTION_CHARS,
+};
+
+const COMPACT_LIMITS: LintLimits = {
+  minWords: MIN_ROLE_WORDS,
+  maxWords: COMPACT_ROLE_WORDS,
+  maxChars: COMPACT_SUGGESTION_CHARS,
+};
 const MAX_CHOICES = 5;
 
 const COURTESY =
@@ -336,7 +358,11 @@ export class ReplyService {
     }
   }
 
-  async list(ref: string, mode: ReplyMode): Promise<ReplyOptions> {
+  async list(
+    ref: string,
+    mode: ReplyMode,
+    surface: ReplySurface = "web",
+  ): Promise<ReplyOptions> {
     const { latest, messages, originalRequest, latestRequest } =
       await this.loadContext(ref);
     const config = this.settings.config();
@@ -359,7 +385,7 @@ export class ReplyService {
       .update(context)
       .digest("hex")
       .slice(0, 16);
-    const cacheKey = `${ref}:${mode}:${config.reply.baseUrl}:${config.reply.model}:${digest}`;
+    const cacheKey = `${ref}:${mode}:${surface}:${config.reply.baseUrl}:${config.reply.model}:${digest}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       this.cache.delete(cacheKey);
@@ -377,6 +403,7 @@ export class ReplyService {
       momentContext,
       context,
       cacheKey,
+      surface,
     ).finally(() => {
       this.inflight.delete(cacheKey);
     });
@@ -392,6 +419,7 @@ export class ReplyService {
     momentContext: MomentContext,
     context: string,
     cacheKey: string,
+    surface: ReplySurface,
   ): Promise<ReplyOptions> {
     if (mode === "choices") {
       const generation = await this.choices(messages, config, question);
@@ -437,6 +465,7 @@ export class ReplyService {
       moment,
       config,
       lintContext(momentContext),
+      surface,
     );
     if (linted.options.length === 0) {
       return {
@@ -469,7 +498,11 @@ export class ReplyService {
    * the cache and returns the moment, prompt, context, raw output, and lint
    * decisions.
    */
-  async audit(ref: string, mode: ReplyMode): Promise<ReplyAudit> {
+  async audit(
+    ref: string,
+    mode: ReplyMode,
+    surface: ReplySurface = "web",
+  ): Promise<ReplyAudit> {
     const started = Date.now();
     const { latest, messages, originalRequest, latestRequest } =
       await this.loadContext(ref);
@@ -490,7 +523,7 @@ export class ReplyService {
     const context = buildMomentPrompt(momentContext);
     const moment = momentContext.moment;
     const systemPrompt =
-      mode === "reply" ? REPLY_SYSTEM_PROMPT : CHOICE_SYSTEM_PROMPT;
+      mode === "reply" ? replySystemPrompt(surface) : CHOICE_SYSTEM_PROMPT;
     const modelStarted = Date.now();
 
     if (mode === "choices") {
@@ -549,6 +582,7 @@ export class ReplyService {
       moment,
       config,
       lintContext(momentContext),
+      surface,
     );
     const options = withDoneAcknowledgement(
       linted.options.length > 0
@@ -595,6 +629,7 @@ export class ReplyService {
     moment: ReplyMoment,
     config: AssistantConfig,
     lint: LintContext,
+    surface: ReplySurface,
   ): Promise<{
     generation: {
       roles: RoleTexts;
@@ -604,8 +639,9 @@ export class ReplyService {
     };
     linted: ReturnType<typeof buildRoleOptions>;
   }> {
-    const generation = await this.modelRoles(context, config);
-    let linted = buildRoleOptions(generation.roles, moment, context, lint);
+    const limits = surface === "g2" ? COMPACT_LIMITS : WEB_LIMITS;
+    const generation = await this.modelRoles(context, config, surface);
+    let linted = buildRoleOptions(generation.roles, moment, context, lint, limits);
     const draftFields = ALL_ROLES.filter(
       (role) => generation.roles[role].trim().length > 0,
     ).length;
@@ -630,10 +666,10 @@ export class ReplyService {
       ...gap.map((role) => `  ${role}: ${reasons.get(role) ?? "empty"}`),
       "  Return all six fields again and keep the accepted ones unchanged.",
     ].join("\n");
-    const retry = await this.modelRoles(repairContext, config);
+    const retry = await this.modelRoles(repairContext, config, surface);
     const roles = { ...generation.roles };
     for (const role of gap) roles[role] = retry.roles[role];
-    linted = buildRoleOptions(roles, moment, context, lint);
+    linted = buildRoleOptions(roles, moment, context, lint, limits);
     return {
       generation: {
         roles,
@@ -654,6 +690,7 @@ export class ReplyService {
   private async modelRoles(
     context: string,
     config: AssistantConfig,
+    surface: ReplySurface,
   ): Promise<{
     roles: RoleTexts;
     raw: string;
@@ -664,7 +701,7 @@ export class ReplyService {
       const result = await this.completion(
         config,
         [
-          { role: "system", content: REPLY_SYSTEM_PROMPT },
+          { role: "system", content: replySystemPrompt(surface) },
           { role: "user", content: context },
         ],
         { maxTokens: 320, schema: REPLY_SCHEMA },
@@ -886,6 +923,17 @@ export class ReplyService {
       this.cache.delete(oldest);
     }
   }
+}
+
+function replySystemPrompt(surface: ReplySurface): string {
+  if (surface !== "g2") return REPLY_SYSTEM_PROMPT;
+  return REPLY_SYSTEM_PROMPT.replace(
+    "- 2-10 words. Plain text.",
+    "- 2-8 words and at most 46 characters. Plain text.",
+  ).replace(
+    "Return only JSON.",
+    "- Keep every message at most 46 characters. No paths, URLs, or code.\nReturn only JSON.",
+  );
 }
 
 function replyModelReady(config: AssistantConfig): boolean {
@@ -1402,6 +1450,7 @@ function buildRoleOptions(
   moment: ReplyMoment,
   grounding: string,
   lint: LintContext = {},
+  limits: LintLimits = WEB_LIMITS,
 ): {
   options: ReplyOption[];
   rejected: ReplyRejected[];
@@ -1427,6 +1476,7 @@ function buildRoleOptions(
       moment,
       grounding,
       lint,
+      limits,
     );
     if (reason) {
       rejected.push({ ...candidate, reason });
@@ -1493,6 +1543,7 @@ function lintSuggestion(
   moment: ReplyMoment,
   grounding: string,
   lint: LintContext = {},
+  limits: LintLimits = WEB_LIMITS,
 ): string | undefined {
   const text = raw.trim();
   if (!text) return role === "ask" ? undefined : "empty";
@@ -1502,12 +1553,12 @@ function lintSuggestion(
     (role === "answer" || role === "opposite") &&
     /^(?:done|acknowledged|thanks|thank you|ok|okay|yes|lgtm|ship it)[.!]*$/i.test(text);
   if (
-    (words < MIN_ROLE_WORDS && !doneAcknowledgement) ||
-    words > MAX_ROLE_WORDS
+    (words < limits.minWords && !doneAcknowledgement) ||
+    words > limits.maxWords
   ) {
     return "length";
   }
-  if (text.length > MAX_SUGGESTION_CHARS) return "too long";
+  if (text.length > limits.maxChars) return "too long";
   if (META_TEXT.test(text)) return "meta";
   if (UNSAFE_TEXT.test(text) || UNSAFE_TEXT_ALT.test(text)) return "unsafe";
   if (violatesConstraints(text, moment.constraints)) return "constraint";

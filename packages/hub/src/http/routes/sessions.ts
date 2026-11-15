@@ -92,7 +92,8 @@ export function registerSessionRoutes(
     const ref = c.req.param("ref");
     const mode = zReplyMode.safeParse(c.req.query("mode") ?? "reply");
     if (!mode.success) throw badRequest("Invalid reply-option mode");
-    return c.json(await replies.list(ref, mode.data));
+    const surface = c.req.query("surface") === "g2" ? "g2" : "web";
+    return c.json(await replies.list(ref, mode.data, surface));
   });
 
   app.get("/api/v1/sessions/:ref/lineage", async (c) =>
