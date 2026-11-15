@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.2.2](https://github.com/amoshydra/oktoso/compare/v0.2.1...v0.2.2) (2026-11-15)
+
+
+### Features
+
+* **backup:** snapshot and restore the hub data directory ([2631531](https://github.com/amoshydra/oktoso/commit/2631531ebd89e59aff0e598fc9454b8a9af5e223))
+* **hardening:** metrics, log redaction, and packaging ([40619e9](https://github.com/amoshydra/oktoso/commit/40619e93d9d09b26aa8bf7aa3f2d53686c336a4e))
+* **local-data:** export sessions and own every local store ([984437e](https://github.com/amoshydra/oktoso/commit/984437e135a64f1fa166f0ba86ba107b1d6a116e))
+* **overview:** report usage on the renamed dashboard ([879c968](https://github.com/amoshydra/oktoso/commit/879c9688cc61d53b90f6c7ab0e8543ae9973e071))
+* **recall:** cache transcripts locally behind an opt-in ([c69af78](https://github.com/amoshydra/oktoso/commit/c69af784af01c8b7f17165e872838de031b415c2))
+* **recall:** index cached transcripts for search ([1aa8dc1](https://github.com/amoshydra/oktoso/commit/1aa8dc1d05679564bdeede3cbcadeb7d82e0f380))
+* **search:** add the messages scope with highlighted snippets ([51b77ac](https://github.com/amoshydra/oktoso/commit/51b77ac13f7962f66387f2842dcb0b8d729db142))
+* **search:** expose the transcript index over HTTP ([8302580](https://github.com/amoshydra/oktoso/commit/830258091769309332dafca7799367d616da5d62))
+* **sessions:** resolve and show a session's lineage ([f7d4881](https://github.com/amoshydra/oktoso/commit/f7d488198ea1a2943f27a59d4426749cdc9d4a50))
+* **web:** use the wide field on list pages ([2de7fdf](https://github.com/amoshydra/oktoso/commit/2de7fdfc214d6bb84c6ad790ade17606cbb5931b))
+
+
+### Bug Fixes
+
+* **auth:** throttle pairing attempts ([1247db5](https://github.com/amoshydra/oktoso/commit/1247db500902ee0e2a8aabfa3b9b7c0c5081e811))
+* **automation:** do not fake success on a form that cannot be answered ([5cfc080](https://github.com/amoshydra/oktoso/commit/5cfc080ca6758b69d157eeccf3d12852adc9e016))
+* **backup:** keep restores inside the data directory ([ed4b8f8](https://github.com/amoshydra/oktoso/commit/ed4b8f8be3c5004c27e4287e44bdb5bab08f82b3))
+* **logs:** keep diagnostics while masking secrets ([c0f3257](https://github.com/amoshydra/oktoso/commit/c0f3257444f775d33ae2bd87356f0dd129d52571))
+* **metrics:** require the owner token and keep series stable ([02a6455](https://github.com/amoshydra/oktoso/commit/02a64557c71e7278b64234e5c8ffb5b2ab207272))
+* **recall:** make the index survive compaction, reload, and opt-out ([1a1fde5](https://github.com/amoshydra/oktoso/commit/1a1fde52afa980a657c2fb5cc9a784d98c63d5d3))
+* **recall:** make the transcript cache safe under concurrency ([22590b7](https://github.com/amoshydra/oktoso/commit/22590b734f4482372179f7ed27ab481d34645df9))
+* **sessions:** keep the real error code when the first prompt fails ([4c79801](https://github.com/amoshydra/oktoso/commit/4c79801776a6dd21909c72f0c0223b0eb08f2245))
+* **sessions:** send the first prompt when creating with text ([1a9ed31](https://github.com/amoshydra/oktoso/commit/1a9ed31199bf91e52199e43e9ca3f3abf77e2a2f))
+* **web:** align the chat panel to the reading column ([d1a0747](https://github.com/amoshydra/oktoso/commit/d1a0747291ff59c01bfe50d220fc8f1422f0a53b))
+* **web:** consolidate icons and type roles ([962c6b1](https://github.com/amoshydra/oktoso/commit/962c6b13ec7b6af7aeeca88debf5e3014270421b))
+* **web:** resolve the first audit batch ([9d19144](https://github.com/amoshydra/oktoso/commit/9d191446dea7eab9e58507cf84302682e4685436))
+
 ## [0.2.1](https://github.com/amoshydra/oktoso/compare/v0.2.0...v0.2.1) (2026-11-15)
 
 
