@@ -10,13 +10,23 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
 export const BACKUP_FORMAT = 1;
 
 export const zBackupFile = z.object({
-  path: z.string(),
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        !value.startsWith("/") &&
+        !value.startsWith("\\") &&
+        !value.split(/[\\/]/).includes("..") &&
+        !/^[a-zA-Z]:/.test(value),
+      "Backup paths must be relative and stay inside the snapshot",
+    ),
   bytes: z.number().int().nonnegative(),
   sha256: z.string(),
 });
@@ -59,6 +69,18 @@ export async function createBackup(
     throw new Error("The backup directory must live outside the hub data directory");
   }
 
+  const existing = await readdir(outDir).catch(() => [] as string[]);
+  if (existing.length > 0) {
+    throw new Error(`The backup directory is not empty: ${outDir}`);
+  }
+  const sourceEntries = await readdir(dataDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      throw new Error(`The data directory does not exist: ${dataDir}`);
+    }
+    throw error;
+  });
+  void sourceEntries;
+
   await mkdir(outDir, { recursive: true, mode: 0o700 });
   const files: BackupManifest["files"] = [];
   const sourceRoot = join(outDir, "data");
@@ -69,8 +91,8 @@ export async function createBackup(
       continue;
     }
     if (EXCLUDED_SUFFIXES.some((suffix) => entry.endsWith(suffix))) continue;
-    const source = join(dataDir, entry);
-    const target = join(sourceRoot, entry);
+    const source = safeJoin(dataDir, entry);
+    const target = safeJoin(sourceRoot, entry);
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });
     await copyFile(source, target);
     const info = await stat(source);
@@ -86,7 +108,7 @@ export async function createBackup(
     format: BACKUP_FORMAT,
     createdAt: new Date(options.now?.() ?? Date.now()).toISOString(),
     version: options.version,
-    dataDir,
+    dataDir: basename(dataDir),
     files,
     excluded: [...EXCLUDED_ROOTS, ...EXCLUDED_SUFFIXES.map((suffix) => `*${suffix}`)],
   };
@@ -121,7 +143,7 @@ export async function restoreBackup(
   );
 
   for (const file of manifest.files) {
-    const source = join(fromDir, "data", file.path);
+    const source = safeJoin(join(fromDir, "data"), file.path);
     const content = await readFile(source);
     if (content.byteLength !== file.bytes || sha256(content) !== file.sha256) {
       throw new Error(`Backup is corrupt: ${file.path} does not match its manifest`);
@@ -135,6 +157,15 @@ export async function restoreBackup(
     );
   }
 
+  try {
+    const { access, constants } = await import("node:fs/promises");
+    await access(dirname(dataDir), constants.W_OK);
+  } catch {
+    throw new Error(
+      `Cannot restore into ${dataDir}: its parent directory is not writable. Run restore from the host, or move dataDir under a writable parent.`,
+    );
+  }
+
   const stamp = new Date(options.now?.() ?? Date.now())
     .toISOString()
     .replace(/[:.]/g, "-");
@@ -143,9 +174,9 @@ export async function restoreBackup(
   await mkdir(staging, { recursive: true, mode: 0o700 });
 
   for (const file of manifest.files) {
-    const target = join(staging, file.path);
+    const target = safeJoin(staging, file.path);
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-    await copyFile(join(fromDir, "data", file.path), target);
+    await copyFile(safeJoin(join(fromDir, "data"), file.path), target);
     await chmod(target, 0o600);
   }
 
@@ -173,18 +204,43 @@ export async function restoreBackup(
 export async function dataDirFromConfig(
   configPath: string,
   fallback: string,
+  env: Record<string, string | undefined> = process.env,
 ): Promise<string> {
+  let configured: string | undefined;
   try {
     const raw = JSON.parse(await readFile(configPath, "utf8")) as {
       dataDir?: unknown;
     };
     if (typeof raw.dataDir === "string" && raw.dataDir.length > 0) {
-      return resolve(raw.dataDir);
+      configured = raw.dataDir.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name: string) =>
+        env[name] ?? match,
+      );
     }
   } catch {
     // A missing or unreadable config falls back to the platform default.
   }
-  return resolve(fallback);
+  // Same precedence as loadConfig: HUB_DATA_DIR wins, then the file, then the
+  // platform default. Resolving differently here would back up the wrong tree.
+  return resolve(env.HUB_DATA_DIR ?? configured ?? fallback);
+}
+
+/** Refuses an absolute path or one that climbs out of the root. */
+function safeJoin(root: string, relative: string): string {
+  if (
+    relative.length === 0 ||
+    relative.startsWith("/") ||
+    relative.startsWith("\\") ||
+    relative.split(/[\\/]/).includes("..") ||
+    /^[a-zA-Z]:/.test(relative)
+  ) {
+    throw new Error(`Refusing an unsafe backup path: ${relative}`);
+  }
+  const base = resolve(root);
+  const target = resolve(base, relative);
+  if (target !== base && !target.startsWith(`${base}${sep}`)) {
+    throw new Error(`Refusing a backup path outside the snapshot: ${relative}`);
+  }
+  return target;
 }
 
 async function walk(root: string, prefix = ""): Promise<string[]> {
@@ -196,6 +252,12 @@ async function walk(root: string, prefix = ""): Promise<string[]> {
       out.push(...(await walk(root, path)));
     } else if (entry.isFile()) {
       out.push(path);
+    } else if (entry.isSymbolicLink()) {
+      throw new Error(
+        `Backup does not follow symlinks: ${path}. Copy the target instead.`,
+      );
+    } else {
+      throw new Error(`Backup does not support special files: ${path}`);
     }
   }
   return out;

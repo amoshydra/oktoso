@@ -32,6 +32,9 @@ export async function runBackupCommand(
   );
 
   if (options.action === "backup") {
+    // Appends are not atomic; a snapshot taken under a running hub can certify
+    // a torn line as valid.
+    await assertHubStopped(options.configPath);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outDir = resolve(options.out ?? `oktoso-backup-${stamp}`);
     const manifest = await createBackup({
@@ -67,15 +70,15 @@ export async function runBackupCommand(
 }
 
 async function assertHubStopped(configPath: string): Promise<void> {
-  let host = "127.0.0.1";
-  let port = 8787;
+  let host = process.env.HUB_HOST ?? "127.0.0.1";
+  let port = process.env.HUB_PORT ? Number(process.env.HUB_PORT) : 8787;
   try {
     const raw = JSON.parse(await readFile(configPath, "utf8")) as {
       host?: unknown;
       port?: unknown;
     };
-    if (typeof raw.host === "string") host = raw.host;
-    if (typeof raw.port === "number") port = raw.port;
+    if (typeof raw.host === "string") host = process.env.HUB_HOST ?? raw.host;
+    if (typeof raw.port === "number") port = process.env.HUB_PORT ? Number(process.env.HUB_PORT) : raw.port;
   } catch {
     return;
   }
@@ -84,13 +87,13 @@ async function assertHubStopped(configPath: string): Promise<void> {
     const response = await fetch(url, { signal: AbortSignal.timeout(700) });
     if (response.ok) {
       throw new Error(
-        `The hub is running at ${url}. Stop it before restoring, or the running process will overwrite the restored state.`,
+        `The hub is running at ${url}. Stop it before backing up or restoring.`,
       );
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Stop it before restoring")) {
+    if (error instanceof Error && error.message.includes("Stop it before")) {
       throw error;
     }
-    // Unreachable means stopped, which is what restore needs.
+    // Unreachable means stopped, which is what these commands need.
   }
 }
