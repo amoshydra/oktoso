@@ -1,11 +1,11 @@
-# Design Lock — v1.17
+# Design Lock — v1.18
 
 Status: **frozen**.
 
-- Version: `design-v1.17`
-- Parent: `design-v1.16`
+- Version: `design-v1.18`
+- Parent: `design-v1.17`
 - Date: 2026-11-16
-- Git tag: `design-v1.17`
+- Git tag: `design-v1.18`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -24,6 +24,7 @@ Status: **frozen**.
 - v1.15 scope: the Overview destination and its usage report, the session details Data row for export, and the Settings Local data panel.
 - v1.16 scope: the mobile session-scope header, Inbox toolbar stacking, and row spacing.
 - v1.17 scope: the accessibility semantics and focus pass.
+- v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
 
 ## What is frozen
 
@@ -511,6 +512,24 @@ Routes, type, spacing, color, and focus rings are unchanged.
 - **Targets.** The chat-sidebar disclosure is 32px on desktop, matching the
   session-list contract, with 34px trailing padding.
 - **No new tokens or routes.**
+
+## Accessibility follow-ups (2026-11-16)
+
+No visual, copy, or layout change. This closes the three follow-ups from the
+v1.16 audit.
+
+- **Login QR overlay.** The camera overlay is a modal dialog with one focusable
+  control. Focus moves to Cancel on open, Tab and Shift+Tab loop inside it,
+  Escape or Cancel closes it, and focus returns to `Scan pairing QR` if it is
+  still connected. Closing aborts the scanner and stops the camera tracks.
+- **Inline panels.** The provider form and new-session panel are not modal, so
+  they do not trap Tab. They focus their first enabled field on mount (the
+  heading when no field exists) and return focus to the opener on unmount. The
+  focus is queued in a microtask so it does not race the page-title focus.
+- **Inbox live region.** A polite `.sr-only` status region announces only
+  blocking items that arrive after the first load. The initial list, ordinary
+  refreshes, and non-blocking items stay silent.
+- **No new tokens or routes.** The change is focus and ARIA behavior only.
 
 ## Change policy
 
