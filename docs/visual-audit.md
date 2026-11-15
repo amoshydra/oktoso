@@ -1144,3 +1144,101 @@ content, plus one tight row rhythm.
   420px, per the filter rule. The 44px topbar theme button keeps its 44px target
   inside the 52px bar. The details sheet keeps its pinned footer and 12px bottom
   breathing room.
+
+## Navigation and filter corrections (2026-11-15)
+
+Four IA warts survived the layout revisions: Providers had no mobile
+destination, the desktop rail still called the runtime screen `Foundation` (and
+ellipsized it), the Search status chips wrapped raggedly at 320px, and the Inbox
+two-column grid left a hole under a short card. Each was resolved by choosing the
+option that keeps one navigation model and one control grammar.
+
+### 1. Providers joins the mobile bar; Runtime leaves it
+
+The mobile bar held the runtime screen, Inbox, Sessions, Search, and Settings,
+and Providers was only reachable through Settings → Open providers. Provider
+health is an operational destination that a phone user needs exactly when
+sessions stop working, so hiding it two taps deep was the wrong trade.
+
+The bar keeps five items: **Inbox, Sessions, Search, Providers, Settings.** The
+runtime screen moves off the mobile bar and stays on the desktop rail.
+
+- Five items is the most the bar holds at 320px. At 320 each destination is
+  64px wide; the widest label, `Providers`, measures 50px, leaving 14px of
+  slack. A sixth item would make every destination 53px wide, so `Sessions`
+  (48px) and `Providers` (50px) would crowd the target and shrink the visual
+  target below the 44px mobile minimum.
+- The active-state grammar and the Inbox attention badge are unchanged: one
+  accent top line plus accent icon and label, and the 10px/700 badge on Inbox.
+- Runtime is an operator screen, not a working destination. It opens from
+  **Settings → Runtime** (`Open runtime`), which replaces the now-redundant
+  `Open providers` card. While Runtime is open, no bottom tab is current,
+  because the route sits outside the five destinations; any tab returns the
+  user to work.
+- Desktop navigation is unchanged apart from the label rename below: Runtime,
+  Inbox, Sessions, Search, Providers, Settings.
+
+### 2. `Foundation` is now `Runtime`
+
+The screen is the hub runtime: hub health, event stream, providers, and
+diagnostics. `Foundation` was a milestone name, and at 10px it was the only rail
+label that needed the 64px rail's ellipsis.
+
+- The visible label, the topbar `h1`, and the placeholder's back action now read
+  `Runtime`. The view id, the route (`/foundation`), the deep link, and the
+  router tests are unchanged, so there is no migration.
+- The rail label measures 38px in the 42px content box, so it renders in full.
+  `Runtime` was chosen over shorter options: `Hub` collides with the `Hub`
+  status card and the rail's provider-health footer, and `Status` / `Health`
+  describe only one panel of the screen.
+- The topbar subline reads `Hub health and events` instead of the redundant
+  `Hub runtime`.
+
+### 3. Search filter labels take their own line below 420px
+
+Before, the `STATUS` label shared the first chip row, so at 320px the chips
+wrapped to a second row starting at the panel's left edge while the first row
+started after the label. The provider group had the same misalignment at 390px.
+
+- At 420px and below the label is `flex: 0 0 100%`, so it owns the first line and
+  every chip row starts flush with it. Measured at 320px: the label and both chip
+  rows start at x=33 in a 288px field. The status chips fit five-to-a-row at
+  390px; at 320px they take four plus one, the same wrapping the Inbox tabs use.
+- The control stays a chip group. A native status `<select>` was the other
+  candidate: it would fit one 32px control, but it would give the two filters in
+  the same toolbar two grammars, fork the render path and the `aria-pressed`
+  state, and hide the active choice behind a closed control. The URL state
+  (`q`/`provider`/`status`), history behavior, keyboard order, and the
+  Any/Running/Idle/Error/Offline choices are unchanged.
+- No new token: the change uses the existing 4px gap, the 10px uppercase label,
+  and the existing chips.
+
+### 4. Inbox cards keep their own height
+
+At 1440px the blocking group held a 352px question card beside a 153px
+permission card, so 199px of canvas sat under the short card.
+
+This stays `align-items: start`.
+
+- `stretch` would draw the short card at 352px and leave about 200px of empty
+  interior below its actions. That reads as a card with missing content, and it
+  misrepresents how much work the item carries.
+- A column-based (masonry) layout would fill the hole with the next card, but it
+  changes reading order: the top-right card becomes the item after the first
+  column instead of the second item, and a blocking card can sit below an
+  ordinary one. Focus order would still follow the DOM, so the visual and focus
+  orders would disagree — the one thing this review must not introduce.
+- Row-major order keeps `blocking first` literal. The empty canvas is the honest
+  boundary between two cards of different sizes, and the next group always
+  starts below the tallest card.
+
+### Files
+
+- `apps/web/src/app/App.tsx`: bottom destinations, Runtime label and subline,
+  Settings runtime card, placeholder copy.
+- `apps/web/src/styles.css`: filter label line break below 420px.
+- `docs/prototypes/app.js`: the mobile mock bar shows the same five
+  destinations.
+- `docs/ui-ia.md`: navigation, runtime route, Inbox, Search, and mobile rules.
+- `tests/e2e/chat.e2e.ts`: mobile destinations, Providers route and active
+  state, Runtime via Settings, and the desktop rail labels.

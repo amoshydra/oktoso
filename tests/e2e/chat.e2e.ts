@@ -774,6 +774,55 @@ describe("responsive history surfaces", () => {
   }
 });
 
+describe("mobile navigation", () => {
+  it("keeps five destinations, exposes Providers, and leaves Runtime to Settings", async () => {
+    if (!page) throw new Error("The E2E page is not ready");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/inbox`);
+    await page.locator(".bottom-nav").waitFor();
+
+    const labels = await page
+      .locator(".bottom-nav .bottom-btn > span:last-child")
+      .allTextContents();
+    expect(labels).toEqual([
+      "Inbox",
+      "Sessions",
+      "Search",
+      "Providers",
+      "Settings",
+    ]);
+
+    await page.getByRole("button", { name: "Providers" }).click();
+    await page.locator(".bottom-nav").waitFor();
+    expect(new URL(page.url()).pathname).toBe("/providers");
+    expect(
+      await page.locator(".bottom-nav .bottom-btn.active").textContent(),
+    ).toBe("Providers");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Open runtime" }).click();
+    await page.locator(".topbar-title").waitFor();
+    expect(new URL(page.url()).pathname).toBe("/foundation");
+    expect(await page.locator(".topbar-title").textContent()).toBe("Runtime");
+    expect(await page.locator(".bottom-nav .bottom-btn.active").count()).toBe(0);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${BASE_URL}/inbox`);
+    await page.locator(".rail-item").first().waitFor();
+    const railLabels = await page
+      .locator(".rail-item .rail-label")
+      .allTextContents();
+    expect(railLabels).toEqual([
+      "Runtime",
+      "Inbox",
+      "Sessions",
+      "Search",
+      "Providers",
+      "Settings",
+    ]);
+  });
+});
+
 describe("notification settings", () => {
   it("saves routing and keeps it across a reload", async () => {
     await page!.goto(`${BASE_URL}/settings`);

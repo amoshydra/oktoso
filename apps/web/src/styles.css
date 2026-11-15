@@ -865,6 +865,14 @@
   }
 }
 
+/* The label keeps its own line once the chips can no longer share one, so a
+   wrapped group reads as one block instead of a ragged second row. */
+@media (max-width: 420px) {
+  .search-filter-label {
+    flex: 0 0 100%;
+  }
+}
+
 .session-scope {
   display: flex;
   flex: 0 0 auto;

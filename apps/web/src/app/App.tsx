@@ -154,9 +154,9 @@ const VIEW_META: Record<
   { label: string; icon: IconName; sub: string; phase: string; description: string }
 > = {
   foundation: {
-    label: "Foundation",
+    label: "Runtime",
     icon: "activity",
-    sub: "Hub runtime",
+    sub: "Hub health and events",
     phase: "0",
     description: "Hub runtime, authentication, state, and the event stream.",
   },
@@ -205,7 +205,7 @@ const RAIL_VIEWS: View[] = [
   "providers",
   "settings",
 ];
-const BOTTOM_VIEWS: View[] = ["foundation", "inbox", "sessions", "search", "settings"];
+const BOTTOM_VIEWS: View[] = ["inbox", "sessions", "search", "providers", "settings"];
 
 function viewForRoute(route: Route): View {
   switch (route.name) {
@@ -1134,12 +1134,12 @@ export function App() {
                   <article className="panel">
                     <div className="panel-head">
                       <div>
-                        <h2>Providers</h2>
-                        <p>Provider connections move under Providers.</p>
+                        <h2>Runtime</h2>
+                        <p>Hub health, the event stream, and diagnostics.</p>
                       </div>
                     </div>
-                    <button className="btn small" type="button" onClick={() => selectView("providers")}>
-                      Open providers
+                    <button className="btn small" type="button" onClick={() => selectView("foundation")}>
+                      Open runtime
                     </button>
                   </article>
                   <article className="panel">
@@ -8438,7 +8438,7 @@ function Placeholder(props: { view: View; onBack: () => void }) {
         <p>{item.description} This screen is not wired to the hub yet.</p>
       </div>
       <button className="btn small" type="button" onClick={props.onBack}>
-        Back to Foundation
+        Back to Runtime
       </button>
     </section>
   );

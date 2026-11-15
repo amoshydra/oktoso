@@ -35,6 +35,11 @@ The interface should feel like a workbench, not a marketing dashboard. Dense eno
 
 ```text
 Oktoso
+├─ Runtime
+│  ├─ Hub health
+│  ├─ Event stream
+│  ├─ Providers
+│  └─ Diagnostics
 ├─ Inbox
 │  ├─ Needs approval
 │  ├─ Needs an answer
@@ -77,6 +82,8 @@ Oktoso
 
 The global navigation has five destinations: Inbox, Sessions, Search, Providers, Settings. A session is a contextual route opened from Inbox or Sessions, not a global destination.
 
+The desktop rail adds one more destination, Runtime, which is the hub health, event stream, and diagnostics screen at `/foundation`. It is an operator surface rather than a working surface, so it stays on the desktop rail and is reached from Settings on mobile. The route keeps its `foundation` id to avoid a migration; only the visible label is `Runtime`.
+
 ### History behavior
 
 Every screen, session, overlay, and filter change that represents navigation is addressable by URL and participates in browser history.
@@ -92,7 +99,7 @@ Every screen, session, overlay, and filter change that represents navigation is 
 
 ### Desktop
 
-- **Left rail:** global destinations with icons and labels. Labels stay on one line and ellipsize inside the 64px rail; hover exposes the full name. Provider health sits at the bottom.
+- **Left rail:** global destinations with icons and labels, led by Runtime (hub health) and then Inbox, Sessions, Search, Providers, and Settings. Labels stay on one line and ellipsize inside the 64px rail; hover exposes the full name. Provider health sits at the bottom.
 - **Session sidebar:** search, filters, provider groups, project groups, session rows. This is the main browsing surface.
 - **Main area:** inbox, session list, chat, provider settings, or search results.
 - **Right details panel:** session metadata, provider link, model, agent, cost, tokens, parent session, and destructive actions.
@@ -105,12 +112,12 @@ Every screen, session, overlay, and filter change that represents navigation is 
 
 ### Mobile
 
-- Bottom navigation: Inbox, Sessions, Search, Settings.
+- Bottom navigation: Inbox, Sessions, Search, Providers, Settings. Five 64px items is what a 320px screen holds without crowding or truncation.
 - Sessions is the home list.
 - Chat opens as a full-screen route.
 - Details and filters open as bottom sheets.
 - New session is a floating action button on Sessions and Inbox.
-- Providers live inside Settings on mobile.
+- Runtime is an operator screen and has no tab of its own: it opens from Settings → Runtime. While it is open no bottom tab is current, because the route is outside the five destinations.
 
 ### Glasses
 
@@ -207,6 +214,7 @@ The inbox is the default screen when something needs attention. It groups items 
 - Blocking items always come first.
 - At 420px and below the filter chips take the full toolbar width and wrap; Refresh moves to its own right-aligned row under them. Above that, the tabs and Refresh share one row.
 - At 1200px and above, cards form a two-column grid inside each group. Each card keeps its own height (`align-items: start`); a blocking card is no wider than any other card and is distinguished by its amber edge, not by spanning the grid.
+- Cards in a row are not stretched to a shared height. A tall question form and a short permission card legitimately differ, and stretching the short card would draw a 150-200px empty interior while implying the two cards carry the same amount of work. The canvas under the short card is the honest boundary; the next group starts after the tallest card.
 - Each card shows type, provider, session title, age, a one-line summary, and actions.
 - A card opens the session when the user clicks the title or the Open action.
 - Approval actions complete in place. A successful action removes the card with a short transition and updates the badge.
@@ -440,6 +448,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 
 - Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
 - At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
+- At 420px and below each filter's uppercase label takes its own line and the chips wrap under it, left-aligned to the label. A wrapped group therefore reads as one block instead of a second row starting under the label's right edge. The control stays a chip group: the URL state, keyboard order, and the Any/Running/Idle/Error/Offline choices are unchanged.
 - First release searches session titles, projects, directories, and agents through the hub session cache.
 - Provider and status filters mirror the Sessions view.
 - Results show title, provider, project or directory, status, and unread or attention cues.
@@ -456,6 +465,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
 - Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.
 - About: hub version, provider versions, build info.
+- Runtime: one quiet `Open runtime` action that opens the hub health and diagnostics screen. It is the only path to that screen on mobile.
 
 ## 12. States
 
@@ -571,7 +581,7 @@ The type scale has six roles, not a continuum of half-steps:
 │   Hermes · 1h · needs answer     │
 │                                  │
 ├──────────────────────────────────┤
-│  Inbox   Sessions   Search  Set  │
+│ Inbox Sessions Search Prov Set   │
 └──────────────────────────────────┘
 ```
 
@@ -596,7 +606,7 @@ Chat on mobile:
 └──────────────────────────────────┘
 ```
 
-- Bottom nav has four destinations. Providers move under Settings.
+- Bottom nav has five destinations: Inbox, Sessions, Search, Providers, Settings. Runtime opens from Settings.
 - Chat is a full-height route with a back button and the session title in the topbar. The bottom navigation remains visible.
 - Details open as a bottom sheet with a pinned footer.
 - The composer is pinned above the bottom navigation, safe area, and keyboard.
