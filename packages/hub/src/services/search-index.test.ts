@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -317,5 +317,148 @@ describe("SearchIndexService", () => {
     expect(index.search("old")).toHaveLength(0);
     expect(index.search("new")[0]?.ref).toBe("a:1");
     expect(index.search("removed")).toHaveLength(0);
+  });
+
+  it("keeps scores correct when a revised session is compacted", async () => {
+    const rootA = await root();
+    const churn = new SearchIndexService({ root: rootA, logger });
+    await churn.init([]);
+    const original = transcript({
+      ref: "a:1",
+      updatedAt: 1,
+      messages: [message("m1", "alpha alpha alpha")],
+    });
+    await churn.update(original);
+    await churn.update({
+      ...original,
+      updatedAt: 2,
+      messages: [message("m2", "alpha")],
+    });
+    const others = Array.from({ length: 70 }, (_, index) =>
+      transcript({
+        ref: `c:${index}`,
+        title: `Ordinary ${index}`,
+        updatedAt: 1,
+        messages: [message(`x${index}`, `unrelated payload ${index}`)],
+      }),
+    );
+    for (const entry of others) await churn.update(entry);
+
+    const clean = new SearchIndexService({ root: await root(), logger });
+    await clean.init([]);
+    await clean.update({ ...original, updatedAt: 2, messages: [message("m2", "alpha")] });
+    for (const entry of others) await clean.update(entry);
+
+    const churned = churn.search("alpha")[0]!;
+    const fresh = clean.search("alpha")[0]!;
+    expect(churned.messageID).toBe("m2");
+    expect(churned.score).toBeCloseTo(fresh.score, 6);
+  });
+
+  it("does not resurrect a removed session after a reload", async () => {
+    const directory = await root();
+    const index = new SearchIndexService({ root: directory, logger });
+    await index.init([]);
+    await index.update(
+      transcript({ ref: "a:1", messages: [message("m1", "alpha body")] }),
+    );
+    await index.update(
+      transcript({ ref: "b:2", messages: [message("m2", "beta body")] }),
+    );
+    await index.remove("b:2");
+    await index.whenIdle();
+    const before = index.stats().documents;
+
+    const reloaded = new SearchIndexService({ root: directory, logger });
+    await reloaded.init([]);
+
+    expect(reloaded.stats().documents).toBe(before);
+    expect(reloaded.search("beta")).toEqual([]);
+    expect(reloaded.search("alpha")[0]?.ref).toBe("a:1");
+  });
+
+  it("rejects a snapshot whose files disagree", async () => {
+    const directory = await root();
+    const index = new SearchIndexService({ root: directory, logger });
+    await index.init([]);
+    await index.update(
+      transcript({ ref: "a:1", messages: [message("m1", "alpha body")] }),
+    );
+    await index.whenIdle();
+
+    const postings = await readFile(join(directory, "postings.bin"));
+    postings[8] = (postings[8]! + 1) % 256;
+    await writeFile(join(directory, "postings.bin"), postings);
+
+    const reloaded = new SearchIndexService({ root: directory, logger });
+    await reloaded.init([]);
+    expect(reloaded.stats().documents).toBe(0);
+    expect(reloaded.search("alpha")).toEqual([]);
+  });
+
+  it("leaves nothing when cleared while a write is pending", async () => {
+    const directory = await root();
+    const index = new SearchIndexService({ root: directory, logger });
+    await index.init([]);
+    await index.update(
+      transcript({ ref: "a:1", messages: [message("m1", "alpha body")] }),
+    );
+    const flush = index.whenIdle();
+    await index.clear();
+    await flush;
+
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  it("orders ties the same way regardless of query word order", async () => {
+    const index = await setup();
+    await index.update(
+      transcript({ ref: "a:1", messages: [message("m1", "alpha beta")] }),
+    );
+    await index.update(
+      transcript({ ref: "b:2", messages: [message("m2", "alpha beta")] }),
+    );
+
+    const forwards = index.search("alpha beta", { scope: "session" });
+    const backwards = index.search("beta alpha", { scope: "session" });
+
+    expect(forwards.map((hit) => hit.ref)).toEqual(backwards.map((hit) => hit.ref));
+  });
+
+  it("keeps one candidate per session for the session scope", async () => {
+    const index = await setup();
+    await index.update(
+      transcript({
+        ref: "a:1",
+        messages: [
+          message("m1", "shared phrase", 1),
+          message("m2", "shared phrase again", 2),
+        ],
+      }),
+    );
+
+    expect(index.search("shared").length).toBe(2);
+    expect(index.search("shared", { scope: "session" }).length).toBe(1);
+  });
+
+  it("does not grow the session table when one session is revised", async () => {
+    const directory = await root();
+    const index = new SearchIndexService({ root: directory, logger });
+    await index.init([]);
+    for (let revision = 0; revision < 40; revision += 1) {
+      await index.update(
+        transcript({
+          ref: "a:1",
+          updatedAt: revision,
+          messages: [message(`m${revision}`, `revision ${revision}`)],
+        }),
+      );
+    }
+    await index.whenIdle();
+
+    const meta = JSON.parse(
+      await readFile(join(directory, "meta.json"), "utf8"),
+    ) as { sessions: unknown[] };
+    expect(meta.sessions).toHaveLength(1);
   });
 });

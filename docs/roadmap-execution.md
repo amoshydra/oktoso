@@ -366,16 +366,18 @@ Status: done. `SearchIndexService` is a hand-rolled inverted index over the
 cached transcripts, in memory as typed arrays with a binary posting snapshot
 under `dataDir/search`.
 
-- [x] Choose the index: hand-rolled. The spike measured a 500-session fixture
-  against MiniSearch and SQLite FTS5 (`/tmp/oktoso-index-spike`): at p95 the
-  hand-rolled index answered in 2.7 ms versus 5.5 ms and 10.3 ms, reloaded in
-  10 ms versus 450 ms and 0.3 ms, and used 5 MB of heap versus 141 MB. FTS5
-  stays the runner-up if phrases and snippets ever justify a database.
+- [x] Choose the index: hand-rolled. A 500-session spike compared it with
+  MiniSearch and SQLite FTS5: at p95 the hand-rolled index answered in 2.7 ms
+  versus 5.5 ms and 10.3 ms, and used 5 MB of heap versus 141 MB. FTS5 stays the
+  runner-up if phrases and snippets ever justify a database. The committed
+  harness (`scripts/bench-search.ts`) measures this implementation at 1.6 ms
+  p50 / 2.5 ms p95, 55 ms reload, and +12 MB of heap.
 - [x] Index message text, role, session title, and project. Identifiers split on
   camelCase and snake_case, so `sessionService` matches `session`.
 - [x] Update incrementally; rebuild on schema change. Writes land in a delta
-  layer that compacts into a fresh seal; an unreadable or outdated snapshot
-  rebuilds from the cache.
+  layer that compacts into a fresh seal. At start the snapshot is loaded and
+  reconciled against the cache in the background; an unreadable or inconsistent
+  snapshot is discarded and rebuilt.
 - [x] Persist under `dataDir`; bounded memory. `meta.json` plus a binary
   postings file (14 MB for 500 sessions), one document table of typed arrays,
   and snippets capped at 200 characters.

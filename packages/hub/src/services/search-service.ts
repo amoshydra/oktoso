@@ -4,8 +4,9 @@ import type {
   SearchResult,
 } from "@amoshydra/oktoso-contracts";
 import { badRequest } from "../domain/errors";
-import type { SearchHit, SearchIndexService } from "./search-index";
+import { snippetAround, type SearchHit, type SearchIndexService } from "./search-index";
 import type { SessionService } from "./session-service";
+import type { TranscriptCacheService } from "./transcript-cache";
 
 /** Hard ceiling on the candidates one query may rank. */
 const MAX_CANDIDATES = 500;
@@ -13,6 +14,8 @@ const MAX_CANDIDATES = 500;
 export interface SearchServiceOptions {
   index: SearchIndexService;
   sessions: SessionService;
+  /** Optional: used to re-snippet a deep match whose stored excerpt misses it. */
+  cache?: TranscriptCacheService;
 }
 
 /**
@@ -29,16 +32,14 @@ export class SearchService {
     const limit = query.limit ?? 20;
     const offset = decodeCursor(query.cursor);
     const scope = query.scope ?? "all";
-    // Message hits collapse into fewer session rows, so ask for more of them.
-    const wanted = Math.min(
-      MAX_CANDIDATES,
-      Math.max(limit + offset + 1, (limit + offset + 1) * (scope === "messages" ? 2 : 8)),
-    );
+    const wanted = Math.min(MAX_CANDIDATES, offset + limit + 1);
 
     const hits = this.options.index.search(query.q, {
       limit: wanted,
       ...(query.provider ? { providerID: query.provider } : {}),
-      ...(scope === "messages" ? { kind: "message" as const } : {}),
+      ...(scope === "messages"
+        ? { kind: "message" as const }
+        : { scope: "session" as const }),
     });
 
     const best = new Map<string, SearchHit>();
@@ -80,6 +81,7 @@ export class SearchService {
     );
 
     const page = rows.slice(offset, offset + limit);
+    await this.refreshSnippets(page, query.q);
     return {
       data: page,
       cursor: {
@@ -88,6 +90,28 @@ export class SearchService {
       },
       ready: this.options.index.stats().ready,
     };
+  }
+
+  /**
+   * A document's stored excerpt is its first 200 characters, so a deep match
+   * can land outside it. When the transcript is still cached, re-cut the
+   * snippet from the message text; otherwise the stored excerpt stands.
+   */
+  private async refreshSnippets(page: SearchResult[], query: string): Promise<void> {
+    const cache = this.options.cache;
+    if (!cache || page.length === 0) return;
+    const terms = query.toLowerCase();
+    await Promise.all(
+      page.map(async (row) => {
+        if (!row.snippet || row.snippet.toLowerCase().includes(terms)) return;
+        if (!row.messageID) return;
+        const transcript = await cache.read(row.ref, { touch: false });
+        const message = transcript?.messages.find(
+          (entry) => entry.id === row.messageID,
+        );
+        if (message) row.snippet = snippetAround(message.text, query);
+      }),
+    );
   }
 }
 

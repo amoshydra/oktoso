@@ -633,7 +633,7 @@ export class SessionService {
           cause: error,
         });
       }
-      throw new AppError("internal", message, 502, {
+      throw new AppError("internal", message, 500, {
         retryable: false,
         details: { ref: session.ref },
         cause: error,

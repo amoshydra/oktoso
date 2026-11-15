@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message, MessagePage, Session } from "@amoshydra/oktoso-contracts";
@@ -382,5 +382,51 @@ describe("TranscriptCacheService", () => {
     await service.init();
 
     expect(service.stats().sessions).toBe(0);
+  });
+
+  it("does not count a startup sweep as recent use", async () => {
+    let now = 1_000;
+    const { service, directory } = await setup({ enabled: true, now: () => now });
+    await service.record(session({ ref: "test:old" }), page([message("m1", 1)]));
+    now = 2_000;
+    await service.record(session({ ref: "test:fresh" }), page([message("m2", 2)]));
+    now = 3_000;
+    await service.read("test:old");
+    await service.whenIdle();
+
+    const readIndex = async () =>
+      JSON.parse(await readFile(join(directory, "index.json"), "utf8")) as {
+        entries: Record<string, { lastUsedAt: number }>;
+      };
+    const before = await readIndex();
+
+    await service.all();
+    await service.whenIdle();
+    const after = await readIndex();
+
+    expect(after.entries["test:old"]?.lastUsedAt).toBe(
+      before.entries["test:old"]?.lastUsedAt,
+    );
+    expect(after.entries["test:fresh"]?.lastUsedAt).toBe(
+      before.entries["test:fresh"]?.lastUsedAt,
+    );
+  });
+
+  it("reports the bytes it actually writes", async () => {
+    const { service, directory } = await setup({ enabled: true });
+    await service.record(
+      session(),
+      page([message("m1", 1, "a reasonably long message body")]),
+    );
+
+    const entries = service.stats();
+    const names = await readdir(directory);
+    let fileBytes = 0;
+    for (const name of names) {
+      if (name === "index.json") continue;
+      fileBytes += (await stat(join(directory, name))).size;
+    }
+
+    expect(entries.bytes).toBe(fileBytes);
   });
 });

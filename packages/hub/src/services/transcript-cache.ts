@@ -194,8 +194,14 @@ export class TranscriptCacheService {
     }
   }
 
-  /** Read a cached transcript and mark it recently used. */
-  async read(ref: string): Promise<CachedTranscript | undefined> {
+  /**
+   * Read a cached transcript. `touch` updates the LRU clock; internal bulk
+   * reads (startup reconcile) pass false so boot does not flatten the order.
+   */
+  async read(
+    ref: string,
+    options: { touch?: boolean } = {},
+  ): Promise<CachedTranscript | undefined> {
     if (!this.enabled) return undefined;
     await this.ensureReady();
     const entry = this.index.entries[ref];
@@ -209,8 +215,10 @@ export class TranscriptCacheService {
       await this.remove(ref);
       return undefined;
     }
-    entry.lastUsedAt = this.now();
-    this.schedulePersist();
+    if (options.touch !== false) {
+      entry.lastUsedAt = this.now();
+      this.schedulePersist();
+    }
     return transcript;
   }
 
@@ -220,7 +228,7 @@ export class TranscriptCacheService {
     await this.ensureReady();
     const transcripts: CachedTranscript[] = [];
     for (const ref of Object.keys(this.index.entries)) {
-      const transcript = await this.read(ref);
+      const transcript = await this.read(ref, { touch: false });
       if (transcript) transcripts.push(transcript);
     }
     return transcripts.sort((left, right) => right.storedAt - left.storedAt);
@@ -281,27 +289,28 @@ export class TranscriptCacheService {
       return;
     }
 
-    const { messages: bounded, truncated } = truncate(messages);
-    const stored: CachedTranscript = {
+    const draft: CachedTranscript = {
       ref,
       updatedAt: session.updatedAt,
       providerID: session.providerID,
       ...(session.title ? { title: session.title } : {}),
       ...(session.project ? { project: session.project } : {}),
       complete,
-      truncated,
-      messages: bounded,
+      truncated: false,
+      messages,
       storedAt: this.now(),
     };
-    const payload = JSON.stringify(stored);
+    // Trim against the exact bytes that hit the disk, so the cap is real.
+    const stored = fitToCap(draft);
+    const bytes = serializedBytes(stored);
     await writeJsonAtomic(this.pathFor(ref), stored);
 
     this.index.entries[ref] = {
       updatedAt: stored.updatedAt,
       storedAt: stored.storedAt,
       lastUsedAt: this.now(),
-      bytes: Buffer.byteLength(payload),
-      messageCount: bounded.length,
+      bytes,
+      messageCount: messages.length,
       complete,
     };
     await this.enforceLimits();
@@ -452,6 +461,11 @@ function projectMessages(messages: Message[]): CachedMessage[] {
   return projected;
 }
 
+/** Matches the serializer `writeJsonAtomic` uses, so the byte budget is real. */
+function serializedBytes(value: unknown): number {
+  return Buffer.byteLength(`${JSON.stringify(value, null, 2)}\n`);
+}
+
 function mergeMessages(
   existing: CachedMessage[],
   incoming: CachedMessage[],
@@ -465,19 +479,16 @@ function mergeMessages(
   });
 }
 
-/** Keeps the newest messages that fit, and says so. */
-function truncate(messages: CachedMessage[]): {
-  messages: CachedMessage[];
-  truncated: boolean;
-} {
-  let bytes = Buffer.byteLength(JSON.stringify(messages));
-  if (bytes <= MAX_TRANSCRIPT_BYTES) return { messages, truncated: false };
-  const kept = [...messages];
-  while (kept.length > 1 && bytes > MAX_TRANSCRIPT_BYTES) {
-    kept.shift();
-    bytes = Buffer.byteLength(JSON.stringify(kept));
+/** Drops the oldest messages until the whole stored object fits the cap. */
+function fitToCap(stored: CachedTranscript): CachedTranscript {
+  let messages = stored.messages;
+  if (serializedBytes(stored) <= MAX_TRANSCRIPT_BYTES) return stored;
+  while (messages.length > 1) {
+    messages = messages.slice(1);
+    const candidate = { ...stored, messages, truncated: true };
+    if (serializedBytes(candidate) <= MAX_TRANSCRIPT_BYTES) return candidate;
   }
-  return { messages: kept, truncated: true };
+  return { ...stored, messages, truncated: true };
 }
 
 /**
