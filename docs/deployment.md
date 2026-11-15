@@ -168,6 +168,10 @@ schedule triggers under a policy.
 - `answer` acts only on a normal, single, non-free-text, non-multi-select
   question whose explicit choices are all non-destructive and non-sensitive.
   Everything else becomes a pending approval.
+- Answers to provider forms are delivered through the provider's form reply,
+  not as a chat message. A form that offers a free-text answer always escalates;
+  OpenCode adds that option to every form, so its `answer` watchers act only
+  after a human approves or always-allows the shape.
 - Every run is leased per watcher + attention id, so duplicate events cannot
   act twice.
 - Budgets are global and per watcher. Pause everything or one watcher from

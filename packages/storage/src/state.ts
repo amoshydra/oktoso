@@ -62,6 +62,8 @@ export const zAutomationApprovalState = zAutomationApproval
         text: z.string().min(1),
         label: z.string().optional(),
         answers: z.array(zSendAnswer).min(1),
+        /** Provider form values; a message send does not resolve a form. */
+        fields: z.record(z.string(), z.string()).optional(),
       })
       .optional(),
     /** The shape to remember if a human chooses "always allow". */

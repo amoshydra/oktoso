@@ -232,12 +232,13 @@ the branch merges; nothing is published from the worktree.
 
 Target: 4–6 weeks. Shipped in `v0.2.0` together with Phase 3.
 
-Status: complete except real-provider validation. Attention,
-session-idle/error, and schedule watchers are implemented, with the low-risk
-answer policy, dry-run, leases, budgets, quiet hours,
+Status: complete, including validation against a real OpenCode provider.
+Attention, session-idle/error, and schedule watchers are implemented, with the
+low-risk answer policy, dry-run, leases, budgets, quiet hours,
 notify/retry/escalate/start actions, approvals in the Inbox and Settings,
 always-allow shapes, runs, pause with an in-flight abort, MCP tools, and the
-CLI. Remaining: approval execution on a real provider.
+CLI. Validation found and fixed one integration bug: answers now go through the
+provider form action instead of a chat message, which did not resolve the form.
 
 ### B1. Contracts
 
@@ -323,7 +324,13 @@ CLI. Remaining: approval execution on a real provider.
 - [x] Session idle/error and schedule triggers fire once.
 - [x] Retry-once and retry-action tests.
 - [x] Kill switch stops an action mid-flight.
-- [ ] Approval execution on a real provider.
+- [x] Approval execution on a real provider. Verified on OpenCode 2.3.0: an
+  escalated form is answered from the approval queue and the `question` tool
+  ends `completed`. The answer path uses the provider form action, because a
+  plain message leaves the form pending.
+- [x] A form that offers a free-text answer is never auto-answered. OpenCode
+  forms always add that option, so on OpenCode every `answer` watcher escalates;
+  only an approved or always-allowed shape answers.
 
 **Phase done:** the acceptance in `roadmap.md` passes on fake providers and one
 real session.
