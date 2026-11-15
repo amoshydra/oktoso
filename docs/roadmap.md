@@ -1,8 +1,8 @@
 # Oktoso — naming and roadmap
 
-Status: Phase 0, Phase 1, and Phase 2 complete; `v0.1.28` is published. This
-revision is the 2026-11-14 project audit and re-plan. The phase-level work
-breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
+Status: Phase 0, Phase 1, and Phase 2 complete; Phase 3 complete; Phase 4
+complete except real-provider validation. `v0.2.0` is published. This revision is the 2026-11-14 project audit and re-plan. The
+phase-level work breakdown is in [`roadmap-execution.md`](roadmap-execution.md).
 
 ## Name
 
@@ -236,7 +236,7 @@ sessions, reads a transcript, and acts on an attention item; writes to its own
 session are rejected, destructive actions require approval, and resource
 subscribers see attention updates.
 
-### Phase 3 — Always-on attention (complete, A7 deferred)
+### Phase 3 — Always-on attention (complete)
 
 Goal: the hub reaches you. A blocking question, a failed run, or a finished
 long-running session arrives on the phone with the app closed, and tapping it
@@ -249,8 +249,8 @@ Deliverables:
 
 - Web Push (VAPID) from the hub, with a service worker, subscription lifecycle,
   and `410 Gone` cleanup.
-- Outbound channels (deferred): ntfy, Telegram, and a generic webhook. Local-
-  first for now; add the generic webhook first when a LAN consumer exists.
+- Web Push is the only outbound channel. There is no ntfy, Telegram, or
+  webhook sender, and none is planned.
 - Routing rules: blocking immediate, unread/error digest, quiet hours, and
   coalescing ("3 questions from 2 sessions").
 - Installable PWA: offline shell, cached session list, queued sends, and a
@@ -280,7 +280,7 @@ Deliverables:
   `session.idle`, and schedule.
 - Actions: notify, auto-answer, escalate, retry, and start-from-template.
 - Risk policy: allowlist of low-risk question shapes, destructive and sensitive
-  escalation, quiet hours, actions per hour, and token budget per day.
+  escalation, quiet hours, and actions per hour and per day.
 - Approval queue reusing the inbox grammar, with an audit trail per run.
 - Dry-run mode on by default for every new watcher.
 - Global and per-watcher pause.
