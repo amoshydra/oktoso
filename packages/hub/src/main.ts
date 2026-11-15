@@ -25,6 +25,7 @@ import {
 import { createTheme } from "./cli/terminal";
 import { runMcpCommand } from "./cli/mcp-command";
 import { runAutomationCommand } from "./cli/automation-command";
+import { runBackupCommand } from "./cli/backup-command";
 import { TerminalUi } from "./cli/tui";
 import type { PairingLinkInfo, UiSnapshot } from "./cli/types";
 import {
@@ -273,6 +274,27 @@ async function main(): Promise<void> {
     } catch (error) {
       process.stderr.write(
         `Automation command failed: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (options.command === "backup" || options.command === "restore") {
+    try {
+      await runBackupCommand({
+        action: options.command,
+        configPath: options.configPath,
+        version: VERSION,
+        ...(options.out ? { out: options.out } : {}),
+        ...(options.from ? { from: options.from } : {}),
+        ...(options.force ? { force: true } : {}),
+      });
+    } catch (error) {
+      process.stderr.write(
+        `${options.command === "backup" ? "Backup" : "Restore"} failed: ${
           error instanceof Error ? error.message : String(error)
         }\n`,
       );
