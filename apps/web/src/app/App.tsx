@@ -7813,6 +7813,20 @@ function SessionDetails(props: {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [overlay]);
 
+  useEffect(() => {
+    if (overlay) return;
+    // Above 1320px details is a column, not a modal, but Escape remains a
+    // shortcut. Nested previews and composer sheets stop their own Escape
+    // before it reaches this listener.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      props.onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [overlay, props.onClose]);
+
   const copyReference = async () => {
     setNotice(undefined);
     try {
