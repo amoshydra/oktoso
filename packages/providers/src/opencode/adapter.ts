@@ -1326,17 +1326,15 @@ export function openCodeSessionStatus(
   now = Date.now(),
 ): SessionStatus {
   const { busy, idle } = raw.time;
-  if (busy !== undefined) {
-    if (idle === undefined) {
-      // A busy run that has not updated for half an hour is stuck. OpenCode can
-      // leave `busy` set after a failed form/question tool; without this, the
-      // session never leaves running and the composer only offers Steer.
-      if (now - raw.time.updated > STALE_RUNNING_MS) {
-        return raw.outcome === "failed" ? "error" : "idle";
-      }
-      return "running";
+  if (busy !== undefined && (idle === undefined || busy > idle)) {
+    // A busy run that has not updated for half an hour is stuck. OpenCode can
+    // leave `busy` set after a failed form/question tool; without this, the
+    // session never leaves running and the composer only offers Steer. This
+    // applies whether or not a previous run left an `idle` timestamp.
+    if (now - raw.time.updated > STALE_RUNNING_MS) {
+      return raw.outcome === "failed" ? "error" : "idle";
     }
-    if (busy > idle) return "running";
+    return "running";
   }
   // No busy marker means no active run. A session may update its title,
   // metadata, folder, or fork pointer without ever setting busy; treating

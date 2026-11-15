@@ -413,6 +413,7 @@ describe("openCodeSessionStatus", () => {
     expect(
       openCodeSessionStatus(
         session({ updated: 3_000, busy: 3_000, idle: 2_000 }, "succeeded"),
+        3_000,
       ),
     ).toBe("running");
   });
@@ -439,6 +440,7 @@ describe("openCodeSessionStatus", () => {
     expect(
       openCodeSessionStatus(
         session({ updated: 3_000, busy: 3_000, idle: 2_000 }, "failed"),
+        3_000,
       ),
     ).toBe("running");
   });
@@ -481,6 +483,15 @@ describe("openCodeSessionStatus", () => {
     expect(
       openCodeSessionStatus(
         session({ updated: 2_000, busy: 1_500 }),
+        2_000 + STALE_RUNNING_MS + 1,
+      ),
+    ).toBe("idle");
+  });
+
+  it("treats a stale busy run after a previous idle as idle", () => {
+    expect(
+      openCodeSessionStatus(
+        session({ updated: 2_000, busy: 3_000, idle: 1_500 }),
         2_000 + STALE_RUNNING_MS + 1,
       ),
     ).toBe("idle");
