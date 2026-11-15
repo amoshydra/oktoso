@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session, SessionListQuery } from "@amoshydra/oktoso-contracts";
+import { ProviderError } from "@amoshydra/oktoso-providers";
 import type { ProviderAdapter } from "@amoshydra/oktoso-providers";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { createLogger } from "../lib/logger";
@@ -168,28 +169,60 @@ describe("SessionService create", () => {
     expect((await sessions.list({})).data).toHaveLength(1);
   });
 
-  it("keeps the session and names it when the first prompt fails", async () => {
+  it("keeps the provider error code when the first prompt fails", async () => {
     const { adapter } = createAdapter({
       async sendMessage() {
-        throw Object.assign(new Error("provider said no"), {
-          name: "ProviderError",
-          code: "invalid_request",
-          status: 400,
+        throw new ProviderError("rate_limited", "provider said no", {
+          status: 429,
         });
       },
+    });
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    const failure = await sessions
+      .create({
+        providerID: "test",
+        title: "First prompt fails",
+        text: "Hello",
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderError);
+    expect(failure).toMatchObject({
+      code: "rate_limited",
+      status: 429,
+      details: { ref: "test:ses_created" },
+      message: expect.stringContaining("test:ses_created"),
+    });
+  });
+
+  it("refuses a first prompt when the provider cannot send", async () => {
+    const { adapter, calls } = createAdapter({
+      capabilities: { create: true, send: false, attach: false },
     });
     const sessions = new SessionService(makeRegistry([adapter]), logger);
 
     await expect(
       sessions.create({
         providerID: "test",
-        title: "First prompt fails",
+        title: "Cannot send",
         text: "Hello",
       }),
-    ).rejects.toMatchObject({
-      details: { ref: "test:ses_created" },
-      message: expect.stringContaining("test:ses_created"),
+    ).rejects.toThrow(/cannot send messages/);
+    expect(calls).toEqual([]);
+  });
+
+  it("returns the running session after the first prompt", async () => {
+    const { adapter } = createAdapter();
+    const sessions = new SessionService(makeRegistry([adapter]), logger);
+
+    const created = await sessions.create({
+      providerID: "test",
+      title: "Running",
+      text: "Hello",
     });
+
+    expect(created.status).toBe("running");
   });
 });
 
