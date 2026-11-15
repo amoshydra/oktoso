@@ -35,6 +35,10 @@ The interface should feel like a workbench, not a marketing dashboard. Dense eno
 
 ```text
 Oktoso
+├─ Overview
+│  ├─ Usage
+│  ├─ Runtime status
+│  └─ Event stream
 ├─ Inbox
 │  ├─ Needs approval
 │  ├─ Needs an answer
@@ -59,8 +63,9 @@ Oktoso
 │  ├─ Model
 │  └─ First prompt
 ├─ Search
+│  ├─ Scope (Sessions, Messages)
 │  ├─ Sessions
-│  ├─ Messages (later)
+│  ├─ Messages
 │  └─ Filters
 ├─ Providers
 │  ├─ Connection
@@ -75,7 +80,7 @@ Oktoso
    └─ About
 ```
 
-The global navigation has five destinations: Inbox, Sessions, Search, Providers, Settings. A session is a contextual route opened from Inbox or Sessions, not a global destination.
+The global navigation has six destinations: Overview, Inbox, Sessions, Search, Providers, Settings. Overview is the default route. A session is a contextual route opened from Inbox or Sessions, not a global destination.
 
 ### History behavior
 
@@ -105,7 +110,7 @@ Every screen, session, overlay, and filter change that represents navigation is 
 
 ### Mobile
 
-- Bottom navigation: Inbox, Sessions, Search, Settings.
+- Bottom navigation: Overview, Inbox, Sessions, Search, Settings. The bar holds five items; a sixth requires shortening every label or moving to icons only.
 - Sessions is the home list.
 - Chat opens as a full-screen route.
 - Details and filters open as bottom sheets.
@@ -170,7 +175,17 @@ Every screen, session, overlay, and filter change that represents navigation is 
 - At widths below 761 px, use the mobile layout: single column, bottom navigation, and full-screen chat.
 - At 761–1100 px, the session sidebar narrows to 300 px and session rows return to the two-line title-and-facts layout.
 
-## 5. Inbox
+## 5. Overview
+
+- Overview is the default route and the only hub-wide report. It answers "what has this cost, and is the hub healthy?" in that order.
+- **Usage** comes first: a panel with a `Group by` chip row (Provider, Project, Model, Day) and a table of group, sessions, tokens, cost. Counts, tokens, and cost are right-aligned with tabular figures; an unreported figure is an em dash, never `0` or `$0.00`. The last row is `Reported total`, and a note states how many sessions did not report each figure.
+- At 1100px and above the report is a table. Below, each row stacks as label and count, then `4.2M tokens · $12.40`.
+- Day grouping follows each session's last update, never per-message usage; the note says so.
+- The panel head states how many sessions were counted, so a bounded client-side walk never claims to be the whole history.
+- Runtime status cards, the provider panel, the event stream, and diagnostics follow the report. There is no hero: the phase-0 runtime banner and its roadmap copy are gone, because it repeated the page title at 20px and made a claim that is no longer true.
+- States: no sessions, no reported usage (dashes plus the count note), loading, and an inline error inside the panel.
+
+## 6. Inbox
 
 The inbox is the default screen when something needs attention. It groups items by what the user must do.
 
@@ -213,7 +228,7 @@ The inbox is the default screen when something needs attention. It groups items 
 - Empty state: "Nothing needs you. Browse sessions or start a new chat."
 - The inbox refreshes through SSE. A manual refresh is available but not required.
 
-## 6. Sessions
+## 7. Sessions
 
 The sessions view is the full browsing surface.
 - The first page is cached in local storage after a successful load. When the hub is unreachable, the list renders that page and shows a quiet `Offline · showing the last synced list from <time>` line with Retry instead of an empty error. A cold load with no cache keeps the normal error state.
@@ -273,7 +288,7 @@ The sessions view is the full browsing surface.
 - Optional: group by provider or project.
 - Collapsed groups remember their state per device.
 
-## 7. Session and chat
+## 8. Session and chat
 
 The session view is the core reading and reply surface.
 
@@ -286,6 +301,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It is the only title in the view.
 - The transcript opens with a quiet context strip: project, agent, model, and the status chip. It has no document title and no second sticky header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
+- Details gains a **Data** row with `Export Markdown` and `Export JSON` links once C7 ships; the format is the choice, so there is no menu.
 - Details gains a **Lineage** section when the session belongs to a family: one indented row per session from the root down, the current row marked with the accent inset. Each row is a button that opens that session; the header says how many sessions the tree holds and marks it partial when a cap cut it. A lone session shows no section at all.
 - The topbar theme toggle is a 32px icon control with an outcome label (`Switch to light theme` / `Switch to dark theme`). In chat it is hidden at 420px and below so the title keeps its width; the theme control stays available on the other views.
 - Project, agent, model, and the status chip stay together in the transcript context strip. The provider lives in the topbar subline.
@@ -383,7 +399,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Provider-specific actions.
 - The overlay traps Tab within the panel, closes on Escape or the scrim, and returns focus to the details toggle.
 
-## 8. New session
+## 9. New session
 
 ```text
 ┌──────────────────────────────────────────────────────┐
@@ -408,7 +424,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Create is disabled until the provider is online and required fields are valid.
 - After creation, the client opens the session and shows the first prompt in the transcript.
 
-## 9. Providers
+## 10. Providers
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -435,7 +451,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Capability chips explain why an action is hidden.
 - Provider credentials never render after save. Editing leaves the secret blank to keep the existing credential.
 
-## 10. Search
+## 11. Search
 
 - Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
 - At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
@@ -446,7 +462,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Both scopes keep the query, provider, and status in the URL. Typing replaces the history entry; changing a filter or the scope adds one.
 - Keyboard: `Cmd/Ctrl+K` opens search from any signed-in screen, Tab moves through filters and results, and Escape clears the query.
 
-## 11. Settings
+## 12. Settings
 
 - Appearance: theme, density, message width.
 - Notifications: per-device Web Push with enable, test, and disable; a permission badge; per-type routing (Immediate, Digest, Off) for permission, approval, question, unread, and error; a digest window; quiet hours with an IANA time zone; and a device list with per-device revoke. Channel credentials stay on the hub; a device only sees its label, device ID, and last-seen time.
@@ -461,7 +477,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.
 - About: hub version, provider versions, build info.
 
-## 12. States
+## 13. States
 
 Every screen needs these states:
 
@@ -473,10 +489,12 @@ Every screen needs these states:
 - **Streaming:** append text, keep scroll position unless the user is at the bottom.
 - **Disconnected hub:** persistent banner with reconnect and last sync time.
 - **No attention:** calm empty inbox with a link to sessions.
+- **No usage:** the Overview report renders em dashes and states how many sessions reported nothing.
+- **Partial usage:** the report keeps the rows it has and the note names the sessions that did not report cost or tokens.
 - **Signed out:** owner/session token form, a note to open a pairing link, and a secondary **Scan pairing QR** action only when the browser is a secure context and exposes the Barcode Detection API. The camera overlay has one cancel action and an inline camera error.
 - **Pairing page:** server-rendered confirmation outside the app shell. It shows the hub origin, expiry time, and one primary **Pair this device** action. An already-paired browser gets **Open Oktoso** plus a secondary **Pair again** action. An expired page points to `p` in the hub terminal. It uses the same self-hosted Inter and IBM Plex Mono stacks as the app so it does not depend on the web build or an external CDN.
 
-## 13. Visual language
+## 14. Visual language
 
 ### Tone
 
@@ -558,7 +576,7 @@ The type scale has six roles, not a continuum of half-steps:
 - Icons: 16 or 18px line icons, 1.7px stroke. The rail and bottom navigation share the same set; lettermarks and text glyphs are not used for navigation or icon-only controls.
 - Desktop controls are 32px high. Quiet message actions are 28px. Mobile controls keep a 44px target. The composer `⋯`, Stop, and Send cluster uses three actual 44px squares with no overlapping pseudo hit area.
 
-## 14. Mobile layout
+## 15. Mobile layout
 
 ```text
 ┌──────────────────────────────────┐
@@ -600,7 +618,7 @@ Chat on mobile:
 └──────────────────────────────────┘
 ```
 
-- Bottom nav has four destinations. Providers move under Settings.
+- Bottom nav has five destinations: Overview, Inbox, Sessions, Search, Settings. Providers move under Settings.
 - Chat is a full-height route with a back button and the session title in the topbar. The bottom navigation remains visible.
 - Details open as a bottom sheet with a pinned footer.
 - The composer is pinned above the bottom navigation, safe area, and keyboard.
@@ -612,7 +630,7 @@ Chat on mobile:
 - Long press a session row for pin, mark read, copy ref, and open in provider.
 - Pull to refresh on the list.
 
-## 15. Glasses adaptation
+## 16. Glasses adaptation
 
 The glasses show one decision or one short conversation at a time.
 
@@ -683,7 +701,7 @@ Tap talk  Swipe scroll
 
 The hub does not care which gesture a client uses. The client maps gestures to the same attention actions.
 
-## 16. VR adaptation
+## 17. VR adaptation
 
 ```text
         ┌──────────────┐
@@ -704,7 +722,7 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 - Attention cards stay large and reachable.
 - Start with a 2D web panel in a WebXR browser, then add spatial layout.
 
-## 17. Accessibility
+## 18. Accessibility
 
 - All actions are reachable by keyboard.
 - Focus rings use the accent color and remain visible.
@@ -716,7 +734,7 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 - Screen-reader labels for icon-only buttons.
 - The glasses UI uses large text and short lines. The VR UI keeps panels at readable angles and distances.
 
-## 18. Content guidelines
+## 19. Content guidelines
 
 - Use provider names as the providers use them: OpenCode, Open WebUI, Hermes.
 - Status words: running, idle, error, offline.
@@ -726,7 +744,7 @@ The hub does not care which gesture a client uses. The client maps gestures to t
 - Show timestamps as relative for recent items and absolute for older ones.
 - Error messages name the failing provider and the next action.
 
-## 19. Prototype
+## 20. Prototype
 
 Open `docs/prototypes/index.html` through a local server:
 

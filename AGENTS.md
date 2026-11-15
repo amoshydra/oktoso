@@ -77,7 +77,7 @@ Six roles only:
 
 - `1320px` and below: details is a right-side overlay. Above `1320px`: details is a column.
 - `1100px` and below: sidebar narrows to 300px and the sessions table drops the project column.
-- `760px` and below: mobile layout with bottom navigation.
+- `760px` and below: mobile layout with bottom navigation. The bar holds five destinations; a sixth requires shortening labels or icons only.
 - `480px` and below: hide provider machine names; keep the provider name.
 - `420px` and below: filters wrap instead of clipping or hiding chips.
 - `360px` and below: hide the secondary external action in the chat topbar; the details sheet exposes it.
@@ -96,7 +96,7 @@ Before calling UI work complete:
 
 - Review dark and light themes.
 - Review 1440px, 1024px, 390px, and 320px widths.
-- Check inbox, sessions, chat, details, providers, settings, search, and the new-session modal.
+- Check overview, inbox, sessions, chat, details, providers, settings, search, and the new-session modal.
 - Confirm no horizontal overflow at narrow widths.
 - Check the browser console for errors.
 - Run `pnpm brand:check`; if it reports changed sources, run `pnpm brand:screens` and commit the images and manifest.
