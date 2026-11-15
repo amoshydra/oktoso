@@ -96,7 +96,7 @@ export const zHubState = z.object({
   transcriptCache: zTranscriptCacheSettings.default({
     enabled: false,
     ttlDays: 7,
-    maxSessions: 200,
+    maxSessions: 500,
   }),
 });
 
@@ -127,7 +127,7 @@ export function createInitialState(): HubState {
     automationLeases: {},
     automationPaused: false,
     automationWatcherPause: {},
-    transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 200 },
+    transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 500 },
   };
 }
 

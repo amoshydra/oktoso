@@ -141,6 +141,10 @@ about 1 MB so one huge session cannot fill the disk.
 - Turning the cache off deletes every stored transcript. **Clear cache** deletes
   them without changing the setting. Deleting `dataDir/transcripts` by hand is
   also safe: nothing in the hub depends on it.
+- A search index follows the cache. It lives in `dataDir/search` and covers
+  exactly the transcripts the cache holds, so `maxSessions` is also the search
+  horizon. Turning the cache off or clearing it deletes the index too; a manual
+  delete of either directory is safe.
 - Everything else in `dataDir` is untouched by these actions.
 
 ## Automation
