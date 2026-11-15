@@ -1091,6 +1091,85 @@ describe("ReplyService live gate cases", () => {
 });
 
 describe("ReplyService G2 reply usability", () => {
+  it("keeps an approval acceptance despite the generic guard", async () => {
+    const data = [
+      textMessage("m1", "user", "Merge it?"),
+      textMessage(
+        "m2",
+        "assistant",
+        "PR #92 is green. Merge it and I'll publish 0.1.29.",
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        roleCompletion({
+          answer: "Go ahead and merge it.",
+          opposite: "Hold off until the checks pass.",
+          next: "Run the integration tests.",
+          verify: "Check the diff.",
+          extend: "Add a changelog note.",
+          ask: "Should I tag the release?",
+        }),
+      ),
+    );
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const answer = audit.options.find((option) => option.role === "answer");
+
+    expect(audit.moment.kind).toBe("approval");
+    expect(answer?.text).toBe("Go ahead and merge it.");
+  });
+
+  it("repairs a challenge answer that restates the diagnosis", async () => {
+    const data = [
+      textMessage("m1", "user", "Why does the inbox flicker?"),
+      textMessage(
+        "m2",
+        "assistant",
+        "The inbox flickers because the attention list refetches on every event.",
+      ),
+      textMessage(
+        "m3",
+        "user",
+        "No — that's not it. The drawer remounts, not the list.",
+      ),
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        roleCompletion({
+          answer: "The drawer remounts on every event.",
+          opposite: "The list refetch is still the cause.",
+          next: "Check the lifecycle hooks.",
+          verify: "Rerun the profiler.",
+          extend: "Add a regression test.",
+          ask: "What triggers the remount?",
+        }),
+      )
+      .mockResolvedValueOnce(
+        roleCompletion({
+          answer: "Agreed, drop the extra remount.",
+          opposite: "The list refetch is still the cause.",
+          next: "Check the lifecycle hooks.",
+          verify: "Rerun the profiler.",
+          extend: "Add a regression test.",
+          ask: "What triggers the remount?",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const audit = await service.audit("desktop-opencode:ses_1", "reply");
+    const answer = audit.options.find((option) => option.role === "answer");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(audit.moment.kind).toBe("challenge");
+    expect(answer?.text).toBe("Agreed, drop the extra remount.");
+    expect(audit.raw).toContain("--- retry ---");
+  });
+
   it("keeps a one-word acknowledgement on a finished turn", async () => {
     const data = [
       textMessage("m1", "user", "Fix the auth race"),
