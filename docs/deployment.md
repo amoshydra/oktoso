@@ -134,7 +134,7 @@ about 1 MB so one huge session cannot fill the disk.
 - Pages of one session revision merge by message id, so scrolling back builds a
   complete transcript. A new provider `updatedAt` replaces the stored copy.
   Writes are queued per session and never block the read they follow.
-- `ttlDays` (1–90, default 7) and `maxSessions` (10–2000, default 200) bound the
+- `ttlDays` (1–90, default 7) and `maxSessions` (10–2000, default 500) bound the
   cache, with a 200 MB total budget. Eviction is least-recently-used, and
   expired entries are dropped on read and at start-up. Orphan files and
   abandoned temp files are removed at start-up.
@@ -143,7 +143,11 @@ about 1 MB so one huge session cannot fill the disk.
   also safe: nothing in the hub depends on it.
 - A search index follows the cache. It lives in `dataDir/search` and covers
   exactly the transcripts the cache holds, so `maxSessions` is also the search
-  horizon. `GET /api/v1/search?q=` reads that index and never calls a provider. Turning the cache off or clearing it deletes the index too; a manual
+  horizon. `GET /api/v1/search?q=` reads that index and never calls a provider.
+  A search can trail a chat read by one cache write plus the one-second index
+  debounce, and it reports `ready: false` while the startup reconcile runs.
+  Each document stores its first 200 characters; when a match sits deeper and
+  the transcript is still cached, the route re-cuts the snippet from the message. Turning the cache off or clearing it deletes the index too; a manual
   delete of either directory is safe.
 - Everything else in `dataDir` is untouched by these actions.
 
@@ -202,7 +206,7 @@ schedule triggers under a policy.
   option matches the proposed answer. A form with several fields, or with no
   matching option, still escalates, but approving it only records that a human
   handled it in the provider UI — the hub will not send a message that leaves
-  the form pending.
+  the form pending. Boolean fields have no option list, so they escalate too.
 - A form that offers a free-text answer is never auto-answered. The hub marks
   provider questions as free-text capable, so on OpenCode an `answer` watcher
   acts only after a human approves or always-allows the shape.

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, open, rename, unlink } from "node:fs/promises";
+import { mkdir, readFile, readdir, open, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { CachedTranscript } from "./transcript-cache";
 import type { Logger } from "../lib/logger";
@@ -16,13 +16,11 @@ const DELTA_COMPACT_FLOOR = 64;
 const FIELD_BODY = 1;
 const FIELD_TITLE = 2;
 const FIELD_PROJECT = 4;
-const FIELD_ROLE = 8;
 
 const FIELD_WEIGHT: Record<number, number> = {
   [FIELD_BODY]: 1,
   [FIELD_TITLE]: 3,
   [FIELD_PROJECT]: 2,
-  [FIELD_ROLE]: 1.5,
 };
 
 const KIND_MESSAGE = 0;
@@ -55,6 +53,8 @@ export interface SearchOptions {
   project?: string;
   sessionRef?: string;
   kind?: "message" | "title";
+  /** One candidate per session; the caller wants sessions, not messages. */
+  scope?: "session";
 }
 
 export interface SearchIndexStats {
@@ -69,9 +69,13 @@ export interface SearchIndexStats {
 export interface SearchIndexOptions {
   root: string;
   logger: Logger;
+  /** Re-checked before a reconcile; the cache opt-out can land mid-flight. */
+  enabled?: () => boolean;
 }
 
 interface SessionRecord {
+  /** Stable index into the sessions table; docSession stores this. */
+  slot: number;
   ref: string;
   providerID: string;
   title: string;
@@ -100,6 +104,7 @@ interface PostingList {
 export class SearchIndexService {
   private readonly root: string;
   private readonly logger: Logger;
+  private readonly enabled?: () => boolean;
 
   // Sealed postings.
   private terms: string[] = [];
@@ -122,7 +127,7 @@ export class SearchIndexService {
   private tombstones = 0;
   private totalLen = 0;
 
-  private sessions: SessionRecord[] = [];
+  private sessions: Array<SessionRecord | undefined> = [];
   private readonly sessionByRef = new Map<string, SessionRecord>();
 
   private readonly delta = new Map<string, PostingList>();
@@ -130,22 +135,33 @@ export class SearchIndexService {
   private sealed = true;
   private ready = false;
   private persistTimer?: NodeJS.Timeout;
+  /** Bumped by clear(); an in-flight write from an older epoch must not land. */
+  private epoch = 0;
+  /** Snapshot counter, written into every file so a torn set is rejected. */
+  private generation = 0;
+  private writing: Promise<void> = Promise.resolve();
 
   constructor(options: SearchIndexOptions) {
     this.root = options.root;
     this.logger = options.logger;
+    this.enabled = options.enabled;
   }
 
   async init(cached: CachedTranscript[] = []): Promise<void> {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const loaded = await this.load();
-    if (!loaded) await this.rebuild(cached);
-    this.ready = true;
+    if (loaded) {
+      // The snapshot may lag the cache; stay unready until reconcile runs.
+      this.ready = false;
+    } else {
+      await this.rebuild(cached);
+    }
   }
 
   stats(): SearchIndexStats {
     return {
-      sessions: this.sessions.filter((session) => session.docs.length > 0).length,
+      sessions: this.sessions.filter((session) => session && session.docs.length > 0)
+        .length,
       documents: this.docCount - this.tombstones,
       terms: this.terms.length + this.delta.size,
       bytes: this.approximateBytes(),
@@ -173,6 +189,13 @@ export class SearchIndexService {
   }
 
   async clear(): Promise<void> {
+    this.epoch += 1;
+    this.ready = false;
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = undefined;
+    }
+    await this.writing.catch(() => undefined);
     this.terms = [];
     this.termToID.clear();
     this.postOffsets = new Int32Array(1);
@@ -195,9 +218,10 @@ export class SearchIndexService {
     this.delta.clear();
     this.deltaDocs = 0;
     // Leave nothing behind: a cleared cache must not keep a readable index.
-    for (const file of ["meta.json", "terms.txt", "postings.bin"]) {
-      await unlink(join(this.root, file)).catch(() => undefined);
-    }
+    const names = await readdir(this.root).catch(() => [] as string[]);
+    await Promise.all(
+      names.map((name) => unlink(join(this.root, name)).catch(() => undefined)),
+    );
   }
 
   /** Rebuild every sealed structure from a set of transcripts. */
@@ -225,7 +249,9 @@ export class SearchIndexService {
     this.sealed = false;
     for (const transcript of transcripts) this.addSession(transcript);
     this.seal();
+    this.deltaDocs = 0;
     await this.persist();
+    this.ready = true;
   }
 
   search(query: string, options: SearchOptions = {}): SearchHit[] {
@@ -239,15 +265,25 @@ export class SearchIndexService {
     if (lists.length === 0) return [];
     const live = Math.max(1, this.docCount - this.tombstones);
     for (const entry of lists) {
-      entry.idf = Math.log(
-        1 + (live - entry.postings.df + 0.5) / (entry.postings.df + 0.5),
-      );
+      // df must count live postings, or a term that churned scores as common
+      // until the next compaction.
+      let df = entry.postings.df;
+      if (this.tombstones > 0) {
+        df = 0;
+        for (let position = 0; position < entry.postings.df; position += 1) {
+          if (this.docSession[entry.postings.docAt(position)] !== -1) df += 1;
+        }
+      }
+      entry.idf = Math.log(1 + (live - df + 0.5) / (df + 0.5));
     }
 
     let candidates = this.intersect(lists, options);
     if (candidates.docs.length === 0 && lists.length > 1) {
       // Near-miss: fall back to any-term scoring so the session is findable.
       candidates = this.union(lists, options);
+    }
+    if (options.scope === "session") {
+      candidates = this.bestPerSession(candidates);
     }
 
     const best = topK(candidates.docs, candidates.scores, limit);
@@ -259,7 +295,7 @@ export class SearchIndexService {
         ...(hit.messageID ? { messageID: hit.messageID } : {}),
         ...(hit.role ? { role: hit.role } : {}),
         createdAt: hit.at,
-        score: Number(score.toFixed(4)),
+        score,
         snippet: snippetAround(hit.snippet, query),
         title: hit.title,
         providerID: hit.providerID,
@@ -274,12 +310,19 @@ export class SearchIndexService {
    * at start-up: the cache is the source of truth for what may be indexed.
    */
   async reconcile(cached: CachedTranscript[]): Promise<void> {
+    if (this.enabled && !this.enabled()) {
+      await this.clear();
+      return;
+    }
+    const epoch = this.epoch;
     const live = new Map(cached.map((transcript) => [transcript.ref, transcript]));
     for (const session of [...this.sessions]) {
-      if (session.docs.length === 0) continue;
+      if (this.epoch !== epoch) return;
+      if (!session || session.docs.length === 0) continue;
       if (!live.has(session.ref)) await this.remove(session.ref);
     }
     for (const transcript of cached) {
+      if (this.epoch !== epoch) return;
       const existing = this.sessionByRef.get(transcript.ref);
       if (
         existing &&
@@ -290,6 +333,7 @@ export class SearchIndexService {
       }
       await this.update(transcript);
     }
+    if (this.epoch !== epoch) return;
     this.ready = true;
   }
 
@@ -305,6 +349,7 @@ export class SearchIndexService {
 
   private addSession(transcript: CachedTranscript): void {
     const session: SessionRecord = {
+      slot: this.sessions.length,
       ref: transcript.ref,
       providerID: transcript.providerID,
       title: transcript.title ?? "",
@@ -315,14 +360,21 @@ export class SearchIndexService {
     this.sessions.push(session);
     this.sessionByRef.set(session.ref, session);
 
-    const titleTokens = tokenize(`${session.title} ${session.project}`);
-    if (titleTokens.length > 0) {
-      const id = this.pushDoc(session, KIND_TITLE, -1, 0, transcript.storedAt, titleTokens.length);
-      this.pushPostings(
-        countTokens(titleTokens, FIELD_TITLE | FIELD_PROJECT),
-        id,
+    const titleTokens = tokenize(session.title);
+    const projectTokens = tokenize(session.project);
+    if (titleTokens.length + projectTokens.length > 0) {
+      const id = this.pushDoc(
+        session,
+        KIND_TITLE,
+        -1,
+        0,
+        transcript.storedAt,
+        titleTokens.length + projectTokens.length,
       );
-      this.snippets[id] = clip(session.title);
+      const counts = countTokens(titleTokens, FIELD_TITLE);
+      mergeCounts(counts, countTokens(projectTokens, FIELD_PROJECT));
+      this.pushPostings(counts, id);
+      this.snippets[id] = clip(session.title || session.project);
       session.docs.push(id);
     }
 
@@ -339,13 +391,7 @@ export class SearchIndexService {
         tokens.length,
         message.id,
       );
-      const counts = countTokens(tokens, FIELD_BODY);
-      const roleTerm = message.role.toLowerCase();
-      counts.set(roleTerm, {
-        tf: (counts.get(roleTerm)?.tf ?? 0) + FIELD_WEIGHT[FIELD_ROLE]!,
-        fields: (counts.get(roleTerm)?.fields ?? 0) | FIELD_ROLE,
-      });
-      this.pushPostings(counts, id);
+      this.pushPostings(countTokens(tokens, FIELD_BODY), id);
       this.snippets[id] = clip(message.text);
       session.docs.push(id);
     }
@@ -428,8 +474,9 @@ export class SearchIndexService {
     session.docs = [];
     this.sessionByRef.delete(ref);
     // Session slots stay put: docSession holds an index into a stable array,
-    // so removing one session must not renumber the others.
-    this.sessions[this.sessions.indexOf(session)] = session;
+    // so removing one session must not renumber the others. The hole is
+    // skipped on persist, which keeps meta.json from growing per update.
+    this.sessions[session.slot] = undefined;
   }
 
   private sessionAtDoc(doc: number): SessionRecord | undefined {
@@ -497,6 +544,7 @@ export class SearchIndexService {
     this.snippets.length = next;
     this.docMessageID.length = next;
     for (const session of this.sessions) {
+      if (!session) continue;
       session.docs = session.docs
         .map((doc) => remap[doc]!)
         .filter((doc) => doc >= 0);
@@ -505,10 +553,19 @@ export class SearchIndexService {
     this.deltaDocs = 0;
 
     for (const list of sealedPostings.values()) {
+      const docs: number[] = [];
+      const tf: number[] = [];
+      const fields: number[] = [];
       for (let index = 0; index < list.docs.length; index += 1) {
-        list.docs[index] = remap[list.docs[index]!]!;
+        const doc = remap[list.docs[index]!]!;
+        if (doc < 0) continue;
+        docs.push(doc);
+        tf.push(list.tf[index]!);
+        fields.push(list.fields[index]!);
       }
-      list.docs = list.docs.filter((doc) => doc >= 0);
+      list.docs = docs;
+      list.tf = tf;
+      list.fields = fields;
     }
     for (const [term, list] of sealedPostings) {
       if (list.docs.length === 0) sealedPostings.delete(term);
@@ -641,7 +698,7 @@ export class SearchIndexService {
         if (
           doc >= target &&
           this.docSession[doc] !== -1 &&
-          this.accepts(doc, postings.fieldsAt(position), options)
+          this.accepts(doc, options)
         ) {
           break;
         }
@@ -690,7 +747,7 @@ export class SearchIndexService {
         const doc = entry.postings.docAt(position);
         if (this.docSession[doc] === -1) continue;
         const fields = entry.postings.fieldsAt(position);
-        if (!this.accepts(doc, fields, options)) continue;
+        if (!this.accepts(doc, options)) continue;
         const length = this.docLen[doc]! || 1;
         const norm = K1 * (1 - B + (B * length) / (avg || 1));
         const tf = entry.postings.tfAt(position) * fieldWeight(fields);
@@ -704,7 +761,24 @@ export class SearchIndexService {
     };
   }
 
-  private accepts(doc: number, fields: number, options: SearchOptions): boolean {
+  /** Keeps one document per session so candidates are not spent on duplicates. */
+  private bestPerSession(candidates: Candidates): Candidates {
+    const best = new Map<string, { doc: number; score: number }>();
+    for (let index = 0; index < candidates.docs.length; index += 1) {
+      const doc = candidates.docs[index]!;
+      const session = this.sessionAtDoc(doc);
+      if (!session) continue;
+      const score = candidates.scores[index]!;
+      const current = best.get(session.ref);
+      if (!current || score > current.score) best.set(session.ref, { doc, score });
+    }
+    return {
+      docs: [...best.values()].map((entry) => entry.doc),
+      scores: [...best.values()].map((entry) => entry.score),
+    };
+  }
+
+  private accepts(doc: number, options: SearchOptions): boolean {
     const session = this.sessionAtDoc(doc);
     if (!session) return false;
     if (options.kind === "title" && this.docKind[doc] !== KIND_TITLE) return false;
@@ -712,7 +786,6 @@ export class SearchIndexService {
     if (options.providerID && session.providerID !== options.providerID) return false;
     if (options.project !== undefined && session.project !== options.project) return false;
     if (options.sessionRef && session.ref !== options.sessionRef) return false;
-    void fields;
     return true;
   }
 
@@ -749,34 +822,70 @@ export class SearchIndexService {
   }
 
   private async persist(): Promise<void> {
+    const run = this.writing.then(() => this.writeSnapshot());
+    this.writing = run.catch(() => undefined);
+    await run;
+  }
+
+  /**
+   * Writes one consistent snapshot.
+   *
+   * The three files are captured synchronously from the same in-memory state,
+   * stamped with a generation, and committed meta-last. A reader rejects any
+   * set whose generations disagree, so a compaction between two writes can
+   * never mix a stale document table with fresh postings.
+   */
+  private async writeSnapshot(): Promise<void> {
+    const epoch = this.epoch;
+    const generation = this.generation + 1;
+    const live = this.sessions.filter(
+      (session): session is SessionRecord => Boolean(session && session.docs.length > 0),
+    );
+    const meta = {
+      version: INDEX_VERSION,
+      generation,
+      sessions: live.map((session) => ({
+        ref: session.ref,
+        providerID: session.providerID,
+        title: session.title,
+        project: session.project,
+        updatedAt: session.updatedAt,
+        docs: session.docs,
+      })),
+      documents: {
+        count: this.docCount,
+        kind: Array.from(this.docKind.subarray(0, this.docCount)),
+        ordinal: Array.from(this.docOrdinal.subarray(0, this.docCount)),
+        role: Array.from(this.docRole.subarray(0, this.docCount)),
+        at: Array.from(this.docAt.subarray(0, this.docCount)),
+        len: Array.from(this.docLen.subarray(0, this.docCount)),
+        messageIDs: this.docMessageID,
+        snippets: this.snippets,
+      },
+      delta: [...this.delta].map(([term, list]) => [term, list]),
+    };
+    const metaText = JSON.stringify(meta);
+    const termsText = `${termsHeader(generation, this.terms.length)}\n${this.terms.join("\n")}`;
+    const postings = encodePostings(this, generation, this.docCount);
+
     try {
       await mkdir(this.root, { recursive: true, mode: 0o700 });
-      const meta = {
-        version: INDEX_VERSION,
-        sessions: this.sessions.map((session) => ({
-          ref: session.ref,
-          providerID: session.providerID,
-          title: session.title,
-          project: session.project,
-          updatedAt: session.updatedAt,
-          docs: session.docs,
-        })),
-        documents: {
-          count: this.docCount,
-          kind: Array.from(this.docKind.subarray(0, this.docCount)),
-          ordinal: Array.from(this.docOrdinal.subarray(0, this.docCount)),
-          role: Array.from(this.docRole.subarray(0, this.docCount)),
-          at: Array.from(this.docAt.subarray(0, this.docCount)),
-          len: Array.from(this.docLen.subarray(0, this.docCount)),
-          messageIDs: this.docMessageID,
-          snippets: this.snippets,
-        },
-        delta: [...this.delta].map(([term, list]) => [term, list]),
-        terms: this.terms.length,
+      const temporary = {
+        meta: await writeTemporary(join(this.root, "meta.json"), metaText),
+        terms: await writeTemporary(join(this.root, "terms.txt"), termsText),
+        postings: await writeTemporary(join(this.root, "postings.bin"), postings),
       };
-      await writeAtomic(join(this.root, "meta.json"), JSON.stringify(meta));
-      await writeAtomic(join(this.root, "terms.txt"), this.terms.join("\n"));
-      await writeAtomic(join(this.root, "postings.bin"), encodePostings(this));
+      if (epoch !== this.epoch) {
+        // Cleared while we were writing: do not resurrect anything.
+        await Promise.all(
+          Object.values(temporary).map((path) => unlink(path).catch(() => undefined)),
+        );
+        return;
+      }
+      await rename(temporary.postings, join(this.root, "postings.bin"));
+      await rename(temporary.terms, join(this.root, "terms.txt"));
+      await rename(temporary.meta, join(this.root, "meta.json"));
+      this.generation = generation;
     } catch (error) {
       this.logger.error("Unable to persist the search index", {
         error: error instanceof Error ? error.message : String(error),
@@ -790,6 +899,7 @@ export class SearchIndexService {
     try {
       const meta = JSON.parse(raw) as {
         version: number;
+        generation: number;
         sessions: Array<{
           ref: string;
           providerID: string;
@@ -811,6 +921,7 @@ export class SearchIndexService {
         delta: Array<[string, PostingList]>;
       };
       if (meta.version !== INDEX_VERSION) return false;
+      if (typeof meta.generation !== "number") return false;
       const docCount = meta.documents.count;
       this.docCount = docCount;
       this.docKind = Uint8Array.from(meta.documents.kind);
@@ -823,12 +934,15 @@ export class SearchIndexService {
       this.sessions = [];
       this.sessionByRef.clear();
       for (const session of meta.sessions) {
-        this.sessions.push({ ...session });
-        this.sessionByRef.set(session.ref, this.sessions[this.sessions.length - 1]!);
+        const record: SessionRecord = { slot: this.sessions.length, ...session };
+        this.sessions.push(record);
+        this.sessionByRef.set(record.ref, record);
       }
-      this.docSession = new Int32Array(docCount);
+      this.docSession = new Int32Array(docCount).fill(-1);
       for (let index = 0; index < this.sessions.length; index += 1) {
-        for (const doc of this.sessions[index]!.docs) this.docSession[doc] = index;
+        const session = this.sessions[index];
+        if (!session) continue;
+        for (const doc of session.docs) this.docSession[doc] = index;
       }
       this.delta.clear();
       this.deltaDocs = 0;
@@ -837,15 +951,29 @@ export class SearchIndexService {
         this.deltaDocs += list.docs.length;
       }
       this.totalLen = 0;
+      let live = 0;
       for (let doc = 0; doc < docCount; doc += 1) {
-        if (this.docSession[doc] !== -1) this.totalLen += this.docLen[doc]!;
+        if (this.docSession[doc] === -1) continue;
+        this.totalLen += this.docLen[doc]!;
+        live += 1;
       }
-      this.tombstones = 0;
-      this.terms = (await readFile(join(this.root, "terms.txt"), "utf8")).split("\n").filter(Boolean);
+      this.tombstones = docCount - live;
+      const termsRaw = await readFile(join(this.root, "terms.txt"), "utf8");
+      const [header, ...rest] = termsRaw.split("\n");
+      const lines = rest.filter((term) => term.length > 0);
+      const expected = termsHeader(meta.generation, lines.length);
+      if (header !== expected) {
+        throw new Error("term table generation mismatch");
+      }
+      this.terms = lines;
       this.termToID.clear();
       this.terms.forEach((term, index) => this.termToID.set(term, index));
       const postings = await readFile(join(this.root, "postings.bin"));
-      decodePostings(this, postings);
+      decodePostings(this, postings, {
+        generation: meta.generation,
+        documents: meta.documents.count,
+      });
+      this.generation = meta.generation;
       this.sealed = true;
       return true;
     } catch (error) {
@@ -939,18 +1067,31 @@ function topK(
   const best: Array<{ doc: number; score: number }> = [];
   for (let index = 0; index < docs.length; index += 1) {
     const score = scores[index]!;
-    if (best.length === limit && score <= best[best.length - 1]!.score) continue;
-    const entry = { doc: docs[index]!, score };
+    const doc = docs[index]!;
+    const last = best[best.length - 1];
+    if (best.length === limit && last && (score < last.score || (score === last.score && doc >= last.doc))) {
+      continue;
+    }
+    const entry = { doc, score };
     let position = best.length;
-    while (position > 0 && best[position - 1]!.score < entry.score) position -= 1;
+    while (position > 0) {
+      const previous = best[position - 1]!;
+      if (previous.score > score) break;
+      if (previous.score === score && previous.doc < doc) break;
+      position -= 1;
+    }
     best.splice(position, 0, entry);
     if (best.length > limit) best.pop();
   }
   return best;
 }
 
+const ROLE_NAMES = new Map(
+  Object.entries(ROLE_CODES).map(([name, code]) => [code, name]),
+);
+
 function roleName(code: number): string | undefined {
-  return Object.entries(ROLE_CODES).find(([, value]) => value === code)?.[0];
+  return ROLE_NAMES.get(code);
 }
 
 function fieldWeight(fields: number): number {
@@ -958,7 +1099,6 @@ function fieldWeight(fields: number): number {
   if (fields & FIELD_BODY) weight = Math.max(weight, FIELD_WEIGHT[FIELD_BODY]!);
   if (fields & FIELD_TITLE) weight = Math.max(weight, FIELD_WEIGHT[FIELD_TITLE]!);
   if (fields & FIELD_PROJECT) weight = Math.max(weight, FIELD_WEIGHT[FIELD_PROJECT]!);
-  if (fields & FIELD_ROLE) weight = Math.max(weight, FIELD_WEIGHT[FIELD_ROLE]!);
   return weight || 1;
 }
 
@@ -974,6 +1114,21 @@ function countTokens(tokens: string[], field: number): Map<string, { tf: number;
     }
   }
   return counts;
+}
+
+function mergeCounts(
+  target: Map<string, { tf: number; fields: number }>,
+  source: Map<string, { tf: number; fields: number }>,
+): void {
+  for (const [term, entry] of source) {
+    const current = target.get(term);
+    if (current) {
+      current.tf += entry.tf;
+      current.fields |= entry.fields;
+    } else {
+      target.set(term, { ...entry });
+    }
+  }
 }
 
 function clip(text: string): string {
@@ -1005,13 +1160,26 @@ export function tokenize(text: string): string[] {
 }
 
 /** Query-time snippet: a window around the first matched term. */
+function indexOfWord(haystack: string, needle: string): number {
+  let from = 0;
+  for (;;) {
+    const found = haystack.indexOf(needle, from);
+    if (found === -1) return -1;
+    const before = found === 0 ? "" : haystack[found - 1]!;
+    const after = haystack[found + needle.length] ?? "";
+    const boundary = (char: string) => char === "" || !/[\p{L}\p{N}]/u.test(char);
+    if (boundary(before) && boundary(after)) return found;
+    from = found + 1;
+  }
+}
+
 export function snippetAround(snippet: string, query: string): string {
   const terms = tokenize(query);
   if (terms.length === 0) return snippet;
   const lower = snippet.toLowerCase();
   let index = -1;
   for (const term of terms) {
-    const found = lower.indexOf(term);
+    const found = indexOfWord(lower, term);
     if (found === -1) continue;
     if (index === -1 || found < index) index = found;
   }
@@ -1023,9 +1191,25 @@ export function snippetAround(snippet: string, query: string): string {
 
 // --- postings codec ---
 
-function encodePostings(index: SearchIndexService): Buffer {
+const POSTINGS_MAGIC = "OKSP";
+const POSTINGS_VERSION = 1;
+
+function termsHeader(generation: number, terms: number): string {
+  return `#oktoso-search v1 gen=${generation} terms=${terms}`;
+}
+
+function encodePostings(
+  index: SearchIndexService,
+  generation: number,
+  docCount: number,
+): Buffer {
   const { docs, tf, fields, offsets, terms } = index.sealedState();
-  const chunks: Buffer[] = [];
+  const header = Buffer.alloc(16);
+  header.write(POSTINGS_MAGIC, 0, "ascii");
+  header.writeUInt32LE(POSTINGS_VERSION, 4);
+  header.writeUInt32LE(generation, 8);
+  header.writeUInt32LE(docCount, 12);
+  const chunks: Buffer[] = [header];
   for (let term = 0; term < terms.length; term += 1) {
     const start = offsets[term]!;
     const end = offsets[term + 1]!;
@@ -1051,13 +1235,27 @@ function encodePostings(index: SearchIndexService): Buffer {
 function decodePostings(
   index: SearchIndexService,
   buffer: Buffer,
+  expected: { generation: number; documents: number },
 ): void {
   const { terms } = index.sealedState();
+  if (
+    buffer.length < 16 ||
+    buffer.toString("ascii", 0, 4) !== POSTINGS_MAGIC ||
+    buffer.readUInt32LE(4) !== POSTINGS_VERSION
+  ) {
+    throw new Error("unknown postings format");
+  }
+  if (
+    buffer.readUInt32LE(8) !== expected.generation ||
+    buffer.readUInt32LE(12) !== expected.documents
+  ) {
+    throw new Error("postings generation mismatch");
+  }
   const offsets = new Int32Array(terms.length + 1);
   const docs: number[] = [];
   const tf: number[] = [];
   const fields: number[] = [];
-  let offset = 0;
+  let offset = 16;
   for (let term = 0; term < terms.length; term += 1) {
     if (offset + 4 > buffer.length) throw new Error("truncated postings");
     const count = buffer.readUInt32LE(offset);
@@ -1082,7 +1280,10 @@ function decodePostings(
   });
 }
 
-async function writeAtomic(path: string, contents: string | Buffer): Promise<void> {
+async function writeTemporary(
+  path: string,
+  contents: string | Buffer,
+): Promise<string> {
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   const handle = await open(temporary, "w", 0o600);
   try {
@@ -1091,10 +1292,5 @@ async function writeAtomic(path: string, contents: string | Buffer): Promise<voi
   } finally {
     await handle.close();
   }
-  try {
-    await rename(temporary, path);
-  } catch (error) {
-    await unlink(temporary).catch(() => undefined);
-    throw error;
-  }
+  return temporary;
 }
