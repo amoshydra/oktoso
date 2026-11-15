@@ -10,10 +10,16 @@ import {
   zSendInput,
   zSessionListQuery,
   zSessionSelectionInput,
+  type Message,
 } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "../../services/session-service";
 import type { ReplyService } from "../../services/reply-service";
 import type { SessionActions } from "../../services/session-actions";
+import {
+  exportFilename,
+  exportJson,
+  exportMarkdown,
+} from "../../services/session-export";
 import type { AppEnv } from "../types";
 import { badRequest, notFound } from "../../domain/errors";
 
@@ -43,6 +49,39 @@ export function registerSessionRoutes(
     }
     const session = await sessions.create(parsed.data);
     return c.json(session, 201);
+  });
+
+  app.get("/api/v1/sessions/:ref/export", async (c) => {
+    const ref = c.req.param("ref");
+    const format = c.req.query("format") === "json" ? "json" : "md";
+    const session = await sessions.get(ref);
+
+    const collected: Message[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page += 1) {
+      const result = await sessions.messages(ref, {
+        limit: 200,
+        ...(cursor ? { cursor } : {}),
+      });
+      collected.push(...result.data);
+      cursor = result.cursor.next ?? undefined;
+      if (!cursor) break;
+    }
+    // Pages arrive newest-first; the export reads oldest-first.
+    const messages = [...collected].reverse();
+    const input = { session, messages, exportedAt: Date.now() };
+    const body = format === "json" ? exportJson(input) : exportMarkdown(input);
+
+    c.header(
+      "Content-Disposition",
+      `attachment; filename="${exportFilename(session, format)}"`,
+    );
+    return c.body(body, 200, {
+      "Content-Type":
+        format === "json"
+          ? "application/json; charset=utf-8"
+          : "text/markdown; charset=utf-8",
+    });
   });
 
   app.get("/api/v1/sessions/:ref", async (c) => {

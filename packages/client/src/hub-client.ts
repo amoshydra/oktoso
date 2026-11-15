@@ -56,6 +56,9 @@ import type {
   SearchPage,
   SearchQuery,
   SessionLineage,
+  LocalDataView,
+  LocalDataStore,
+  LocalRetentionInput,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
 import {
@@ -467,6 +470,63 @@ export class HubClient {
     const response = await this.request<{ data: AssistantView }>(
       "/api/v1/settings/assistant",
       { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  /** Downloads a transcript export; the hub names the file. */
+  async exportSession(
+    ref: string,
+    format: "md" | "json",
+  ): Promise<{ text: string; filename: string }> {
+    const headers: Record<string, string> = { Accept: "*/*" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/api/v1/sessions/${encodeURIComponent(ref)}/export?format=${format}`,
+      { headers, credentials: this.credentials },
+    );
+    if (!response.ok) {
+      throw new HubError(
+        "http_error",
+        `Hub returned HTTP ${response.status}`,
+        { status: response.status },
+      );
+    }
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const match = disposition.match(/filename="([^"]+)"/);
+    return {
+      text: await response.text(),
+      filename: match?.[1] ?? `session.${format}`,
+    };
+  }
+
+  async localData(): Promise<LocalDataView> {
+    const response = await this.request<{ data: LocalDataView }>(
+      "/api/v1/settings/local-data",
+    );
+    return response.data;
+  }
+
+  async saveLocalRetention(input: LocalRetentionInput): Promise<LocalDataView> {
+    const response = await this.request<{ data: LocalDataView }>(
+      "/api/v1/settings/local-data",
+      { method: "PUT", body: input },
+    );
+    return response.data;
+  }
+
+  async clearLocalStore(store: LocalDataStore): Promise<LocalDataView> {
+    const response = await this.request<{ data: LocalDataView }>(
+      `/api/v1/settings/local-data/${store}`,
+      { method: "DELETE" },
+    );
+    return response.data;
+  }
+
+  async clearAllLocalData(): Promise<LocalDataView> {
+    const response = await this.request<{ data: LocalDataView }>(
+      "/api/v1/settings/local-data",
+      { method: "DELETE" },
     );
     return response.data;
   }

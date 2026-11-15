@@ -3162,6 +3162,60 @@ components:
         - current
         - nodes
         - truncated
+    LocalDataView:
+      type: object
+      properties:
+        drafts:
+          type: integer
+          minimum: 0
+        markers:
+          type: integer
+          minimum: 0
+        feedback:
+          type: integer
+          minimum: 0
+        feedbackBytes:
+          type: integer
+          minimum: 0
+        retention:
+          type: object
+          properties:
+            draftsDays:
+              type: integer
+              minimum: 0
+              maximum: 3650
+              default: 0
+            markersDays:
+              type: integer
+              minimum: 0
+              maximum: 3650
+              default: 30
+            feedbackDays:
+              type: integer
+              minimum: 0
+              maximum: 3650
+              default: 30
+      required:
+        - drafts
+        - markers
+        - feedback
+        - feedbackBytes
+        - retention
+    LocalRetentionInput:
+      type: object
+      properties:
+        draftsDays:
+          type: integer
+          minimum: 0
+          maximum: 3650
+        markersDays:
+          type: integer
+          minimum: 0
+          maximum: 3650
+        feedbackDays:
+          type: integer
+          minimum: 0
+          maximum: 3650
     NotificationChannelKind:
       type: string
       enum:
@@ -5312,6 +5366,131 @@ paths:
                 $ref: "#/components/schemas/Error"
         "502":
           description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/export:
+    get:
+      tags:
+        - sessions
+      summary: Export a session transcript
+      description: Markdown or JSON download of one session and its transcript. Attachment files are listed, not embedded. The hub reads the transcript from the provider.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+        - schema:
+            type: string
+            enum:
+              - md
+              - json
+          required: false
+          name: format
+          in: query
+      responses:
+        "200":
+          description: Exported transcript
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/settings/local-data:
+    get:
+      tags:
+        - settings
+      summary: Read local data counts and retention
+      responses:
+        "200":
+          description: Local data view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LocalDataView"
+                required:
+                  - data
+    put:
+      tags:
+        - settings
+      summary: Set per-store retention
+      description: Retention is per store; `0` means never prune. Drafts default to never so unsent work is not deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRetentionInput"
+      responses:
+        "200":
+          description: Updated local data view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LocalDataView"
+                required:
+                  - data
+        "400":
+          description: Invalid retention settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - settings
+      summary: Clear all local data
+      description: Clears drafts, read markers, reply feedback, the transcript cache, and its search index. Providers are untouched.
+      responses:
+        "200":
+          description: Cleared local data view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LocalDataView"
+                required:
+                  - data
+  /api/v1/settings/local-data/{store}:
+    delete:
+      tags:
+        - settings
+      summary: Clear one local store
+      parameters:
+        - schema:
+            type: string
+            enum:
+              - drafts
+              - markers
+              - feedback
+          required: true
+          name: store
+          in: path
+      responses:
+        "200":
+          description: Cleared local data view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LocalDataView"
+                required:
+                  - data
+        "400":
+          description: Unknown store
           content:
             application/json:
               schema:

@@ -69,6 +69,8 @@ import {
   zSearchResult,
   zSearchPage,
   zSessionLineage,
+  zLocalDataView,
+  zLocalRetentionInput,
   zSendInput,
   zSendResult,
   zSession,
@@ -243,6 +245,11 @@ const SearchPageSchema = registry.register("SearchPage", zSearchPage);
 const SessionLineageSchema = registry.register(
   "SessionLineage",
   zSessionLineage,
+);
+const LocalDataViewSchema = registry.register("LocalDataView", zLocalDataView);
+const LocalRetentionInputSchema = registry.register(
+  "LocalRetentionInput",
+  zLocalRetentionInput,
 );
 const NotificationChannelKindSchema = registry.register(
   "NotificationChannelKind",
@@ -687,6 +694,87 @@ registry.registerPath({
     404: errorResponse("Session or queued message not found"),
     501: errorResponse("Provider cannot cancel queued messages"),
     502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/export",
+  tags: ["sessions"],
+  summary: "Export a session transcript",
+  description:
+    "Markdown or JSON download of one session and its transcript. Attachment files are listed, not embedded. The hub reads the transcript from the provider.",
+  request: {
+    params,
+    query: z.object({ format: z.enum(["md", "json"]).optional() }),
+  },
+  responses: {
+    200: { description: "Exported transcript" },
+    404: errorResponse("Session not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/settings/local-data",
+  tags: ["settings"],
+  summary: "Read local data counts and retention",
+  responses: {
+    200: {
+      description: "Local data view",
+      content: json(z.object({ data: LocalDataViewSchema })),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/settings/local-data",
+  tags: ["settings"],
+  summary: "Set per-store retention",
+  description:
+    "Retention is per store; `0` means never prune. Drafts default to never so unsent work is not deleted.",
+  request: {
+    body: { content: json(LocalRetentionInputSchema), required: true },
+  },
+  responses: {
+    200: {
+      description: "Updated local data view",
+      content: json(z.object({ data: LocalDataViewSchema })),
+    },
+    400: errorResponse("Invalid retention settings"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/settings/local-data",
+  tags: ["settings"],
+  summary: "Clear all local data",
+  description:
+    "Clears drafts, read markers, reply feedback, the transcript cache, and its search index. Providers are untouched.",
+  responses: {
+    200: {
+      description: "Cleared local data view",
+      content: json(z.object({ data: LocalDataViewSchema })),
+    },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/settings/local-data/{store}",
+  tags: ["settings"],
+  summary: "Clear one local store",
+  request: {
+    params: z.object({ store: z.enum(["drafts", "markers", "feedback"]) }),
+  },
+  responses: {
+    200: {
+      description: "Cleared local data view",
+      content: json(z.object({ data: LocalDataViewSchema })),
+    },
+    400: errorResponse("Unknown store"),
   },
 });
 

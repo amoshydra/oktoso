@@ -21,7 +21,7 @@ Status: **frozen**.
 - v1.12 scope: the shared icon grid, type-role consistency, provider accents, and one-dot session state.
 - v1.13 scope: the wide-screen content field, the sessions table, the two-column Inbox and Providers layouts, the search toolbar, and the single-title chat header.
 - v1.14 scope: the chat panel and composer aligned to the 640px reading column.
-- v1.15 scope: the Overview destination and its usage report; the session details Data row for export.
+- v1.15 scope: the Overview destination and its usage report, the session details Data row for export, and the Settings Local data panel.
 
 ## What is frozen
 
@@ -467,6 +467,10 @@ unchanged.
   event stream, and diagnostics remain, after the report.
 - No new tokens, radii, or type roles. The panel reuses the panel head, chip,
   and table grammar already in the frozen system.
+- Settings gains **Local data** in place of the standalone Transcript cache
+  panel: per-store counts, per-store retention, per-store Clear, the cache's
+  own toggle/window/cap, and a two-step Clear all. Export is two links under a
+  `Data` heading in details.
 - The prototype gains the Overview view, the usage panel, and the renamed nav
   labels in the same revision.
 

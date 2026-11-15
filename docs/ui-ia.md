@@ -301,7 +301,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It is the only title in the view.
 - The transcript opens with a quiet context strip: project, agent, model, and the status chip. It has no document title and no second sticky header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
-- Details gains a **Data** row with `Export Markdown` and `Export JSON` links once C7 ships; the format is the choice, so there is no menu.
+- Details carries a **Data** row with `Export Markdown` and `Export JSON` links. The format is the choice, so there is no menu; the note says attachment files are listed, not embedded.
 - Details gains a **Lineage** section when the session belongs to a family: one indented row per session from the root down, the current row marked with the accent inset. Each row is a button that opens that session; the header says how many sessions the tree holds and marks it partial when a cap cut it. A lone session shows no section at all.
 - The topbar theme toggle is a 32px icon control with an outcome label (`Switch to light theme` / `Switch to dark theme`). In chat it is hidden at 420px and below so the title keeps its width; the theme control stays available on the other views.
 - Project, agent, model, and the status chip stay together in the transcript context strip. The provider lives in the topbar subline.
@@ -470,10 +470,14 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Pending automation approvals also appear in the Inbox under an `Automation` group, using the same approval card. They count toward the Inbox badge. Approve executes the stored plan; Deny records the decision.
 - Shortcuts: command palette, new session, search, send.
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
-- Transcript cache: an opt-in local copy of message text, with a keep-for window
-  in days, a maximum session count, a one-line size readout, Save, and Clear
-  cache. The note states that providers stay authoritative and that stored
-  transcripts are deleted when the cache is turned off.
+- Local data: one panel for everything the hub keeps on its own disk. The
+  transcript cache keeps its enable toggle, keep-for days, maximum session
+  count, size readout, Save, and Clear. Reply feedback, drafts, and read markers
+  each show a count and a Clear action. Retention is per store — cache 7 days,
+  markers and feedback 30, drafts **Never** — because a draft is unsent work
+  while the cache is derived data. **Clear all local data** asks for a second
+  click. The note states that providers own the conversations and that turning
+  the cache off also deletes the search index.
 - Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.
 - About: hub version, provider versions, build info.
 
