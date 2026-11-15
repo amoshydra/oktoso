@@ -1,4 +1,11 @@
-import { MemoryStateStore } from "@amoshydra/oktoso-storage";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  JsonStateStore,
+  MemoryStateStore,
+  type StateStore,
+} from "@amoshydra/oktoso-storage";
 import { EventBus } from "../packages/hub/src/services/event-bus";
 import { createLogger } from "../packages/hub/src/lib/logger";
 
@@ -13,7 +20,13 @@ import { createLogger } from "../packages/hub/src/lib/logger";
 const LISTENERS = Number(process.env.LOAD_LISTENERS ?? 200);
 const BURST = Number(process.env.LOAD_BURST ?? 500);
 
-const store = new MemoryStateStore();
+// Memory measures the bus; json measures production, where every publish is a
+// clone, a schema parse, a full rewrite, and two fsyncs.
+const useJson = process.env.LOAD_STORE === "json";
+const scratch = useJson ? await mkdtemp(join(tmpdir(), "oktoso-load-")) : undefined;
+const store: StateStore = scratch
+  ? await JsonStateStore.open({ filePath: join(scratch, "state.json") })
+  : new MemoryStateStore();
 const logger = createLogger({ level: "silent" });
 const bus = new EventBus(store, logger, { heartbeatMs: 60_000 });
 await bus.init();
@@ -59,9 +72,11 @@ console.log(
       publishP95Ms: +at(0.95).toFixed(3),
       publishMaxMs: +at(1).toFixed(3),
       framesPerSecond: Math.round(frames / (totalMs / 1000)),
+      store: useJson ? "json" : "memory",
       rssMB: +(process.memoryUsage().rss / 1_000_000).toFixed(1),
     },
     null,
     2,
   ),
 );
+if (scratch) await rm(scratch, { recursive: true, force: true });
