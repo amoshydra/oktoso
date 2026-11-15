@@ -1,5 +1,39 @@
-const SENSITIVE_KEY =
-  /password|passwd|token|authorization|api[-_]?key|secret|cookie|credential|text|body|content|prompt|draft|completion|transcript|messages|systemPrompt|context/i;
+/**
+ * Whole-key matches only, compared with separators and case removed.
+ *
+ * Substring matching masked diagnostics such as `contextTokens`,
+ * `statusText`, and `contentType`, which is exactly what an operator needs when
+ * a provider call fails.
+ */
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "passwd",
+  "token",
+  "tokens",
+  "accesstoken",
+  "refreshtoken",
+  "authorization",
+  "apikey",
+  "secret",
+  "secretkey",
+  "cookie",
+  "credential",
+  "credentials",
+  "text",
+  "body",
+  "content",
+  "prompt",
+  "draft",
+  "completion",
+  "transcript",
+  "messages",
+  "systemprompt",
+  "context",
+]);
+
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEYS.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""));
+}
 
 /**
  * Values registered at startup: the owner token, provider credentials, VAPID
@@ -51,13 +85,33 @@ function redactValue(value: unknown, seen: WeakSet<object>, depth: number): unkn
   if (seen.has(value)) return "[CIRCULAR]";
   seen.add(value);
 
+  if (value instanceof Error) {
+    // message/stack/cause are non-enumerable, so the plain walk would log {}.
+    return redactValue(
+      {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+        cause: value.cause,
+      },
+      seen,
+      depth + 1,
+    );
+  }
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) {
     return value.map((item) => redactValue(item, seen, depth + 1));
+  }
+  if (value instanceof Map) {
+    return redactValue(Object.fromEntries(value), seen, depth + 1);
+  }
+  if (value instanceof Set) {
+    return [...value].map((item) => redactValue(item, seen, depth + 1));
   }
 
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    output[key] = SENSITIVE_KEY.test(key)
+    output[key] = isSensitiveKey(key)
       ? "[REDACTED]"
       : redactValue(child, seen, depth + 1);
   }
