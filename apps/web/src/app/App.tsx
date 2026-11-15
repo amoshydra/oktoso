@@ -1167,7 +1167,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.17 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.18 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -6560,6 +6560,11 @@ function SessionDetail(props: {
             onClose={() => props.onDetailsOpenChange(false)}
             onMarkRead={() => void markRead()}
             onInterrupt={() => void interrupt()}
+            onSessionUpdated={(next) => {
+              setSession(next);
+              writeSessionCache(next);
+              props.onSessionChange(next);
+            }}
             onOpenSession={props.onOpenSession}
           />
         </>
@@ -7811,6 +7816,7 @@ function SessionDetails(props: {
   onClose: () => void;
   onMarkRead: () => void;
   onInterrupt: () => void;
+  onSessionUpdated: (session: Session) => void;
   onOpenSession: (ref: string) => void;
 }) {
   const { session, provider } = props;
@@ -7821,6 +7827,10 @@ function SessionDetails(props: {
   const [lineage, setLineage] = useState<SessionLineage>();
   const [exporting, setExporting] = useState<"md" | "json">();
   const [exportError, setExportError] = useState<string>();
+  const [renaming, setRenaming] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(session.title);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string>();
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const restoreOnClose = useRef(false);
@@ -7836,7 +7846,6 @@ function SessionDetails(props: {
       ? (tokens.input ?? 0) + (tokens.output ?? 0)
       : undefined);
 
-  useEffect(() => {
   useEffect(() => {
     let cancelled = false;
     setLineage(undefined);
@@ -7854,11 +7863,16 @@ function SessionDetails(props: {
   }, [props.client, session.ref]);
 
   useEffect(() => {
+    setRenaming(false);
+    setTitleDraft(session.title);
+    setRenameError(undefined);
+  }, [session.ref, session.title]);
+
+  useEffect(() => {
     const query = window.matchMedia("(max-width: 1319px)");
     const onChange = () => setOverlay(query.matches);
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, []);
   }, []);
 
   useEffect(() => {
@@ -7964,6 +7978,41 @@ function SessionDetails(props: {
     }
   };
 
+  const startRename = () => {
+    setTitleDraft(session.title);
+    setRenameError(undefined);
+    setRenaming(true);
+  };
+
+  const cancelRename = () => {
+    setRenaming(false);
+    setTitleDraft(session.title);
+    setRenameError(undefined);
+  };
+
+  const saveRename = async () => {
+    const title = titleDraft.trim();
+    if (!title || title === session.title || renameBusy) return;
+    setRenameBusy(true);
+    setRenameError(undefined);
+    setNotice(undefined);
+    try {
+      const updated = await props.client.renameSession(session.ref, title);
+      props.onSessionUpdated(updated);
+      setTitleDraft(updated.title);
+      setRenaming(false);
+      setNotice("Session renamed.");
+    } catch (reason) {
+      setRenameError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to rename the session.",
+      );
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
   return (
     <aside
       className="chat-details"
@@ -7989,6 +8038,77 @@ function SessionDetails(props: {
       </div>
 
       <div className="chat-details-body">
+        {provider?.capabilities.rename ? (
+          <section className="chat-details-section">
+            <div className="chat-details-label">Name</div>
+            {renaming ? (
+              <form
+                className="session-rename-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveRename();
+                }}
+              >
+                <label className="sr-only" htmlFor="session-rename-input">
+                  Session title
+                </label>
+                <input
+                  id="session-rename-input"
+                  className="session-rename-input"
+                  value={titleDraft}
+                  maxLength={200}
+                  autoFocus
+                  disabled={renameBusy}
+                  onChange={(event) => setTitleDraft(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelRename();
+                  }}
+                />
+                <div className="session-rename-actions">
+                  <button
+                    className="btn small primary"
+                    type="submit"
+                    disabled={
+                      renameBusy ||
+                      !titleDraft.trim() ||
+                      titleDraft.trim() === session.title
+                    }
+                  >
+                    {renameBusy ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    className="btn ghost small"
+                    type="button"
+                    disabled={renameBusy}
+                    onClick={cancelRename}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {renameError ? (
+                  <span className="form-error" role="alert">
+                    {renameError}
+                  </span>
+                ) : null}
+              </form>
+            ) : (
+              <div className="session-rename-row">
+                <strong>{session.title}</strong>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={startRename}
+                >
+                  Rename
+                </button>
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section className="chat-details-section">
           <div className="chat-details-label">Connection</div>
           <Detail label="Provider" value={providerLabel(session.providerID)} mono={false} />
@@ -8169,7 +8289,7 @@ function SessionDetails(props: {
           </button>
         ) : null}
         <span className="chat-details-notice" aria-live="polite">
-          {exportError ?? forkError ?? notice ?? ""}
+          {exportError ?? forkError ?? renameError ?? notice ?? ""}
         </span>
       </div>
     </aside>

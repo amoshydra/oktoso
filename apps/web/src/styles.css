@@ -4834,6 +4834,53 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   align-self: flex-start;
 }
 
+.session-rename-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.session-rename-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.session-rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-rename-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-base);
+  outline: 0;
+}
+
+.session-rename-input:focus {
+  border-color: var(--accent);
+}
+
+.session-rename-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.session-rename-actions .btn {
+  flex: 1;
+}
+
 .chat-details-actions {
   position: sticky;
   bottom: 0;
@@ -5332,7 +5379,8 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   .attention-field input,
   .attention-field select,
   .attention-field textarea,
-  .attention-choice-input {
+  .attention-choice-input,
+  .session-rename-input {
     font-size: var(--text-lg);
   }
 

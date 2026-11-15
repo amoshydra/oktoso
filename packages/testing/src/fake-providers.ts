@@ -947,6 +947,30 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     response.end();
     return;
   }
+  if (sessionMatch && request.method === "PATCH") {
+    const session = OPENCODE_SESSIONS.find((item) => item.id === sessionMatch[1]);
+    if (!session) {
+      sendJson(response, 404, {
+        _tag: "SessionNotFoundError",
+        message: "Session not found",
+      });
+      return;
+    }
+    const body = await readBody(request);
+    if (typeof body.title !== "string" || !body.title.trim()) {
+      sendJson(response, 400, {
+        _tag: "InvalidRequestError",
+        message: "title is required",
+      });
+      return;
+    }
+    session.title = body.title.trim();
+    session.time.updated = Date.now();
+    broadcastEvent("session.updated", { sessionID: session.id });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   if (sessionMatch && request.method === "GET") {
     // A child session that is not in the list, so the subagent tile can show a
     // live child without changing the session-list fixtures.
@@ -1327,6 +1351,10 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     const incomingMessages = incomingHistory.messages && typeof incomingHistory.messages === "object"
       ? (incomingHistory.messages as Record<string, FakeOwuiMessage>)
       : {};
+    if (typeof incoming.title === "string" && incoming.title.trim()) {
+      chat.title = incoming.title.trim();
+      chat.chat.title = incoming.title.trim();
+    }
     Object.assign(chat.chat.history.messages, incomingMessages);
     if (typeof incomingHistory.currentId === "string" || incomingHistory.currentId === null) {
       chat.chat.history.currentId = incomingHistory.currentId as string | null;

@@ -339,6 +339,22 @@ export class SessionService {
     }
   }
 
+  async rename(ref: string, title: string): Promise<Session> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.rename || !adapter.renameSession) {
+      throw notImplemented("This provider does not support renaming sessions");
+    }
+    this.assertProviderAvailable(adapter.id);
+    const session = await adapter.renameSession(
+      ref,
+      title,
+      operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
+    this.sessions.set(session.ref, session);
+    return session;
+  }
+
   /**
    * Return the last synced session without touching the provider. Read-path
    * callers use this for cheap metadata on a latency budget.

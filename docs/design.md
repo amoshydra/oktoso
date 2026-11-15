@@ -108,6 +108,7 @@ interface ProviderCapabilities {
   attachments: boolean
   files: boolean
   search: boolean
+  rename: boolean
 }
 ```
 
@@ -266,6 +267,7 @@ Endpoints:
 | Create | `POST /api/session` with `{ "title", "location": { "directory" } }` |
 | Switch agent | `POST /api/session/{sessionID}/agent` with `{ "agent": "..." }` |
 | Switch model | `POST /api/session/{sessionID}/model` with `{ "model": { "id", "providerID", "variant?" } }` |
+| Rename | `PATCH /api/session/{sessionID}` with `{ "title": "..." }` |
 | List agents | `GET /api/agent` |
 | List models | `GET /api/model` |
 | Interrupt | `POST /api/session/{sessionID}/interrupt` |
@@ -277,7 +279,7 @@ Endpoints:
 | Mark viewed | `POST /api/session/{sessionID}/view` |
 | Read file | `GET /api/fs/read/{path}?location[directory]={session directory}` |
 
-Capabilities: `list`, `read`, `send`, `create`, `stream`, `interrupt`, `permissions`, `forms`, `attachments`, `files`. No search across messages.
+Capabilities: `list`, `read`, `send`, `create`, `stream`, `interrupt`, `permissions`, `forms`, `attachments`, `files`, `rename`. No search across messages.
 
 Mapping notes:
 
@@ -285,7 +287,7 @@ Mapping notes:
 - Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`, including tool `state.metadata` and the part-level `created`/`completed` timings used for tile metrics.
 - `shell` records become a single `shell` part (`shellID`, `command`, `status`, `exit`, background flag, output, timings) on a `system` message. Background shells are long-lived and are shown as transcript rows.
 - `compaction` records become a single `compaction` part (`reason`, `status`, `summary`, model, cost, tokens) on a `system` message. `synthetic` records stay dropped: they duplicate tool results.
-- `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running when `busy` is newer than `idle` (or `idle` is absent); `outcome` drives error state, and `viewed` drives unread state.
+- `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running only when `busy` is set and a newer `idle` is absent; a session with no `busy` is idle. A busy run that has not updated for 30 minutes is treated as idle so a failed form/question tool cannot leave the composer on Steer. `outcome` drives error state, and `viewed` drives unread state.
 - Permission requests block the agent. They are blocking attention items.
 - Forms can be simple option lists or complex multi-field forms. The hub exposes the field schema so clients can render what they can and defer complex forms to the web client.
 - Model refs carry an optional `variant`. The hub exposes model variants as reasoning choices; switching the model or agent updates the provider session through the dedicated endpoints.
@@ -311,7 +313,7 @@ Endpoints:
 | Models | `GET /api/v1/models` |
 | Completion | `POST /api/chat/completions` with `stream: true` |
 
-Capabilities: `list`, `read`, `send`, `create`, `stream`. No permissions, forms, or interrupt in the first release.
+Capabilities: `list`, `read`, `send`, `create`, `stream`, `rename`. No permissions or forms in the first release.
 
 Mapping notes:
 

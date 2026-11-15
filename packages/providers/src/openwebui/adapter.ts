@@ -115,6 +115,7 @@ const openWebUICapabilities: ProviderCapabilities = {
   search: false,
   options: true,
   markRead: false,
+  rename: true,
 };
 
 export class OpenWebUIAdapter implements ProviderAdapter {
@@ -254,6 +255,35 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       ...this.toSessionFromDetail(chat, folders),
       unread: summary ? this.isUnread(summary) : false,
     };
+  }
+
+  async renameSession(
+    ref: string,
+    title: string,
+    signal: AbortSignal,
+  ): Promise<Session> {
+    const nativeID = this.nativeID(ref);
+    const detail = await this.fetchChat(nativeID, signal);
+    const response = await this.request<OpenWebUIChat>(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      {
+        chat: { ...detail.chat, title },
+        ...(detail.folder_id ? { folder_id: detail.folder_id } : {}),
+      },
+    );
+    const summary = this.summaries.get(nativeID);
+    if (summary) {
+      this.summaries.set(nativeID, {
+        ...summary,
+        title,
+        updated_at: response.updated_at ?? summary.updated_at,
+      });
+    }
+    const folders = await this.folders(signal).catch(() => new Map());
+    return this.toSessionFromDetail(response, folders);
   }
 
   async getMessages(
