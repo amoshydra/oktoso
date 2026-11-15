@@ -79,8 +79,11 @@ export const zTranscriptCacheSettings = z.object({
   enabled: z.boolean().default(false),
   /** Days a cached transcript survives after its last write. */
   ttlDays: z.number().int().min(1).max(90).default(7),
-  /** Least-recently-used transcripts are evicted past this count. */
-  maxSessions: z.number().int().min(10).max(2_000).default(200),
+  /**
+   * Least-recently-used transcripts are evicted past this count. The search
+   * index only covers cached sessions, so this is also the search horizon.
+   */
+  maxSessions: z.number().int().min(10).max(2_000).default(500),
 });
 
 export const zTranscriptCacheInput = z.object({

@@ -970,7 +970,7 @@ components:
               type: integer
               minimum: 10
               maximum: 2000
-              default: 200
+              default: 500
         stats:
           type: object
           properties:
