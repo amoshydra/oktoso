@@ -7831,6 +7831,7 @@ function SessionDetails(props: {
   const [titleDraft, setTitleDraft] = useState(session.title);
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState<string>();
+  const renameButtonRef = useRef<HTMLButtonElement | null>(null);
   const asideRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const restoreOnClose = useRef(false);
@@ -7877,10 +7878,13 @@ function SessionDetails(props: {
 
   useEffect(() => {
     const previous = document.activeElement;
-    restoreOnClose.current = window.matchMedia("(max-width: 1319px)").matches;
-    if (restoreOnClose.current) closeRef.current?.focus();
+    // Restore the opener in both layouts. Above 1320px details is a column,
+    // but the X and Escape still unmount it and should return focus.
+    restoreOnClose.current = true;
+    if (window.matchMedia("(max-width: 1319px)").matches) {
+      closeRef.current?.focus();
+    }
     return () => {
-      if (!restoreOnClose.current) return;
       if (previous instanceof HTMLElement && previous.isConnected) {
         previous.focus();
       }
@@ -7981,6 +7985,7 @@ function SessionDetails(props: {
   const startRename = () => {
     setTitleDraft(session.title);
     setRenameError(undefined);
+    setNotice(undefined);
     setRenaming(true);
   };
 
@@ -7988,6 +7993,8 @@ function SessionDetails(props: {
     setRenaming(false);
     setTitleDraft(session.title);
     setRenameError(undefined);
+    setNotice(undefined);
+    window.requestAnimationFrame(() => renameButtonRef.current?.focus());
   };
 
   const saveRename = async () => {
@@ -8002,6 +8009,7 @@ function SessionDetails(props: {
       setTitleDraft(updated.title);
       setRenaming(false);
       setNotice("Session renamed.");
+      window.requestAnimationFrame(() => renameButtonRef.current?.focus());
     } catch (reason) {
       setRenameError(
         reason instanceof Error
@@ -8048,6 +8056,12 @@ function SessionDetails(props: {
                   event.preventDefault();
                   void saveRename();
                 }}
+                onKeyDownCapture={(event) => {
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  cancelRename();
+                }}
               >
                 <label className="sr-only" htmlFor="session-rename-input">
                   Session title
@@ -8060,12 +8074,6 @@ function SessionDetails(props: {
                   autoFocus
                   disabled={renameBusy}
                   onChange={(event) => setTitleDraft(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Escape") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    cancelRename();
-                  }}
                 />
                 <div className="session-rename-actions">
                   <button
@@ -8100,6 +8108,7 @@ function SessionDetails(props: {
                 <button
                   className="text-button"
                   type="button"
+                  ref={renameButtonRef}
                   onClick={startRename}
                 >
                   Rename
@@ -8289,7 +8298,7 @@ function SessionDetails(props: {
           </button>
         ) : null}
         <span className="chat-details-notice" aria-live="polite">
-          {exportError ?? forkError ?? renameError ?? notice ?? ""}
+          {exportError ?? forkError ?? notice ?? ""}
         </span>
       </div>
     </aside>
