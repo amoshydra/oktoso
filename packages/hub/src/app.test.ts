@@ -1415,6 +1415,32 @@ describe("hub app", () => {
     expect(missing.status).toBeGreaterThanOrEqual(404);
   });
 
+  it("throttles repeated pairing attempts from one client", async () => {
+    const { app } = await createTestApp();
+    const headers = {
+      "x-forwarded-for": "203.0.113.9",
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 22; attempt += 1) {
+      const response = await app.request("/pair/not-a-code", {
+        method: "POST",
+        headers,
+      });
+      statuses.push(response.status);
+    }
+
+    expect(statuses.filter((status) => status === 401).length).toBeGreaterThan(0);
+    expect(statuses.at(-1)).toBe(429);
+
+    const other = await app.request("/pair/not-a-code", {
+      method: "POST",
+      headers: { ...headers, "x-forwarded-for": "198.51.100.7" },
+    });
+    expect(other.status).toBe(401);
+  });
+
   it("exposes Prometheus metrics behind the owner credential", async () => {
     const { app } = await createTestApp();
 
