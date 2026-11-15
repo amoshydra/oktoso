@@ -62,7 +62,6 @@ function makeConfig(
 ): NotificationConfig {
   return {
     enabled: true,
-    channels: [],
     routing: DEFAULT_NOTIFICATION_ROUTING,
     vapid: { subject: "mailto:test@example.com" },
     maxAttempts: 3,

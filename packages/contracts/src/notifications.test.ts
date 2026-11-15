@@ -70,27 +70,22 @@ describe("notification contracts", () => {
 
   it("never exposes channel credentials in the view", () => {
     const view = zNotificationChannelView.parse({
-      kind: "ntfy",
+      kind: "webpush",
       enabled: true,
       configured: true,
       token: "secret",
-      url: "https://ntfy.example.com",
-      botToken: "secret",
+      endpoint: "https://push.example.com/secret-capability",
     });
 
     expect(view).not.toHaveProperty("token");
-    expect(view).not.toHaveProperty("url");
-    expect(view).not.toHaveProperty("botToken");
+    expect(view).not.toHaveProperty("endpoint");
   });
 
   it("round-trips the settings view", () => {
     const settings = zNotificationSettings.parse({
       enabled: true,
       routing: DEFAULT_NOTIFICATION_ROUTING,
-      channels: [
-        { kind: "webpush", enabled: true, configured: true },
-        { kind: "ntfy", enabled: false, configured: true, label: "phone" },
-      ],
+      channels: [{ kind: "webpush", enabled: true, configured: true }],
       subscriptions: [
         {
           id: "sub-1",

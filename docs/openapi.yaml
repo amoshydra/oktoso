@@ -2963,9 +2963,6 @@ components:
       type: string
       enum:
         - webpush
-        - ntfy
-        - telegram
-        - webhook
     QuietHours:
       type: object
       properties:
@@ -3049,9 +3046,6 @@ components:
           type: string
           enum:
             - webpush
-            - ntfy
-            - telegram
-            - webhook
         enabled:
           type: boolean
         configured:
@@ -3158,9 +3152,6 @@ components:
           type: string
           enum:
             - webpush
-            - ntfy
-            - telegram
-            - webhook
         attentionID:
           type: string
         sessionRef:
@@ -3203,9 +3194,6 @@ components:
                 type: string
                 enum:
                   - webpush
-                  - ntfy
-                  - telegram
-                  - webhook
               attentionID:
                 type: string
               sessionRef:
@@ -3243,9 +3231,6 @@ components:
           type: string
           enum:
             - webpush
-            - ntfy
-            - telegram
-            - webhook
     NotificationTestResult:
       type: object
       properties:
@@ -3276,9 +3261,6 @@ components:
                 type: string
                 enum:
                   - webpush
-                  - ntfy
-                  - telegram
-                  - webhook
               enabled:
                 type: boolean
               configured:
