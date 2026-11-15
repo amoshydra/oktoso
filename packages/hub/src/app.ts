@@ -19,6 +19,7 @@ import type { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import type { TranscriptionService } from "./services/transcription-service";
 import type { QuestionService } from "./services/question-service";
 import type { NotificationService } from "./services/notification-service";
+import type { TranscriptCacheService } from "./services/transcript-cache";
 import type { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -42,6 +43,7 @@ import { registerReplyAuditRoutes } from "./http/routes/reply-audit";
 import { registerQuestionRoutes } from "./http/routes/questions";
 import { registerDraftRoutes } from "./http/routes/drafts";
 import { registerSettingsRoutes } from "./http/routes/settings";
+import { registerTranscriptCacheRoutes } from "./http/routes/transcript-cache";
 import { registerTranscriptionRoutes } from "./http/routes/transcribe";
 import { registerAttentionRoutes } from "./http/routes/attention";
 import { registerEventRoutes } from "./http/routes/events";
@@ -63,6 +65,8 @@ export interface AppDependencies {
   drafts: DraftService;
   attachments: AttachmentStore;
   settings: AssistantSettingsService;
+  /** Opt-in local transcript cache; absent in tests that do not need it. */
+  transcripts?: TranscriptCacheService;
   replies: ReplyService;
   replyFeedback: ReplyFeedbackStore;
   transcription: TranscriptionService;
@@ -130,6 +134,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);
   registerSettingsRoutes(app, deps.settings);
+  if (deps.transcripts) {
+    registerTranscriptCacheRoutes(app, deps.transcripts);
+  }
   registerTranscriptionRoutes(app, deps.transcription);
   registerAttentionRoutes(app, deps.attention);
   if (deps.notifications) {

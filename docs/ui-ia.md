@@ -452,6 +452,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Pending automation approvals also appear in the Inbox under an `Automation` group, using the same approval card. They count toward the Inbox badge. Approve executes the stored plan; Deny records the decision.
 - Shortcuts: command palette, new session, search, send.
 - Devices and tokens: pair a browser or wearable with a five-minute link, rotate the owner token, and revoke all paired sessions. Per-device revocation is later.
+- Transcript cache: an opt-in local copy of message text, with a keep-for window
+  in days, a maximum session count, a one-line size readout, Save, and Clear
+  cache. The note states that providers stay authoritative and that stored
+  transcripts are deleted when the cache is turned off.
 - Assistant: reply assistance and voice transcription endpoints. The voice section explains that web dictation needs HTTPS or localhost, that audio goes through the hub, and that the STT key stays on the hub.
 - About: hub version, provider versions, build info.
 
