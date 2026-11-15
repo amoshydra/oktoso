@@ -1,4 +1,5 @@
 import type { Session } from "@amoshydra/oktoso-contracts";
+import { Icon } from "./Icon";
 import { SessionRow } from "./SessionRow";
 import type { SessionTreeNode } from "./session-tree";
 
@@ -16,7 +17,6 @@ export interface SessionTreeProps {
   onOpen: (ref: string) => void;
   labels: SessionTreeLabels;
   activeRef?: string;
-  showStatusChip?: boolean;
   depth?: number;
 }
 
@@ -39,7 +39,6 @@ export function SessionTree(props: SessionTreeProps) {
           onOpen={props.onOpen}
           labels={props.labels}
           activeRef={props.activeRef}
-          showStatusChip={props.showStatusChip}
         />
       ))}
     </div>
@@ -54,7 +53,6 @@ function SessionTreeBranch(props: {
   onOpen: (ref: string) => void;
   labels: SessionTreeLabels;
   activeRef?: string;
-  showStatusChip?: boolean;
   parentTitle?: string;
 }) {
   const { node, depth } = props;
@@ -89,7 +87,6 @@ function SessionTreeBranch(props: {
               ) : null}
             </>
           }
-          showStatusChip={props.showStatusChip}
           reserveTrailing={hasChildren}
           onOpen={() => props.onOpen(session.ref)}
         />
@@ -107,22 +104,11 @@ function SessionTreeBranch(props: {
               props.onToggle(session.ref);
             }}
           >
-            <svg
+            <Icon
+              name="chevron-right"
+              size={14}
               className={`session-disclosure-chevron ${open ? "open" : ""}`}
-              viewBox="0 0 16 16"
-              width="14"
-              height="14"
-              aria-hidden="true"
-            >
-              <path
-                d="M6 3.5 10.5 8 6 12.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            />
           </button>
         ) : null}
       </div>
@@ -144,7 +130,6 @@ function SessionTreeBranch(props: {
               onOpen={props.onOpen}
               labels={props.labels}
               activeRef={props.activeRef}
-              showStatusChip={props.showStatusChip}
               parentTitle={session.title}
             />
           ))}

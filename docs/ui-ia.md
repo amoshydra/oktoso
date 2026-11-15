@@ -92,7 +92,7 @@ Every screen, session, overlay, and filter change that represents navigation is 
 
 ### Desktop
 
-- **Left rail:** global destinations with icons and labels. Provider health sits at the bottom.
+- **Left rail:** global destinations with icons and labels. Labels stay on one line and ellipsize inside the 64px rail; hover exposes the full name. Provider health sits at the bottom.
 - **Session sidebar:** search, filters, provider groups, project groups, session rows. This is the main browsing surface.
 - **Main area:** inbox, session list, chat, provider settings, or search results.
 - **Right details panel:** session metadata, provider link, model, agent, cost, tokens, parent session, and destructive actions.
@@ -237,7 +237,7 @@ The sessions view is the full browsing surface.
 
 ### Session row
 
-- Status dot: running, idle, error, offline.
+- One status dot: running, idle, error, offline. The row does not repeat the status as a pill; the accessible name carries the status word.
 - Title, truncated to one line.
 - Provider badge with the provider name.
 - Project or directory basename.
@@ -282,6 +282,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle.
 - The transcript repeats the title once as a 20px document title. There is no second sticky transcript header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
+- The topbar theme toggle is a 32px icon control with an outcome label (`Switch to light theme` / `Switch to dark theme`). In chat it is hidden at 420px and below so the title keeps its width; the theme control stays available on the other views.
 - Project, agent, model, and the status chip stay together in the document header. The provider lives in the topbar subline.
 
 ### Transcript
@@ -293,7 +294,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 - A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and is removed from the tab order and hidden at the bottom.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
-- Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Links open safely in a new tab.
+- Message text renders sanitized Markdown: paragraphs, lists, links, inline code, fenced code, blockquotes, and tables. Markdown headings are capped at 16px for `h1`/`h2` and 14px for `h3`/`h4`, so they never compete with the page title. Links open safely in a new tab.
 - Relative Markdown links and image sources resolve against the provider base URL. For OpenCode, project-relative file references resolve through the provider filesystem read endpoint with the session directory, so `docs/spec.md` and `docs/concepts/plot.png` open the actual project files rather than a provider-root URL. Absolute links stay absolute; `mailto:` and `tel:` links stay local; unsupported schemes and unsafe data images are removed.
 - Provider-hosted images and files load through the hub attachment proxy, which uses the provider credentials and enforces same-origin, size, redirect, and content-type rules. The browser receives a blob URL for private resources, so prompts and provider tokens stay out of image URLs. File links use the same proxy and download the attachment.
 - File parts use the same URL resolution. Image attachments render inline with a caption; other files keep their name, MIME type, and Open action.
@@ -431,7 +432,7 @@ On desktop, a 300px session sidebar sits between the rail and the transcript. It
 
 ## 10. Search
 
-- Search is a rail destination on desktop and a bottom-navigation destination on mobile.
+- Search is a rail destination on desktop and a bottom-navigation destination on mobile. The search field is 14px on desktop and 16px on mobile.
 - First release searches session titles, projects, directories, and agents through the hub session cache.
 - Provider and status filters mirror the Sessions view.
 - Results show title, provider, project or directory, status, and unread or attention cues.
@@ -496,7 +497,7 @@ The visual system uses a layered neutral palette. Borders and surface shifts car
 | `warning` | `#ffd166` | `#8a5200` | Needs attention |
 | `danger` | `#ff9292` | `#b91c1c` | Deny, error, destructive |
 
-Provider identity and state are separate systems. In session lists and inbox cards, provider badges use a neutral mark and the provider name. Provider accents appear only on the Providers screen, where they identify a connection rather than a state:
+Provider identity and state are separate systems. In session lists and inbox cards, provider badges use a neutral mark and the provider name. Provider accents appear only on the Providers screen, where the 30px provider mark carries the accent tint and border to identify a connection rather than a state:
 
 - OpenCode: mint `#7ee2b8` dark, `#0b6b3a` light
 - Open WebUI: blue `#9cc0ff` dark, `#2f4fb5` light
@@ -509,7 +510,7 @@ State color is reserved for status and attention. Unread is shown by title weigh
 - Faint text stays above 4.5:1 on cards and the canvas.
 - Interactive controls use `border-strong`, which clears 3:1 on the card surface.
 - Card edges use `border`; dividers use `border-subtle`.
-- Controls use `surface-2`; active rows use `surface-2` plus an accent inset bar.
+- Controls use `surface-2`; active rows use `surface-2` plus an accent inset bar. The active rail icon takes the accent; its label stays `text`.
 - Cards use a small shadow. Hovered cards and the composer use a medium shadow. Modals and sheets use a large shadow.
 - Focus uses one 2px accent outline. Inputs use a tight offset; the composer owns its own focus ring.
 - Status uses a label, a dot, and a tinted pill. Color is never the only cue.
@@ -544,7 +545,7 @@ The type scale has six roles, not a continuum of half-steps:
 - Radius: 4px for badges, 8px for controls, 12px for cards, 16px for sheets, 999px for pills.
 - Borders carry structure. Shadows are minimal and functional.
 - Icons: 16 or 18px line icons, 1.7px stroke. The rail and bottom navigation share the same set; lettermarks and text glyphs are not used for navigation or icon-only controls.
-- Desktop controls are 32px high. Quiet message actions are 28px. Mobile controls keep a 44px target, except the 32px composer send, which keeps an expanded hit area.
+- Desktop controls are 32px high. Quiet message actions are 28px. Mobile controls keep a 44px target. The composer `⋯`, Stop, and Send cluster uses three actual 44px squares with no overlapping pseudo hit area.
 
 ## 14. Mobile layout
 

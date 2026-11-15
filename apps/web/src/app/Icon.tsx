@@ -8,6 +8,9 @@ export type IconName =
   | "server"
   | "sliders"
   | "arrow-left"
+  | "arrow-up"
+  | "arrow-down"
+  | "ellipsis"
   | "sun"
   | "moon"
   | "x"
@@ -56,6 +59,15 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   "arrow-left": <path d="M19 12H5m7 7-7-7 7-7" />,
+  "arrow-up": <path d="M12 19V5m-7 7 7-7 7 7" />,
+  "arrow-down": <path d="M12 5v14m7-7-7 7-7-7" />,
+  ellipsis: (
+    <>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </>
+  ),
   sun: (
     <>
       <circle cx="12" cy="12" r="4" />
