@@ -46,6 +46,8 @@ export const zSearchPage = z.object({
   cursor: zSearchCursor,
   /** False while the index is still reconciling with the transcript cache. */
   ready: z.boolean(),
+  /** False when the transcript cache is off, so nothing is searchable. */
+  enabled: z.boolean(),
 });
 
 export type SearchScope = z.infer<typeof zSearchScope>;

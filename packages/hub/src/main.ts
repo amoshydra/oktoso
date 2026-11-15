@@ -598,6 +598,7 @@ async function main(): Promise<void> {
       index: searchIndex,
       sessions,
       cache: transcripts,
+      enabled: () => transcripts.enabled,
     });
     attention = new AttentionService(
       registry,
