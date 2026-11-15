@@ -162,10 +162,6 @@ export const zNotificationDeliveryPage = z.object({
   data: z.array(zNotificationDelivery),
 });
 
-export const zNotificationTestInput = z.object({
-  channel: zNotificationChannelKind.optional(),
-});
-
 export const zNotificationTestResult = z.object({
   attempted: z.number().int().min(0),
   delivered: z.number().int().min(0),
@@ -211,5 +207,4 @@ export type NotificationDeliveryStatus = z.infer<
 export type NotificationDeliveryPage = z.infer<
   typeof zNotificationDeliveryPage
 >;
-export type NotificationTestInput = z.infer<typeof zNotificationTestInput>;
 export type NotificationTestResult = z.infer<typeof zNotificationTestResult>;
