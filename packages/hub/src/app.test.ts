@@ -38,6 +38,7 @@ import {
   resetFakeProviderState,
   type FakeProviderServer,
 } from "@amoshydra/oktoso-testing";
+import type { AutomationTemplate } from "@amoshydra/oktoso-contracts";
 
 const token = "test-token-long-enough";
 const logger = createLogger({ level: "silent" });
@@ -70,6 +71,7 @@ async function createTestApp(options: {
   providerConfigPath?: string;
   transcriptionFetch?: typeof fetch;
   openwebui?: boolean;
+  templates?: AutomationTemplate[];
 } = {}) {
   const fake = await createFakeProviderServer({ kind: "opencode", port: 0 });
   servers.push(fake);
@@ -162,7 +164,7 @@ async function createTestApp(options: {
           limits: { maxActionsPerHour: 6, maxActionsPerDay: 24 },
         },
       ],
-      templates: [],
+      templates: options.templates ?? [],
       quietHours: {
         enabled: false,
         start: "22:00",
@@ -1441,20 +1443,82 @@ describe("hub app", () => {
     expect(other.status).toBe(401);
   });
 
-  it("lists templates and rejects an unknown template start", async () => {
-    const { app } = await createTestApp();
+  it("lists templates and starts one with a bare session body", async () => {
+    const { app } = await createTestApp({
+      templates: [
+        {
+          id: "nightly",
+          name: "Nightly review",
+          providerID: "desktop-opencode",
+          title: "Nightly review",
+          text: "Review the repository.",
+        },
+      ],
+    });
     const headers = { Authorization: `Bearer ${token}` };
 
     const view = (await (
       await app.request("/api/v1/automation", { headers })
-    ).json()) as { data: { templates: unknown[] } };
-    expect(Array.isArray(view.data.templates)).toBe(true);
+    ).json()) as {
+      data: { templates: Array<{ id: string; providerID: string }> };
+    };
+    expect(view.data.templates).toEqual([
+      expect.objectContaining({
+        id: "nightly",
+        providerID: "desktop-opencode",
+      }),
+    ]);
+
+    const started = await app.request(
+      "/api/v1/automation/templates/nightly/start",
+      { method: "POST", headers },
+    );
+    expect(started.status).toBe(201);
+    const body = (await started.json()) as {
+      ref: string;
+      title: string;
+      data?: unknown;
+    };
+    // The client reads `ref` off a bare session, like POST /api/v1/sessions.
+    expect(body.ref).toMatch(/^desktop-opencode:/);
+    expect(body.title).toBe("Nightly review");
+    expect("data" in body).toBe(false);
+
+    const messages = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(body.ref)}/messages`,
+      { headers },
+    );
+    expect(JSON.stringify(await messages.json())).toContain(
+      "Review the repository.",
+    );
 
     const missing = await app.request(
       "/api/v1/automation/templates/nope/start",
       { method: "POST", headers },
     );
     expect(missing.status).toBe(404);
+  });
+
+  it("names the unknown provider when a template cannot start", async () => {
+    const { app } = await createTestApp({
+      templates: [
+        { id: "ghost", providerID: "not-configured", title: "Ghost" },
+      ],
+    });
+    const response = await app.request(
+      "/api/v1/automation/templates/ghost/start",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "not_found",
+        message: expect.stringContaining("not-configured"),
+      },
+    });
   });
 
   it("exposes Prometheus metrics behind the owner credential", async () => {

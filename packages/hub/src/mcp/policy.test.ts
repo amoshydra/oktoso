@@ -33,7 +33,20 @@ const automationView: AutomationView = {
   enabled: true,
   paused: false,
   dryRun: true,
-  templates: [],
+  templates: [
+    {
+      id: "nightly_open",
+      providerID: "opencode",
+      title: "Nightly open",
+      text: "Leaked prompt text",
+    },
+    {
+      id: "nightly_web",
+      providerID: "openwebui",
+      title: "Nightly web",
+      text: "Leaked prompt text",
+    },
+  ],
   watchers: [
     {
       id: "global",
@@ -223,6 +236,9 @@ describe("withProviderPolicy", () => {
     ]);
     expect(view.allowedShapes.map((shape) => shape.id)).toEqual([
       "shape_open",
+    ]);
+    expect(view.templates.map((template) => template.id)).toEqual([
+      "nightly_open",
     ]);
   });
 

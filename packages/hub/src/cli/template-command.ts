@@ -25,13 +25,15 @@ export async function runTemplateCommand(
 
   if (options.action === "list") {
     const view = await client.automation();
-    if (view.templates.length === 0) {
+    // Older hubs predate the field; treat that as an empty list.
+    const templates = view.templates ?? [];
+    if (templates.length === 0) {
       process.stdout.write(
         "No templates configured. Add automation.templates in the hub config.\n",
       );
       return;
     }
-    for (const template of view.templates) {
+    for (const template of templates) {
       process.stdout.write(
         `${template.id.padEnd(24)} ${template.providerID.padEnd(20)} ${
           template.name ?? template.title

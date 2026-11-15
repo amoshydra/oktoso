@@ -227,7 +227,7 @@ Read-only:
 | `sessions_messages` | Paginated transcript |
 | `attention_list` | Permissions, approvals, questions, unread, and errors |
 | `questions_get` | Pending question with choices and risk |
-| `automation_list` | Watchers, dry-run/pause state, recent runs, approvals, and allowed shapes; `runs`/`approvals` default to 10 and cap at 50, `shapes` defaults to 20 and caps at 100 |
+| `automation_list` | Watchers, start templates, dry-run/pause state, recent runs, approvals, and allowed shapes; `runs`/`approvals` default to 10 and cap at 50, `shapes` defaults to 20 and caps at 100 |
 | `approvals_list` | Actions the automation policy escalated to a human; `limit` defaults to 20 and caps at 100 |
 
 Write (`--allow-write`):

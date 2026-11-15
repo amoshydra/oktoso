@@ -462,3 +462,34 @@ describe("HubClient.setSessionSelection", () => {
     });
   });
 });
+
+describe("HubClient.startTemplate", () => {
+  it("posts to the template start route and reads the bare session", async () => {
+    let captured: { url: string; init: RequestInit | undefined } | undefined;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      captured = { url: String(input), init };
+      return new Response(
+        JSON.stringify({
+          ref: "desktop-opencode:ses_tpl",
+          providerID: "desktop-opencode",
+          nativeID: "ses_tpl",
+          title: "Nightly review",
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const hub = new HubClient({
+      baseUrl: "http://hub",
+      token: "owner-token",
+      fetchImpl,
+    });
+
+    const session = await hub.startTemplate("nightly review");
+
+    expect(captured?.url).toBe(
+      "http://hub/api/v1/automation/templates/nightly%20review/start",
+    );
+    expect(captured?.init?.method).toBe("POST");
+    expect(session.ref).toBe("desktop-opencode:ses_tpl");
+  });
+});
