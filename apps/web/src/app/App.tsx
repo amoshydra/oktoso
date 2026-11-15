@@ -1113,10 +1113,10 @@ export function App() {
                 onOpen={openSession}
               />
             ) : view === "providers" ? (
-              <>
+              <div className="providers-layout">
                 {providerPanel}
                 {diagnosticsPanel}
-              </>
+              </div>
             ) : view === "settings" ? (
               <>
                 <section className="grid-two">
@@ -1160,7 +1160,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.1 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.13 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -2491,9 +2491,7 @@ function SearchView(props: {
                     <span className="session-subagent-tag">Subagent</span>
                   ) : undefined
                 }
-                metaSuffix={
-                  session.agent ? <> · {session.agent}</> : undefined
-                }
+                metaSuffix={session.agent}
                 onOpen={() => props.onOpen(session.ref)}
               />
             ))}
@@ -5550,7 +5548,6 @@ function SessionDetail(props: {
                 tabIndex={0}
               >
               <header className="chat-doc-head">
-                <div className="chat-doc-title">{session.title}</div>
                 <div className="chat-meta">
                   {session.project || session.directory ? (
                     <span>{session.project ?? session.directory}</span>

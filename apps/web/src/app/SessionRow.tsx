@@ -35,14 +35,23 @@ export function SessionRow(props: SessionRowProps) {
       <span className={`session-status-dot ${session.status}`} />
       <span className="session-list-main">
         <strong>{session.title}</strong>
-        <span className="session-list-meta">
-          {props.metaPrefix}
-          {props.provider}
-          {session.project || session.directory ? (
-            <> · {session.project ?? session.directory}</>
-          ) : null}
-          {props.metaSuffix}
-        </span>
+        {props.metaPrefix ? (
+          <span className="session-list-tags">{props.metaPrefix}</span>
+        ) : null}
+      </span>
+      <span className="session-list-facts">
+        <span className="session-meta-provider">{props.provider}</span>
+        {session.project || session.directory || props.metaSuffix ? (
+          <span className="session-meta-context">
+            {session.project ?? session.directory}
+            {props.metaSuffix ? (
+              <>
+                {session.project || session.directory ? " · " : ""}
+                {props.metaSuffix}
+              </>
+            ) : null}
+          </span>
+        ) : null}
       </span>
       <span className="session-list-side">
         {props.attention ? (
