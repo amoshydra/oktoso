@@ -33,7 +33,7 @@ the only two layouts. The phone surface is a separate long page.
 | `answer-confirm` | `CONFIRM · title` | `Send this answer?` + quoted text | `This cannot be undone.` | Answer |
 | `answer-stale` | `ANSWER · changed` or `ANSWER · resolved` | changed/resolved copy | `Tap choose · Back ×2` | Chat |
 | `session-actions` | `SESSION` | `Stop` (running) / `Phone keyboard` | `Tap choose · Back ×2` | Chat or More |
-| `reply` | `REPLY n/N` + ` · Suggested` on a model page | model answer / `Alt:` / `Ask:` first, then canned | `Tap choose · Back ×2` (or `Sending…`) | Chat or More |
+| `reply` | `REPLY n/N` + ` · Suggested` on a model page | expected `answer` first (including a done fallback acknowledgement), then the other model roles, then canned | `Tap choose · Back ×2` (or `Sending…`) | Chat or More |
 | `choices` | `CHOOSE n` + ` · Suggested` | choice labels | `Tap choose · Back ×2` | Reply |
 | `voice` | `VOICE` | `Listening…` / tap to stop / Back cancels | `Tap to stop` | Chat |
 | `failure` | `SESSION EXPIRED` / `HUB OFFLINE` / `AGENT OFFLINE` / `TIMEOUT` | failure message | `Pair again…` or `Tap choose · Back ×2` | origin |

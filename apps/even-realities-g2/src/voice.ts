@@ -23,6 +23,17 @@ export function transcriptionConfigured(
  * endpoint. The hub does not generate this action because the web client has
  * its own dictation control.
  */
+/**
+ * G2 reply pages show three choices. Keep the expected answer first, then the
+ * other model suggestions, then the canned utilities. A done fallback answer
+ * is canned but still belongs at the top.
+ */
+export function orderReplyOptions(options: ReplyOption[]): ReplyOption[] {
+  const rank = (option: ReplyOption): number =>
+    option.role === "answer" ? 0 : option.source === "model" ? 1 : 2;
+  return [...options].sort((left, right) => rank(left) - rank(right));
+}
+
 export function withVoiceOption(
   options: ReplyOption[],
   enabled: boolean,

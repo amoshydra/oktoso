@@ -70,6 +70,7 @@ import {
 import { selectSendKey } from "./send-key";
 import {
   pcmChunksToWav,
+  orderReplyOptions,
   transcriptionConfigured,
   withVoiceOption,
 } from "./voice";
@@ -2545,10 +2546,7 @@ function replyView(): {
   hasNext: boolean;
   suggested: boolean;
 } {
-  const ordered = [...state.replyOptions].sort(
-    (left, right) =>
-      Number(right.source === "model") - Number(left.source === "model"),
-  );
+  const ordered = orderReplyOptions(state.replyOptions);
   const page = pageChoices(ordered, state.replyPage, 3);
   const items = page.items.map((option) => option.label);
   const hasPrevious = page.page > 0;
