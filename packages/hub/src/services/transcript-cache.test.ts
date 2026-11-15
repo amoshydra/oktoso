@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message, MessagePage, Session } from "@amoshydra/oktoso-contracts";
@@ -51,25 +51,28 @@ function page(messages: Message[], next: string | null = null): MessagePage {
   return { data: messages, cursor: { previous: null, next } };
 }
 
-async function setup(options: { enabled?: boolean; now?: () => number } = {}) {
+async function setup(
+  options: { enabled?: boolean; now?: () => number; maxSessions?: number } = {},
+) {
+  const directory = await root();
   const store = new MemoryStateStore();
   if (options.enabled) {
     await store.update((state) => {
       state.transcriptCache = {
         enabled: true,
         ttlDays: 7,
-        maxSessions: 200,
+        maxSessions: options.maxSessions ?? 200,
       };
     });
   }
   const service = new TranscriptCacheService({
-    root: await root(),
+    root: directory,
     store,
     logger,
     ...(options.now ? { now: options.now } : {}),
   });
   await service.init();
-  return { service, store };
+  return { service, store, directory };
 }
 
 describe("TranscriptCacheService", () => {
@@ -167,8 +170,7 @@ describe("TranscriptCacheService", () => {
   });
 
   it("deletes stored transcripts when the cache is turned off", async () => {
-    const { service } = await setup({ enabled: true });
-    const directory = await root();
+    const { service, directory } = await setup({ enabled: true });
 
     await service.record(session(), page([message("m1", 1)]));
     const view = await service.update({ enabled: false });
@@ -190,6 +192,135 @@ describe("TranscriptCacheService", () => {
     expect(service.stats().sessions).toBe(0);
     expect(await service.all()).toEqual([]);
     expect(service.settings().enabled).toBe(true);
+  });
+
+
+  it("keeps every page when two records for one session race", async () => {
+    const { service } = await setup({ enabled: true });
+
+    await Promise.all([
+      service.record(session(), page([message("m1", 1)], "older")),
+      service.record(session(), page([message("m2", 2)], null)),
+    ]);
+
+    const cached = await service.read("test:ses_1");
+    expect(cached?.messages.map((item) => item.id).sort()).toEqual(["m1", "m2"]);
+  });
+
+  it("persists the index after a limit change", async () => {
+    const { service, directory } = await setup({ enabled: true });
+    for (let index = 0; index < 11; index += 1) {
+      await service.record(
+        session({ ref: `test:ses_${index}`, nativeID: `ses_${index}` }),
+        page([message(`m${index}`, index)]),
+      );
+    }
+
+    await service.update({ maxSessions: 10 });
+    const onDisk = JSON.parse(
+      await readFile(join(directory, "index.json"), "utf8"),
+    ) as { entries: Record<string, unknown> };
+    expect(Object.keys(onDisk.entries)).toHaveLength(10);
+  });
+
+  it("persists the last use time so LRU survives a restart", async () => {
+    let now = 1_000;
+    const { service, store, directory } = await setup({
+      enabled: true,
+      maxSessions: 10,
+      now: () => now,
+    });
+    const record = async (
+      target: TranscriptCacheService,
+      ref: string,
+      at: number,
+    ) => {
+      now = at;
+      await target.record(
+        session({ ref, nativeID: ref.replace("test:", "") }),
+        page([message(`m-${ref}`, at)]),
+      );
+    };
+
+    for (let index = 0; index < 10; index += 1) {
+      await record(service, `test:ses_${index}`, 1_000 + index);
+    }
+    now = 2_000;
+    await service.read("test:ses_0");
+    await service.whenIdle();
+
+    const restarted = new TranscriptCacheService({
+      root: directory,
+      store,
+      logger,
+      now: () => now,
+    });
+    await restarted.init();
+    await record(restarted, "test:ses_plus", 3_000);
+
+    expect(restarted.stats().sessions).toBe(10);
+    // The refreshed transcript survives; the one written right after it goes.
+    expect(await restarted.read("test:ses_0")).toBeDefined();
+    expect(await restarted.read("test:ses_1")).toBeUndefined();
+  });
+
+  it("serves nothing while the cache is off", async () => {
+    const { service } = await setup({ enabled: true });
+    await service.record(session(), page([message("m1", 1)]));
+    await service.update({ enabled: false });
+
+    expect(await service.read("test:ses_1")).toBeUndefined();
+    expect(await service.all()).toEqual([]);
+  });
+
+  it("drops orphan files and abandoned temp files at start", async () => {
+    const { directory } = await setup({ enabled: true });
+    await writeFile(join(directory, "deadbeef.json"), "{}", { mode: 0o600 });
+    await writeFile(join(directory, "leftover.tmp"), "{}", { mode: 0o600 });
+
+    const restarted = new TranscriptCacheService({
+      root: directory,
+      store: new MemoryStateStore(),
+      logger,
+    });
+    await restarted.init();
+
+    const names = await readdir(directory);
+    expect(names).not.toContain("deadbeef.json");
+    expect(names).not.toContain("leftover.tmp");
+  });
+
+  it("stores text only, never tool output or reasoning", async () => {
+    const { service } = await setup({ enabled: true });
+    const rich: Message = {
+      id: "m1",
+      sessionRef: "test:ses_1",
+      role: "assistant",
+      createdAt: 1,
+      parts: [
+        { type: "reasoning", text: "hidden thinking" },
+        { type: "text", text: "visible answer" },
+        { type: "tool", id: "call_1", name: "bash", status: "completed" },
+      ],
+    };
+
+    await service.record(session(), page([rich]));
+    const cached = await service.read("test:ses_1");
+
+    expect(cached?.messages).toHaveLength(1);
+    expect(cached?.messages[0]?.text).toBe("visible answer");
+    expect(JSON.stringify(cached)).not.toContain("hidden thinking");
+    expect(JSON.stringify(cached)).not.toContain("bash");
+  });
+
+  it("caps a single transcript and marks it truncated", async () => {
+    const { service } = await setup({ enabled: true });
+    const huge = "x".repeat(1_100_000);
+
+    await service.record(session(), page([message("m1", 1, huge)]));
+
+    const cached = await service.read("test:ses_1");
+    expect(cached?.truncated).toBe(true);
   });
 
   it("ignores a corrupt index instead of failing to start", async () => {
