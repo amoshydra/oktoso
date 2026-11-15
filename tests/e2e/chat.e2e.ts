@@ -667,6 +667,15 @@ describe("navigation history", () => {
     expect(currentPath()).toContain("details=1");
   });
 
+  it("closes the desktop details column with Escape", async () => {
+    await page!.setViewportSize({ width: 1440, height: 900 });
+    await openSession("Fix auth race in gateway");
+    // Above 1320px the column opens automatically with the session.
+    await page!.locator("#session-details").waitFor();
+    await page!.keyboard.press("Escape");
+    await page!.locator("#session-details").waitFor({ state: "hidden" });
+  });
+
   it("opens and closes the new-session panel with history", async () => {
     if (!page) throw new Error("The E2E page is not ready");
     await page.getByRole("button", { name: "Sessions" }).click();
