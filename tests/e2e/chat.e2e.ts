@@ -384,6 +384,48 @@ describe("chat sending", () => {
     ).toBe(true);
   });
 
+  it("keeps the running mobile composer controls at 44px without overlap", async () => {
+    await openSession("Port hub to Rust");
+    await page!.setViewportSize({ width: 390, height: 844 });
+    await page!.locator(".chat-composer textarea").fill(`Slow cluster ${Date.now()}`);
+    await page!.getByRole("button", { name: "Send message" }).click();
+    await page!
+      .getByRole("button", { name: "Interrupt the running agent" })
+      .waitFor({ timeout: 5_000 });
+
+    const rects = await page!.evaluate(() => {
+      const selectors = {
+        more: ".composer-tools-toggle",
+        stop: ".composer-interrupt",
+        send: ".composer-send",
+      };
+      const result: Record<string, { x: number; w: number; h: number; right: number } | null> = {};
+      for (const [key, selector] of Object.entries(selectors)) {
+        const node = document.querySelector(selector);
+        if (!node) {
+          result[key] = null;
+          continue;
+        }
+        const rect = node.getBoundingClientRect();
+        result[key] = {
+          x: Math.round(rect.x),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          right: Math.round(rect.right),
+        };
+      }
+      return result;
+    });
+
+    for (const key of ["more", "stop", "send"] as const) {
+      expect(rects[key]).not.toBeNull();
+      expect(rects[key]!.w).toBe(44);
+      expect(rects[key]!.h).toBe(44);
+    }
+    expect(rects.more!.right).toBeLessThanOrEqual(rects.stop!.x);
+    expect(rects.stop!.right).toBeLessThanOrEqual(rects.send!.x);
+  });
+
   it("floats the jump and keeps the composer fixed while the transcript fades", async () => {
     await openSession("Refactor session index");
     const composerTop = await page!
@@ -404,6 +446,9 @@ describe("chat sending", () => {
         classes: panel.className,
         jumpOpacity: getComputedStyle(jump).opacity,
         jumpHidden: jump.getAttribute("aria-hidden"),
+        jumpAria: jump.getAttribute("aria-label"),
+        jumpText: jump.textContent?.trim() ?? "",
+        measure: getComputedStyle(document.querySelector(".chat-message")!).maxWidth,
         fadeTop: style.getPropertyValue("--fade-top").trim(),
         fadeBottom: style.getPropertyValue("--fade-bottom").trim(),
         masked: style.maskImage !== "none",
@@ -420,6 +465,9 @@ describe("chat sending", () => {
     expect(middle.classes).toContain("has-above");
     expect(middle.classes).toContain("has-below");
     expect(middle.jumpOpacity).toBe("1");
+    expect(middle.jumpAria).toBeNull();
+    expect(middle.jumpText.length).toBeGreaterThan(0);
+    expect(middle.measure).toBe("728px");
     expect(middle.fadeTop).toBe("24px");
     expect(middle.fadeBottom).toBe("24px");
     expect(middle.masked).toBe(true);
