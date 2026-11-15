@@ -10,6 +10,7 @@ import { zProviderConfig, type ProviderConfig } from "../config/schema";
 import { assertConfigFilePermissions } from "../config/permissions";
 import { badRequest, conflict, notFound } from "../domain/errors";
 import type { Logger } from "../lib/logger";
+import { registerSecret } from "../lib/redact";
 import type { AttentionService } from "./attention-service";
 import type { ProviderEventService } from "./provider-events";
 import type { ProviderRegistry } from "./provider-registry";
@@ -18,6 +19,12 @@ import type { SessionService } from "./session-service";
 interface RawHubConfig {
   providers?: ProviderConfig[];
   [key: string]: unknown;
+}
+
+/** Credentials added at runtime must join the redactor too. */
+function registerProviderSecret(auth: ProviderConfig["auth"]): void {
+  if (auth?.kind === "basic") registerSecret(auth.password);
+  else if (auth?.kind === "bearer") registerSecret(auth.token);
 }
 
 export class ProviderAdminService {
@@ -48,6 +55,7 @@ export class ProviderAdminService {
         ...raw,
         providers: [...providers, config],
       });
+      registerProviderSecret(config.auth);
       this.registry.add(config);
       this.invalidate();
       void this.providerEvents?.syncSubscriptions();
@@ -84,6 +92,7 @@ export class ProviderAdminService {
       const next = [...providers];
       next[index] = config;
       await this.write({ ...raw, providers: next });
+      registerProviderSecret(config.auth);
       this.registry.replace(config);
       this.invalidate();
       void this.providerEvents?.syncSubscriptions();

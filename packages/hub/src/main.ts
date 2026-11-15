@@ -672,6 +672,8 @@ async function main(): Promise<void> {
             privateKey: config.notifications.vapid.privateKey,
           }
         : await loadOrCreateVapidKeys(resolve(config.dataDir));
+    // The key actually in use can come from disk, not only from the config.
+    registerSecrets([vapidKeys.privateKey]);
     const notifications = new NotificationService({
       config: config.notifications,
       store,
