@@ -28,15 +28,17 @@ Update the checkboxes in place as work lands. Do not create a parallel plan.
   `docs/openapi.yaml`.
 - No background aggregation endpoint. Rollups are computed from data the client
   already fetches.
-- `App.tsx` is already 7,219 lines. New UI lands in its own module and mounts
+- `App.tsx` is already 8,859 lines. New UI lands in its own module and mounts
   from `App.tsx`; do not grow the monolith.
 
 ## Workstreams and dependencies
 
 ```text
-W1 Mobile loop      Phase 3 (notifications/PWA) ──> Phase 4 (supervisor) ──> Phase 9 (G2 ambient)
-W2 Memory           Phase 5 (recall/lineage) ─────────────────────────────> Phase 8 (hardening)
-W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ─────> Phase 8
+W1 Mobile loop      Phase 3 (notifications/PWA) ──> Phase 4 (supervisor)
+W2 Memory           Phase 5 (recall/lineage)
+W3 Platform         Phase 6 (providers, skipped) ──> Phase 7 (MCP southbound, skipped)
+Hardening           Phase 8 (independent of the skipped platform track)
+Bets                Phase 9 (independent, one at a time)
 ```
 
 - Phase 3 is independent. Start there.
@@ -44,11 +46,12 @@ W3 Platform         Phase 6 (providers) ──> Phase 7 (MCP southbound) ──�
   Phase 3 notification channel.
 - Phase 5 is independent and can run in parallel with Phase 3/4 if there is
   capacity.
-- Phase 6 is independent. Hermes is the first task because it closes a
-  documented gap.
-- Phase 7 depends on the Phase 4 policy layer and the Phase 6 capability model.
-- Phase 8 lands last, but `/metrics` can be pulled forward at any time.
-- Phase 9 depends on all of the above.
+- Phase 6 and Phase 7 are **skipped by the owner** as of 2026-11-16: no Hermes
+  install, and the southbound broker's benefit is unclear for a single-owner
+  hub. The tasks stay in this document as the record; the revisit trigger is a
+  third provider or a concrete tool-governance need.
+- Phase 8 is independent of the skipped track and is done except F5.
+- Phase 9 is independent bets, not a dependency chain: schedule one at a time.
 
 ## Phase 3 — Always-on attention
 
@@ -340,7 +343,7 @@ real session.
 
 ## Phase 5 — Recall and lineage
 
-Target: 3–4 weeks. Release: `v0.3.0`.
+Target: 3–4 weeks. Released as `0.2.2`.
 
 ### C1. Transcript cache
 
@@ -429,11 +432,11 @@ Status: done.
 
 ### C6. Cost view
 
-- [ ] Compute per-provider, project, model, and day from the existing session
+- [x] Compute per-provider, project, model, and day from the existing session
   list pages, walked client-side; no aggregation endpoint.
-- [ ] Place it as the first section of the Overview destination, with no new
+- [x] Place it as the first section of the Overview destination, with no new
   route or nav item.
-- [ ] Show tokens and cost with tabular figures; an unreported figure is an em
+- [x] Show tokens and cost with tabular figures; an unreported figure is an em
   dash and the note names how many sessions reported nothing.
 
 ### C7. Retention and export
@@ -455,7 +458,7 @@ fixture; export round-trips; deleting local state leaves the provider untouched.
 
 ## Phase 6 — Provider platform
 
-Target: 6–8 weeks. Release: `v0.4.0`.
+Target: 6–8 weeks. Skipped by the owner; revisit on a third provider.
 
 ### D1. Hermes adapter
 
@@ -492,7 +495,7 @@ passes the suite with no hub changes.
 
 ## Phase 7 — MCP southbound
 
-Target: 6–8 weeks. Release: `v0.5.0`.
+Target: 6–8 weeks. Skipped by the owner; revisit on a tool-governance need.
 
 ### E1. Client registry
 
@@ -525,7 +528,7 @@ Target: 6–8 weeks. Release: `v0.5.0`.
 
 ## Phase 8 — Hardening and observability
 
-Target: 2–3 weeks. Release: `v0.6.0`.
+Target: 2–3 weeks. Release: `0.2.x` (phase 5 already shipped as `0.2.2`).
 
 ### F1. Metrics
 
@@ -567,13 +570,24 @@ Status: done.
 - [x] Docker image (`Dockerfile`), Termux install script
   (`packaging/termux-install.sh`), and a systemd unit
   (`packaging/oktoso.service`).
-- [x] Clean Node 24 install check: CI runs Node 24, and the image is pinned to
-  `node:24-alpine`.
+- [x] Clean Node 24 install check: CI runs Node 24, the image is pinned to
+  `node:24-alpine`, and `scripts/smoke-image.sh` builds, boots, and probes the
+  image (health 200, unauthenticated `/metrics` 401).
 
 ### F5. Acceptance runs
 
 Status: blocked on hardware — a Termux device and a TLS/VPN path. The runbook is
 in `deployment.md` ("Acceptance run"); results go in the same section.
+
+**F5 exception (2026-11-16).** F5 needs a Termux device and a TLS/VPN path;
+neither is available. Phase 8 closes on the four acceptance bullets in
+`roadmap.md`, none of which depend on F5. What stays unvalidated is the Android
+install path (`packaging/termux-install.sh`) and the external-origin path.
+Compensating evidence: the image builds, boots, answers health, and rejects an
+unauthenticated `/metrics` scrape (`scripts/smoke-image.sh`), and the seven-step
+runbook is unchanged. Until the runbook runs and its results are recorded,
+`deployment.md` and the README must not claim a verified Termux install. A
+failed run is a `0.2.x` patch, not a phase reopen.
 
 - [ ] Real Termux and cross-host run.
 - [ ] TLS/VPN validation.
@@ -585,8 +599,8 @@ Status: done.
 - [x] SSE fan-out and event-burst load test (`scripts/load-test.ts`): 500
   events to 200 subscribers, 100k serialized frames, p95 0.099 ms per publish.
 - [x] Security review with a written record (`docs/security-review.md`):
-  fourteen findings, one low-risk gap (no pairing-attempt throttle), residual
-  risks listed.
+  fourteen findings, two documented gaps (advisory body caps, a spoofable
+  pairing-limit key), residual risks listed.
 
 ### F7. Rust decision
 
@@ -625,10 +639,9 @@ Schedule one bet at a time, each with its own acceptance before it starts.
 | `0.1.29` | Phase 3, slice 1: contracts, notification core, Web Push | e2e push delivery |
 | `0.1.30` | Phase 3, slice 2: channels, quiet hours, settings | routing/quiet-hours tests |
 | `0.2.0` | Phases 3 and 4: attention, PWA/offline, supervisor | phase acceptance |
-| `0.3.0` | Phase 5: recall and lineage | search/export acceptance |
-| `0.4.0` | Phase 6: Provider platform and Hermes | conformance suite |
-| `0.5.0` | Phase 7: MCP southbound | policy acceptance |
-| `0.6.0` | Phase 8: hardening | acceptance runs |
+| `0.2.2` | Phase 5: recall and lineage | search/export acceptance |
+| `0.2.3` | Phase 8: hardening | automated acceptance, F5 exception |
+| `0.3.0` | next minor: a Phase 9 bet | per-bet acceptance |
 
 Patch releases inside a phase are expected. A phase does not merge to `main`
 until its acceptance passes.
