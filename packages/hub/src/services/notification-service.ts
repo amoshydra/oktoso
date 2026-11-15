@@ -286,20 +286,15 @@ export class NotificationService {
   }
 
   private channelViews(): NotificationChannelView[] {
-    const views: NotificationChannelView[] = [];
-    const webpush = this.config.channels.find(
-      (channel) => channel.kind === "webpush",
-    );
-    views.push({
-      kind: "webpush",
-      enabled: webpush ? webpush.enabled : true,
-      configured: Boolean(this.applicationServerKey),
-    });
-    for (const channel of this.config.channels) {
-      if (channel.kind === "webpush") continue;
-      views.push({ kind: channel.kind, enabled: channel.enabled, configured: true });
-    }
-    return views;
+    // Web Push is the only channel. It is available as soon as the hub has a
+    // VAPID key; a browser subscription is the registration.
+    return [
+      {
+        kind: "webpush",
+        enabled: true,
+        configured: Boolean(this.applicationServerKey),
+      },
+    ];
   }
 
   /** Await every handler queued so far. Tests and shutdown use this. */
@@ -419,19 +414,10 @@ export class NotificationService {
   }
 
   private activeChannels(): NotificationChannelKind[] {
-    const kinds = new Set<NotificationChannelKind>();
-    // Web Push needs no channel config, only a subscription. An explicit
-    // `enabled: false` turns it off.
-    const webpush = this.config.channels.find(
-      (channel) => channel.kind === "webpush",
+    // Web Push needs no channel config, only a subscription.
+    return (["webpush"] as NotificationChannelKind[]).filter((kind) =>
+      this.transport.supports(kind),
     );
-    if (!webpush || webpush.enabled) kinds.add("webpush");
-    for (const channel of this.config.channels) {
-      if (channel.kind !== "webpush" && channel.enabled) {
-        kinds.add(channel.kind);
-      }
-    }
-    return [...kinds].filter((kind) => this.transport.supports(kind));
   }
 
   private async sendWithRetry(payload: NotificationPayload): Promise<boolean> {

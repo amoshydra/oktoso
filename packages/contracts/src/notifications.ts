@@ -8,12 +8,11 @@ import { zAttentionType } from "./attention";
  * resolved settings view. Channel credentials never cross the API boundary.
  */
 
-export const zNotificationChannelKind = z.enum([
-  "webpush",
-  "ntfy",
-  "telegram",
-  "webhook",
-]);
+/**
+ * Web Push is the only delivery channel. It needs no channel entry in config:
+ * a browser subscription is the whole registration.
+ */
+export const zNotificationChannelKind = z.literal("webpush");
 
 export const zClockTime = z
   .string()
