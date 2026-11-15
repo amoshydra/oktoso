@@ -2094,11 +2094,11 @@
 }
 
 .chat-sidebar .session-disclosure {
-  width: 24px;
+  width: 32px;
 }
 
 .chat-sidebar .session-list-item.session-row-trailing {
-  padding-right: 26px;
+  padding-right: 34px;
 }
 
 .chat-sidebar .session-child-count {

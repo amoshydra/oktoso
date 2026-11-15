@@ -153,7 +153,7 @@ describe("landmarks and headings", () => {
   it("renders exactly one h1 on every main view", async () => {
     const current = requirePage();
     const views = [
-      ["/foundation", "Foundation"],
+      ["/foundation", "Overview"],
       ["/inbox", "Inbox"],
       ["/sessions", "Sessions"],
       ["/search", "Search"],
