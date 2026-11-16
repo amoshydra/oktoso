@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.3](https://github.com/amoshydra/oktoso/compare/v0.2.2...v0.2.3) (2026-11-16)
+
+
+### Features
+
+* **g2:** request compact replies and show Tap reply ([0df482c](https://github.com/amoshydra/oktoso/commit/0df482c9b2270784caf696adaab88d5b9f565483))
+* **reply:** improve suggestion content for failure and challenge ([bee2d76](https://github.com/amoshydra/oktoso/commit/bee2d7618054bfa38c3889ef929ec20ba5b14da0))
+* **sessions:** rename sessions across providers ([dca6da6](https://github.com/amoshydra/oktoso/commit/dca6da6a80203f3ef88d8e9371646760125c2606))
+
+
+### Bug Fixes
+
+* **hub:** ground reply suggestions in the latest turn ([5f601d4](https://github.com/amoshydra/oktoso/commit/5f601d4750e79c5250c4a0adfbe5c3b352675c16))
+* **reply:** keep G2 suggestions usable without a keyboard ([98ca499](https://github.com/amoshydra/oktoso/commit/98ca499a7b33ec90e868b8fb5794ee5cbd0fd75d))
+* **sessions:** expire a stale busy run after any prior idle ([a522643](https://github.com/amoshydra/oktoso/commit/a522643f7ebd8ec96564e8c21c5907ad03bb793e))
+* **sessions:** stop stale running state and deleted session cache ([6bcd0b5](https://github.com/amoshydra/oktoso/commit/6bcd0b5aa0d8f0be3012cc461fea694a855b7737))
+* settle the rebase review findings ([d15a3f1](https://github.com/amoshydra/oktoso/commit/d15a3f149956dcb7bd32ad7b078ff630a83af851))
+* **web:** close accessibility follow-ups for overlays and panels ([d3a4862](https://github.com/amoshydra/oktoso/commit/d3a4862161629c8336554084e24defab657c2413))
+* **web:** improve accessibility semantics and focus handling ([6d1ac43](https://github.com/amoshydra/oktoso/commit/6d1ac43252d52ea7a3cd3e630d92dd867be08793))
+* **web:** restore Escape for the desktop details column ([f9d17c8](https://github.com/amoshydra/oktoso/commit/f9d17c8617a348a88fce0a7a1f6bcf640336b8b2))
+* **web:** stop mobile headers from colliding ([c8fb407](https://github.com/amoshydra/oktoso/commit/c8fb407f5c73d67c9086423aaad80d5d043be0ca))
+
 ## [0.2.2](https://github.com/amoshydra/oktoso/compare/v0.2.1...v0.2.2) (2026-11-15)
 
 
