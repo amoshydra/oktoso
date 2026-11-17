@@ -89,6 +89,7 @@ import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
 import { highlightParts } from "./search-highlight";
+import { transcriptPhase } from "./transcript-state";
 import { OverviewUsage } from "./overview-usage";
 import { LocalDataSettingsPanel } from "./settings-local-data";
 import {
@@ -3604,6 +3605,7 @@ function NewSessionForm(props: {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const [createdRef, setCreatedRef] = useState<string>();
   const panelRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   useInlinePanelFocus(panelRef, headingRef);
@@ -3646,8 +3648,35 @@ function NewSessionForm(props: {
     };
   }, [props.client, providerID]);
 
+  const sendFirstPrompt = async (ref: string) => {
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await props.client.sendMessage(ref, { text: prompt.trim() });
+    } catch (reason) {
+      // Keep the panel open: the session exists, so the failure must stay
+      // visible and retryable instead of navigating into an empty chat.
+      setCreatedRef(ref);
+      setSubmitting(false);
+      setError(
+        reason instanceof Error
+          ? `Session created, but the first prompt failed: ${reason.message}`
+          : "Session created, but the first prompt failed",
+      );
+      return;
+    }
+    setSubmitting(false);
+    props.onCreated(ref);
+  };
+
   const submit = async () => {
-    if (!providerID || !title.trim() || submitting) return;
+    if (submitting) return;
+    if (createdRef) {
+      if (!prompt.trim()) return;
+      await sendFirstPrompt(createdRef);
+      return;
+    }
+    if (!providerID || !title.trim()) return;
     setSubmitting(true);
     setError(undefined);
     let session;
@@ -3666,17 +3695,9 @@ function NewSessionForm(props: {
     }
 
     if (prompt.trim()) {
-      try {
-        await props.client.sendMessage(session.ref, { text: prompt.trim() });
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? `Session created, but the first prompt failed: ${reason.message}`
-            : "Session created, but the first prompt failed",
-        );
-      }
+      await sendFirstPrompt(session.ref);
+      return;
     }
-
     setSubmitting(false);
     props.onCreated(session.ref);
   };
@@ -3766,12 +3787,37 @@ function NewSessionForm(props: {
           {error ? <div className="form-error" role="alert">{error}</div> : null}
 
           <div className="form-actions">
-            <button className="btn small" type="button" onClick={props.onClose}>
-              Cancel
-            </button>
-            <button className="btn primary small" type="submit" disabled={loading || submitting || !title.trim() || !providerID}>
-              {submitting ? "Creating…" : "Create session"}
-            </button>
+            {createdRef ? (
+              <>
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => props.onCreated(createdRef)}
+                >
+                  Open session
+                </button>
+                <button
+                  className="btn primary small"
+                  type="submit"
+                  disabled={submitting || !prompt.trim()}
+                >
+                  {submitting ? "Sending…" : "Retry prompt"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn small" type="button" onClick={props.onClose}>
+                  Cancel
+                </button>
+                <button
+                  className="btn primary small"
+                  type="submit"
+                  disabled={loading || submitting || !title.trim() || !providerID}
+                >
+                  {submitting ? "Creating…" : "Create session"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       )}
@@ -4027,11 +4073,19 @@ function SessionDetail(props: {
   const { text: draft, status: draftStatus, update: updateDraft, discard: discardDraft } =
     useSessionDraft(props.client, props.sessionRef);
   const [error, setError] = useState<string>();
+  const [retryingTranscript, setRetryingTranscript] = useState(false);
+  const autoRetried = useRef(false);
   const [sendError, setSendError] = useState<string>();
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [queuedOpen, setQueuedOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState<string>();
   const [inboxError, setInboxError] = useState<string>();
+  const phase = transcriptPhase({
+    loading,
+    error,
+    messageCount: messages.length,
+    running: session?.status === "running",
+  });
   const [previewPath, setPreviewPath] = useState<string | undefined>(
     props.previewPath,
   );
@@ -4543,8 +4597,17 @@ function SessionDetail(props: {
 
   const refreshLatest = useCallback(
     async (forceBottom = false, replace = false) => {
-      const [nextSession, page] = await Promise.all([
-        props.client.session(props.sessionRef),
+      // Apply the header as soon as it arrives: a slow transcript should not
+      // hold the context strip and title hostage.
+      const sessionPromise = props.client
+        .session(props.sessionRef)
+        .then((nextSession) => {
+          setSession(nextSession);
+          writeSessionCache(nextSession);
+          return nextSession;
+        });
+      const [, page] = await Promise.all([
+        sessionPromise,
         props.client.messages(props.sessionRef, {
           limit: MESSAGE_PAGE_SIZE,
           order: "desc",
@@ -4552,8 +4615,6 @@ function SessionDetail(props: {
       ]);
       const latest = [...page.data].reverse();
       const stick = (forceBottom || nearBottom()) && !restoreScroll.current;
-      setSession(nextSession);
-      writeSessionCache(nextSession);
       setMessages((current) =>
         replace ? latest : mergeLatestPage(current, latest),
       );
@@ -4562,6 +4623,20 @@ function SessionDetail(props: {
     },
     [props.client, props.sessionRef],
   );
+
+  const retryTranscript = useCallback(async () => {
+    if (retryingTranscript) return;
+    setRetryingTranscript(true);
+    try {
+      await refreshLatest(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to load the transcript",
+      );
+    } finally {
+      setRetryingTranscript(false);
+    }
+  }, [refreshLatest, retryingTranscript]);
 
   useEffect(
     () =>
@@ -5348,6 +5423,7 @@ function SessionDetail(props: {
     let cancelled = false;
     pendingScroll.current = undefined;
     restoreScroll.current = hasSavedScroll("transcript");
+    autoRetried.current = false;
     setSession(readSessionCache(props.sessionRef));
     setMessages(queuedMessages(props.sessionRef));
     setOlderCursor(null);
@@ -5388,6 +5464,19 @@ function SessionDetail(props: {
       cancelled = true;
     };
   }, [props.client, props.sessionRef, refreshLatest]);
+
+  /**
+   * One automatic retry when a running session has not written its first
+   * message yet. The provider may accept a prompt before it is readable; a
+   * second read a moment later usually settles it. One shot only, reset per
+   * session, so a stuck provider cannot loop.
+   */
+  useEffect(() => {
+    if (phase !== "waiting" || autoRetried.current) return;
+    autoRetried.current = true;
+    const timer = window.setTimeout(() => void retryTranscript(), 1200);
+    return () => window.clearTimeout(timer);
+  }, [phase, retryTranscript]);
 
   useEffect(() => {
     const fresh = props.events.filter((event) => event.seq > processedSeq.current);
@@ -5772,7 +5861,12 @@ function SessionDetail(props: {
     <div className={`chat-layout ${props.detailsOpen && session ? "details-open" : ""}`}>
       <div className="chat-main">
         {loading && !session ? (
-          <div className="empty chat-loading">Loading session…</div>
+          <div className="empty chat-loading" aria-busy="true">
+            <TranscriptSkeleton />
+            <span className="sr-only" role="status" aria-live="polite">
+              Loading transcript…
+            </span>
+          </div>
         ) : error && !session ? (
           <div className="alert" role="alert">
             {error}
@@ -5785,6 +5879,16 @@ function SessionDetail(props: {
             {error ? (
               <div className="alert" role="alert">
                 {error}
+                {messages.length === 0 ? (
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={retryingTranscript}
+                    onClick={() => void retryTranscript()}
+                  >
+                    {retryingTranscript ? "Retrying…" : "Retry"}
+                  </button>
+                ) : null}
                 <button className="text-button" type="button" onClick={() => setError(undefined)}>
                   Dismiss
                 </button>
@@ -5797,7 +5901,13 @@ function SessionDetail(props: {
                 aria-label="Session transcript"
                 ref={transcriptRef}
                 tabIndex={0}
+                aria-busy={phase === "loading"}
               >
+              {phase === "loading" ? (
+                <span className="sr-only" role="status" aria-live="polite">
+                  Loading transcript…
+                </span>
+              ) : null}
               <header className="chat-doc-head">
                 <div className="chat-meta">
                   {session.project || session.directory ? (
@@ -5835,9 +5945,27 @@ function SessionDetail(props: {
                 </div>
               ) : null}
 
-              {messages.length === 0 ? (
-                <div className="empty">No messages yet. Send the first prompt below.</div>
-              ) : (
+              {phase === "loading" ? (
+                <TranscriptSkeleton />
+              ) : phase === "waiting" ? (
+                <div className="empty transcript-waiting">
+                  The agent is running, but no messages have been written yet.
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={retryingTranscript}
+                    onClick={() => void retryTranscript()}
+                  >
+                    {retryingTranscript ? "Retrying…" : "Retry"}
+                  </button>
+                </div>
+              ) : phase === "empty" ? (
+                <div className="empty">
+                  {sessionProvider?.capabilities.send === false
+                    ? "No messages yet."
+                    : "No messages yet. Send the first prompt below."}
+                </div>
+              ) : phase === "error" ? null : (
                 transcriptItems.map((item) =>
                   item.kind === "date" ? (
                     <DateSeparator at={item.at} key={item.key} />
@@ -7795,6 +7923,27 @@ function ShellRow(props: { message: Message }) {
         <pre className="shell-run-output">{output}</pre>
       ) : null}
     </section>
+  );
+}
+
+/** Decorative placeholders while the first transcript page loads. */
+function TranscriptSkeleton() {
+  return (
+    <div className="transcript-skeleton" aria-hidden="true">
+      {[0, 1, 2].map((row) => (
+        <div className="skeleton-row" key={row}>
+          <span className="skeleton-role" />
+          <span
+            className="skeleton-line"
+            style={{ width: `${row === 1 ? 62 : 78}%` }}
+          />
+          <span
+            className="skeleton-line"
+            style={{ width: `${row === 2 ? 44 : 58}%` }}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
