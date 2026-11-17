@@ -1670,6 +1670,49 @@
   }
 }
 
+.transcript-skeleton {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+
+.skeleton-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skeleton-role {
+  width: 72px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .transcript-skeleton {
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.transcript-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
 .chat-history-control {
   display: flex;
   justify-content: center;

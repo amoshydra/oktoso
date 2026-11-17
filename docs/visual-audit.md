@@ -919,6 +919,21 @@ instead of raw fences, without changing the transcript hierarchy.
 - Titles are 12px and truncate on one line; the depth label stays at 10px faint.
   The section header carries the count and the word `partial` when capped.
 
+## Transcript loading states (2026-11-18)
+
+- The transcript skeleton uses three message-shaped rows of `surface-2` bars at
+  the reading-column width, with the existing 4px radius and no borders. It is
+  decorative, `aria-hidden`, and pulses only under
+  `prefers-reduced-motion: no-preference`.
+- The false-empty bug is recorded here as the rationale: the empty state
+  claimed "no messages" while the first page was still loading, and a failed
+  first prompt navigated into that state. Loading, waiting, error, and empty are
+  now mutually exclusive.
+- Copy: waiting reads "The agent is running, but no messages have been written
+  yet." with Retry; empty keeps the first-prompt half only when the provider can
+  send.
+- Reviewed at 1440, 1024, 390, and 320px in both themes; no new tokens.
+
 ## Local data and export (2026-11-16)
 
 - Local data is one Settings panel with four rows. Each row is name and count

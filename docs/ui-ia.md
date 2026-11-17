@@ -315,6 +315,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The transcript is its own scroll region inside the chat shell. The composer stays pinned below it; the page itself does not scroll.
 - The transcript panel and composer are capped at 672px. With the 16px transcript padding and 1px frame, the reading column fills the panel at about 640px, roughly 88 characters of Inter prose at 14px. The floating jump sits in the right gutter on wide screens, and a constant 48px bottom inset keeps it clear of the last line on narrow ones.
 - On open, fetch the newest message page first (200 by default), render it oldest-to-newest, and start at the latest message. Never fetch the oldest page first.
+- While that page loads, the transcript body shows a skeleton, not the empty state; the panel is `aria-busy` and announces "Loading transcript…" once. The empty state appears only after a successful load returns no messages. A failed load shows the alert and Retry.
+- A running session whose first message is not readable yet reads "The agent is running, but no messages have been written yet." with Retry, and the client re-reads once after a short delay.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
 - A floating **Jump to latest** pill sits at the bottom-right of the transcript when the reader is away from the true bottom. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform, never takes layout space, and at the bottom it is removed from the tab order, made inert, and hidden from assistive technology.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
@@ -427,7 +429,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Provider comes first. It determines the available projects, agents, and models.
 - Projects and models load asynchronously with a skeleton state.
 - Create is disabled until the provider is online and required fields are valid.
-- After creation, the client opens the session and shows the first prompt in the transcript.
+- On prompt success, the client opens the session and shows the prompt in the transcript. On prompt failure it keeps the panel open with the error and offers Retry prompt and Open session; it never navigates into an empty chat.
 - The panel is inline, not modal: Tab is not trapped. Opening it focuses the first field (the provider select); closing it, with Cancel or the close control, returns focus to **New session**.
 
 ## 10. Providers
@@ -493,7 +495,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 
 Every screen needs these states:
 
-- **Loading:** skeletons for lists and messages. Do not block the whole app.
+- **Loading:** skeletons for lists and the transcript. Do not block the whole app. The transcript skeleton is decorative, `aria-hidden`, and paired with one polite announcement; it never replaces optimistic or queued rows.
 - **Empty:** a clear next action.
 - **Offline provider:** amber status chip, cached data labeled "last synced", retry action.
 - **Auth error:** red status chip with a direct path to provider settings.

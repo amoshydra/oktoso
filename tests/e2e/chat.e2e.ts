@@ -1194,3 +1194,157 @@ describe("automation settings", () => {
       .waitFor({ state: "visible", timeout: 5_000 });
   });
 });
+
+describe("transcript loading", () => {
+  async function backToSessions(): Promise<void> {
+    await page!.getByRole("button", { name: "Sessions" }).first().click();
+    await page!.locator(".session-list").waitFor({ timeout: 10_000 });
+  }
+
+  async function newSession(title: string, prompt: string): Promise<void> {
+    await page!.getByRole("button", { name: "Sessions" }).first().click();
+    await page!.locator(".session-list").waitFor({ timeout: 10_000 });
+    await page!.getByRole("button", { name: "New session" }).click();
+    await page!.getByRole("heading", { name: "New session" }).waitFor();
+    await page!.getByLabel("Title").fill(title);
+    if (prompt) await page!.getByLabel("First prompt").fill(prompt);
+    await page!.getByRole("button", { name: "Create session" }).click();
+  }
+
+  it("shows a skeleton instead of the empty state while the transcript loads", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.locator(".chat-message").first().waitFor();
+    await backToSessions();
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const route = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(route, async (handler) => {
+      await gate;
+      await handler.continue();
+    });
+
+    await openSession("Fix auth race in gateway");
+    await page!.locator(".transcript-skeleton").first().waitFor({ timeout: 3_000 });
+    expect(
+      await page!.getByText("No messages yet. Send the first prompt below.").count(),
+    ).toBe(0);
+    expect(await page!.locator(".chat-panel").getAttribute("aria-busy")).toBe("true");
+    expect(
+      await page!.locator('.chat-panel [role="status"]').first().innerText(),
+    ).toContain("Loading transcript");
+
+    release();
+    await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
+    expect(await page!.locator(".transcript-skeleton").count()).toBe(0);
+    await expect(page!.locator(".chat-panel").getAttribute("aria-busy")).resolves.not.toBe(
+      "true",
+    );
+    await page!.unroute(route);
+  });
+
+  it("waits for a running session instead of claiming it is empty", async () => {
+    await openSession("Fix auth race in gateway");
+    await sendPrompt("Slow staging check");
+    await page!.locator(".chat-message").first().waitFor();
+    await backToSessions();
+
+    let first = true;
+    const route = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(route, async (handler) => {
+      if (first) {
+        first = false;
+        await handler.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [], cursor: { next: null, previous: null } }),
+        });
+        return;
+      }
+      await handler.continue();
+    });
+
+    await openSession("Fix auth race in gateway");
+    await page!.getByText(/The agent is running, but no messages/).waitFor({
+      timeout: 5_000,
+    });
+    expect(
+      await page!.getByText("No messages yet. Send the first prompt below.").count(),
+    ).toBe(0);
+
+    await page!.getByRole("button", { name: "Retry", exact: true }).click();
+    await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
+    await page!.unroute(route);
+  });
+
+  it("shows an error and Retry, never the empty state, when the load fails", async () => {
+    await openSession("Fix auth race in gateway");
+    await page!.locator(".chat-message").first().waitFor();
+    await backToSessions();
+
+    let first = true;
+    const route = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(route, async (handler) => {
+      if (first) {
+        first = false;
+        await handler.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "internal", message: "boom" } }),
+        });
+        return;
+      }
+      await handler.continue();
+    });
+
+    await openSession("Fix auth race in gateway");
+    await page!.getByRole("alert").first().waitFor({ timeout: 5_000 });
+    expect(
+      await page!.getByText("No messages yet. Send the first prompt below.").count(),
+    ).toBe(0);
+
+    await page!.getByRole("button", { name: "Retry", exact: true }).click();
+    await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
+    await page!.unroute(route);
+  });
+
+  it("keeps the empty state for a session with no prompt", async () => {
+    await newSession("Empty transcript check", "");
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
+    await page!
+      .getByText("No messages yet. Send the first prompt below.")
+      .waitFor({ timeout: 10_000 });
+    expect(await page!.locator(".transcript-skeleton").count()).toBe(0);
+  });
+
+  it("keeps the new-session panel open when the first prompt fails", async () => {
+    await page!.route("**/api/v1/sessions/*/messages", async (handler) => {
+      if (handler.request().method() === "POST") {
+        await handler.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "internal", message: "send failed" } }),
+        });
+        return;
+      }
+      await handler.continue();
+    });
+
+    await newSession("Prompt failure check", "This prompt will fail");
+    await page!
+      .getByText(/Session created, but the first prompt failed/)
+      .waitFor({ timeout: 10_000 });
+    expect(await page!.getByRole("button", { name: "Create session" }).count()).toBe(0);
+    expect(await page!.getByRole("button", { name: "Retry prompt" }).count()).toBe(1);
+    expect(page!.url()).toContain("/sessions?new=1");
+
+    await page!.getByRole("button", { name: "Open session" }).click();
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
+    await page!
+      .getByText("No messages yet. Send the first prompt below.")
+      .waitFor({ timeout: 10_000 });
+    await page!.unroute("**/api/v1/sessions/*/messages");
+  });
+});

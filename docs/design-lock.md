@@ -1,11 +1,11 @@
-# Design Lock — v1.19
+# Design Lock — v1.20
 
 Status: **frozen**.
 
-- Version: `design-v1.19`
-- Parent: `design-v1.18`
-- Date: 2026-11-16
-- Git tag: `design-v1.19`
+- Version: `design-v1.20`
+- Parent: `design-v1.19`
+- Date: 2026-11-18
+- Git tag: `design-v1.20`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -25,6 +25,7 @@ Status: **frozen**.
 - v1.16 scope: the mobile session-scope header, Providers panel head, Inbox toolbar stacking, and row spacing.
 - v1.17 scope: the accessibility semantics and focus pass.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
+- v1.20 scope: transcript loading, waiting, and error states in the chat shell.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -552,6 +553,28 @@ radius, or color token.
 - **Search filters.** At 420px and below the `PROVIDER` and `STATUS` labels own
   their line, so wrapped chips align with the label. The chips stay one control
   group; the URL state and choices are unchanged.
+
+## Transcript states (2026-11-18)
+
+- The transcript body has four states and they never overlap: content, loading,
+  waiting, and empty. Content wins whenever a message exists, including queued
+  and optimistic rows, so a refresh never replaces them with a placeholder.
+- Loading is a decorative skeleton inside the same panel: three message-shaped
+  rows of `--surface-2` bars at the reading-column width. The panel carries
+  `aria-busy` and one polite "Loading transcript…" announcement. The skeleton is
+  hidden from assistive technology and animates only when the reader has not
+  asked for reduced motion.
+- A failed load shows the alert and a Retry action; it never falls through to
+  "No messages yet", which would claim the transcript is complete.
+- A running session with no messages yet reads "The agent is running, but no
+  messages have been written yet." with a Retry action, not the empty copy. One
+  automatic re-read follows after a short delay, once per session.
+- The empty state appears only after a successful load returns no messages. The
+  "Send the first prompt below" half is dropped when the provider cannot send.
+- Creating a session with a prompt no longer navigates away when that prompt
+  fails: the panel stays, the error is visible, and it offers Retry prompt and
+  Open session.
+- No new tokens, radii, or type roles.
 
 ## Change policy
 
