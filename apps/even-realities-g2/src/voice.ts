@@ -33,6 +33,9 @@ export function orderReplyOptions(options: ReplyOption[]): ReplyOption[] {
  * Add a local voice action only when the hub has a usable transcription
  * endpoint. The hub does not generate this action because the web client has
  * its own dictation control.
+ *
+ * Voice is a reply *method*, not a suggestion, so it sits first: one tap from
+ * the reply screen starts recording instead of paging through suggestions.
  */
 export function withVoiceOption(
   options: ReplyOption[],
@@ -41,21 +44,16 @@ export function withVoiceOption(
   if (!enabled || options.some((option) => option.action === "voice")) {
     return options;
   }
-  const voice: ReplyOption = {
-    id: "voice",
-    label: "Voice reply",
-    text: "",
-    source: "canned",
-    action: "voice",
-  };
-  const phoneIndex = options.findIndex((option) => option.action === "phone");
-  if (phoneIndex < 0) return [...options, voice];
-  return [
-    ...options.slice(0, phoneIndex),
-    voice,
-    ...options.slice(phoneIndex),
-  ];
+  return [VOICE_REPLY_OPTION, ...options];
 }
+
+export const VOICE_REPLY_OPTION: ReplyOption = {
+  id: "voice",
+  label: "Voice reply",
+  text: "",
+  source: "canned",
+  action: "voice",
+};
 
 /**
  * Normalise one audio frame from the Even hub.

@@ -74,6 +74,7 @@ import {
   orderReplyOptions,
   transcriptionConfigured,
   withVoiceOption,
+  VOICE_REPLY_OPTION,
 } from "./voice";
 import {
   attentionHeader,
@@ -238,6 +239,7 @@ let voiceDetail = "";
 let voiceCaption = "";
 let voiceHeard = "";
 let voiceTapGuardUntil = 0;
+let voiceAvailable = false;
 let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
 let bridge: EvenAppBridge | undefined;
@@ -2469,7 +2471,10 @@ async function openReply(): Promise<void> {
   state.replyReturnScreen =
     state.screen === "answer-more" ? "answer-more" : "chat";
   state.replyPage = 0;
-  state.replyOptions = [];
+  // Offer voice immediately, before the suggestions arrive: the endpoint state
+  // is cached from the previous reply screen, so the first row never waits on
+  // the hub.
+  state.replyOptions = voiceAvailable ? [VOICE_REPLY_OPTION] : [];
   state.replyLoading = true;
   state.notice = undefined;
   state.screen = "reply";
@@ -2485,10 +2490,8 @@ async function openReply(): Promise<void> {
       state.replyLoading = false;
       return;
     }
-    state.replyOptions = withVoiceOption(
-      options.data,
-      transcriptionConfigured(settings),
-    );
+    voiceAvailable = transcriptionConfigured(settings);
+    state.replyOptions = withVoiceOption(options.data, voiceAvailable);
     state.replyLoading = false;
     clearFailure();
     markRequestSuccess();
@@ -2557,16 +2560,21 @@ function replyView(): {
   hasNext: boolean;
   suggested: boolean;
 } {
-  const ordered = orderReplyOptions(state.replyOptions);
+  const voice = state.replyOptions.find((option) => option.action === "voice");
+  const ordered = orderReplyOptions(
+    state.replyOptions.filter((option) => option.action !== "voice"),
+  );
   const page = pageChoices(ordered, state.replyPage, 3);
-  const items = page.items.map((option) => option.label);
+  // Voice is a method, not a suggestion: keep it on every page, above them.
+  const options = voice ? [voice, ...page.items] : page.items;
+  const items = options.map((option) => option.label);
   const hasPrevious = page.page > 0;
   const hasNext = page.page < page.pages - 1;
   if (hasPrevious) items.unshift("← Previous choices");
   if (hasNext) items.push("More choices →");
   return {
     items,
-    options: page.items,
+    options,
     page: page.page,
     pages: page.pages,
     hasPrevious,
@@ -2603,12 +2611,14 @@ async function startVoice(): Promise<void> {
   voiceBusy = true;
   const settings = await client.assistantSettings().catch(() => undefined);
   if (!transcriptionConfigured(settings)) {
+    voiceAvailable = false;
     voiceBusy = false;
     state.screen = "chat";
     setPhoneStatus("Voice transcription is not configured.", true);
     render();
     return;
   }
+  voiceAvailable = true;
 
   // Paint the voice screen *before* opening the microphone. Opening audio and
   // then rebuilding the page container can tear the host capture session down
@@ -3772,6 +3782,16 @@ function render(): void {
     return;
   }
   if (state.screen === "reply" && state.replyLoading) {
+    const view = replyView();
+    if (view.options.length > 0) {
+      const footer = "Tap choose   Back ×2";
+      if (setPreview("REPLY", view.items.join("\n"), footer, view.items)) {
+        void showPage(
+          listPage("REPLY", view.items, footer, "Suggestions are loading…"),
+        );
+      }
+      return;
+    }
     const header = "REPLY";
     const body = "Reading suggestions…";
     const footer = "Back ×2";

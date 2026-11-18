@@ -8,6 +8,7 @@ import {
   pcmToWav,
   transcriptionConfigured,
   withVoiceOption,
+  VOICE_REPLY_OPTION,
 } from "./voice";
 
 function assistantView(
@@ -90,13 +91,14 @@ describe("G2 voice helpers", () => {
     expect(transcriptionConfigured(assistantView())).toBe(true);
   });
 
-  it("inserts voice before the phone keyboard option", () => {
+  it("puts voice first so it never needs paging", () => {
     const withVoice = withVoiceOption(options, true);
     expect(withVoice.map((option) => option.action)).toEqual([
-      "send",
       "voice",
+      "send",
       "phone",
     ]);
+    expect(withVoice[0]).toBe(VOICE_REPLY_OPTION);
     expect(withVoiceOption(options, false)).toBe(options);
     expect(withVoiceOption(withVoice, true)).toBe(withVoice);
   });
