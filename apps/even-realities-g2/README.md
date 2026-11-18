@@ -71,10 +71,12 @@ remains the keyboard for long or free-form answers.
 The voice screen owns the whole exchange. It paints first and opens the
 microphone second, because rebuilding the page container after `audioControl`
 can drop the host capture session. It then reports the outcome on the glasses:
-the transcript, or the failure with the captured size, elapsed time, and frame
-count. A microphone that never delivered a frame therefore says so on the
-glasses instead of silently returning to the chat. Tap retries; Back leaves.
-Real-hardware voice acceptance is still pending.
+the transcript with **Send** / **Edit on phone**, or the failure with the
+captured size, elapsed time, and frame count. A microphone that never delivered
+a frame therefore says so on the glasses instead of silently returning to the
+chat. One tap on the result sends the reply; Back leaves. Taps that opened or
+closed the previous screen are ignored for a moment so a single gesture never
+acts twice.
 
 ## Screen map
 
@@ -99,7 +101,7 @@ Chat
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
-├─ Voice            listen / transcribe / result, hidden without hub STT
+├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
 └─ Phone keyboard   longer text fallback
 
 Failure
