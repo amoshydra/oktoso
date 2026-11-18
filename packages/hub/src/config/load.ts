@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { defaultDataDir } from "./paths";
 import { assertConfigFilePermissions } from "./permissions";
+import { parseConfig, parseConfigJson } from "./errors";
 import {
   zHubConfig,
   zHubPairingConfig,
@@ -36,7 +37,10 @@ export async function loadConfig(
   env: Env = process.env,
 ): Promise<HubConfig> {
   await assertConfigFilePermissions(filePath);
-  const raw = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  const raw = parseConfigJson(
+    await readFile(filePath, "utf8"),
+    filePath,
+  ) as unknown;
   const interpolated = interpolate(raw, env) as Record<string, unknown>;
 
   if (interpolated.dataDir === undefined) {
@@ -52,7 +56,7 @@ export async function loadConfig(
       .filter(Boolean);
   }
 
-  return zHubConfig.parse(interpolated);
+  return parseConfig(zHubConfig, interpolated, filePath);
 }
 
 /**
@@ -65,10 +69,10 @@ export async function loadHubTarget(
   env: Env = process.env,
 ): Promise<HubTarget> {
   await assertConfigFilePermissions(filePath);
-  const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const raw = parseConfigJson(
+    await readFile(filePath, "utf8"),
+    filePath,
+  ) as Record<string, unknown>;
   const picked = {
     host: raw.host,
     port: raw.port,
@@ -78,7 +82,7 @@ export async function loadHubTarget(
   if (env.HUB_HOST) interpolated.host = env.HUB_HOST;
   if (env.HUB_PORT) interpolated.port = env.HUB_PORT;
 
-  return zHubTarget.parse(interpolated);
+  return parseConfig(zHubTarget, interpolated, filePath);
 }
 
 export async function loadPairingConfig(
@@ -86,10 +90,10 @@ export async function loadPairingConfig(
   env: Env = process.env,
 ): Promise<HubPairingConfig> {
   await assertConfigFilePermissions(filePath);
-  const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const raw = parseConfigJson(
+    await readFile(filePath, "utf8"),
+    filePath,
+  ) as Record<string, unknown>;
   const picked = {
     host: raw.host,
     port: raw.port,
@@ -102,7 +106,7 @@ export async function loadPairingConfig(
   if (env.HUB_PORT) interpolated.port = env.HUB_PORT;
   if (env.HUB_TOKEN) interpolated.token = env.HUB_TOKEN;
 
-  return zHubPairingConfig.parse(interpolated);
+  return parseConfig(zHubPairingConfig, interpolated, filePath);
 }
 
 export function buildProviderEndpoint(
