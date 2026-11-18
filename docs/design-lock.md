@@ -1,11 +1,11 @@
-# Design Lock — v1.20
+# Design Lock — v1.21
 
 Status: **frozen**.
 
-- Version: `design-v1.20`
-- Parent: `design-v1.19`
+- Version: `design-v1.21`
+- Parent: `design-v1.20`
 - Date: 2026-11-18
-- Git tag: `design-v1.20`
+- Git tag: `design-v1.21`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -26,6 +26,7 @@ Status: **frozen**.
 - v1.17 scope: the accessibility semantics and focus pass.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
 - v1.20 scope: transcript loading, waiting, and error states in the chat shell.
+- v1.21 scope: the Settings Automation Templates panel and human reason labels.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -575,6 +576,29 @@ radius, or color token.
   fails: the panel stays, the error is visible, and it offers Retry prompt and
   Open session.
 - No new tokens, radii, or type roles.
+
+## Automation templates panel (2026-11-18)
+
+- A **Templates** panel sits between Watchers and Approvals in Settings →
+  Automation. It lists the file-configured recipes; the panel still never edits
+  config.
+- Each row shows the template name (16px card title role is not used here; the
+  row uses the existing 14px `settings-device-name` and 11px detail), then
+  `id · providerID`, plus `· first prompt` when the template sends one.
+- **Start** is a quiet `.btn small` row action, matching Pause, with an
+  accessible name of `Start <name>`. It creates the session and sends the
+  prompt, ignores pause, dry run, budgets, and quiet hours, and opens the new
+  session. While it runs the row reads `Starting…`.
+- Empty state: `No templates configured. Add automation.templates in the hub
+  config.` Loading state: `Loading templates…` only before the first view.
+- A first-prompt failure keeps the panel, shows the error, and offers **Open
+  session**; there is no retry, because the session already exists.
+- Rows wrap at ≤760px with the existing `.automation-list` rule; no new
+  responsive behavior.
+- Reason codes in approvals and recent runs render as one plain sentence. The
+  mapping lives in `apps/web/src/app/automation-copy.ts`; an unknown code
+  degrades to the code with spaces.
+- No new tokens, radii, type roles, routes, or navigation.
 
 ## Change policy
 

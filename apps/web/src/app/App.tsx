@@ -88,6 +88,7 @@ import { readRouteCache, writeRouteCache } from "./route-cache";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
+import { automationReasonLabel } from "./automation-copy";
 import { highlightParts } from "./search-highlight";
 import { transcriptPhase } from "./transcript-state";
 import { OverviewUsage } from "./overview-usage";
@@ -1168,13 +1169,18 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.19 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.21 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
                 <LocalDataSettingsPanel client={client as HubClient} />
                 <NotificationSettingsPanel client={client as HubClient} />
-                <AutomationSettingsPanel client={client as HubClient} />
+                <AutomationSettingsPanel
+                  client={client as HubClient}
+                  onOpenSession={(ref) =>
+                    navigate({ name: "chat", ref, details: false })
+                  }
+                />
                 {diagnosticsPanel}
               </>
             ) : (
@@ -1924,9 +1930,9 @@ function InboxView(props: {
                 item={approvalAttention(approval)}
                 key={approval.id}
                 busy={busyID === approval.id}
-                detail={`${approval.watcherID} · ${approval.reason}${
-                  approval.proposed ? ` · ${approval.proposed.text}` : ""
-                }`}
+                detail={`${approval.watcherID} · ${automationReasonLabel(
+                  approval.reason,
+                )}${approval.proposed ? ` · ${approval.proposed.text}` : ""}`}
                 onAction={(action) => void actOnApproval(approval, action)}
                 onOpen={() => props.onOpen(approval.sessionRef)}
               />

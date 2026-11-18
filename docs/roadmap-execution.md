@@ -616,11 +616,13 @@ Status: done.
 Schedule one bet at a time, each with its own acceptance before it starts.
 
 - [ ] G1. Cross-provider handoff. Skipped until a third provider exists.
-- [ ] G2. Templates and recipes. Slice 1 is in: `AutomationView` carries
+- [x] G2. Templates and recipes. Slice 1: `AutomationView` carries
   `templates`, `POST /api/v1/automation/templates/:id/start` and
   `oktoso template list|start` start one as a human action, ignoring pause, dry
-  run, budgets, and quiet hours. Slice 2 is the Settings/New-session UI and
-  needs a design bump.
+  run, budgets, and quiet hours. Slice 2: the Settings → Automation Templates
+  panel starts one and opens the session, and approval/run reasons render as
+  plain sentences (`design-v1.21`). The New-session panel stays unchanged: a
+  prefilled form would add a second create path.
 - [ ] G3. G2 ambient mode and hardware acceptance. Ambient is impossible on SDK
   0.0.16; run the hardware checklist when the glasses are in hand.
 - [x] G4. Local reply drafting through Ollama. No code was needed: the reply
