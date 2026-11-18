@@ -68,6 +68,11 @@ mono) and the hub's configured transcription endpoint. The voice action is
 hidden when transcription is disabled or missing a base URL or model. The phone
 remains the keyboard for long or free-form answers.
 
+**Voice reply is the first row of the reply screen**, on every page, and it is
+offered while the suggestions are still loading. Opening the reply screen and
+tapping once starts the recording; no paging or scrolling is involved. The
+suggestions keep their own hierarchy below it.
+
 The voice screen owns the whole exchange. It paints first and opens the
 microphone second, because rebuilding the page container after `audioControl`
 can drop the host capture session. It then reports the outcome on the glasses:
