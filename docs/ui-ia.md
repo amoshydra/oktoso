@@ -468,7 +468,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - A `Scope` control selects **Sessions** or **Messages**; the choice lives in the URL (`?scope=messages`) so the back stack restores it.
 - Sessions searches titles, projects, directories, and agents through the hub session cache. Provider and status filters mirror the Sessions view; results show title, provider, project or directory, status, and unread or attention cues.
 - Messages searches the transcript cache through `GET /api/v1/search`. Provider and status filters apply. Results show the session title, provider, project, role, and the matching excerpt with the query highlighted in `<mark>`.
-- Message search needs the transcript cache: when it is off, the view says so and points at Settings → Transcript cache. While the index catches up, the summary says so and an empty result explains it.
+- Message search needs the transcript cache: when it is off, the view says so and points at Settings → Local data. While the index catches up, the summary says so and an empty result explains it.
 - Both scopes keep the query, provider, and status in the URL. Typing replaces the history entry; changing a filter or the scope adds one.
 - Keyboard: `Cmd/Ctrl+K` opens search from any signed-in screen, Tab moves through filters and results, and Escape clears the query.
 
