@@ -57,6 +57,47 @@ export function withVoiceOption(
   ];
 }
 
+/**
+ * Normalise one audio frame from the Even hub.
+ *
+ * The SDK promises a `Uint8Array`, and newer hosts deliver exactly that. Older
+ * or in-between hosts hand the same bytes over as a plain number list, an
+ * `ArrayBuffer` (or a view over one), or a base64 string. Returning `undefined`
+ * for anything else keeps a non-audio event out of the microphone buffer.
+ */
+export function pcmBytes(raw: unknown): Uint8Array | undefined {
+  if (raw instanceof Uint8Array) return raw;
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  if (ArrayBuffer.isView(raw)) {
+    return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+  }
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return new Uint8Array(0);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) {
+      const value = raw[index];
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return undefined;
+      }
+      bytes[index] = value & 0xff;
+    }
+    return bytes;
+  }
+  if (typeof raw === "string" && raw.length > 0) {
+    try {
+      const binary = atob(raw);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      return bytes;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export function pcmChunksToWav(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
   const pcm = new Uint8Array(size);
