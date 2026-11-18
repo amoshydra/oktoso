@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/amoshydra/oktoso/compare/v0.2.3...v0.2.4) (2026-11-18)
+
+
+### Bug Fixes
+
+* **chat:** stop showing a false empty transcript while loading ([55a0f30](https://github.com/amoshydra/oktoso/commit/55a0f30aa412f7b0ded14cf7be30c68d14561907))
+
 ## [0.2.3](https://github.com/amoshydra/oktoso/compare/v0.2.2...v0.2.3) (2026-11-16)
 
 
