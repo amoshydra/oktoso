@@ -608,6 +608,17 @@ describe("chat sending", () => {
       undefined,
       { timeout: 5_000 },
     );
+    // The draft arrives before the fork's session header; the topbar shows
+    // "Session" until it resolves.
+    await page!.waitForFunction(
+      () =>
+        document
+          .querySelector(".topbar-title")
+          ?.textContent?.toLowerCase()
+          .includes("fork") === true,
+      undefined,
+      { timeout: 10_000 },
+    );
     expect(await page!.locator(".topbar-title").textContent()).toContain("fork");
   });
 });
