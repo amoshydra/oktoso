@@ -1247,15 +1247,26 @@ describe("transcript loading", () => {
 
   it("waits for a running session instead of claiming it is empty", async () => {
     await openSession("Fix auth race in gateway");
-    await sendPrompt("Slow staging check");
     await page!.locator(".chat-message").first().waitFor();
     await backToSessions();
 
-    let first = true;
+    // Force the header to running; the fake's own busy window is too short to
+    // rely on when the runner is slow.
+    const sessionRoute = /\/api\/v1\/sessions\/[^/]+$/;
+    await page!.route(sessionRoute, async (handler) => {
+      const response = await handler.fetch();
+      const body = (await response.json()) as Record<string, unknown>;
+      body.status = "running";
+      await handler.fulfill({ response, json: body });
+    });
+
+    // Empty for the first read and the one automatic re-read, then the real
+    // page, so the waiting state is stable until the user asks to retry.
+    let calls = 0;
     const route = /\/api\/v1\/sessions\/.+\/messages\?/;
     await page!.route(route, async (handler) => {
-      if (first) {
-        first = false;
+      calls += 1;
+      if (calls <= 2) {
         await handler.fulfill({
           status: 200,
           contentType: "application/json",
@@ -1268,15 +1279,18 @@ describe("transcript loading", () => {
 
     await openSession("Fix auth race in gateway");
     await page!.getByText(/The agent is running, but no messages/).waitFor({
-      timeout: 5_000,
+      timeout: 10_000,
     });
     expect(
       await page!.getByText("No messages yet. Send the first prompt below.").count(),
     ).toBe(0);
 
+    // Let the one-shot automatic re-read happen, then retry for real.
+    await page!.waitForTimeout(1_500);
     await page!.getByRole("button", { name: "Retry", exact: true }).click();
     await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
     await page!.unroute(route);
+    await page!.unroute(sessionRoute);
   });
 
   it("shows an error and Retry, never the empty state, when the load fails", async () => {
@@ -1320,17 +1334,36 @@ describe("transcript loading", () => {
   });
 
   it("keeps the new-session panel open when the first prompt fails", async () => {
-    await page!.route("**/api/v1/sessions/*/messages", async (handler) => {
-      if (handler.request().method() === "POST") {
-        await handler.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ error: { code: "internal", message: "send failed" } }),
-        });
-        return;
-      }
-      await handler.continue();
+    // Stub in the page rather than through request routing: this path must not
+    // depend on service-worker or proxy behaviour in the runner.
+    await page!.addInitScript(() => {
+      const original = window.fetch.bind(window);
+      window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        const method = (
+          init?.method ??
+          (input instanceof Request ? input.method : "GET")
+        ).toUpperCase();
+        if (method === "POST" && url.includes("/messages")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: { code: "internal", message: "send failed" },
+              }),
+              { status: 500, headers: { "content-type": "application/json" } },
+            ),
+          );
+        }
+        return original(input as RequestInfo, init);
+      };
     });
+    await page!.goto(BASE_URL);
+    await page!.getByRole("button", { name: "Sessions" }).waitFor({ timeout: 10_000 });
 
     await newSession("Prompt failure check", "This prompt will fail");
     await page!
@@ -1345,6 +1378,5 @@ describe("transcript loading", () => {
     await page!
       .getByText("No messages yet. Send the first prompt below.")
       .waitFor({ timeout: 10_000 });
-    await page!.unroute("**/api/v1/sessions/*/messages");
   });
 });
