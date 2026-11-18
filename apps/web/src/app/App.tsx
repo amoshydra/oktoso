@@ -2526,7 +2526,7 @@ function SearchView(props: {
   const emptyPrompt = messages
     ? indexed.enabled
       ? "Type a query to search message text in cached transcripts."
-      : "Message search needs the transcript cache. Turn it on in Settings → Transcript cache."
+      : "Message search needs the transcript cache. Turn it on in Settings → Local data."
     : "Type a query or choose a provider or status filter to search sessions across providers.";
 
   return (

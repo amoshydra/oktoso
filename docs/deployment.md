@@ -186,7 +186,7 @@ re-reads them on the next request.
 
 ## Transcript cache
 
-Off by default. When enabled in **Settings → Transcript cache**, the hub keeps
+Off by default. When enabled in **Settings → Local data**, the hub keeps
 the message text it already read from a provider so search, export, and offline
 views do not need another round trip. Only text parts are stored: tool input,
 tool output, and reasoning are dropped, and a single transcript is capped at
