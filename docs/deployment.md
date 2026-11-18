@@ -294,12 +294,14 @@ schedule triggers under a policy.
   template prompt as its first message. A schedule `start` watcher does not need
   `condition.sessionRef`; other schedule actions do.
 - A template can also be started by a person, not only by a watcher:
-  `POST /api/v1/automation/templates/<id>/start` or
-  `oktoso template start --id <id>` (list with `oktoso template list`). A manual
+  **Settings → Automation → Templates → Start**, `POST
+  /api/v1/automation/templates/<id>/start`, or `oktoso template start --id
+  <id>` (list with `oktoso template list`). A manual
   start ignores `automation.enabled`, pause, dry run, budgets, and quiet hours
   and records no run; it is a human action, not a supervisor decision. If the
   session is created but the first prompt fails, the error names the new
-  session and is not retryable — retrying would create a second one.
+  session and is not retryable — retrying would create a second one. The panel
+  offers **Open session** instead.
 - Always-allow stores a bounded shape (watcher, question kind, options, and the
   chosen label) after a second confirmation in Settings → Automation. Only
   boolean and single-choice questions are eligible; free-text, multi-select,

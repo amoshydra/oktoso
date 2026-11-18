@@ -7,6 +7,7 @@ import type {
   AutomationView,
 } from "@amoshydra/oktoso-contracts";
 import type { HubClient } from "@amoshydra/oktoso-client";
+import { automationReasonLabel } from "./automation-copy";
 
 const DECISION_LABELS: Record<AutomationRun["decision"], string> = {
   acted: "Acted",
@@ -29,13 +30,20 @@ function formatWhen(at: number): string {
   }).format(new Date(at));
 }
 
-export function AutomationSettingsPanel(props: { client: HubClient }) {
+export function AutomationSettingsPanel(props: {
+  client: HubClient;
+  onOpenSession?: (ref: string) => void;
+}) {
   const [view, setView] = useState<AutomationView>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [confirmShape, setConfirmShape] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [templateError, setTemplateError] = useState<{
+    message: string;
+    ref?: string;
+  }>();
 
   const load = async (spinner = true) => {
     if (spinner) setLoading(true);
@@ -94,6 +102,34 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
     run(`watcher:${id}`, async () => {
       setView(await props.client.pauseWatcher(id, !paused));
     });
+
+  /**
+   * A manual start is a human action: it ignores pause, dry run, budgets, and
+   * quiet hours, and creates no automation run. Open the session on success;
+   * keep the panel and name the ref when the session exists but its first
+   * prompt failed.
+   */
+  const startTemplate = async (id: string, name: string) => {
+    setBusy(`template:${id}`);
+    setTemplateError(undefined);
+    setNotice(undefined);
+    try {
+      const session = await props.client.startTemplate(id);
+      props.onOpenSession?.(session.ref);
+      setNotice(`Started ${name}.`);
+    } catch (reason) {
+      const ref = (reason as { details?: { ref?: unknown } } | undefined)
+        ?.details?.ref;
+      setTemplateError({
+        message: `Could not start ${name}: ${
+          reason instanceof Error ? reason.message : "the hub request failed"
+        }`,
+        ...(typeof ref === "string" ? { ref } : {}),
+      });
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   const decide = (
     approval: AutomationApproval,
@@ -235,6 +271,71 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
       <article className="panel">
         <div className="panel-head">
           <div>
+            <h2>Templates</h2>
+            <p>
+              Start a configured recipe as yourself. Pause, dry run, budgets,
+              and quiet hours do not apply.
+            </p>
+          </div>
+          <span className="mode-badge">{view?.templates.length ?? 0}</span>
+        </div>
+
+        {loading && !view ? (
+          <p className="form-note">Loading templates…</p>
+        ) : view && view.templates.length > 0 ? (
+          <ul className="automation-list">
+            {view.templates.map((template) => {
+              const label = template.name ?? template.title;
+              return (
+                <li key={template.id}>
+                  <div className="settings-device-meta">
+                    <span className="settings-device-name">{label}</span>
+                    <span className="settings-device-detail">
+                      {template.id} · {template.providerID}
+                      {template.text ? " · first prompt" : ""}
+                    </span>
+                  </div>
+                  <button
+                    className="btn small"
+                    type="button"
+                    aria-label={`Start ${label}`}
+                    disabled={busy === `template:${template.id}`}
+                    onClick={() => void startTemplate(template.id, label)}
+                  >
+                    {busy === `template:${template.id}`
+                      ? "Starting…"
+                      : "Start"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="form-note">
+            No templates configured. Add <code>automation.templates</code> in
+            the hub config.
+          </p>
+        )}
+
+        {templateError ? (
+          <div className="form-error" role="alert">
+            <span>{templateError.message}</span>
+            {templateError.ref && props.onOpenSession ? (
+              <button
+                className="btn small"
+                type="button"
+                onClick={() => props.onOpenSession?.(templateError.ref!)}
+              >
+                Open session
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+
+      <article className="panel">
+        <div className="panel-head">
+          <div>
             <h2>Approvals</h2>
             <p>Actions the policy would not take without a human.</p>
           </div>
@@ -250,7 +351,8 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                     {approval.title}
                   </span>
                   <span className="settings-device-detail">
-                    {approval.watcherID} · {approval.reason} ·{" "}
+                    {approval.watcherID} ·{" "}
+                    {automationReasonLabel(approval.reason)} ·{" "}
                     {approval.proposed?.text ?? approval.summary}
                   </span>
                 </div>
@@ -376,7 +478,8 @@ export function AutomationSettingsPanel(props: { client: HubClient }) {
                     {run.watcherID} · {run.action ?? run.trigger}
                   </span>
                   <span className="settings-device-detail">
-                    {run.detail ?? run.reason} · {formatWhen(run.at)}
+                    {run.detail ?? automationReasonLabel(run.reason)} ·{" "}
+                    {formatWhen(run.at)}
                   </span>
                 </div>
               </li>

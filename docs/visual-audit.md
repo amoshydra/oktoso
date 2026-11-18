@@ -1303,3 +1303,26 @@ a global page. The title stays the page `h1`; rename edits that title in place.
 - Saving updates the topbar title and the local session cache, so the page title
   and the session row do not disagree.
 - No new token, route beyond the PATCH session endpoint, or layout surface.
+
+## Automation templates panel (2026-11-18)
+
+The Settings → Automation surface gained a Templates panel, not a new screen.
+It reuses the automation row grammar so the panel reads as part of the same
+list of file-configured objects.
+
+- The panel head uses the existing 16px title, 14px muted description, and the
+  10px `mode-badge` count. The row name is 14px; the id/provider detail is 11px;
+  no new type role.
+- **Start** is a `.btn small` at 32px, matching the watcher Pause action on the
+  same surface. Mobile keeps the 32px target for consistency with the existing
+  row actions rather than raising only the new button; the panel's rows wrap
+  under 760px with the existing rule.
+- The accessible name includes the template (`Start Nightly review`), so a
+  screen reader does not hear a column of identical "Start" buttons.
+- The template error is an alert inside the panel; when the hub includes the
+  created session ref, the error carries one secondary **Open session** action.
+- Reason codes were replaced by one sentence each. The mapping is shared by the
+  Inbox approval card and the Settings approvals/runs lists, so the same event
+  reads the same way on both surfaces.
+- No token, radius, contrast, or motion change. The panel adds no primary action
+  and no color.
