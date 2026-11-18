@@ -66,8 +66,15 @@ Screenshot capture and framing are documented in
 Voice replies use the glasses microphone (16 kHz, signed 16-bit little-endian,
 mono) and the hub's configured transcription endpoint. The voice action is
 hidden when transcription is disabled or missing a base URL or model. The phone
-remains the keyboard for long or free-form answers. Real-hardware voice
-acceptance is still pending.
+remains the keyboard for long or free-form answers.
+
+The voice screen owns the whole exchange. It paints first and opens the
+microphone second, because rebuilding the page container after `audioControl`
+can drop the host capture session. It then reports the outcome on the glasses:
+the transcript, or the failure with the captured size, elapsed time, and frame
+count. A microphone that never delivered a frame therefore says so on the
+glasses instead of silently returning to the chat. Tap retries; Back leaves.
+Real-hardware voice acceptance is still pending.
 
 ## Screen map
 
@@ -92,7 +99,7 @@ Chat
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
-├─ Voice            glasses microphone, hidden without hub STT
+├─ Voice            listen / transcribe / result, hidden without hub STT
 └─ Phone keyboard   longer text fallback
 
 Failure

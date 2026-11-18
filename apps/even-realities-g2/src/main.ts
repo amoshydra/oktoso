@@ -69,6 +69,7 @@ import {
 } from "./pending-send";
 import { selectSendKey } from "./send-key";
 import {
+  pcmBytes,
   pcmChunksToWav,
   orderReplyOptions,
   transcriptionConfigured,
@@ -223,10 +224,17 @@ const state: AppState = {
 const MAX_VOICE_BYTES = 4_000_000;
 const MAX_VOICE_MS = 60_000;
 const SEND_TIMEOUT_MS = 30_000;
+type VoicePhase = "listening" | "transcribing" | "failed" | "done";
 let voiceActive = false;
 let voiceBusy = false;
 let voiceChunks: Uint8Array[] = [];
 let voiceBytes = 0;
+let voiceFrames = 0;
+let voiceStartedAt = 0;
+let voicePhase: VoicePhase = "listening";
+let voiceDetail = "";
+let voiceCaption = "";
+let voiceHeard = "";
 let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
 let bridge: EvenAppBridge | undefined;
@@ -2589,31 +2597,57 @@ async function performReply(index: number): Promise<void> {
 
 async function startVoice(): Promise<void> {
   if (!client || !bridge || voiceActive || voiceBusy) return;
+  voiceBusy = true;
   const settings = await client.assistantSettings().catch(() => undefined);
   if (!transcriptionConfigured(settings)) {
+    voiceBusy = false;
     state.screen = "chat";
     setPhoneStatus("Voice transcription is not configured.", true);
     render();
     return;
   }
+
+  // Paint the voice screen *before* opening the microphone. Opening audio and
+  // then rebuilding the page container can tear the host capture session down
+  // again, which leaves the screen saying "Listening" with no audio arriving.
+  voiceActive = true;
+  voiceBusy = true;
+  voiceChunks = [];
+  voiceBytes = 0;
+  voiceFrames = 0;
+  voiceStartedAt = performance.now();
+  voicePhase = "listening";
+  voiceCaption = "";
+  voiceDetail = "";
+  voiceHeard = "";
+  state.screen = "voice";
+  setPhoneStatus("Listening… tap the glasses to stop.");
+  const view = voiceView();
+  if (setPreview(view.header, view.body, view.footer)) {
+    // Await the paint: the host should own a settled page before capture opens.
+    await showPage(textPage(view.body, view.footer, view.header));
+  }
+
+  // Start the capture budget with the screen, so a host that never answers
+  // audioControl still ends the session instead of hanging on "Listening".
+  voiceTimer = setTimeout(() => void stopVoice(), MAX_VOICE_MS);
+
   try {
     const opened = await bridge.audioControl(true, AudioInputSource.Glasses);
     if (!opened) throw new Error("The glasses microphone is not available.");
-    voiceBusy = true;
-    voiceActive = true;
-    voiceChunks = [];
-    voiceBytes = 0;
-    state.screen = "voice";
-    setPhoneStatus("Listening… tap the glasses to stop.");
-    render();
-    voiceTimer = setTimeout(() => void stopVoice(), MAX_VOICE_MS);
   } catch (error) {
+    if (voiceTimer) {
+      clearTimeout(voiceTimer);
+      voiceTimer = undefined;
+    }
     voiceActive = false;
     voiceBusy = false;
-    state.screen = "chat";
-    setPhoneStatus(failureMessage(error), true);
+    voicePhase = "failed";
+    voiceDetail = captureSummary();
+    voiceCaption = errorMessage(error);
+    setPhoneStatus(`Voice start failed: ${voiceCaption}`, true);
+    log(`Voice start failed: ${voiceCaption}`);
     render();
-    log(`Voice start failed: ${failureMessage(error)}`);
   }
 }
 
@@ -2626,22 +2660,30 @@ async function stopVoice(): Promise<void> {
   }
   const chunks = voiceChunks;
   const bytes = voiceBytes;
+  const frames = voiceFrames;
+  const captured = captureSummary();
   voiceChunks = [];
   voiceBytes = 0;
+  voiceFrames = 0;
   try {
     await bridge?.audioControl(false);
   } catch {
     // The microphone may already be closed.
   }
 
-  state.screen = "chat";
   if (bytes === 0 || chunks.length === 0) {
     voiceBusy = false;
-    setPhoneStatus("No audio captured. Try again.", true);
+    voicePhase = "failed";
+    voiceCaption = "No audio captured.";
+    voiceDetail = `${frames} frames · ${captured}`;
+    setPhoneStatus(`No audio captured (${frames} frames). Try again.`, true);
     render();
     return;
   }
 
+  voicePhase = "transcribing";
+  voiceCaption = "Transcribing…";
+  voiceDetail = captured;
   setPhoneStatus("Transcribing…");
   render();
   try {
@@ -2653,6 +2695,9 @@ async function stopVoice(): Promise<void> {
     const text = result.text.trim();
     if (!text) {
       voiceBusy = false;
+      voicePhase = "failed";
+      voiceCaption = "No speech detected.";
+      voiceDetail = captured;
       setPhoneStatus("No speech detected. Try again.", true);
       render();
       return;
@@ -2660,8 +2705,15 @@ async function stopVoice(): Promise<void> {
     phoneText.value = text;
     phoneText.focus();
     syncPhoneSession();
+    voicePhase = "done";
+    voiceCaption = "Transcript ready.";
+    voiceDetail = captured;
+    voiceHeard = text;
     setPhoneStatus("Transcript ready. Edit or send.");
   } catch (error) {
+    voicePhase = "failed";
+    voiceCaption = "Transcription failed.";
+    voiceDetail = failureMessage(error);
     setPhoneStatus(failureMessage(error), true);
     log(`Voice transcription failed: ${failureMessage(error)}`);
   } finally {
@@ -2680,6 +2732,7 @@ async function cancelVoice(): Promise<void> {
   }
   voiceChunks = [];
   voiceBytes = 0;
+  voiceFrames = 0;
   try {
     await bridge?.audioControl(false);
   } catch {
@@ -2688,6 +2741,48 @@ async function cancelVoice(): Promise<void> {
   state.screen = "chat";
   setPhoneStatus("Voice cancelled.");
   render();
+}
+
+/** Where the microphone session is, in the operator's terms. */
+function captureSummary(): string {
+  if (!voiceStartedAt) return "0.0 s";
+  const seconds = (performance.now() - voiceStartedAt) / 1000;
+  return `${voiceBytes >= 1024 ? `${Math.round(voiceBytes / 1024)} kB` : `${voiceBytes} B`} · ${seconds.toFixed(1)} s`;
+}
+
+/** The voice screen keeps the outcome on the glasses, not only on the phone. */
+function voiceView(): { header: string; body: string; footer: string } {
+  const header = "VOICE";
+  if (voicePhase === "listening") {
+    return {
+      header,
+      body: "Listening…\n\nTap the glasses to stop.\nBack cancels.",
+      footer: "Tap to stop",
+    };
+  }
+  if (voicePhase === "transcribing") {
+    return {
+      header,
+      body: `Transcribing…\n\n${voiceDetail}`,
+      footer: "Please wait",
+    };
+  }
+  if (voicePhase === "done") {
+    const heard = wrapText(voiceHeard, 54, 3).join("\n");
+    return {
+      header,
+      body: `${voiceCaption}\n\n${heard}\n\nSend from the phone.`,
+      footer: "Tap to close",
+    };
+  }
+  const detail = voiceDetail
+    ? wrapText(voiceDetail, 54, 2).join("\n")
+    : "";
+  return {
+    header,
+    body: `${voiceCaption}${detail ? `\n${detail}` : ""}`,
+    footer: "Tap retry   Back ×2",
+  };
 }
 
 async function executeReply(option: ReplyOption): Promise<void> {
@@ -2843,7 +2938,11 @@ async function performChoice(index: number): Promise<void> {
 function back(): void {
   hidePhoneForm();
   if (state.screen === "voice") {
-    void cancelVoice();
+    if (voiceActive) void cancelVoice();
+    else {
+      state.screen = "chat";
+      render();
+    }
     return;
   }
   if (state.screen === "failure") {
@@ -3135,7 +3234,12 @@ function handleListClick(index: number): void {
 
 function handleTextClick(): void {
   if (state.screen === "voice") {
-    void stopVoice();
+    if (voiceActive) void stopVoice();
+    else if (voicePhase === "failed") void startVoice();
+    else if (!voiceBusy) {
+      state.screen = "chat";
+      render();
+    }
     return;
   }
   if (state.screen === "failure") {
@@ -3165,16 +3269,21 @@ function handleTextClick(): void {
 }
 
 function onEvenEvent(event: any): void {
-  const pcm = event?.audioEvent?.audioPcm;
-  if (voiceActive && pcm instanceof Uint8Array) {
-    if (voiceBytes + pcm.byteLength <= MAX_VOICE_BYTES) {
-      voiceChunks.push(pcm);
-      voiceBytes += pcm.byteLength;
-    }
+  const audio = event?.audioEvent;
+  if (!audio) {
+    eventQueue.push(event);
+    void processEvents();
     return;
   }
-  eventQueue.push(event);
-  void processEvents();
+  // Audio frames are microphone data, never input. Normalise whatever shape
+  // the host sent and drop the frame when the microphone is closed.
+  const pcm = pcmBytes(audio.audioPcm);
+  if (!voiceActive || !pcm) return;
+  voiceFrames += 1;
+  if (voiceBytes + pcm.byteLength <= MAX_VOICE_BYTES) {
+    voiceChunks.push(pcm);
+    voiceBytes += pcm.byteLength;
+  }
 }
 
 async function processEvents(): Promise<void> {
@@ -3186,9 +3295,18 @@ async function processEvents(): Promise<void> {
     const input = glassInput(event);
     if (state.screen === "voice") {
       if (input?.type === "text-click") {
-        void stopVoice();
+        if (voiceActive) void stopVoice();
+        else if (voicePhase === "failed") void startVoice();
+        else if (!voiceBusy) {
+          state.screen = "chat";
+          render();
+        }
       } else if (input?.type === "back") {
-        void cancelVoice();
+        if (voiceActive) void cancelVoice();
+        else {
+          state.screen = "chat";
+          render();
+        }
       }
       return;
     }
@@ -3271,9 +3389,9 @@ function render(): void {
     return;
   }
   if (state.screen === "voice") {
-    const body = "Listening…\n\nTap the glasses to stop.\nBack cancels.";
-    if (setPreview("VOICE", body, "Tap to stop")) {
-      void showPage(textPage(body, "Voice reply"));
+    const view = voiceView();
+    if (setPreview(view.header, view.body, view.footer)) {
+      void showPage(textPage(view.body, view.footer, view.header));
     }
     return;
   }

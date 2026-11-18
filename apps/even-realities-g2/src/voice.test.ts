@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AssistantView, ReplyOption } from "@amoshydra/oktoso-contracts";
 import {
   GLASSES_PCM,
+  pcmBytes,
   pcmChunksToWav,
   orderReplyOptions,
   pcmToWav,
@@ -98,5 +99,34 @@ describe("G2 voice helpers", () => {
     ]);
     expect(withVoiceOption(options, false)).toBe(options);
     expect(withVoiceOption(withVoice, true)).toBe(withVoice);
+  });
+
+  it("reads a typed-array audio frame as its own bytes", () => {
+    const frame = new Uint8Array([0, 1, 2, 3]);
+
+    expect(pcmBytes(frame)).toBe(frame);
+  });
+
+  it("reads a plain number list as bytes", () => {
+    expect([...pcmBytes([0, 1, 255, 256, -1])!]).toEqual([0, 1, 255, 0, 255]);
+  });
+
+  it("reads an ArrayBuffer and a view over one", () => {
+    const buffer = new Uint8Array([9, 8, 7, 6]).buffer;
+    expect([...pcmBytes(buffer)!]).toEqual([9, 8, 7, 6]);
+    expect([...pcmBytes(new Uint16Array(buffer, 0, 1))!]).toEqual([9, 8]);
+  });
+
+  it("reads a base64 frame", () => {
+    expect([...pcmBytes(btoa("\x00\x01\x02\xff"))!]).toEqual([0, 1, 2, 255]);
+  });
+
+  it("rejects anything that is not a byte frame", () => {
+    expect(pcmBytes(undefined)).toBeUndefined();
+    expect(pcmBytes(null)).toBeUndefined();
+    expect(pcmBytes({ audioPcm: [1, 2] })).toBeUndefined();
+    expect(pcmBytes([1, "2"])).toBeUndefined();
+    expect(pcmBytes([1, Number.NaN])).toBeUndefined();
+    expect(pcmBytes("not base64 !!")).toBeUndefined();
   });
 });
