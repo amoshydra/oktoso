@@ -92,7 +92,7 @@ Home
 ├─ Inbox            attention items
 ├─ Unsent           failed sends, when present
 ├─ Retry / Pair     inline failure, when present
-├─ Recent           five most recent root sessions
+├─ Recent           root sessions, five per page, More loads older
 ├─ Current          last opened session, when available
 ├─ Symbols          glyph legend
 └─ Settings         data refresh, reload, connection, version
@@ -226,6 +226,9 @@ Sessions with `parentRef` are child sessions.
 
 - Child sessions do not create `UNREAD` or `ERROR` attention items.
 - Recent requests `scope=root`, so child sessions do not appear there.
+- Recent loads 25 root sessions, shows five per page, and follows the hub's
+  cursor for older pages. `More sessions →` is the last row; Back steps one
+  page back before it leaves the screen.
 - Child provider-native permissions and questions remain visible with a `›`
   prefix because they can block the parent task.
 - A blocking permission/question suppresses a duplicate unread row for the same

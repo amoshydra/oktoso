@@ -69,6 +69,7 @@ import {
   type PendingSend,
 } from "./pending-send";
 import { selectSendKey } from "./send-key";
+import { sessionListPage } from "./sessions-model";
 import {
   pcmBytes,
   pcmChunksToWav,
@@ -126,6 +127,8 @@ interface AppState {
   attentionTotal: number;
   attentionExpanded: boolean;
   sessions: Session[];
+  sessionPage: number;
+  sessionsNext?: string;
   returnScreen: Screen;
   selectedAttention?: Attention;
   sessionRef?: string;
@@ -187,6 +190,8 @@ const state: AppState = {
   attentionTotal: 0,
   attentionExpanded: false,
   sessions: [],
+  sessionPage: 0,
+  sessionsNext: undefined,
   returnScreen: "home",
   chatMessages: [],
   chatLines: [],
@@ -1361,8 +1366,10 @@ async function openSessions(): Promise<void> {
   if (!client) return;
   showLoading("Loading recent\nsessions…");
   try {
-    const page = await client.sessions({ limit: 5, scope: "root" });
+    const page = await client.sessions({ limit: 25, scope: "root" });
     state.sessions = page.data;
+    state.sessionsNext = page.cursor.next ?? undefined;
+    state.sessionPage = 0;
     clearFailure();
     markRequestSuccess();
     state.screen = "sessions";
@@ -1379,6 +1386,51 @@ async function openSessions(): Promise<void> {
     state.screen = "sessions";
     render();
     log(`Session list failed: ${failure.kind} · ${failure.title}`);
+  }
+}
+
+function sessionsView(): ReturnType<typeof sessionListPage> {
+  return sessionListPage(
+    state.sessions,
+    state.sessionPage,
+    Boolean(state.sessionsNext),
+  );
+}
+
+function sessionItems(view: ReturnType<typeof sessionsView>): string[] {
+  const items = view.sessions.map((session) =>
+    sessionRowLabel(session, Boolean(questionSummaryFor(session.ref))),
+  );
+  if (view.hasMore) items.push("More sessions →");
+  if (state.failure) items.push(failureRowLabel());
+  return items;
+}
+
+async function moreSessions(): Promise<void> {
+  const view = sessionsView();
+  if (view.page < view.pages - 1) {
+    state.sessionPage = view.page + 1;
+    render();
+    return;
+  }
+  if (!client || !state.sessionsNext) return;
+  const cursor = state.sessionsNext;
+  state.sessionsNext = undefined;
+  try {
+    const page = await client.sessions({ limit: 25, scope: "root", cursor });
+    const seen = new Set(state.sessions.map((session) => session.ref));
+    const added = page.data.filter((session) => !seen.has(session.ref));
+    state.sessions = [...state.sessions, ...added];
+    state.sessionsNext = page.cursor.next ?? undefined;
+    state.sessionPage = view.page + 1;
+    state.failure = undefined;
+    render();
+    void refreshQuestionSummaries(added.map((session) => session.ref));
+  } catch (error) {
+    state.sessionsNext = cursor;
+    state.failure = classifyFailure(error);
+    render();
+    log(`Sessions page failed: ${errorMessage(error)}`);
   }
 }
 
@@ -3167,6 +3219,11 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "sessions" && state.sessionPage > 0) {
+    state.sessionPage -= 1;
+    render();
+    return;
+  }
   if (state.screen === "inbox" || state.screen === "sessions") {
     state.screen = "home";
     state.selectedAttention = undefined;
@@ -3281,9 +3338,17 @@ function handleListClick(index: number): void {
       break;
     }
     case "sessions": {
-      const session = state.sessions[index];
-      if (session) void openChat(session.ref, session.title, "sessions");
-      else if (state.failure && index === state.sessions.length) {
+      const view = sessionsView();
+      const moreIndex = view.sessions.length;
+      const session = view.sessions[index];
+      if (session) {
+        void openChat(session.ref, session.title, "sessions");
+      } else if (view.hasMore && index === moreIndex) {
+        void moreSessions();
+      } else if (
+        state.failure &&
+        index === moreIndex + (view.hasMore ? 1 : 0)
+      ) {
         handleInlineFailure();
       }
       break;
@@ -3577,29 +3642,15 @@ function render(): void {
     return;
   }
   if (state.screen === "sessions") {
-    const items = state.sessions.length
-      ? state.sessions.map((session) =>
-          sessionRowLabel(
-            session,
-            Boolean(questionSummaryFor(session.ref)),
-          ),
-        )
-      : state.failure
-        ? []
-        : ["No recent sessions"];
-    if (state.failure) items.push(failureRowLabel());
+    const view = sessionsView();
+    const items = sessionItems(view);
+    if (items.length === 0) items.push("No recent sessions");
+    const header = `RECENT ${view.page + 1}/${view.pages}${
+      state.sessionsNext ? "+" : ""
+    }`;
     const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
-    if (
-      setPreview(
-        `RECENT ${state.sessions.length}`,
-        items.join("\n"),
-        footer,
-        items,
-      )
-    ) {
-      void showPage(
-        listPage(`RECENT ${state.sessions.length}`, items, footer),
-      );
+    if (setPreview(header, items.join("\n"), footer, items)) {
+      void showPage(listPage(header, items, footer));
     }
     return;
   }
