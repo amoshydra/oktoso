@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.7](https://github.com/amoshydra/oktoso/compare/v0.2.6...v0.2.7) (2026-11-19)
+
+
+### Features
+
+* **g2:** always offer Stop in the chat menu ([394b97e](https://github.com/amoshydra/oktoso/commit/394b97e2a8c970acaa008e6b37614a5b46d79786))
+
+
+### Bug Fixes
+
+* **g2:** redeclare the menu when a turn starts reasoning ([702e73d](https://github.com/amoshydra/oktoso/commit/702e73d3c9561e0126a2bc846b0ef4f3afd80b70))
+* **g2:** repaint when only the menu changed ([38da1d7](https://github.com/amoshydra/oktoso/commit/38da1d750180fb053264b1deec86d715f5a1cca8))
+
 ## [0.2.6](https://github.com/amoshydra/oktoso/compare/v0.2.5...v0.2.6) (2026-11-19)
 
 
