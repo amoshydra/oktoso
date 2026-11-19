@@ -122,7 +122,6 @@ type Screen =
   | "failure"
   | "legend"
   | "settings"
-  | "settings-reload"
   | "session-actions";
 
 interface AppState {
@@ -3295,11 +3294,6 @@ function back(): void {
     render();
     return;
   }
-  if (state.screen === "settings-reload") {
-    state.screen = "settings";
-    render();
-    return;
-  }
   if (state.screen === "session-actions") {
     state.screen = state.replyReturnScreen;
     state.replyReturnScreen = "chat";
@@ -3375,18 +3369,7 @@ function handleListClick(index: number): void {
     }
     case "settings": {
       if (index === 0) void refreshSettings();
-      else if (index === 1) {
-        state.screen = "settings-reload";
-        render();
-      }
-      break;
-    }
-    case "settings-reload": {
-      if (index === 0) reloadApp();
-      else if (index === 1) {
-        state.screen = "settings";
-        render();
-      }
+      else if (index === 1) reloadApp();
       break;
     }
     case "sessions": {
@@ -3684,16 +3667,6 @@ function render(): void {
       : (state.settingsNotice ?? "Tap choose   Back ×2");
     if (setPreview("SETTINGS", info, footer, items)) {
       void showPage(listPage("SETTINGS", items, footer, info));
-    }
-    return;
-  }
-  if (state.screen === "settings-reload") {
-    const body =
-      "Reload the page to load a new build?\nThe current screen and chat position will be lost.";
-    const items = ["Reload", "Cancel"];
-    const footer = "Tap choose   Back ×2";
-    if (setPreview("RELOAD APP", body, footer, items)) {
-      void showPage(listPage("RELOAD APP", items, footer, body));
     }
     return;
   }

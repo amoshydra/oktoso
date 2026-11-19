@@ -64,8 +64,8 @@ Screenshot capture and framing are documented in
   discard removes it.
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
-- **Settings** — action list with `Refresh data` and `Reload app` (reload asks
-  for confirmation), plus connection, version, and last refresh in the body.
+- **Settings** — action list with `Refresh data` and `Reload app` (reload happens
+  immediately), plus connection, version, and last refresh in the body.
   App version appears beside the `OKTOSO` header. A successful phone pairing
   collapses the pairing form to a compact connected row.
 
