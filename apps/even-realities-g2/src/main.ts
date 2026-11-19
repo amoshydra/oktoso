@@ -42,6 +42,7 @@ import {
   initialViewport,
   mergeChatMessages,
   nextViewport,
+  type ChatBuild,
 } from "./chat-model";
 import {
   buildAnswerMetadata,
@@ -273,6 +274,7 @@ let eventRefreshActions: Array<() => void | Promise<void>> = [];
 let failureRetry: (() => void | Promise<void>) | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
+let chatFollowText: string | undefined;
 let phoneFormItem: Attention | undefined;
 let phoneFormValues: Record<string, unknown> = {};
 let phoneQuestionKey = "";
@@ -1658,6 +1660,7 @@ async function openChat(
   state.pendingAnswerChoice = undefined;
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
+  chatFollowText = undefined;
   state.screen = "chat";
   clearFailure();
   state.notice = undefined;
@@ -2202,6 +2205,39 @@ async function sendBatchAnswers(): Promise<void> {
   }
 }
 
+/**
+ * After a send, the provider may echo the message a moment later. Remember its
+ * text so the chat can land on it as soon as it appears instead of staying on
+ * the previous message.
+ */
+function normalizedMessageText(message: Message): string {
+  return message.parts
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function followSentMessage(built: ChatBuild): void {
+  if (!chatFollowText) return;
+  const sent = [...state.chatMessages]
+    .reverse()
+    .find(
+      (message) =>
+        message.role === "user" &&
+        normalizedMessageText(message) === chatFollowText,
+    );
+  if (!sent) return;
+  const start = built.messageStarts[sent.id];
+  if (start === undefined) return;
+  state.chatOffset = Math.min(
+    start,
+    Math.max(0, built.lines.length - CHAT_VISIBLE_LINES),
+  );
+  state.chatNewBelow = false;
+  chatFollowText = undefined;
+}
+
 async function loadChat(quiet: boolean): Promise<void> {
   if (!client || !state.sessionRef) return;
   const ref = state.sessionRef;
@@ -2233,6 +2269,18 @@ async function loadChat(quiet: boolean): Promise<void> {
       : initialViewport(built, CHAT_VISIBLE_LINES);
     state.chatOffset = viewport.offset;
     state.chatNewBelow = viewport.newBelow;
+    if (chatFollowText) {
+      followSentMessage(built);
+      if (chatFollowText && !quiet) {
+        // The provider has not echoed the send yet: wait at the end of the
+        // transcript so the message can be followed into view when it lands.
+        state.chatOffset = Math.max(
+          0,
+          state.chatLines.length - CHAT_VISIBLE_LINES,
+        );
+        state.chatNewBelow = false;
+      }
+    }
     state.chatFailure = undefined;
     state.chatLoading = false;
     markRequestSuccess();
@@ -2294,6 +2342,7 @@ function applyLiveMessage(message: Message): void {
   });
   state.chatOffset = viewport.offset;
   state.chatNewBelow = viewport.newBelow;
+  if (isNew && message.role === "user") followSentMessage(built);
   const changed =
     previousLines.length !== state.chatLines.length ||
     previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -2934,6 +2983,7 @@ async function executeReply(option: ReplyOption): Promise<void> {
           { idempotencyKey, signal: sendSignal() },
         );
         clearPendingSend(idempotencyKey);
+        chatFollowText = text.replace(/\s+/g, " ").trim();
         state.question = undefined;
         rememberQuestionSummary(state.sessionRef, null);
         updatePhoneQuestion();
