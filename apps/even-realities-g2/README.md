@@ -166,6 +166,27 @@ instead of taking over the screen.
 - The glass keeps painting; only polling pauses in the case or off the face.
   A stale wear reading must never blank a reload.
 
+## Regression harness
+
+`tests/e2e/g2.e2e.ts` drives the hosted app through the same channel the Even
+host uses: `rebuildPageContainer` for pages and menus, `evenHubEvent` for taps,
+menu selections, and audio frames. It runs against a test hub with fake
+providers, so no real session or provider is touched.
+
+```sh
+pnpm build:single-port
+pnpm test:e2e:g2
+```
+
+It covers boot and navigation, the empty Inbox one-liner, the always-on `Stop
+agent` menu declaration, stop → confirm → chat, and the voice listen →
+transcribe → result → send flow. It runs with the rest of the e2e suite
+(`pnpm test:e2e`) in CI.
+
+Limits: it does not render the OS menu overlay, capture a real microphone, or
+paint the framebuffer. Use the Even simulator or hardware for those; this
+harness is for screen transitions and host-contract regressions.
+
 ## Symbols
 
 The simulator verified these glyphs. They are single-cell characters, not emoji.
