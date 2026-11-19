@@ -74,6 +74,12 @@ import { selectSendKey } from "./send-key";
 import { sessionListPage } from "./sessions-model";
 import { MENU_ID, menuForScreen, type MenuEntry } from "./menu";
 import {
+  deviceAwake,
+  glassesStatusLabel,
+  type GlassesSnapshot,
+} from "./device";
+import { landingScreen, type LaunchSourceName } from "./launch";
+import {
   pcmBytes,
   pcmChunksToWav,
   orderReplyOptions,
@@ -287,6 +293,11 @@ let failureRetry: (() => void | Promise<void>) | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
 let chatFollowText: string | undefined;
+const RELOADED = new URL(window.location.href).searchParams.has("reload");
+let launchSource: LaunchSourceName | undefined;
+let device: GlassesSnapshot = {};
+let deviceKnown = false;
+let booted = false;
 let phoneFormItem: Attention | undefined;
 let phoneFormValues: Record<string, unknown> = {};
 let phoneQuestionKey = "";
@@ -1182,6 +1193,58 @@ async function togglePairScan(): Promise<void> {
   }
 }
 
+async function applyLanding(): Promise<void> {
+  if (!client || !launchSource || !booted) return;
+  const source = launchSource;
+  launchSource = undefined;
+  const landing = landingScreen({
+    source,
+    hasSession: Boolean(state.sessionRef && state.sessionTitle),
+    reloaded: RELOADED,
+  });
+  if (landing === "inbox") {
+    state.screen = "inbox";
+    render();
+    return;
+  }
+  if (landing === "chat" && state.sessionRef && state.sessionTitle) {
+    await openChat(state.sessionRef, state.sessionTitle, "home");
+  }
+}
+
+function applyDeviceStatus(status: {
+  batteryLevel?: number;
+  isCharging?: boolean;
+  isInCase?: boolean;
+  isWearing?: boolean;
+}): void {
+  const wasAwake = deviceAwake(device, deviceKnown);
+  device = {
+    ...(typeof status.batteryLevel === "number"
+      ? { batteryLevel: status.batteryLevel }
+      : {}),
+    ...(typeof status.isCharging === "boolean"
+      ? { charging: status.isCharging }
+      : {}),
+    ...(typeof status.isInCase === "boolean" ? { inCase: status.isInCase } : {}),
+    ...(typeof status.isWearing === "boolean"
+      ? { wearing: status.isWearing }
+      : {}),
+  };
+  deviceKnown = true;
+  const awake = deviceAwake(device, deviceKnown);
+  if (wasAwake !== awake) {
+    if (!awake && voiceActive) void cancelVoice();
+    if (awake) {
+      // Paints were skipped while asleep; force the next render through.
+      paintedScreen = undefined;
+      lastGlassSignature = "";
+      render();
+    }
+  }
+  if (awake && state.screen === "settings") render();
+}
+
 async function restoreConnection(): Promise<void> {
   const baseUrl = hubBaseURL();
   setConnection("Restoring…");
@@ -1215,6 +1278,8 @@ async function restoreConnection(): Promise<void> {
       await refreshInbox();
       state.screen = "home";
       render();
+      booted = true;
+      await applyLanding();
       return;
     } catch {
       // Try the next credential.
@@ -1310,6 +1375,18 @@ function startEventStream(): void {
           event.sessionRef === state.sessionRef
         ) {
           scheduleEventRefresh(() => loadChat(true));
+        }
+        if (
+          event.type === "attention.created" &&
+          state.screen === "home" &&
+          deviceAwake(device, deviceKnown) &&
+          (event.data as { priority?: unknown } | undefined)?.priority ===
+            "blocking"
+        ) {
+          // A blocking item arrived while the user was sitting on Home: show
+          // it instead of waiting for them to check.
+          state.screen = "inbox";
+          render();
         }
         if (
           (event.type.startsWith("attention.") ||
@@ -2545,6 +2622,7 @@ async function updateChatView(): Promise<void> {
   try {
     const view = chatView();
     if (!setPreview(view.header, view.body, view.footer)) return;
+    if (!deviceAwake(device, deviceKnown)) return;
     await bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: 2,
@@ -3664,7 +3742,10 @@ function render(): void {
       ...(state.lastRefreshAt
         ? [`Last refresh · ${timeLabel(state.lastRefreshAt)}`]
         : []),
-    ].join("\n");
+      glassesStatusLabel(device, deviceKnown),
+    ]
+      .filter(Boolean)
+      .join("\n");
     const footer = state.settingsBusy
       ? "Refreshing…"
       : (state.settingsNotice ?? "Tap choose   Back ×2");
@@ -4056,6 +4137,7 @@ function menuObjectForScreen(): MenuContainerProperty | undefined {
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
+  if (!deviceAwake(device, deviceKnown)) return;
   // The menu is declared with the page: every rebuild must carry it forward or
   // the OS drops the app's items.
   const menu = menuObjectForScreen();
@@ -4256,8 +4338,20 @@ async function init(): Promise<void> {
       }),
     );
     bridge.onEvenHubEvent(onEvenEvent);
+    bridge.onLaunchSource((source) => {
+      launchSource = source;
+      void applyLanding();
+    });
+    bridge.onDeviceStatusChanged((status) => applyDeviceStatus(status));
+    void bridge
+      .getDeviceInfo()
+      .then((info) => {
+        if (info) applyDeviceStatus(info.status);
+      })
+      .catch(() => undefined);
     pollTimer = setInterval(() => {
       if (!client || eventStreamOpen) return;
+      if (!deviceAwake(device, deviceKnown)) return;
       if (state.screen === "inbox" || state.screen === "home") {
         void refreshInbox();
       } else if (state.screen === "chat" && state.sessionRef) {
