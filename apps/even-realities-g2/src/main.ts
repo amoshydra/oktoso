@@ -4,6 +4,8 @@ import {
   AudioInputSource,
   CreateStartUpPageContainer,
   EvenAppBridge,
+  MenuContainerProperty,
+  MenuItemProperty,
   RebuildPageContainer,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -70,6 +72,7 @@ import {
 } from "./pending-send";
 import { selectSendKey } from "./send-key";
 import { sessionListPage } from "./sessions-model";
+import { MENU_ID, menuForScreen, type MenuEntry } from "./menu";
 import {
   pcmBytes,
   pcmChunksToWav,
@@ -1771,6 +1774,18 @@ async function openChat(
       if (state.screen === "chat") render();
     })
     .catch(() => undefined);
+  // The contextual menu offers Voice reply on the chat, so know whether the
+  // hub can transcribe before the user opens the reply screen.
+  void client
+    ?.assistantSettings()
+    .then((settings) => {
+      if (state.sessionRef !== ref) return;
+      const next = transcriptionConfigured(settings);
+      if (next === voiceAvailable) return;
+      voiceAvailable = next;
+      if (state.screen === "chat") render();
+    })
+    .catch(() => undefined);
   void loadQuestion(ref);
   await loadChat(false);
   if (client) void client.markRead(ref).catch(() => undefined);
@@ -3150,6 +3165,53 @@ async function performChoice(index: number): Promise<void> {
   }
 }
 
+function handleMenuAction(itemID: number): void {
+  switch (itemID) {
+    case MENU_ID.home:
+      goHome();
+      return;
+    case MENU_ID.back:
+      back();
+      return;
+    case MENU_ID.voice:
+      if (!voiceActive && !voiceBusy) void startVoice();
+      return;
+    case MENU_ID.reply:
+      void openReply();
+      return;
+    case MENU_ID.phone:
+      focusPhoneKeyboard();
+      return;
+    case MENU_ID.stop:
+      void stopVoice();
+      return;
+    case MENU_ID.cancel:
+      void cancelVoice();
+      return;
+    default:
+      return;
+  }
+}
+
+function goHome(): void {
+  if (state.screen === "home") return;
+  hidePhoneForm();
+  state.screen = "home";
+  state.selectedAttention = undefined;
+  state.notice = undefined;
+  render();
+}
+
+function focusPhoneKeyboard(): void {
+  if (!state.sessionRef) return;
+  phoneText.focus();
+  setPhoneStatus("Type on the phone, then send.");
+  if (state.screen !== "chat") {
+    state.screen = "chat";
+    render();
+  }
+}
+
 function back(): void {
   hidePhoneForm();
   if (state.screen === "voice") {
@@ -3495,6 +3557,11 @@ function handleTextClick(): void {
 }
 
 function onEvenEvent(event: any): void {
+  const menuItem = event?.menuItemClickEvent;
+  if (menuItem && typeof menuItem.itemID === "number") {
+    handleMenuAction(menuItem.itemID);
+    return;
+  }
   const audio = event?.audioEvent;
   if (!audio) {
     eventQueue.push(event);
@@ -4048,8 +4115,26 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
   handleListClick(previewCursor);
 }
 
+function menuObjectForScreen(): MenuContainerProperty | undefined {
+  const entries: MenuEntry[] = menuForScreen(state.screen, {
+    hasSession: Boolean(state.sessionRef),
+    voiceEnabled: voiceAvailable,
+  });
+  if (entries.length === 0) return undefined;
+  return new MenuContainerProperty({
+    menuItems: entries.map(
+      (entry) =>
+        new MenuItemProperty({ itemName: entry.label, itemID: entry.id }),
+    ),
+  });
+}
+
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
+  // The menu is declared with the page: every rebuild must carry it forward or
+  // the OS drops the app's items.
+  const menu = menuObjectForScreen();
+  if (menu) page.menuObject = menu;
   const started = performance.now();
   try {
     await bridge.rebuildPageContainer(page);
