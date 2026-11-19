@@ -1,4 +1,5 @@
 import type { AssistantView, ReplyOption } from "@amoshydra/oktoso-contracts";
+import { wrapText } from "@amoshydra/oktoso-wearable-core";
 
 /** Even G2 microphone format: 16 kHz, signed 16-bit little-endian, mono. */
 export const GLASSES_PCM = {
@@ -54,6 +55,58 @@ export const VOICE_REPLY_OPTION: ReplyOption = {
   source: "canned",
   action: "voice",
 };
+
+export type VoicePhase = "listening" | "transcribing" | "failed" | "done";
+
+export interface VoiceScreen {
+  header: string;
+  body: string;
+  footer: string;
+  items?: string[];
+}
+
+/**
+ * One voice screen for every stage, so the glasses always show where the reply
+ * is: listening, transcribing, the words to send, or what went wrong.
+ */
+export function voiceScreen(input: {
+  phase: VoicePhase;
+  detail?: string;
+  caption?: string;
+  heard?: string;
+}): VoiceScreen {
+  const header = "VOICE";
+  if (input.phase === "listening") {
+    return {
+      header,
+      body: "Listening…\n\nTap the glasses to stop.\nBack cancels.",
+      footer: "Tap to stop",
+    };
+  }
+  if (input.phase === "transcribing") {
+    return {
+      header,
+      body: `Transcribing…\n\n${input.detail ?? ""}`,
+      footer: "Please wait",
+    };
+  }
+  if (input.phase === "done") {
+    return {
+      header,
+      body: wrapText(input.heard ?? "", 54, 2).join("\n"),
+      footer: "Tap choose   Back ×2",
+      items: ["Send", "Edit on phone"],
+    };
+  }
+  const detail = input.detail
+    ? wrapText(input.detail, 54, 2).join("\n")
+    : "";
+  return {
+    header,
+    body: `${input.caption ?? ""}${detail ? `\n${detail}` : ""}`,
+    footer: "Tap retry   Back ×2",
+  };
+}
 
 /**
  * Normalise one audio frame from the Even hub.

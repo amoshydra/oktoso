@@ -7,6 +7,7 @@ import {
   orderReplyOptions,
   pcmToWav,
   transcriptionConfigured,
+  voiceScreen,
   withVoiceOption,
   VOICE_REPLY_OPTION,
 } from "./voice";
@@ -101,6 +102,39 @@ describe("G2 voice helpers", () => {
     expect(withVoice[0]).toBe(VOICE_REPLY_OPTION);
     expect(withVoiceOption(options, false)).toBe(options);
     expect(withVoiceOption(withVoice, true)).toBe(withVoice);
+  });
+
+  it("walks the voice screen from listening to sending", () => {
+    expect(voiceScreen({ phase: "listening" })).toEqual({
+      header: "VOICE",
+      body: "Listening…\n\nTap the glasses to stop.\nBack cancels.",
+      footer: "Tap to stop",
+    });
+
+    const sending = voiceScreen({ phase: "transcribing", detail: "92 kB · 6.8 s" });
+    expect(sending.body).toContain("Transcribing…");
+    expect(sending.body).toContain("92 kB · 6.8 s");
+    expect(sending.items).toBeUndefined();
+
+    const done = voiceScreen({
+      phase: "done",
+      heard: "Send this to the session, please.",
+    });
+    expect(done.items).toEqual(["Send", "Edit on phone"]);
+    expect(done.body).toBe("Send this to the session, please.");
+    expect(done.footer).toBe("Tap choose   Back ×2");
+  });
+
+  it("shows a failed capture with the frame count", () => {
+    const failed = voiceScreen({
+      phase: "failed",
+      caption: "No audio captured.",
+      detail: "0 frames · 0 B · 3.2 s",
+    });
+
+    expect(failed.body).toBe("No audio captured.\n0 frames · 0 B · 3.2 s");
+    expect(failed.footer).toBe("Tap retry   Back ×2");
+    expect(failed.items).toBeUndefined();
   });
 
   it("reads a typed-array audio frame as its own bytes", () => {
