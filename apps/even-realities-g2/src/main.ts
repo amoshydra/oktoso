@@ -307,6 +307,7 @@ let device: GlassesSnapshot = {};
 let deviceKnown = false;
 let booted = false;
 let providerStates: Record<string, string> = {};
+let dismissedTurnID: string | undefined;
 let phoneFormItem: Attention | undefined;
 let phoneFormValues: Record<string, unknown> = {};
 let phoneQuestionKey = "";
@@ -1292,9 +1293,17 @@ function turnFailure(): TurnFailure | undefined {
   const last = [...state.chatMessages]
     .reverse()
     .find((message) => message.role === "assistant");
-  if (!last) return undefined;
+  if (!last || last.id === dismissedTurnID) return undefined;
   const message = turnErrorText(last.metadata?.error);
   return message ? { id: last.id, message } : undefined;
+}
+
+/** Back from a failed turn acknowledges it so the chat tap returns to replies. */
+function dismissTurnFailure(): void {
+  const failure = turnFailure();
+  if (failure) dismissedTurnID = failure.id;
+  state.screen = "chat";
+  render();
 }
 
 function openTurnFailure(): void {
@@ -1930,6 +1939,7 @@ async function openChat(
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   chatFollowText = undefined;
+  dismissedTurnID = undefined;
   state.screen = "chat";
   clearFailure();
   state.notice = undefined;
@@ -3485,8 +3495,7 @@ function back(): void {
     return;
   }
   if (state.screen === "turn-failed") {
-    state.screen = "chat";
-    render();
+    dismissTurnFailure();
     return;
   }
   if (state.screen === "pending") {
@@ -3561,10 +3570,7 @@ function handleListClick(index: number): void {
     }
     case "turn-failed": {
       if (index === 0) void retryTurn();
-      else {
-        state.screen = "chat";
-        render();
-      }
+      else dismissTurnFailure();
       break;
     }
     case "settings": {
