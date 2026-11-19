@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.5](https://github.com/amoshydra/oktoso/compare/v0.2.4...v0.2.5) (2026-11-19)
+
+
+### Features
+
+* **g2:** make an empty inbox point at the work ([172b246](https://github.com/amoshydra/oktoso/commit/172b246c43e63100b6e1e7c1bb2533f1fae4fc3b))
+* **g2:** make voice reply the first row ([f64c9ec](https://github.com/amoshydra/oktoso/commit/f64c9ec3edefe7ec6c86a3ac946fbe63ace82239))
+* **g2:** one line for an empty inbox ([7611b40](https://github.com/amoshydra/oktoso/commit/7611b40c2b9227e4df68e752cdbba2ae05f523ab))
+* **g2:** page through recent sessions ([5479237](https://github.com/amoshydra/oktoso/commit/54792372d89d9bb9e7c957ef1e7f882fa084da12))
+* **g2:** send a voice reply from the glasses ([eb2b235](https://github.com/amoshydra/oktoso/commit/eb2b2356eb53f1fb6898a4d5821f77b2cdeb2342))
+* **templates:** list and start configured templates ([195a6f3](https://github.com/amoshydra/oktoso/commit/195a6f3a7f2acf0ffc173dd2584c1e19a34528a4))
+* **web:** start automation templates from Settings ([91da8fc](https://github.com/amoshydra/oktoso/commit/91da8fc992dbeb8ac10f864457b34ee2da2b4d36))
+
+
+### Bug Fixes
+
+* **g2:** keep the voice reply on the glasses, and say what failed ([e03271a](https://github.com/amoshydra/oktoso/commit/e03271acc02e078f30bbfd8b72c5a119a5bcdf8f))
+* **g2:** land on the reply that was just sent ([4b9a6ce](https://github.com/amoshydra/oktoso/commit/4b9a6cefa5a56d486bf1ca378898c2cd60aa8c81))
+* **g2:** repaint the chat after a voice reply ([6442c52](https://github.com/amoshydra/oktoso/commit/6442c52d503ebf7410516d33b3baf18450a1eb6c))
+* **templates:** close the review findings on the start surface ([24e756f](https://github.com/amoshydra/oktoso/commit/24e756f38701ff20d12c78ffeb22a2ae0d45201c))
+
 ## [0.2.4](https://github.com/amoshydra/oktoso/compare/v0.2.3...v0.2.4) (2026-11-18)
 
 
