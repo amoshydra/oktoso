@@ -282,6 +282,8 @@ let previewCursor = 0;
 let lastGlassSignature = "";
 /** The screen whose page is actually on the glass; incremental updates need it. */
 let paintedScreen: Screen | undefined;
+/** Menu labels painted with that page; a stale menu must force a rebuild. */
+let paintedMenu = "";
 let chatLoadSequence = 0;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
@@ -2599,9 +2601,12 @@ function chatView(): { header: string; body: string; footer: string } {
 
 async function updateChatView(): Promise<void> {
   if (!bridge) return;
-  if (paintedScreen !== "chat") {
-    // The glass still holds another page (the voice result, a list, a form).
-    // Container upgrades would land on the wrong containers, so repaint.
+  if (
+    paintedScreen !== "chat" ||
+    paintedMenu !== menuSignature(menuEntries())
+  ) {
+    // The glass holds another page, or the menu changed with the turn state
+    // (Stop appears/leaves). Container upgrades cannot redeclare a menu.
     render();
     return;
   }
@@ -4114,10 +4119,16 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
   handleListClick(previewCursor);
 }
 
+function menuEntries(): MenuEntry[] {
+  return menuForScreen(state.screen, { canInterrupt: canInterrupt() });
+}
+
+function menuSignature(entries: MenuEntry[]): string {
+  return entries.map((entry) => `${entry.id}:${entry.label}`).join("|");
+}
+
 function menuObjectForScreen(): MenuContainerProperty | undefined {
-  const entries: MenuEntry[] = menuForScreen(state.screen, {
-    canInterrupt: canInterrupt(),
-  });
+  const entries = menuEntries();
   if (entries.length === 0) return undefined;
   return new MenuContainerProperty({
     menuItems: entries.map(
@@ -4133,6 +4144,7 @@ async function showPage(page: RebuildPageContainer): Promise<void> {
   // the OS drops the app's items.
   const menu = menuObjectForScreen();
   if (menu) page.menuObject = menu;
+  paintedMenu = menuSignature(menuEntries());
   const started = performance.now();
   try {
     await bridge.rebuildPageContainer(page);
