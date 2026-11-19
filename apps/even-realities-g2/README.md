@@ -59,10 +59,12 @@ Screenshot capture and framing are documented in
   keyboard`. When it does generate, it returns an answer, an opposite labelled
   `Alt:`, and an ask labelled `Ask:`, grounded in a compact MOMENT block with
   pending, done, and constraint state.
-- **Contextual menu** — tap then long press on the chat: `Stop agent` first when
-  a turn is running (confirmation screen, then back to the chat), and
-  `Scroll to the bottom` below it. Reply and voice keep their own first-class
-  entry points, so the menu does not repeat them.
+- **Contextual menu** — tap then long press on the chat: `Stop agent` and
+  `Scroll to the bottom`, always in that order. Stop opens a confirmation screen
+  and is idempotent: the provider answers `{"interrupted":false}` when nothing
+  is running, so the menu never depends on guessing the turn state. Reply and
+  voice keep their own first-class entry points, so the menu does not repeat
+  them.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
   send. Provider-native `question` tool calls use the same chat answer flow as
@@ -133,7 +135,7 @@ Chat
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
-├─ Stop agent       confirmation, when a turn is running
+├─ Stop agent       confirmation, always available
 ├─ Turn failed      provider error + Retry / Back
 └─ Phone keyboard   longer text fallback
 

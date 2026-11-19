@@ -11,16 +11,14 @@ export interface MenuEntry {
 
 /**
  * The glasses contextual menu (tap then long press) is the shortcut surface for
- * the chat. Stop is first when there is a turn to interrupt, and it opens a
- * confirmation screen; scroll-to-bottom is the quiet convenience below it.
+ * the chat. Stop is always first: it is idempotent ("make it not running"), the
+ * provider no-ops cleanly when nothing is running, and the confirmation screen
+ * is the safety, not a state guess. Scroll-to-bottom sits below it.
  */
-export function menuForScreen(
-  screen: string,
-  options: { canInterrupt?: boolean } = {},
-): MenuEntry[] {
+export function menuForScreen(screen: string): MenuEntry[] {
   if (screen !== "chat") return [];
-  const items: MenuEntry[] = [];
-  if (options.canInterrupt) items.push({ id: MENU_ID.stop, label: "Stop agent" });
-  items.push({ id: MENU_ID.bottom, label: "Scroll to the bottom" });
-  return items;
+  return [
+    { id: MENU_ID.stop, label: "Stop agent" },
+    { id: MENU_ID.bottom, label: "Scroll to the bottom" },
+  ];
 }
