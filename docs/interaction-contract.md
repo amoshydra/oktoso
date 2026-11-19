@@ -391,6 +391,9 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 - Without `q`, the endpoint serves the recent-session cache.
 - Provider cursors are opaque and are not merged, so cross-provider search does
   not paginate yet.
+- A provider that fails during a search is reported in `warnings`; the other
+  providers' results are still returned, and the Search screen names the
+  provider whose results may be missing.
 - Message-content search remains provider-specific and is not guaranteed.
 
 The existing `GET/PUT /api/v1/settings/assistant` remains the configuration

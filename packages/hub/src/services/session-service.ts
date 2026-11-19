@@ -14,6 +14,7 @@ import type {
   SessionListQuery,
   SessionPage,
   SessionSelectionInput,
+  SessionWarning,
 } from "@amoshydra/oktoso-contracts";
 import {
   isAbsoluteSessionPath,
@@ -265,6 +266,7 @@ export class SessionService {
           !providerUnavailableReason(this.registry, adapter.id),
       );
 
+    const warnings: SessionWarning[] = [];
     const results = await Promise.all(
       adapters.map(async (adapter) => {
         try {
@@ -274,9 +276,12 @@ export class SessionService {
           );
           return { page };
         } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          warnings.push({ providerID: adapter.id, message });
           this.logger.warn("Session search failed", {
             provider: adapter.id,
-            error: error instanceof Error ? error.message : String(error),
+            error: message,
           });
           return { page: undefined };
         }
@@ -294,6 +299,7 @@ export class SessionService {
     return {
       data: this.filterSessions([...merged.values()], query).slice(0, limit),
       cursor: { next: null, previous: null },
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
