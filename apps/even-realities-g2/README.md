@@ -31,9 +31,15 @@ Screenshot capture and framing are documented in
   detail screen with Approve / Deny; approval decisions call
   `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
   blocking items are shown; the Inbox adds a `More` row when the list is capped.
+  A blocking item that arrives while Home is open opens the Inbox by itself.
   With nothing active the screen is a single top-aligned line — the glyph and
   title of the session you were last in — and one tap resumes it. With no
   session at all it reads `No session open.`
+- **Launch routing** — opening from the glasses menu lands on Inbox; opening
+  from the phone app resumes the current chat; a reload stays on Home.
+- **Device state** — the host reports wearing, charging, and battery. When the
+  glasses are in the case or off the face, painting and polling pause; the phone
+  surface keeps updating. Battery and charging show in Settings.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming.
@@ -65,7 +71,8 @@ Screenshot capture and framing are documented in
 - **Symbols** — compact single-cell glyphs replace status words. A persistent
   legend lives on Home → Symbols and on the phone.
 - **Settings** — action list with `Refresh data` and `Reload app` (reload happens
-  immediately), plus connection, version, and last refresh in the body.
+  immediately), plus connection, version, last refresh, and glasses battery in
+  the body.
   App version appears beside the `OKTOSO` header. A successful phone pairing
   collapses the pairing form to a compact connected row.
 
@@ -139,6 +146,10 @@ instead of taking over the screen.
   copy of the screen's actions.
 - A new screen has to replace a step, not add one: Settings reloads in one tap,
   and an empty Inbox is one line.
+- The landing screen comes from the launch source, not from a menu the user has
+  to learn.
+- The glass sleeps with the wearer: no paint or polling while it is in the case
+  or off the face.
 
 ## Symbols
 
