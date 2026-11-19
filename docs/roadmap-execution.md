@@ -659,10 +659,13 @@ Schedule one bet at a time, each with its own acceptance before it starts.
     show a brief "waking model" row; it does not need a state machine.
   - The assistant and dictation do not co-reside with a 27B on 24 GB. With Qwen
     resident, GlassScribe OOMs after three retries (211 MB free), falls back to
-    CPU, and a 3.9 s clip takes 43 s. Unloading the LLM first gives 0.7 s warm
-    ASR and costs ~2.5 s to reload the assistant. M1 must serialize them, and
-    the ASR pin should evict the LLM rather than fail — the current gate does
-    the reverse.
+    CPU, and a 3.9 s clip takes 43 s. ASR now goes through the orchestrator at
+    `/asr/...` (`gpu-ochestrator` `0679b5e`): a transcription POST that needs
+    VRAM unloads llama models first, ComfyUI is reclaimed if idle, and an LLM
+    request waits for that swap instead of racing it. Measured: cold switch
+    8.4 s (unload + ASR load + transcript), warm 0.5–0.7 s, return trip ~4 s.
+    The hub's transcription base URL is `http://127.0.0.1:42068/asr/v1`; a
+    direct `:8100` call bypasses the gate and can still starve itself.
 
 ## Cross-cutting work
 
