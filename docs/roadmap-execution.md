@@ -635,22 +635,34 @@ Schedule one bet at a time, each with its own acceptance before it starts.
 - [x] G6. Hub agent spike (session scope, read-only). `pnpm ask <ref>
   "question"` (`scripts/ask.mjs`) assembles session meta, attention, the pending
   question, a deduped tool-action digest, and the text tail, then makes one
-  completion. Measured 2026-11-19 on `Ternary-Bonsai-2-27B-gguf` (24 GB host,
-  warm): 1.0–4.5 s end to end, 0.6–13.6k chars of context, 380–4500 prompt
-  tokens, 50–150 output tokens, across a running session, an idle planning
-  session, and two error sessions.
-  - The first cut ("last 20 raw messages") was useless on tool-heavy sessions:
-    every turn was a tool call, and the model reported that no file edits were
-    visible when they were. Splitting a **deduped action digest** from the
-    **text-only transcript** fixed it: the same question then named the edited
-    files correctly.
+  completion. Read-only by construction: it never calls a write route.
+  - Context shape mattered more than the model. The first cut ("last 20 raw
+    messages") fed a tool-heavy session nothing but tool calls, and the model
+    reported that no file edits were visible when four were. Splitting a
+    **deduped action digest** from the **text-only transcript** fixed it: the
+    same question then named the edited files.
+  - Model comparison, 2026-11-19, same four sessions and prompts, warm, 24 GB
+    host. Qwen 3.8 27B at 32k ctx: 0.5–2.7 s (avg 1.7), 19.1 GB VRAM.
+    Ternary-Bonsai 2 27B: 2.6–3.7 s (avg 3.0), 14.4 GB. Both were correct on
+    the planning and Hermes sessions. Qwen cited turns and stayed tighter;
+    Bonsai mistyped a session ref and answered the cache session from the wrong
+    thread. Qwen is the default; `ASK_MODEL` overrides it.
+  - The Qwen preset's earlier load failures were VRAM, not config: with VR and
+    the ASR server stopped, the unchanged 131k preset loaded. `ctx-size` is now
+    32768 (the largest observed prompt is ~4k tokens), costing 2.7 GB less.
+    `~/.llama/draft/Qwen3.8-27B-Aggressive-FastMTP-32K.gguf` cannot be used as
+    a draft head: 32k vocab against the model's 248k.
   - Honesty held. On an error session whose recorded turns contain no error
-    text, the model said so and named the next thing to check instead of
+    text, both models said so and named the next thing to check instead of
     inventing a cause.
-  - Cold start is the open risk: the router sleeps an idle model after 600 s, so
-    the first ask after a gap pays the load. M1 must stream a "waking model"
-    state, not a spinner with no reason.
-  - No write tools are involved. The spike is read-only by construction.
+  - Cold start is cheaper than assumed: a cold 27B load added ~2.5 s. M1 can
+    show a brief "waking model" row; it does not need a state machine.
+  - The assistant and dictation do not co-reside with a 27B on 24 GB. With Qwen
+    resident, GlassScribe OOMs after three retries (211 MB free), falls back to
+    CPU, and a 3.9 s clip takes 43 s. Unloading the LLM first gives 0.7 s warm
+    ASR and costs ~2.5 s to reload the assistant. M1 must serialize them, and
+    the ASR pin should evict the LLM rather than fail — the current gate does
+    the reverse.
 
 ## Cross-cutting work
 

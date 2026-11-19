@@ -14,7 +14,7 @@
  *   node scripts/ask.mjs --list
  *
  * Options:
- *   --model <id>        override the model (default: Ternary-Bonsai-2-27B-gguf)
+ *   --model <id>        override the model (default: Qwen 3.8 27B)
  *   --base-url <url>    override the OpenAI-compatible base URL
  *   --limit <n>         transcript tail size, default 20
  *   --max-chars <n>     per-message character cap, default 1200
@@ -31,7 +31,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DEFAULT_MODEL = process.env.ASK_MODEL ?? "Ternary-Bonsai-2-27B-gguf";
+const DEFAULT_MODEL =
+  process.env.ASK_MODEL ?? "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF";
 const DEFAULT_BASE_URL = "https://gpu.home.local.odlbo.cyou/llamacpp/v1";
 
 const SYSTEM_PROMPT = `You are Oktoso's scoped assistant. You answer questions about one AI agent session using only the context provided.
