@@ -74,16 +74,17 @@ mono) and the hub's configured transcription endpoint. The voice action is
 hidden when transcription is disabled or missing a base URL or model. The phone
 remains the keyboard for long or free-form answers.
 
-**Voice reply is the first row of the reply screen**, on every page, and it is
-offered while the suggestions are still loading. Opening the reply screen and
-tapping once starts the recording; no paging or scrolling is involved. The
-suggestions keep their own hierarchy below it.
+**Voice reply is the first row of the first reply page**, and it is offered
+while the suggestions are still loading. Opening the reply screen and tapping
+once starts the recording; no paging or scrolling is involved. Later pages show
+their full set of suggestions without repeating the shortcut.
 
 The voice screen owns the whole exchange. It paints first and opens the
 microphone second, because rebuilding the page container after `audioControl`
 can drop the host capture session. It then reports the outcome on the glasses:
-the transcript with **Send** / **Edit on phone**, or the failure with the
-captured size, elapsed time, and frame count. A microphone that never delivered
+the transcript with **Send** / **Edit on phone**, or the failure as a plain
+sentence. Sizes, frame counts, and timings go to the phone log, not the glass.
+A microphone that never delivered
 a frame therefore says so on the glasses instead of silently returning to the
 chat. One tap on the result sends the reply; Back leaves. Taps that opened or
 closed the previous screen are ignored for a moment so a single gesture never
@@ -122,8 +123,22 @@ Failure
 └─ Auth / offline / provider / timeout   Retry or Pair this phone, Back
 ```
 
-Back always follows where you came from. A failed background refresh stays inline
-as a `Retry · <state>` row instead of taking over the screen.
+Back always follows where you came from; on Recent it first steps one page
+back. A failed background refresh stays inline as a `Retry · <state>` row
+instead of taking over the screen.
+
+## UX rules
+
+- One primary action per screen; secondary actions stay quiet.
+- The glass speaks in sentences. Sizes, frame counts, and timings belong in the
+  phone log.
+- Voice reply is the first row of the first reply page, nowhere else.
+- Lists scroll with the platform gesture. Recent pages five at a time, and Back
+  steps one page back before it leaves.
+- The contextual menu holds a shortcut that has no other control, not a second
+  copy of the screen's actions.
+- A new screen has to replace a step, not add one: Settings reloads in one tap,
+  and an empty Inbox is one line.
 
 ## Symbols
 

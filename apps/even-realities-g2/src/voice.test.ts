@@ -111,9 +111,8 @@ describe("G2 voice helpers", () => {
       footer: "Tap to stop",
     });
 
-    const sending = voiceScreen({ phase: "transcribing", detail: "92 kB · 6.8 s" });
+    const sending = voiceScreen({ phase: "transcribing" });
     expect(sending.body).toContain("Transcribing…");
-    expect(sending.body).toContain("92 kB · 6.8 s");
     expect(sending.items).toBeUndefined();
 
     const done = voiceScreen({
@@ -125,16 +124,22 @@ describe("G2 voice helpers", () => {
     expect(done.footer).toBe("Tap choose   Back ×2");
   });
 
-  it("shows a failed capture with the frame count", () => {
+  it("shows a failed capture with the reason and no stats", () => {
     const failed = voiceScreen({
       phase: "failed",
       caption: "No audio captured.",
-      detail: "0 frames · 0 B · 3.2 s",
     });
 
-    expect(failed.body).toBe("No audio captured.\n0 frames · 0 B · 3.2 s");
+    expect(failed.body).toBe("No audio captured.");
     expect(failed.footer).toBe("Tap retry   Back ×2");
     expect(failed.items).toBeUndefined();
+
+    const reason = voiceScreen({
+      phase: "failed",
+      caption: "Transcription failed.",
+      detail: "Timed out · try again",
+    });
+    expect(reason.body).toBe("Transcription failed.\nTimed out · try again");
   });
 
   it("reads a typed-array audio frame as its own bytes", () => {

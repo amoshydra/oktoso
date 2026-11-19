@@ -2714,8 +2714,10 @@ function replyView(): {
     state.replyOptions.filter((option) => option.action !== "voice"),
   );
   const page = pageChoices(ordered, state.replyPage, 3);
-  // Voice is a method, not a suggestion: keep it on every page, above them.
-  const options = voice ? [voice, ...page.items] : page.items;
+  // Voice is a method, not a suggestion: first row of the first page, where
+  // the shortcut matters. Later pages show their full set of suggestions.
+  const options =
+    voice && page.page === 0 ? [voice, ...page.items] : page.items;
   const items = options.map((option) => option.label);
   const hasPrevious = page.page > 0;
   const hasNext = page.page < page.pages - 1;
@@ -2835,7 +2837,7 @@ async function stopVoice(): Promise<void> {
   // a glass event, and the screen must not look idle while the hub works.
   voicePhase = "transcribing";
   voiceCaption = "Transcribing…";
-  voiceDetail = captured;
+  voiceDetail = "";
   setPhoneStatus("Transcribing…");
   render();
 
@@ -2849,9 +2851,10 @@ async function stopVoice(): Promise<void> {
     voiceBusy = false;
     voicePhase = "failed";
     voiceCaption = "No audio captured.";
-    voiceDetail = `${frames} frames · ${captured}`;
+    voiceDetail = "";
     voiceTapGuardUntil = performance.now() + VOICE_TAP_GUARD_MS;
-    setPhoneStatus(`No audio captured (${frames} frames). Try again.`, true);
+    setPhoneStatus("No audio captured. Try again.", true);
+    log(`Voice capture empty: ${frames} frames · ${captured}`);
     showVoiceOutcome();
     return;
   }
@@ -2867,7 +2870,7 @@ async function stopVoice(): Promise<void> {
       voiceBusy = false;
       voicePhase = "failed";
       voiceCaption = "No speech detected.";
-      voiceDetail = captured;
+      voiceDetail = "";
       voiceTapGuardUntil = performance.now() + VOICE_TAP_GUARD_MS;
       setPhoneStatus("No speech detected. Try again.", true);
       showVoiceOutcome();
@@ -2920,7 +2923,7 @@ async function cancelVoice(): Promise<void> {
   render();
 }
 
-/** Where the microphone session is, in the operator's terms. */
+/** Capture size and duration, for the phone log rather than the glass. */
 function captureSummary(): string {
   if (!voiceStartedAt) return "0.0 s";
   const seconds = (performance.now() - voiceStartedAt) / 1000;
@@ -3682,9 +3685,7 @@ function render(): void {
     const view = sessionsView();
     const items = sessionItems(view);
     if (items.length === 0) items.push("No recent sessions");
-    const header = `RECENT ${view.page + 1}/${view.pages}${
-      state.sessionsNext ? "+" : ""
-    }`;
+    const header = `RECENT ${view.page + 1}/${view.pages}`;
     const footer = `Tap open   Swipe move   Back ×2 · ${streamLabel()}`;
     if (setPreview(header, items.join("\n"), footer, items)) {
       void showPage(listPage(header, items, footer));
