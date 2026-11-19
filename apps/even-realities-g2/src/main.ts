@@ -1774,18 +1774,6 @@ async function openChat(
       if (state.screen === "chat") render();
     })
     .catch(() => undefined);
-  // The contextual menu offers Voice reply on the chat, so know whether the
-  // hub can transcribe before the user opens the reply screen.
-  void client
-    ?.assistantSettings()
-    .then((settings) => {
-      if (state.sessionRef !== ref) return;
-      const next = transcriptionConfigured(settings);
-      if (next === voiceAvailable) return;
-      voiceAvailable = next;
-      if (state.screen === "chat") render();
-    })
-    .catch(() => undefined);
   void loadQuestion(ref);
   await loadChat(false);
   if (client) void client.markRead(ref).catch(() => undefined);
@@ -3166,50 +3154,16 @@ async function performChoice(index: number): Promise<void> {
 }
 
 function handleMenuAction(itemID: number): void {
-  switch (itemID) {
-    case MENU_ID.home:
-      goHome();
-      return;
-    case MENU_ID.back:
-      back();
-      return;
-    case MENU_ID.voice:
-      if (!voiceActive && !voiceBusy) void startVoice();
-      return;
-    case MENU_ID.reply:
-      void openReply();
-      return;
-    case MENU_ID.phone:
-      focusPhoneKeyboard();
-      return;
-    case MENU_ID.stop:
-      void stopVoice();
-      return;
-    case MENU_ID.cancel:
-      void cancelVoice();
-      return;
-    default:
-      return;
-  }
+  if (itemID === MENU_ID.bottom) scrollChatToBottom();
 }
 
-function goHome(): void {
-  if (state.screen === "home") return;
-  hidePhoneForm();
-  state.screen = "home";
-  state.selectedAttention = undefined;
-  state.notice = undefined;
+function scrollChatToBottom(): void {
+  if (state.screen !== "chat") return;
+  const maxOffset = Math.max(0, state.chatLines.length - CHAT_VISIBLE_LINES);
+  if (state.chatOffset === maxOffset && !state.chatNewBelow) return;
+  state.chatOffset = maxOffset;
+  state.chatNewBelow = false;
   render();
-}
-
-function focusPhoneKeyboard(): void {
-  if (!state.sessionRef) return;
-  phoneText.focus();
-  setPhoneStatus("Type on the phone, then send.");
-  if (state.screen !== "chat") {
-    state.screen = "chat";
-    render();
-  }
 }
 
 function back(): void {
@@ -4116,10 +4070,7 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
 }
 
 function menuObjectForScreen(): MenuContainerProperty | undefined {
-  const entries: MenuEntry[] = menuForScreen(state.screen, {
-    hasSession: Boolean(state.sessionRef),
-    voiceEnabled: voiceAvailable,
-  });
+  const entries: MenuEntry[] = menuForScreen(state.screen);
   if (entries.length === 0) return undefined;
   return new MenuContainerProperty({
     menuItems: entries.map(

@@ -44,10 +44,9 @@ Screenshot capture and framing are documented in
   keyboard`. When it does generate, it returns an answer, an opposite labelled
   `Alt:`, and an ask labelled `Ask:`, grounded in a compact MOMENT block with
   pending, done, and constraint state.
-- **Contextual menu** — tap then long press raises the app's actions without
-  leaving the current screen: `Voice reply`, `Reply`, `Phone keyboard`, `Home`,
-  and `Back` on the chat; `Stop recording` and `Cancel` while dictating; `Home`
-  and `Back` elsewhere. Items appear only when they apply.
+- **Contextual menu** — tap then long press on the chat raises one shortcut,
+  `Scroll to the bottom`, which jumps to the newest line. Reply and voice keep
+  their own first-class entry points, so the menu does not repeat them.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
   send. Provider-native `question` tool calls use the same chat answer flow as
@@ -172,13 +171,13 @@ The owner token is never included in the G2 package.
 | Ring tap / R1 tap | Open, select, reply, or run a session action |
 | Double tap | Back |
 | Scroll / swipe | Move selection or chat line |
-| Tap then long press | Contextual menu: Voice reply, Reply, Phone keyboard, Home, Back |
+| Tap then long press | Scroll the chat to the newest line |
 
 The OS owns the tap-then-long-press gesture for its menu, so plain long press
 only reaches the app when the OS does not claim it. The menu is declared with
-each page (`menuObject`) and must be carried forward on every rebuild; the
-entries stay a shortcut to actions that are otherwise a screen away, not a
-second navigation tree.
+each page (`menuObject`) and must be carried forward on every rebuild. It stays
+one shortcut, not a second navigation tree: reply and voice are already on the
+surface they belong to.
 
 ## Run locally
 
