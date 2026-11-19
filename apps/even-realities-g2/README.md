@@ -51,9 +51,10 @@ Screenshot capture and framing are documented in
   keyboard`. When it does generate, it returns an answer, an opposite labelled
   `Alt:`, and an ask labelled `Ask:`, grounded in a compact MOMENT block with
   pending, done, and constraint state.
-- **Contextual menu** — tap then long press on the chat raises one shortcut,
-  `Scroll to the bottom`, which jumps to the newest line. Reply and voice keep
-  their own first-class entry points, so the menu does not repeat them.
+- **Contextual menu** — tap then long press on the chat: `Stop agent` first when
+  a turn is running (confirmation screen, then back to the chat), and
+  `Scroll to the bottom` below it. Reply and voice keep their own first-class
+  entry points, so the menu does not repeat them.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
   send. Provider-native `question` tool calls use the same chat answer flow as
@@ -120,11 +121,11 @@ Inbox
 Chat
 ├─ Answer           choices + Type answer / More / Read chat
 ├─ Batch            Answer on phone / More / Read chat
-├─ Session          wait/done: Stop (running) / Phone keyboard
 ├─ More             More replies / Read chat / Stop
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
+├─ Stop agent       confirmation, when a turn is running
 └─ Phone keyboard   longer text fallback
 
 Failure
@@ -145,6 +146,8 @@ instead of taking over the screen.
   steps one page back before it leaves.
 - The contextual menu holds a shortcut that has no other control, not a second
   copy of the screen's actions.
+- An action the user started never fails silently: it ends on a screen with
+  `Retry`/`Back`, or on the chat with `Tap retry` in the footer.
 - A new screen has to replace a step, not add one: Settings reloads in one tap,
   and an empty Inbox is one line.
 - The landing screen comes from the launch source, not from a menu the user has
@@ -198,7 +201,7 @@ The owner token is never included in the G2 package.
 | Ring tap / R1 tap | Open, select, reply, or run a session action |
 | Double tap | Back |
 | Scroll / swipe | Move selection or chat line |
-| Tap then long press | Scroll the chat to the newest line |
+| Tap then long press | `Stop agent` (with confirmation) and `Scroll to the bottom` |
 
 The OS owns the tap-then-long-press gesture for its menu, so plain long press
 only reaches the app when the OS does not claim it. The menu is declared with

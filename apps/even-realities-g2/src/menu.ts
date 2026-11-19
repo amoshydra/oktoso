@@ -1,6 +1,7 @@
 /** Contextual-menu item ids stay stable so handlers never guess by label. */
 export const MENU_ID = {
-  bottom: 1,
+  stop: 1,
+  bottom: 2,
 } as const;
 
 export interface MenuEntry {
@@ -9,11 +10,17 @@ export interface MenuEntry {
 }
 
 /**
- * The glasses contextual menu (tap then long press) carries one shortcut: jump
- * to the newest chat line. Reply and voice reply already have first-class entry
- * points, so repeating them here only adds noise.
+ * The glasses contextual menu (tap then long press) is the shortcut surface for
+ * the chat. Stop is first when there is a turn to interrupt, and it opens a
+ * confirmation screen; scroll-to-bottom is the quiet convenience below it.
  */
-export function menuForScreen(screen: string): MenuEntry[] {
+export function menuForScreen(
+  screen: string,
+  options: { canInterrupt?: boolean } = {},
+): MenuEntry[] {
   if (screen !== "chat") return [];
-  return [{ id: MENU_ID.bottom, label: "Scroll to the bottom" }];
+  const items: MenuEntry[] = [];
+  if (options.canInterrupt) items.push({ id: MENU_ID.stop, label: "Stop agent" });
+  items.push({ id: MENU_ID.bottom, label: "Scroll to the bottom" });
+  return items;
 }
