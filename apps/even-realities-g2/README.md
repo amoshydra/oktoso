@@ -81,7 +81,9 @@ captured size, elapsed time, and frame count. A microphone that never delivered
 a frame therefore says so on the glasses instead of silently returning to the
 chat. One tap on the result sends the reply; Back leaves. Taps that opened or
 closed the previous screen are ignored for a moment so a single gesture never
-acts twice.
+acts twice. After a send the glasses return to the chat, and the view follows
+the message in as soon as the provider echoes it, even when the echo lands a
+few seconds after the send.
 
 ## Screen map
 
