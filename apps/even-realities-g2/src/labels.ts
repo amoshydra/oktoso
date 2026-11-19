@@ -47,16 +47,23 @@ export function subagentPrefix(parentRef?: string): string {
   return parentRef ? SUBAGENT_GLYPH : "";
 }
 
+/** Error rows name the provider so a failure is attributable at a glance. */
+function providerPrefix(item: Attention): string {
+  if (item.type !== "error") return "";
+  const provider = item.sessionRef.split(":")[0];
+  return provider ? `${provider} · ` : "";
+}
+
 export function attentionRowLabel(item: Attention): string {
   return clampLine(
-    `${subagentPrefix(item.parentRef)}${attentionGlyph(item.type)} ${item.title}`,
+    `${subagentPrefix(item.parentRef)}${attentionGlyph(item.type)} ${providerPrefix(item)}${item.title}`,
     54,
   );
 }
 
 export function attentionHeader(item: Attention): string {
   return clampLine(
-    `${subagentPrefix(item.parentRef)}${attentionGlyph(item.type)} ${item.title}`,
+    `${subagentPrefix(item.parentRef)}${attentionGlyph(item.type)} ${providerPrefix(item)}${item.title}`,
     40,
   );
 }
