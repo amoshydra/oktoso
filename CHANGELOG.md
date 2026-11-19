@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.6](https://github.com/amoshydra/oktoso/compare/v0.2.5...v0.2.6) (2026-11-19)
+
+
+### Features
+
+* **g2:** add the contextual menu shortcuts ([60918fc](https://github.com/amoshydra/oktoso/commit/60918fc3ee67e73bb7337a10d959d41cbef2baea))
+* **g2:** land from the launch source, and sleep with the wearer ([43af007](https://github.com/amoshydra/oktoso/commit/43af0073402c0ec3cfe03b026ae648181c14aa39))
+* **g2:** name the provider on error rows ([423172a](https://github.com/amoshydra/oktoso/commit/423172a2de392800a891b1a5e1effa11b7afdab6))
+* **g2:** stop from the long-press menu, and never strand the screen ([480e634](https://github.com/amoshydra/oktoso/commit/480e634e0da7590b2c65b0bc2c7809a51fb67bb2))
+* **g2:** surface provider state and failed turns ([c7d6135](https://github.com/amoshydra/oktoso/commit/c7d613536242ddac51c2d3c05e69a90fd603b28e))
+
+
+### Bug Fixes
+
+* **g2:** never gate painting on the wear sensor ([7428d94](https://github.com/amoshydra/oktoso/commit/7428d9431bc49196f6110e91e9359bd2ce51e216))
+* **g2:** redeclare the menu when the turn starts or ends ([a220c15](https://github.com/amoshydra/oktoso/commit/a220c15b025b0791c56577922f66610ea34598b3))
+
 ## [0.2.5](https://github.com/amoshydra/oktoso/compare/v0.2.4...v0.2.5) (2026-11-19)
 
 
