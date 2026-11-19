@@ -184,3 +184,45 @@ export function classifyFailure(error: unknown): FailureInfo {
     action: "retry",
   };
 }
+
+/**
+ * Provider problems that are worth a line on the glass before an action fails.
+ * Anything else stays quiet; the action failure is the real signal.
+ */
+export function providerIssueLabel(
+  status: string | undefined,
+): string | undefined {
+  if (status === "offline") return "Provider offline";
+  if (status === "auth-error") return "Provider sign-in needed";
+  return undefined;
+}
+
+/** Normalise a message-level provider error into one readable sentence. */
+export function turnErrorText(error: unknown): string | undefined {
+  if (error === undefined || error === null || error === false) return undefined;
+  if (typeof error === "string") return error.trim() || undefined;
+  if (typeof error === "object") {
+    const record = error as {
+      message?: unknown;
+      name?: unknown;
+      data?: unknown;
+    };
+    if (typeof record.message === "string" && record.message.trim()) {
+      return record.message.trim();
+    }
+    const data = record.data;
+    if (data && typeof data === "object" && "message" in data) {
+      const message = (data as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message.trim();
+    }
+    if (typeof record.name === "string" && record.name.trim()) {
+      return record.name.replace(/([a-z])([A-Z])/g, "$1 $2");
+    }
+  }
+  try {
+    const text = JSON.stringify(error);
+    return text && text !== "{}" ? text : "The provider reported an error.";
+  } catch {
+    return "The provider reported an error.";
+  }
+}

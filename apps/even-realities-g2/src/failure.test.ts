@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { HubError } from "@amoshydra/oktoso-client";
-import { classifyFailure } from "./failure";
+import {
+  classifyFailure,
+  providerIssueLabel,
+  turnErrorText,
+} from "./failure";
 
 describe("G2 failure classification", () => {
   it("asks for pairing on an expired session", () => {
@@ -88,5 +92,26 @@ describe("G2 failure classification", () => {
       action: "retry",
       message: "An unexpected error occurred. Try again.",
     });
+  });
+
+  it("names the provider problems worth a line", () => {
+    expect(providerIssueLabel("offline")).toBe("Provider offline");
+    expect(providerIssueLabel("auth-error")).toBe("Provider sign-in needed");
+    expect(providerIssueLabel("online")).toBeUndefined();
+    expect(providerIssueLabel(undefined)).toBeUndefined();
+  });
+
+  it("normalises a turn error into one sentence", () => {
+    expect(turnErrorText("Rate limit reached")).toBe("Rate limit reached");
+    expect(turnErrorText({ message: "Model overloaded" })).toBe("Model overloaded");
+    expect(
+      turnErrorText({ name: "ProviderAuthError", data: { message: "Invalid API key" } }),
+    ).toBe("Invalid API key");
+    expect(turnErrorText({ name: "MessageAbortedError" })).toBe(
+      "Message Aborted Error",
+    );
+    expect(turnErrorText({ code: 429 })).toBe('{"code":429}');
+    expect(turnErrorText({})).toBe("The provider reported an error.");
+    expect(turnErrorText(undefined)).toBeUndefined();
   });
 });
