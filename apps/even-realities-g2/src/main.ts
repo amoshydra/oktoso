@@ -62,7 +62,12 @@ import {
   approvalAttention,
   isAutomationApproval,
 } from "./approval-model";
-import { classifyFailure, type FailureInfo } from "./failure";
+import {
+  classifyFailure,
+  providerIssueLabel,
+  turnErrorText,
+  type FailureInfo,
+} from "./failure";
 import { listPage, minimalPage, textPage } from "./layout";
 import {
   forgetPendingSend,
@@ -128,7 +133,8 @@ type Screen =
   | "failure"
   | "legend"
   | "settings"
-  | "interrupt-confirm";
+  | "interrupt-confirm"
+  | "turn-failed";
 
 interface AppState {
   screen: Screen;
@@ -300,6 +306,7 @@ let launchSource: LaunchSourceName | undefined;
 let device: GlassesSnapshot = {};
 let deviceKnown = false;
 let booted = false;
+let providerStates: Record<string, string> = {};
 let phoneFormItem: Attention | undefined;
 let phoneFormValues: Record<string, unknown> = {};
 let phoneQuestionKey = "";
@@ -1237,6 +1244,81 @@ function applyDeviceStatus(status: {
   if (state.screen === "settings") render();
 }
 
+function sessionProviderID(): string | undefined {
+  const ref = state.sessionRef;
+  if (!ref) return undefined;
+  return ref.split(":")[0] || undefined;
+}
+
+function providerIssue(): string | undefined {
+  const id = sessionProviderID();
+  return id ? providerIssueLabel(providerStates[id]) : undefined;
+}
+
+async function refreshProviders(): Promise<void> {
+  if (!client) return;
+  try {
+    const providers = await client.providers();
+    providerStates = Object.fromEntries(
+      providers.map((provider) => [provider.id, provider.status]),
+    );
+    if (state.screen === "chat") render();
+  } catch {
+    // Advisory only; a failed action still gets its own failure screen.
+  }
+}
+
+function showProviderFailure(): void {
+  const status = providerStates[sessionProviderID() ?? ""];
+  if (status !== "offline" && status !== "auth-error") return;
+  showFailure(
+    { code: status === "auth-error" ? "provider_auth_error" : "provider_offline" },
+    {
+      returnScreen: "chat",
+      retry: () => {
+        void refreshProviders();
+        void loadChat(false);
+      },
+    },
+  );
+}
+
+interface TurnFailure {
+  id: string;
+  message: string;
+}
+
+function turnFailure(): TurnFailure | undefined {
+  const last = [...state.chatMessages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  if (!last) return undefined;
+  const message = turnErrorText(last.metadata?.error);
+  return message ? { id: last.id, message } : undefined;
+}
+
+function openTurnFailure(): void {
+  if (!turnFailure()) return;
+  state.screen = "turn-failed";
+  render();
+}
+
+async function retryTurn(): Promise<void> {
+  const failure = turnFailure();
+  if (!client || !state.sessionRef || !failure) return;
+  const ref = state.sessionRef;
+  state.screen = "chat";
+  render();
+  try {
+    await client.retryMessage(ref, failure.id);
+  } catch (error) {
+    showFailure(error, { returnScreen: "chat", retry: () => retryTurn() });
+    log(`Turn retry failed: ${failureMessage(error)}`);
+    return;
+  }
+  await loadChat(false);
+}
+
 async function restoreConnection(): Promise<void> {
   const baseUrl = hubBaseURL();
   setConnection("Restoring…");
@@ -1267,6 +1349,7 @@ async function restoreConnection(): Promise<void> {
       restoreCurrent();
       log("Restored hub session");
       startEventStream();
+      void refreshProviders();
       await refreshInbox();
       state.screen = "home";
       render();
@@ -1312,8 +1395,32 @@ function startEventStream(): void {
       },
       onEvent: (event) => {
         if (controller.signal.aborted) return;
+        if (event.type === "provider.status") {
+          const provider = (
+            event.data as {
+              provider?: { id?: unknown; status?: unknown };
+            }
+          )?.provider;
+          if (
+            typeof provider?.id === "string" &&
+            typeof provider.status === "string"
+          ) {
+            providerStates = {
+              ...providerStates,
+              [provider.id]: provider.status,
+            };
+            if (
+              state.screen === "chat" &&
+              provider.id === sessionProviderID()
+            ) {
+              render();
+            }
+          }
+          return;
+        }
         if (event.type === "resync") {
           void refreshInbox();
+          void refreshProviders();
           void refreshQuestionSummaries();
           if (state.screen === "chat" && state.sessionRef) {
             void loadChat(true);
@@ -2564,20 +2671,24 @@ function chatView(): { header: string; body: string; footer: string } {
         : offset === 0
           ? "Swipe down"
           : "Swipe";
+  const issue = providerIssue();
   const actionHint =
     state.answerBusy || state.messageBusy
       ? "Sending…"
-      : state.chatFailure
+      : state.chatFailure || issue
         ? "Tap retry"
-        : state.question
-          ? "? Answer"
-          : "Tap reply";
+        : turnFailure()
+          ? "Tap for error"
+          : state.question
+            ? "? Answer"
+            : "Tap reply";
   const stream = streamLabel();
   const base = [
     actionHint,
     `${first}-${last}/${total}`,
     messageLabel,
     state.chatActivity,
+    issue ?? "",
     stream !== "Live" ? stream : "",
     state.chatFailure?.short ?? "",
     state.chatNewBelow ? "New below" : "",
@@ -3373,6 +3484,11 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "turn-failed") {
+    state.screen = "chat";
+    render();
+    return;
+  }
   if (state.screen === "pending") {
     state.screen = "home";
     render();
@@ -3437,6 +3553,14 @@ function handleListClick(index: number): void {
     }
     case "interrupt-confirm": {
       if (index === 0) void confirmInterrupt();
+      else {
+        state.screen = "chat";
+        render();
+      }
+      break;
+    }
+    case "turn-failed": {
+      if (index === 0) void retryTurn();
       else {
         state.screen = "chat";
         render();
@@ -3550,6 +3674,14 @@ function handleTextClick(): void {
   if (state.screen === "chat") {
     if (state.chatFailure) {
       void loadChat(false);
+      return;
+    }
+    if (providerIssue()) {
+      showProviderFailure();
+      return;
+    }
+    if (turnFailure()) {
+      openTurnFailure();
       return;
     }
     if (state.question) openAnswer();
@@ -3981,6 +4113,21 @@ function render(): void {
     const footer = "Tap choose   Back ×2";
     if (setPreview("STOP AGENT", body, footer, items)) {
       void showPage(listPage("STOP AGENT", items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "turn-failed") {
+    const failure = turnFailure();
+    if (!failure) {
+      state.screen = "chat";
+      render();
+      return;
+    }
+    const body = wrapText(failure.message, 54, 2).join("\n");
+    const items = ["Retry", "Back"];
+    const footer = "Tap choose   Back ×2";
+    if (setPreview("TURN FAILED", body, footer, items)) {
+      void showPage(listPage("TURN FAILED", items, footer, body));
     }
     return;
   }

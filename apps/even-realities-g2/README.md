@@ -35,6 +35,12 @@ Screenshot capture and framing are documented in
   With nothing active the screen is a single top-aligned line — the glyph and
   title of the session you were last in — and one tap resumes it. With no
   session at all it reads `No session open.`
+- **Provider state** — `provider.status` events mark the chat footer
+  `Provider offline` or `Provider sign-in needed`; tapping opens the standard
+  failure screen with `Retry`.
+- **Failed turns** — when the last assistant message carries a provider error,
+  the chat footer says `Tap for error`; the screen shows the provider's own
+  message with `Retry` / `Back`.
 - **Launch routing** — opening from the glasses menu lands on Inbox; opening
   from the phone app resumes the current chat; a reload stays on Home.
 - **Device state** — the host reports wearing, charging, and battery. When the
@@ -126,6 +132,7 @@ Chat
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
 ├─ Stop agent       confirmation, when a turn is running
+├─ Turn failed      provider error + Retry / Back
 └─ Phone keyboard   longer text fallback
 
 Failure
