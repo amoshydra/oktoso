@@ -61,7 +61,7 @@ import {
   isAutomationApproval,
 } from "./approval-model";
 import { classifyFailure, type FailureInfo } from "./failure";
-import { listPage, textPage } from "./layout";
+import { listPage, minimalPage, textPage } from "./layout";
 import {
   forgetPendingSend,
   loadPendingSends,
@@ -3425,6 +3425,11 @@ function handleTextClick(): void {
     voiceInputHandler({ type: "text-click" });
     return;
   }
+  if (state.screen === "inbox" && state.attentionTotal === 0 && !state.failure) {
+    // The empty inbox is one line; a tap dismisses it.
+    back();
+    return;
+  }
   if (state.screen === "failure") {
     performFailureAction(0);
     return;
@@ -3655,6 +3660,13 @@ function render(): void {
     return;
   }
   if (state.screen === "inbox") {
+    if (state.attentionTotal === 0 && !state.failure) {
+      const body = "Nothing needs you.";
+      if (setPreview("", body, "")) {
+        void showPage(minimalPage(body));
+      }
+      return;
+    }
     const visible = visibleAttention(state.attention, state.attentionExpanded);
     const hidden = state.attentionTotal - visible.length;
     const items = visible.length
