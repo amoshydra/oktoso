@@ -74,8 +74,11 @@ import {
   pcmChunksToWav,
   orderReplyOptions,
   transcriptionConfigured,
+  voiceScreen,
   withVoiceOption,
   VOICE_REPLY_OPTION,
+  type VoicePhase,
+  type VoiceScreen,
 } from "./voice";
 import {
   attentionHeader,
@@ -228,7 +231,6 @@ const MAX_VOICE_MS = 60_000;
 const SEND_TIMEOUT_MS = 30_000;
 /** A tap that opened or closed the voice screen must not also act on the new one. */
 const VOICE_TAP_GUARD_MS = 900;
-type VoicePhase = "listening" | "transcribing" | "failed" | "done";
 let voiceActive = false;
 let voiceBusy = false;
 let voiceChunks: Uint8Array[] = [];
@@ -2782,7 +2784,6 @@ async function stopVoice(): Promise<void> {
       return;
     }
     phoneText.value = text;
-    phoneText.focus();
     syncPhoneSession();
     voicePhase = "done";
     voiceCaption = "Transcript ready.";
@@ -2836,49 +2837,13 @@ function captureSummary(): string {
   return `${voiceBytes >= 1024 ? `${Math.round(voiceBytes / 1024)} kB` : `${voiceBytes} B`} · ${seconds.toFixed(1)} s`;
 }
 
-interface VoiceView {
-  header: string;
-  body: string;
-  footer: string;
-  items?: string[];
-}
-
-/**
- * One voice screen for every stage, so the glasses always show where the reply
- * is: listening, transcribing, the words to send, or what went wrong.
- */
-function voiceView(): VoiceView {
-  const header = "VOICE";
-  if (voicePhase === "listening") {
-    return {
-      header,
-      body: "Listening…\n\nTap the glasses to stop.\nBack cancels.",
-      footer: "Tap to stop",
-    };
-  }
-  if (voicePhase === "transcribing") {
-    return {
-      header,
-      body: `Transcribing…\n\n${voiceDetail}`,
-      footer: "Please wait",
-    };
-  }
-  if (voicePhase === "done") {
-    return {
-      header,
-      body: wrapText(voiceHeard, 54, 2).join("\n"),
-      footer: "Tap choose   Back ×2",
-      items: ["Send", "Edit on phone"],
-    };
-  }
-  const detail = voiceDetail
-    ? wrapText(voiceDetail, 54, 2).join("\n")
-    : "";
-  return {
-    header,
-    body: `${voiceCaption}${detail ? `\n${detail}` : ""}`,
-    footer: "Tap retry   Back ×2",
-  };
+function voiceView(): VoiceScreen {
+  return voiceScreen({
+    phase: voicePhase,
+    detail: voiceDetail,
+    caption: voiceCaption,
+    heard: voiceHeard,
+  });
 }
 
 function voiceInputHandler(input: GlassInput | undefined): void {
