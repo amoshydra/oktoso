@@ -128,7 +128,7 @@ type Screen =
   | "failure"
   | "legend"
   | "settings"
-  | "session-actions";
+  | "interrupt-confirm";
 
 interface AppState {
   screen: Screen;
@@ -391,8 +391,7 @@ function setStreamStatus(
       state.screen === "sessions" ||
       state.screen === "inbox" ||
       state.screen === "chat" ||
-      state.screen === "settings" ||
-      state.screen === "session-actions")
+      state.screen === "settings")
   ) {
     render();
   }
@@ -2566,9 +2565,11 @@ function chatView(): { header: string; body: string; footer: string } {
   const actionHint =
     state.answerBusy || state.messageBusy
       ? "Sending…"
-      : state.question
-        ? "? Answer"
-        : "Tap reply";
+      : state.chatFailure
+        ? "Tap retry"
+        : state.question
+          ? "? Answer"
+          : "Tap reply";
   const stream = streamLabel();
   const base = [
     actionHint,
@@ -2728,42 +2729,6 @@ async function openReply(): Promise<void> {
       });
     }
     log(`Reply options failed: ${failureMessage(error)}`);
-  }
-}
-
-function sessionActionRows(): string[] {
-  const rows: string[] = [];
-  if (
-    state.sessionStatus === "running" ||
-    /working|running/i.test(state.chatActivity)
-  ) {
-    rows.push("Stop");
-  }
-  rows.push("Phone keyboard");
-  return rows;
-}
-
-async function performSessionAction(index: number): Promise<void> {
-  if (!client || !state.sessionRef) return;
-  const action = sessionActionRows()[index];
-  if (action === "Stop") {
-    try {
-      await client.interrupt(state.sessionRef);
-    } catch (error) {
-      log(`Interrupt failed: ${failureMessage(error)}`);
-    }
-    state.notice = undefined;
-    state.screen = "chat";
-    await loadChat(false);
-    return;
-  }
-  if (action === "Phone keyboard") {
-    phoneText.focus();
-    phoneText.scrollIntoView({ block: "center", behavior: "smooth" });
-    setPhoneStatus("Type on the phone, then send.");
-    state.notice = undefined;
-    state.screen = "chat";
-    render();
   }
 }
 
@@ -3075,6 +3040,7 @@ async function executeReply(option: ReplyOption): Promise<void> {
     if (option.action === "interrupt") {
       await client.interrupt(state.sessionRef);
       state.screen = "chat";
+      render();
       await loadChat(false);
       return;
     }
@@ -3223,7 +3189,40 @@ async function performChoice(index: number): Promise<void> {
 }
 
 function handleMenuAction(itemID: number): void {
-  if (itemID === MENU_ID.bottom) scrollChatToBottom();
+  if (itemID === MENU_ID.stop) openInterruptConfirm();
+  else if (itemID === MENU_ID.bottom) scrollChatToBottom();
+}
+
+function canInterrupt(): boolean {
+  if (!state.sessionRef) return false;
+  if (state.sessionStatus === "running") return true;
+  return /working|running/i.test(state.chatActivity);
+}
+
+function openInterruptConfirm(): void {
+  if (!client || !state.sessionRef || !canInterrupt()) return;
+  state.screen = "interrupt-confirm";
+  render();
+}
+
+async function confirmInterrupt(): Promise<void> {
+  if (!client || !state.sessionRef) return;
+  const ref = state.sessionRef;
+  // Paint the chat before the call: a slow or failed provider must not leave
+  // the confirmation (or the menu) on the glass.
+  state.screen = "chat";
+  render();
+  try {
+    await client.interrupt(ref);
+  } catch (error) {
+    showFailure(error, {
+      returnScreen: "chat",
+      retry: () => confirmInterrupt(),
+    });
+    log(`Interrupt failed: ${failureMessage(error)}`);
+    return;
+  }
+  await loadChat(false);
 }
 
 function scrollChatToBottom(): void {
@@ -3364,10 +3363,8 @@ function back(): void {
     render();
     return;
   }
-  if (state.screen === "session-actions") {
-    state.screen = state.replyReturnScreen;
-    state.replyReturnScreen = "chat";
-    state.notice = undefined;
+  if (state.screen === "interrupt-confirm") {
+    state.screen = "chat";
     render();
     return;
   }
@@ -3433,8 +3430,12 @@ function handleListClick(index: number): void {
       }
       break;
     }
-    case "session-actions": {
-      void performSessionAction(index);
+    case "interrupt-confirm": {
+      if (index === 0) void confirmInterrupt();
+      else {
+        state.screen = "chat";
+        render();
+      }
       break;
     }
     case "settings": {
@@ -3542,6 +3543,10 @@ function handleTextClick(): void {
     return;
   }
   if (state.screen === "chat") {
+    if (state.chatFailure) {
+      void loadChat(false);
+      return;
+    }
     if (state.question) openAnswer();
     else void openReply();
     return;
@@ -3965,16 +3970,12 @@ function render(): void {
     }
     return;
   }
-  if (state.screen === "session-actions") {
-    const rows = sessionActionRows();
-    const body =
-      state.notice ??
-      (state.sessionStatus === "running"
-        ? "Agent is running."
-        : "Open reply for suggestions.");
+  if (state.screen === "interrupt-confirm") {
+    const body = "Stop the agent's current turn?";
+    const items = ["Stop", "Cancel"];
     const footer = "Tap choose   Back ×2";
-    if (setPreview("SESSION", rows.join("\n"), footer, rows)) {
-      void showPage(listPage("SESSION", rows, footer, body));
+    if (setPreview("STOP AGENT", body, footer, items)) {
+      void showPage(listPage("STOP AGENT", items, footer, body));
     }
     return;
   }
@@ -4114,7 +4115,9 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
 }
 
 function menuObjectForScreen(): MenuContainerProperty | undefined {
-  const entries: MenuEntry[] = menuForScreen(state.screen);
+  const entries: MenuEntry[] = menuForScreen(state.screen, {
+    canInterrupt: canInterrupt(),
+  });
   if (entries.length === 0) return undefined;
   return new MenuContainerProperty({
     menuItems: entries.map(
