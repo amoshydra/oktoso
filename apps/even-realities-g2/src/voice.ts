@@ -86,7 +86,7 @@ export function voiceScreen(input: {
   if (input.phase === "transcribing") {
     return {
       header,
-      body: `Transcribing…\n\n${input.detail ?? ""}`,
+      body: "Transcribing…\n\nThis takes a few seconds.",
       footer: "Please wait",
     };
   }
