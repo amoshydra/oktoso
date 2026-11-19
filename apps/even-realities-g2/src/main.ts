@@ -264,6 +264,8 @@ let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
 let lastGlassSignature = "";
+/** The screen whose page is actually on the glass; incremental updates need it. */
+let paintedScreen: Screen | undefined;
 let chatLoadSequence = 0;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
@@ -2437,6 +2439,12 @@ function chatView(): { header: string; body: string; footer: string } {
 
 async function updateChatView(): Promise<void> {
   if (!bridge) return;
+  if (paintedScreen !== "chat") {
+    // The glass still holds another page (the voice result, a list, a form).
+    // Container upgrades would land on the wrong containers, so repaint.
+    render();
+    return;
+  }
   if (chatUpdateInFlight) {
     chatUpdateQueued = true;
     return;
@@ -2688,6 +2696,7 @@ async function startVoice(): Promise<void> {
   const view = voiceView();
   if (setPreview(view.header, view.body, view.footer)) {
     // Await the paint: the host should own a settled page before capture opens.
+    paintedScreen = "voice";
     await showPage(textPage(view.body, view.footer, view.header));
   }
 
@@ -2989,6 +2998,9 @@ async function executeReply(option: ReplyOption): Promise<void> {
         updatePhoneQuestion();
         state.screen = "chat";
         state.notice = "Reply sent.";
+        // Paint the chat before awaiting the reload. A concurrent event refresh
+        // can supersede loadChat, and the glass must not stay on the voice page.
+        render();
         await loadChat(false);
         state.messageKey = undefined;
         state.messageKeyText = undefined;
@@ -3466,6 +3478,10 @@ function performFailureAction(index: number): void {
 
 function render(): void {
   if (!bridge) return;
+  // A new screen gets a fresh paint even if its text matches the last frame:
+  // text and list pages can share a header/body/footer but not a layout.
+  if (paintedScreen !== state.screen) lastGlassSignature = "";
+  paintedScreen = state.screen;
   updatePhoneQuestion();
   updatePhoneState();
   if (!client) {
