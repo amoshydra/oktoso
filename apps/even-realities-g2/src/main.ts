@@ -1463,27 +1463,11 @@ function resumeTarget(): ResumeTarget | undefined {
 
 function emptyInboxBody(): string {
   const target = resumeTarget();
-  if (!target) {
-    return [
-      "No session open.",
-      "",
-      "Open Recent from Home to pick one.",
-      "",
-      "Back ×2",
-    ].join("\n");
-  }
-  const context = [target.project, target.status ?? "idle"]
-    .filter(Boolean)
-    .join(" · ");
-  return [
-    `${sessionMarker(
-      target.parentRef,
-      Boolean(questionSummaryFor(target.ref)),
-    )}${statusGlyph(target.status)} ${clampLine(target.title, 50)}`,
-    clampLine(context, 54),
-    "",
-    "Tap to resume · Back ×2",
-  ].join("\n");
+  if (!target) return "No session open.";
+  return `${sessionMarker(
+    target.parentRef,
+    Boolean(questionSummaryFor(target.ref)),
+  )}${statusGlyph(target.status)} ${clampLine(target.title, 48)}`;
 }
 
 async function refreshInbox(): Promise<void> {

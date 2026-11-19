@@ -31,9 +31,9 @@ Screenshot capture and framing are documented in
   detail screen with Approve / Deny; approval decisions call
   `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
   blocking items are shown; the Inbox adds a `More` row when the list is capped.
-  With nothing active the screen becomes the session you were last in — glyph,
-  title, project and status, top-aligned with no header or footer — and one tap
-  resumes it. With no session at all it points to Recent on Home.
+  With nothing active the screen is a single top-aligned line — the glyph and
+  title of the session you were last in — and one tap resumes it. With no
+  session at all it reads `No session open.`
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming.
