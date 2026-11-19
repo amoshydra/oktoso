@@ -2530,6 +2530,7 @@ async function loadChat(quiet: boolean): Promise<void> {
     )?.id;
     const previousLines = state.chatLines;
     const previousOffset = state.chatOffset;
+    const previousActivity = state.chatActivity;
     state.chatMessages = mergeChatMessages(state.chatMessages, messages);
     const built = buildChat(state.chatMessages);
     state.chatLines = built.lines;
@@ -2570,6 +2571,7 @@ async function loadChat(quiet: boolean): Promise<void> {
       if (
         changed ||
         previousOffset !== state.chatOffset ||
+        previousActivity !== state.chatActivity ||
         paintedMenu !== menuSignature(menuEntries())
       ) {
         await updateChatView();
@@ -2609,6 +2611,7 @@ function applyLiveMessage(message: Message): void {
   const isNew = !state.chatMessages.some((item) => item.id === message.id);
   const previousLines = state.chatLines;
   const previousOffset = state.chatOffset;
+  const previousActivity = state.chatActivity;
   state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
   const built = buildChat(state.chatMessages);
   state.chatLines = built.lines;
@@ -2632,6 +2635,7 @@ function applyLiveMessage(message: Message): void {
   if (
     changed ||
     previousOffset !== state.chatOffset ||
+    previousActivity !== state.chatActivity ||
     paintedMenu !== menuSignature(menuEntries())
   ) {
     void updateChatView();
@@ -3782,8 +3786,10 @@ function performFailureAction(index: number): void {
 function render(): void {
   if (!bridge) return;
   // A new screen gets a fresh paint even if its text matches the last frame:
-  // text and list pages can share a header/body/footer but not a layout.
+  // text and list pages can share a header/body/footer but not a layout. The
+  // same applies to the menu, which lives on the page but not in its text.
   if (paintedScreen !== state.screen) lastGlassSignature = "";
+  if (menuSignature(menuEntries()) !== paintedMenu) lastGlassSignature = "";
   paintedScreen = state.screen;
   updatePhoneQuestion();
   updatePhoneState();
