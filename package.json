@@ -44,7 +44,8 @@
     "brand:screens": "tsx scripts/brand/screens.ts",
     "brand:check": "tsx scripts/brand/check.ts",
     "prepublishOnly": "pnpm build:single-port",
-    "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check"
+    "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check",
+    "smoke:hermes": "node scripts/smoke-hermes.mjs"
   },
   "devDependencies": {
     "@amoshydra/oktoso-testing": "workspace:*",
