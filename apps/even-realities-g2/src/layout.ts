@@ -10,6 +10,32 @@ export const GLASS_HEIGHT = 288;
 export const FOOTER_Y = 246;
 export const FOOTER_HEIGHT = 42;
 
+/**
+ * One line and nothing else: the empty screen. No header, no footer, no list —
+ * used where chrome would only restate that there is nothing to do.
+ */
+export function minimalPage(body: string): RebuildPageContainer {
+  return new RebuildPageContainer({
+    containerTotalNum: 1,
+    textObject: [
+      new TextContainerProperty({
+        xPosition: 0,
+        yPosition: 120,
+        width: GLASS_WIDTH,
+        height: 48,
+        borderWidth: 0,
+        borderColor: 5,
+        borderRadius: 0,
+        paddingLength: 4,
+        containerID: 1,
+        containerName: "message",
+        isEventCapture: 1,
+        content: body,
+      }),
+    ],
+  });
+}
+
 export function textPage(
   body: string,
   footer: string,

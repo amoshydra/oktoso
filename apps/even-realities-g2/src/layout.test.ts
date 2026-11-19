@@ -4,6 +4,7 @@ import {
   GLASS_HEIGHT,
   GLASS_WIDTH,
   listPage,
+  minimalPage,
   textPage,
 } from "./layout";
 
@@ -89,5 +90,17 @@ describe("G2 frame layout", () => {
       "Two",
       "Three",
     ]);
+  });
+
+  it("keeps the empty screen to one line", () => {
+    const page = minimalPage("Nothing needs you.");
+
+    expect(page.textObject).toHaveLength(1);
+    expect(page.listObject ?? []).toHaveLength(0);
+    expect(page.textObject?.[0]?.containerName).toBe("message");
+    expect(page.textObject?.[0]?.content).toBe("Nothing needs you.");
+    expect(page.textObject?.[0]?.isEventCapture).toBe(1);
+    expect(page.textObject?.[0]?.yPosition).toBeGreaterThan(0);
+    assertInsideGlass(page);
   });
 });

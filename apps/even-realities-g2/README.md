@@ -31,6 +31,8 @@ Screenshot capture and framing are documented in
   detail screen with Approve / Deny; approval decisions call
   `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
   blocking items are shown; the Inbox adds a `More` row when the list is capped.
+  With nothing active the screen collapses to one line, `Nothing needs you.`,
+  with no header or footer; a tap or Back returns Home.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming.
@@ -98,6 +100,7 @@ Home
 └─ Settings         data refresh, reload, connection, version
 
 Inbox
+├─ Empty            one line, "Nothing needs you.", tap or Back to leave
 ├─ Attention        permission / form / error / unread / automation detail
 └─ More             additional items beyond the glass cap
 
