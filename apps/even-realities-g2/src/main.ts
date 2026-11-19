@@ -3331,14 +3331,8 @@ function handleMenuAction(itemID: number): void {
   else if (itemID === MENU_ID.bottom) scrollChatToBottom();
 }
 
-function canInterrupt(): boolean {
-  if (!state.sessionRef) return false;
-  if (state.sessionStatus === "running") return true;
-  return /working|running/i.test(state.chatActivity);
-}
-
 function openInterruptConfirm(): void {
-  if (!client || !state.sessionRef || !canInterrupt()) return;
+  if (!client || !state.sessionRef) return;
   state.screen = "interrupt-confirm";
   render();
 }
@@ -4287,7 +4281,7 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
 }
 
 function menuEntries(): MenuEntry[] {
-  return menuForScreen(state.screen, { canInterrupt: canInterrupt() });
+  return menuForScreen(state.screen);
 }
 
 function menuSignature(entries: MenuEntry[]): string {
