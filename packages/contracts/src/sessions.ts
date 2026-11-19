@@ -55,9 +55,16 @@ export const zSessionLineage = z.object({
   truncated: z.boolean(),
 });
 
+export const zSessionWarning = z.object({
+  providerID: z.string(),
+  message: z.string(),
+});
+
 export const zSessionPage = z.object({
   data: z.array(zSession),
   cursor: zCursor,
+  /** Providers that could not answer a search; the page is partial. */
+  warnings: z.array(zSessionWarning).optional(),
 });
 
 export const zSessionListQuery = z.object({
@@ -99,6 +106,7 @@ export type SessionStatus = z.infer<typeof zSessionStatus>;
 export type TokenUsage = z.infer<typeof zTokenUsage>;
 export type Session = z.infer<typeof zSession>;
 export type SessionPage = z.infer<typeof zSessionPage>;
+export type SessionWarning = z.infer<typeof zSessionWarning>;
 export type SessionLineageNode = z.infer<typeof zSessionLineageNode>;
 export type SessionLineage = z.infer<typeof zSessionLineage>;
 export type SessionListQuery = z.infer<typeof zSessionListQuery>;

@@ -831,6 +831,18 @@ components:
                 - "null"
           required:
             - next
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              providerID:
+                type: string
+              message:
+                type: string
+            required:
+              - providerID
+              - message
       required:
         - data
         - cursor

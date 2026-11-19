@@ -655,6 +655,9 @@ describe("SessionService search", () => {
     expect(page.data).toEqual([
       expect.objectContaining({ ref: healthy.ref }),
     ]);
+    expect(page.warnings).toEqual([
+      { providerID: "a", message: "offline" },
+    ]);
   });
 });
 ;

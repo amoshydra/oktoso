@@ -42,6 +42,7 @@ import type {
   Session,
   SessionSelectionInput,
   SessionStatus,
+  SessionWarning,
 } from "@amoshydra/oktoso-contracts";
 import {
   HubClient,
@@ -2376,6 +2377,7 @@ function SearchView(props: {
   const [hits, setHits] = useState<SearchResult[]>([]);
   const [indexed, setIndexed] = useState({ enabled: true, ready: true });
   const [loading, setLoading] = useState(false);
+  const [warnings, setWarnings] = useState<SessionWarning[]>([]);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -2446,6 +2448,7 @@ function SearchView(props: {
     if (messages ? !trimmed : !trimmed && !hasFilters) {
       setSessions([]);
       setHits([]);
+      setWarnings([]);
       setLoading(false);
       return;
     }
@@ -2470,6 +2473,7 @@ function SearchView(props: {
           .then((page) =>
             done(() => {
               setHits(page.data);
+              setWarnings([]);
               setIndexed({ enabled: page.enabled, ready: page.ready });
             }),
           )
@@ -2493,10 +2497,16 @@ function SearchView(props: {
           ...(status !== "all" ? { status } : {}),
           limit: 100,
         })
-        .then((page) => done(() => setSessions(page.data)))
+        .then((page) =>
+          done(() => {
+            setSessions(page.data);
+            setWarnings(page.warnings ?? []);
+          }),
+        )
         .catch((reason: unknown) =>
           done(() => {
             setSessions([]);
+            setWarnings([]);
             setError(
               reason instanceof Error
                 ? reason.message
@@ -2712,6 +2722,15 @@ function SearchView(props: {
             </div>
             <span className="mode-badge">Session metadata</span>
           </div>
+          {warnings.length > 0 ? (
+            <p className="search-warning" role="status">
+              Could not search{" "}
+              {warnings
+                .map((warning) => providerLabel(warning.providerID))
+                .join(", ")}
+              . Results may be incomplete.
+            </p>
+          ) : null}
           <div className={`session-list ${loading ? "search-loading" : ""}`}>
             {sessions.map((session) => (
               <SessionRow
