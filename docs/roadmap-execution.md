@@ -632,6 +632,25 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   placeholders for the host and model id in `wearables.md`.
 - [x] G5. Multi-user decision. Deferred; owned by
   `docs/multi-user-decision.md`.
+- [x] G6. Hub agent spike (session scope, read-only). `pnpm ask <ref>
+  "question"` (`scripts/ask.mjs`) assembles session meta, attention, the pending
+  question, a deduped tool-action digest, and the text tail, then makes one
+  completion. Measured 2026-11-19 on `Ternary-the smaller model-2-27B-gguf` (the host,
+  warm): 1.0–4.5 s end to end, 0.6–13.6k chars of context, 380–4500 prompt
+  tokens, 50–150 output tokens, across a running session, an idle planning
+  session, and two error sessions.
+  - The first cut ("last 20 raw messages") was useless on tool-heavy sessions:
+    every turn was a tool call, and the model reported that no file edits were
+    visible when they were. Splitting a **deduped action digest** from the
+    **text-only transcript** fixed it: the same question then named the edited
+    files correctly.
+  - Honesty held. On an error session whose recorded turns contain no error
+    text, the model said so and named the next thing to check instead of
+    inventing a cause.
+  - Cold start is the open risk: the router sleeps an idle model after 600 s, so
+    the first ask after a gap pays the load. M1 must stream a "waking model"
+    state, not a spinner with no reason.
+  - No write tools are involved. The spike is read-only by construction.
 
 ## Cross-cutting work
 
@@ -716,6 +735,11 @@ These need an answer before the task that depends on them.
    generated `deviceID` plus a label, stored with the subscription; per-
    subscription revoke. Avoid a server-side device registry until Phase 8.
    Owner: A4.
+10. **Assistant model config.** Reuse the `reply` block or add one? The G6
+    spike used a 27B model and the reply block points at a 4B. Recommendation:
+    a separate `assistant` block (baseUrl, model, timeoutMs, maxSteps) that
+    defaults to the operator's existing OpenAI-compatible endpoint, so reply
+    drafting stays fast and the assistant can be stronger. Owner: M1.
 
 ## First sprint (two weeks)
 

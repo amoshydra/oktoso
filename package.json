@@ -45,7 +45,8 @@
     "brand:check": "tsx scripts/brand/check.ts",
     "prepublishOnly": "pnpm build:single-port",
     "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check",
-    "smoke:hermes": "node scripts/smoke-hermes.mjs"
+    "smoke:hermes": "node scripts/smoke-hermes.mjs",
+    "ask": "node scripts/ask.mjs"
   },
   "devDependencies": {
     "@amoshydra/oktoso-testing": "workspace:*",
