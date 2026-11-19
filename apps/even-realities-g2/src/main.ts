@@ -87,6 +87,7 @@ import {
   sessionHeader,
   sessionRowLabel,
   sessionMarker,
+  statusGlyph,
   legendRows,
 } from "./labels";
 
@@ -1432,6 +1433,57 @@ async function moreSessions(): Promise<void> {
     render();
     log(`Sessions page failed: ${errorMessage(error)}`);
   }
+}
+
+interface ResumeTarget {
+  ref: string;
+  title: string;
+  project?: string;
+  status?: Session["status"];
+  parentRef?: string;
+}
+
+/**
+ * What an empty Inbox can still be useful for: the session you were in. It is
+ * the one thing on the glass that turns "nothing needs you" into a way back to
+ * the work instead of a dead end.
+ */
+function resumeTarget(): ResumeTarget | undefined {
+  if (state.sessionRef && state.sessionTitle) {
+    return {
+      ref: state.sessionRef,
+      title: state.sessionTitle,
+      ...(state.sessionProject ? { project: state.sessionProject } : {}),
+      ...(state.sessionStatus ? { status: state.sessionStatus } : {}),
+      ...(state.sessionParentRef ? { parentRef: state.sessionParentRef } : {}),
+    };
+  }
+  return state.sessions[0];
+}
+
+function emptyInboxBody(): string {
+  const target = resumeTarget();
+  if (!target) {
+    return [
+      "No session open.",
+      "",
+      "Open Recent from Home to pick one.",
+      "",
+      "Back ×2",
+    ].join("\n");
+  }
+  const context = [target.project, target.status ?? "idle"]
+    .filter(Boolean)
+    .join(" · ");
+  return [
+    `${sessionMarker(
+      target.parentRef,
+      Boolean(questionSummaryFor(target.ref)),
+    )}${statusGlyph(target.status)} ${clampLine(target.title, 50)}`,
+    clampLine(context, 54),
+    "",
+    "Tap to resume · Back ×2",
+  ].join("\n");
 }
 
 async function refreshInbox(): Promise<void> {
@@ -3426,8 +3478,10 @@ function handleTextClick(): void {
     return;
   }
   if (state.screen === "inbox" && state.attentionTotal === 0 && !state.failure) {
-    // The empty inbox is one line; a tap dismisses it.
-    back();
+    // The empty Inbox offers the session you were in.
+    const target = resumeTarget();
+    if (target) void openChat(target.ref, target.title, "inbox");
+    else back();
     return;
   }
   if (state.screen === "failure") {
@@ -3661,7 +3715,7 @@ function render(): void {
   }
   if (state.screen === "inbox") {
     if (state.attentionTotal === 0 && !state.failure) {
-      const body = "Nothing needs you.";
+      const body = emptyInboxBody();
       if (setPreview("", body, "")) {
         void showPage(minimalPage(body));
       }

@@ -13,6 +13,7 @@ import {
   sessionGlyph,
   sessionHeader,
   sessionRowLabel,
+  statusGlyph,
   SUBAGENT_GLYPH,
 } from "./labels";
 
@@ -74,6 +75,14 @@ describe("G2 labels", () => {
     expect(sessionGlyph(session({ status: "running" }), false)).toBe("▶");
     expect(sessionGlyph(session({ status: "offline" }), false)).toBe("▼");
     expect(sessionGlyph(session(), false)).toBe("◇");
+  });
+
+  it("maps a bare status to the same glyphs", () => {
+    expect(statusGlyph("running")).toBe("▶");
+    expect(statusGlyph("error")).toBe("!");
+    expect(statusGlyph("offline")).toBe("▼");
+    expect(statusGlyph("idle")).toBe("◇");
+    expect(statusGlyph(undefined)).toBe("◇");
   });
 
   it("keeps a complete legend for every rendered symbol", () => {

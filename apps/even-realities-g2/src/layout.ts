@@ -11,8 +11,9 @@ export const FOOTER_Y = 246;
 export const FOOTER_HEIGHT = 42;
 
 /**
- * One line and nothing else: the empty screen. No header, no footer, no list —
- * used where chrome would only restate that there is nothing to do.
+ * One block of text and nothing else: the empty screen. No header, no footer,
+ * no list — used where chrome would only restate that there is nothing to do.
+ * Top-aligned with the body of a normal page so the eye lands in the same place.
  */
 export function minimalPage(body: string): RebuildPageContainer {
   return new RebuildPageContainer({
@@ -20,9 +21,9 @@ export function minimalPage(body: string): RebuildPageContainer {
     textObject: [
       new TextContainerProperty({
         xPosition: 0,
-        yPosition: 120,
+        yPosition: 38,
         width: GLASS_WIDTH,
-        height: 48,
+        height: 204,
         borderWidth: 0,
         borderColor: 5,
         borderRadius: 0,

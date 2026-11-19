@@ -88,6 +88,14 @@ export function sessionGlyph(
   return "◇";
 }
 
+/** The glyph for a status when only the status is known (no full session). */
+export function statusGlyph(status: Session["status"] | undefined): string {
+  if (status === "error") return "!";
+  if (status === "running") return "▶";
+  if (status === "offline") return "▼";
+  return "◇";
+}
+
 export function sessionRowLabel(
   session: Session,
   hasQuestion: boolean,

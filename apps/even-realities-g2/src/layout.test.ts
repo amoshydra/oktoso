@@ -100,7 +100,7 @@ describe("G2 frame layout", () => {
     expect(page.textObject?.[0]?.containerName).toBe("message");
     expect(page.textObject?.[0]?.content).toBe("Nothing needs you.");
     expect(page.textObject?.[0]?.isEventCapture).toBe(1);
-    expect(page.textObject?.[0]?.yPosition).toBeGreaterThan(0);
+    expect(page.textObject?.[0]?.yPosition).toBe(38);
     assertInsideGlass(page);
   });
 });
