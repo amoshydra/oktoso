@@ -1232,17 +1232,8 @@ function applyDeviceStatus(status: {
       : {}),
   };
   deviceKnown = true;
-  const awake = deviceAwake(device, deviceKnown);
-  if (wasAwake !== awake) {
-    if (!awake && voiceActive) void cancelVoice();
-    if (awake) {
-      // Paints were skipped while asleep; force the next render through.
-      paintedScreen = undefined;
-      lastGlassSignature = "";
-      render();
-    }
-  }
-  if (awake && state.screen === "settings") render();
+  if (wasAwake && device.inCase === true && voiceActive) void cancelVoice();
+  if (state.screen === "settings") render();
 }
 
 async function restoreConnection(): Promise<void> {
@@ -1379,7 +1370,6 @@ function startEventStream(): void {
         if (
           event.type === "attention.created" &&
           state.screen === "home" &&
-          deviceAwake(device, deviceKnown) &&
           (event.data as { priority?: unknown } | undefined)?.priority ===
             "blocking"
         ) {
@@ -2622,7 +2612,6 @@ async function updateChatView(): Promise<void> {
   try {
     const view = chatView();
     if (!setPreview(view.header, view.body, view.footer)) return;
-    if (!deviceAwake(device, deviceKnown)) return;
     await bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: 2,
@@ -4137,7 +4126,6 @@ function menuObjectForScreen(): MenuContainerProperty | undefined {
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
-  if (!deviceAwake(device, deviceKnown)) return;
   // The menu is declared with the page: every rebuild must carry it forward or
   // the OS drops the app's items.
   const menu = menuObjectForScreen();

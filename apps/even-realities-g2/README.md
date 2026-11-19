@@ -38,8 +38,9 @@ Screenshot capture and framing are documented in
 - **Launch routing** — opening from the glasses menu lands on Inbox; opening
   from the phone app resumes the current chat; a reload stays on Home.
 - **Device state** — the host reports wearing, charging, and battery. When the
-  glasses are in the case or off the face, painting and polling pause; the phone
-  surface keeps updating. Battery and charging show in Settings.
+  glasses are in the case or off the face, polling pauses (the event stream
+  keeps data fresh); painting never does, so a reload or a wake is never
+  swallowed by a wear-sensor reading. Battery and charging show in Settings.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming.
@@ -148,8 +149,8 @@ instead of taking over the screen.
   and an empty Inbox is one line.
 - The landing screen comes from the launch source, not from a menu the user has
   to learn.
-- The glass sleeps with the wearer: no paint or polling while it is in the case
-  or off the face.
+- The glass keeps painting; only polling pauses in the case or off the face.
+  A stale wear reading must never blank a reload.
 
 ## Symbols
 
