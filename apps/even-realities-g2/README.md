@@ -29,8 +29,10 @@ Screenshot capture and framing are documented in
 - **Attention inbox** — provider permissions and forms, errors, unread root
   sessions, and automation approvals. Approvals reuse the same blocking row and
   detail screen with Approve / Deny; approval decisions call
-  `/api/v1/automation/approvals`. Child sessions do not add unread noise. All
-  blocking items are shown; the Inbox adds a `More` row when the list is capped.
+  `/api/v1/automation/approvals`. Child sessions do not add unread noise. Error
+  rows name the provider (`! desktop-opencode · …`) so a failure is
+  attributable. All blocking items are shown; the Inbox adds a `More` row when
+  the list is capped.
   A blocking item that arrives while Home is open opens the Inbox by itself.
   With nothing active the screen is a single top-aligned line — the glyph and
   title of the session you were last in — and one tap resumes it. With no

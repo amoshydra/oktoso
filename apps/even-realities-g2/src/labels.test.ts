@@ -68,6 +68,13 @@ describe("G2 labels", () => {
     );
   });
 
+  it("names the provider on error rows and headers", () => {
+    const item = attention("error");
+    expect(attentionRowLabel(item)).toBe("! desktop-opencode · Fix auth race");
+    expect(attentionHeader(item)).toBe("! desktop-opencode · Fix auth race");
+    expect(attentionRowLabel(attention("question"))).toBe("? Fix auth race");
+  });
+
   it("prioritizes question, error, unread, running, offline, then idle", () => {
     expect(sessionGlyph(session({ unread: true }), true)).toBe("?");
     expect(sessionGlyph(session({ status: "error", unread: true }), false)).toBe("!");
