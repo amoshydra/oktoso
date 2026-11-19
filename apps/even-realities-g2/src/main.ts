@@ -2567,7 +2567,11 @@ async function loadChat(quiet: boolean): Promise<void> {
       previousLines.length !== state.chatLines.length ||
       previousLines.some((line, index) => line !== state.chatLines[index]);
     if (quiet && bridge && state.screen === "chat") {
-      if (changed || previousOffset !== state.chatOffset) {
+      if (
+        changed ||
+        previousOffset !== state.chatOffset ||
+        paintedMenu !== menuSignature(menuEntries())
+      ) {
         await updateChatView();
       }
       updatePhoneState();
@@ -2625,7 +2629,11 @@ function applyLiveMessage(message: Message): void {
   const changed =
     previousLines.length !== state.chatLines.length ||
     previousLines.some((line, index) => line !== state.chatLines[index]);
-  if (changed || previousOffset !== state.chatOffset) {
+  if (
+    changed ||
+    previousOffset !== state.chatOffset ||
+    paintedMenu !== menuSignature(menuEntries())
+  ) {
     void updateChatView();
   }
   updatePhoneState();
