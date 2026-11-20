@@ -245,11 +245,7 @@ export function AssistantDock({
             ) : turn.action ? null : (
               <div className="assistant-turn-text">…</div>
             )}
-            {turn.usage ? (
-              <div className="assistant-turn-meta">
-                {turn.usage.promptTokens} in · {turn.usage.completionTokens} out
-              </div>
-            ) : null}
+            <TurnMeta turn={turn} />
             {turn.action ? (
               <ActionCard turn={turn} onDecide={decide} />
             ) : null}
@@ -327,6 +323,25 @@ export function AssistantDock({
       </footer>
     </aside>
   );
+}
+
+function TurnMeta({ turn }: { turn: AssistantTurn }) {
+  const parts: string[] = [];
+  if (turn.context) {
+    const { messages, omitted, attention } = turn.context;
+    parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
+    if (omitted > 0) parts.push(`${omitted} older omitted`);
+    if (attention > 0) {
+      parts.push(`${attention} attention ${attention === 1 ? "item" : "items"}`);
+    }
+  }
+  if (turn.usage) {
+    parts.push(
+      `${turn.usage.promptTokens} in · ${turn.usage.completionTokens} out`,
+    );
+  }
+  if (parts.length === 0) return null;
+  return <div className="assistant-turn-meta">{parts.join(" · ")}</div>;
 }
 
 function ActionCard({

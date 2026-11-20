@@ -247,6 +247,12 @@ describe("AssistantService", () => {
     if (done?.type !== "done") return;
     expect(done.turn.text).toBe("The build is red because the test file changed.");
     expect(done.turn.usage).toEqual({ promptTokens: 120, completionTokens: 9 });
+    expect(done.turn.context).toMatchObject({
+      messages: 2,
+      omitted: 0,
+      attention: 1,
+    });
+    expect(done.turn.context?.chars).toBeGreaterThan(0);
 
     const detail = service.getThread(thread.id);
     expect(detail.turns.map((turn) => turn.role)).toEqual(["user", "assistant"]);

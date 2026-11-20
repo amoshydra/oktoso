@@ -222,6 +222,12 @@ describe("session assistant", () => {
     expect(await page!.locator(".assistant-readonly").innerText()).toBe(
       "WRITES NEED YOUR CONFIRMATION",
     );
+    expect(
+      await page!
+        .locator(".assistant-turn.assistant .assistant-turn-meta")
+        .last()
+        .innerText(),
+    ).toContain("Read ");
 
     // The thread survives a reload: it is hub state, not a provider session.
     await page!.reload();
