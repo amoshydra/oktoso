@@ -72,12 +72,12 @@ export const zAssistantAction = z.object({
 /** What the run actually read, so the answer can say so. */
 export const zAssistantContext = z.object({
   /** Transcript turns included after the budget dropped the oldest. */
-  messages: z.number().int().nonnegative(),
+  messages: z.number().int().nonnegative().optional(),
   /** Turns the budget left out. */
-  omitted: z.number().int().nonnegative(),
-  chars: z.number().int().nonnegative(),
+  omitted: z.number().int().nonnegative().optional(),
+  chars: z.number().int().nonnegative().optional(),
   /** Attention items in the context. */
-  attention: z.number().int().nonnegative(),
+  attention: z.number().int().nonnegative().optional(),
   /** The session's last activity when the answer was assembled. */
   asOf: z.number().int().nonnegative().optional(),
 });

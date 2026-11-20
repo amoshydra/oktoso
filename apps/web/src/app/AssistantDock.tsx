@@ -416,13 +416,17 @@ function asOfLabel(ts: number): string {
 function TurnMeta({ turn }: { turn: AssistantTurn }) {
   const parts: string[] = [];
   if (turn.context) {
-    const { messages, omitted, attention } = turn.context;
-    parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
-    if (omitted > 0) parts.push(`${omitted} older omitted`);
-    if (turn.context.asOf) {
-      parts.push(`session as of ${asOfLabel(turn.context.asOf)}`);
+    const { messages, omitted, attention, asOf } = turn.context;
+    if (messages !== undefined) {
+      parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
     }
-    if (attention > 0) {
+    if (omitted !== undefined && omitted > 0) {
+      parts.push(`${omitted} older omitted`);
+    }
+    if (asOf !== undefined) {
+      parts.push(`session as of ${asOfLabel(asOf)}`);
+    }
+    if (attention !== undefined && attention > 0) {
       parts.push(`${attention} attention ${attention === 1 ? "item" : "items"}`);
     }
   }

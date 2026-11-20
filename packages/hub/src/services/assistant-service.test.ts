@@ -472,6 +472,106 @@ describe("AssistantService", () => {
     expect(prompt.length).toBeLessThanOrEqual(24_500);
   });
 
+  it("backfills as-of from the newest message before each answer", async () => {
+    const store = new MemoryStateStore();
+    await store.update((state) => {
+      state.assistantThreads.push({
+        id: "ath_old",
+        scope: { kind: "session", sessionRef: session.ref },
+        title: "old thread",
+        createdAt: 1,
+        updatedAt: 1,
+        messageCount: 4,
+        turns: [
+          {
+            id: "atn_u",
+            threadId: "ath_old",
+            role: "user",
+            text: "q",
+            createdAt: 2_000,
+          },
+          {
+            id: "atn_a",
+            threadId: "ath_old",
+            role: "assistant",
+            text: "a",
+            createdAt: 2_500,
+          },
+          {
+            id: "atn_b",
+            threadId: "ath_old",
+            role: "assistant",
+            text: "b",
+            createdAt: 500,
+          },
+          {
+            id: "atn_c",
+            threadId: "ath_old",
+            role: "assistant",
+            text: "c",
+            createdAt: 2_600,
+            context: { messages: 3, omitted: 1, chars: 90, attention: 0 },
+          },
+        ],
+      });
+    });
+
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions({
+        messages: async (): Promise<MessagePage> => ({
+          data: [
+            {
+              id: "m3",
+              sessionRef: session.ref,
+              role: "assistant",
+              parts: [],
+              createdAt: 3_000,
+            },
+            {
+              id: "m2",
+              sessionRef: session.ref,
+              role: "user",
+              parts: [],
+              createdAt: 1_000,
+            },
+          ],
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl: (async () => new Response("{}")) as unknown as typeof fetch,
+    });
+
+    const updated = await service.backfillAsOf();
+    expect(updated).toBe(3);
+
+    const turns = service.getThread("ath_old").turns;
+    expect(turns[1]?.context?.asOf).toBe(1_000);
+    // No provider message existed before this answer: the answer time is the
+    // strongest honest bound.
+    expect(turns[2]?.context?.asOf).toBe(500);
+    expect(turns[3]?.context).toMatchObject({
+      messages: 3,
+      omitted: 1,
+      chars: 90,
+      attention: 0,
+      asOf: 1_000,
+    });
+
+    expect(await service.backfillAsOf()).toBe(0);
+  });
+
   it("lets a human cancel even after writes are disabled", async () => {
     const fetchImpl = (async () =>
       toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch;

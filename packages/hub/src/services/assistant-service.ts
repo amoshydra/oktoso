@@ -147,6 +147,69 @@ export class AssistantService {
     });
   }
 
+  /**
+   * One-time reconstruction for turns written before the as-of stamp existed.
+   * The session's last activity at answer time is not stored anywhere, so take
+   * the newest provider message at or before the answer. That is the strongest
+   * honest bound; when the provider cannot answer, leave the turn unstamped
+   * and try again next boot.
+   */
+  async backfillAsOf(): Promise<number> {
+    const threads = this.options.store
+      .getState()
+      .assistantThreads.filter(
+        (thread) =>
+          thread.scope.kind === "session" &&
+          thread.turns.some(
+            (turn) => turn.role === "assistant" && !turn.context?.asOf,
+          ),
+      );
+    let updated = 0;
+    for (const thread of threads) {
+      if (thread.scope.kind !== "session") continue;
+      let page;
+      try {
+        page = await this.options.sessions.messages(thread.scope.sessionRef, {
+          limit: 200,
+          order: "desc",
+        });
+      } catch (error) {
+        this.options.logger.warn("assistant as-of backfill skipped", {
+          sessionRef: thread.scope.sessionRef,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+      // Newest first: the first message at or before the answer is the one the
+      // session had last written when the answer was assembled.
+      const resolved = new Map<string, number>();
+      for (const turn of thread.turns) {
+        if (turn.role !== "assistant" || turn.context?.asOf) continue;
+        const last = page.data.find(
+          (message) => message.createdAt <= turn.createdAt,
+        );
+        resolved.set(turn.id, last?.createdAt ?? turn.createdAt);
+      }
+      if (resolved.size === 0) continue;
+      await this.options.store.update((state) => {
+        const target = state.assistantThreads.find(
+          (entry) => entry.id === thread.id,
+        );
+        if (!target) return;
+        for (const turn of target.turns) {
+          const asOf = resolved.get(turn.id);
+          if (asOf === undefined) continue;
+          turn.context = { ...(turn.context ?? {}), asOf };
+          updated += 1;
+        }
+      });
+    }
+    if (updated > 0) {
+      this.options.logger.info("assistant as-of backfill complete", { updated });
+    }
+    return updated;
+  }
+
   status(): AssistantStatus {
     return {
       enabled: this.ready(),

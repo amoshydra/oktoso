@@ -747,6 +747,12 @@ async function main(): Promise<void> {
     });
     automation.start();
     await assistant.init();
+    // Not awaited: provider reads must not delay boot.
+    void assistant.backfillAsOf().catch((error: unknown) => {
+      logger.warn("assistant as-of backfill failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     providerEvents = new ProviderEventService(
       registry,
       eventBus,

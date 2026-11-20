@@ -725,7 +725,10 @@ Schedule one bet at a time, each with its own acceptance before it starts.
 - [x] G10. Assistant thread time markers. Day separators (`Today`,
   `Yesterday`, date) and per-turn `HH:MM` make persisted history legible; each
   answer's context carries the session's last-activity time and renders it as
-  `session as of …`, so an answer based on an older session says so.
+  `session as of …`, so an answer based on an older session says so. Turns
+  written before the stamp existed are backfilled at boot from the newest
+  provider message at or before the answer; when the provider cannot answer,
+  they stay unstamped and the next boot retries.
 
 ## Cross-cutting work
 
