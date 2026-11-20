@@ -51,7 +51,9 @@ Screenshot capture and framing are documented in
   swallowed by a wear-sensor reading. Battery and charging show in Settings.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
-  updates, read markers, and incremental message streaming.
+  updates, read markers, and incremental message streaming. The pending
+  question is re-read when a `question` tool call appears or the turn stops, so
+  the footer cannot keep saying `Tap reply` after the agent asked something.
 - **Replies** — canned and model-assisted reply options, numbered choices, voice,
   and a phone keyboard for longer text. The hub classifies the moment first: it
   skips the model while the agent is running with no ask, or after a finished
