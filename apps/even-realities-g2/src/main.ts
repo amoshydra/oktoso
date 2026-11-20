@@ -272,6 +272,9 @@ let pendingSends: PendingSend[] = loadPendingSends();
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let pairingExpanded = false;
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
+let pollDelay = 4_000;
+let lastEventSeq = 0;
+let eventSeqTimer: ReturnType<typeof setTimeout> | undefined;
 let scanController: AbortController | undefined;
 let replyRequest = 0;
 let replyPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -404,8 +407,12 @@ function setStreamStatus(
   status: AppState["streamStatus"],
 ): void {
   state.streamStatus = status;
-  if (status === "live") stopPolling();
-  else schedulePolling();
+  if (status === "live") {
+    stopPolling();
+    pollDelay = POLL_MS;
+  } else {
+    schedulePolling();
+  }
   if (status === "live") setConnection("Connected · live");
   else if (state.failure && failureAffectsConnection(state.failure)) {
     setConnection(state.failure.title, true);
@@ -1396,15 +1403,61 @@ async function restoreConnection(): Promise<void> {
   render();
 }
 
+const EVENT_SEQ_PREFIX = "oktoso-even-g2-seq";
+
+function eventSeqKey(): string {
+  return `${EVENT_SEQ_PREFIX}:${hubBaseURL() || "hub"}`;
+}
+
+/**
+ * The hub keeps a bounded replay buffer. Reopening the app used to start at
+ * sequence zero and process the whole buffer; resuming from the last seen
+ * sequence turns that into nothing, or a single resync when the gap is old.
+ */
+function loadEventSeq(): number {
+  try {
+    const value = Number(localStorage.getItem(eventSeqKey()));
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberEventSeq(seq: number): void {
+  if (!Number.isInteger(seq) || seq <= lastEventSeq) return;
+  lastEventSeq = seq;
+  if (eventSeqTimer) return;
+  eventSeqTimer = setTimeout(() => {
+    eventSeqTimer = undefined;
+    flushEventSeq();
+  }, 5_000);
+}
+
+function flushEventSeq(): void {
+  if (eventSeqTimer) {
+    clearTimeout(eventSeqTimer);
+    eventSeqTimer = undefined;
+  }
+  try {
+    localStorage.setItem(eventSeqKey(), String(lastEventSeq));
+  } catch {
+    // A full or disabled localStorage must not break the stream.
+  }
+}
+
 function startEventStream(): void {
   eventController?.abort();
   eventStreamOpen = false;
   if (!client) return;
+  lastEventSeq = loadEventSeq();
   const controller = new AbortController();
   eventController = controller;
   void client
     .startEvents({
-      after: 0,
+      after: lastEventSeq,
+      // A wearable does not need a 15 s liveness ping; 60 s cuts idle radio
+      // wakeups by four with no effect on real event latency.
+      heartbeatMs: 60_000,
       signal: controller.signal,
       onStatus: (status) => {
         if (controller !== eventController) return;
@@ -1422,6 +1475,7 @@ function startEventStream(): void {
       },
       onEvent: (event) => {
         if (controller.signal.aborted) return;
+        if (typeof event.seq === "number") rememberEventSeq(event.seq);
         if (event.type === "provider.status") {
           const provider = (
             event.data as {
@@ -1546,6 +1600,7 @@ function startEventStream(): void {
 }
 
 const POLL_MS = 4_000;
+const POLL_MAX_MS = 30_000;
 const POLL_ASLEEP_MS = 30_000;
 
 function stopPolling(): void {
@@ -1560,7 +1615,7 @@ function stopPolling(): void {
  * It stops when the stream is live, and slows down when the glasses are in the
  * case or off the head.
  */
-function schedulePolling(delay = POLL_MS): void {
+function schedulePolling(delay = pollDelay): void {
   if (pollTimer || !client) return;
   pollTimer = setTimeout(() => {
     pollTimer = undefined;
@@ -1578,7 +1633,8 @@ async function pollOnce(): Promise<void> {
       await loadChat(true);
     }
   }
-  schedulePolling(awake ? POLL_MS : POLL_ASLEEP_MS);
+  pollDelay = Math.min(POLL_MAX_MS, pollDelay * 2);
+  schedulePolling(awake ? pollDelay : POLL_ASLEEP_MS);
 }
 
 function scheduleEventRefresh(
@@ -2880,6 +2936,8 @@ function scrollChat(direction: -1 | 1): void {
 
 function scheduleReplyPrefetch(): void {
   if (!client || !state.sessionRef || state.screen !== "chat") return;
+  // Nobody is looking at the glass: opening replies fetches fresh options.
+  if (!deviceAwake(device, deviceKnown)) return;
   if (state.chatLoading || state.chatMessageCount === 0) return;
   if (/working|running/i.test(state.chatActivity)) return;
   const ref = state.sessionRef;
@@ -4606,6 +4664,7 @@ async function init(): Promise<void> {
 
 window.addEventListener("beforeunload", () => {
   stopPolling();
+  flushEventSeq();
   if (voiceTimer) clearTimeout(voiceTimer);
   if (voiceActive) void bridge?.audioControl(false);
 });
