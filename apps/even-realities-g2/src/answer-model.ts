@@ -37,7 +37,12 @@ export interface AnswerRowOptions {
  * instruction to type, not an answer. Sending the literal sentinel would tell
  * the agent "Other" instead of what the user meant.
  */
-const FREE_ANSWER_SENTINEL = /^(other|type your own|something else|custom)\b/i;
+/**
+ * Match the whole label, not a prefix: "Other database" is a real choice,
+ * "Other" is the free-answer escape.
+ */
+const FREE_ANSWER_SENTINEL =
+  /^(?:other|something else|custom|none of these|type (?:your|an) own(?: answer)?)\s*[.!?…]*$/i;
 
 export function isFreeAnswerSentinel(choice: AnswerChoice): boolean {
   return (
