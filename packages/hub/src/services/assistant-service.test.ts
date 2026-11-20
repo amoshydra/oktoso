@@ -10,6 +10,7 @@ import type {
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { AssistantService } from "./assistant-service";
 import type { AttentionService } from "./attention-service";
+import type { SessionActions } from "./session-actions";
 import type { QuestionService } from "./question-service";
 import type { SessionService } from "./session-service";
 import type { Logger } from "../lib/logger";
@@ -140,11 +141,20 @@ function delta(text: string): string {
 
 function build(fetchImpl: typeof fetch, overrides: {
   maxContextMessages?: number;
+  allowWrite?: boolean;
 } = {}) {
   const store = new MemoryStateStore();
+  const sent: Array<{ ref: string; input: Record<string, unknown>; key?: string }> = [];
+  const actions = {
+    send: async (ref: string, input: Record<string, unknown>, key?: string) => {
+      sent.push({ ref, input, key });
+      return { accepted: true, messageId: "sent" };
+    },
+  } as unknown as SessionActions;
   const service = new AssistantService({
     store,
     sessions: fakeSessions(),
+    actions,
     attention: {
       list: async () => attentionPage,
     } as unknown as AttentionService,
@@ -158,10 +168,11 @@ function build(fetchImpl: typeof fetch, overrides: {
       model: "test-model",
       timeoutMs: 5_000,
       maxContextMessages: overrides.maxContextMessages ?? 20,
+      allowWrite: overrides.allowWrite ?? false,
     },
     fetchImpl,
   });
-  return { service, store };
+  return { service, store, sent };
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
@@ -301,11 +312,180 @@ describe("AssistantService", () => {
     expect(detail.turns[1]?.text).toBe("The first half");
   });
 
+  function toolStream(args: unknown): Response {
+    return sseResponse([
+      `data: ${JSON.stringify({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_1",
+                  function: {
+                    name: "propose_session_action",
+                    arguments: JSON.stringify(args),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]);
+  }
+
+  it("proposes a send action instead of sending", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+      { allowWrite: true },
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+
+    expect(sent).toHaveLength(0);
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+    expect(action.run.state).toBe("awaiting-confirm");
+    expect(action.turn.action?.status).toBe("pending");
+    expect(action.turn.action?.text).toBe("Hello");
+  });
+
+  it("sends once with the human's edit after confirmation", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+      { allowWrite: true },
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    const decided = await service.decide(thread.id, action.turn.id, {
+      decision: "confirm",
+      text: "Edited before sending",
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.input.text).toBe("Edited before sending");
+    expect(sent[0]?.key).toContain("assistant:act_");
+    expect(decided.action?.status).toBe("done");
+  });
+
+  it("cancels without sending", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+      { allowWrite: true },
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    const decided = await service.decide(thread.id, action.turn.id, {
+      decision: "cancel",
+    });
+
+    expect(sent).toHaveLength(0);
+    expect(decided.action?.status).toBe("cancelled");
+  });
+
+  it("resolves an answer against the live question", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({
+          kind: "answer",
+          answers: [{ questionId: "q1", choiceId: "yes" }],
+          summary: "Answer Allow?",
+        })) as unknown as typeof fetch,
+      { allowWrite: true },
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "allow it" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    expect(action.turn.action?.answers?.[0]).toMatchObject({
+      questionId: "q1",
+      choiceId: "yes",
+      revision: "r1",
+    });
+
+    await service.decide(thread.id, action.turn.id, { decision: "confirm" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.input.answers).toMatchObject([
+      { questionId: "q1", choiceId: "yes", revision: "r1" },
+    ]);
+  });
+
+  it("ignores a tool call when writes are disabled", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    expect(sent).toHaveLength(0);
+    expect(service.getThread(thread.id).turns[1]?.action).toBeUndefined();
+  });
+
+  it("marks an unreadable action as failed instead of pending", async () => {
+    const { service, sent } = build(
+      (async () =>
+        toolStream({ kind: "send", summary: "Send it?" })) as unknown as typeof fetch,
+      { allowWrite: true },
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.action?.status).toBe("failed");
+    expect(turn?.action?.error).toContain("empty");
+    expect(sent).toHaveLength(0);
+  });
+
   it("reports a disabled assistant instead of starting a run", async () => {
     const store = new MemoryStateStore();
     const service = new AssistantService({
       store,
       sessions: fakeSessions(),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
       attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
       questions: { get: async () => null } as unknown as QuestionService,
       logger: logger(),

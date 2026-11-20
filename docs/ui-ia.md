@@ -423,8 +423,19 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The composer offers three suggested questions before the first turn. While a
   run streams, the primary action becomes **Stop**. The footer always reads
   `Read-only · no writes`.
-- Answers cite what they read in prose. There is no tool-call UI in M1 because
-  there are no tool calls: the hub injects the context.
+- Answers cite what they read in prose. There is no tool-call UI because the
+  hub injects the context; the only structured element is an action card.
+- **Writes (M2).** When `assistant.allowWrite` is on, the model may propose one
+  action: send a message, answer the pending question, or stop the running
+  turn. The proposal renders as an **action card** inside the answer: what
+  would happen, the message text (editable for `send`), one primary action, and
+  Cancel. Nothing is sent until that primary action is pressed, and the card
+  records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
+- While an action is pending the composer is disabled with
+  `Decide the action above first…`. One action at a time.
+- The footer reads `Read-only · no writes` when writes are off and
+  `Writes need your confirmation` when they are on. There is no silent write
+  mode.
 - The G2 and VR surfaces are unchanged. The glasses are a consumer of
   conclusions (M5), not a chat client.
 

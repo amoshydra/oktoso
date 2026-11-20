@@ -51,21 +51,56 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
         response.writeHead(404).end();
         return;
       }
-      request.resume();
-      response.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        response.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+        });
+        const wantsAction = body.includes("ACTION:");
+        const frames = wantsAction
+          ? [
+              `data: ${JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_1",
+                          function: {
+                            name: "propose_session_action",
+                            arguments: JSON.stringify({
+                              kind: "send",
+                              text: "E2E confirmed reply",
+                              summary: "Send this reply to the session?",
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })}\n\n`,
+              `data: ${JSON.stringify({
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+                usage: { prompt_tokens: 42, completion_tokens: 8 },
+              })}\n\n`,
+              "data: [DONE]\n\n",
+            ]
+          : [
+              `data: ${JSON.stringify({ choices: [{ delta: { content: ANSWER } }] })}\n\n`,
+              `data: ${JSON.stringify({
+                choices: [{ delta: {}, finish_reason: "stop" }],
+                usage: { prompt_tokens: 42, completion_tokens: 8 },
+              })}\n\n`,
+              "data: [DONE]\n\n",
+            ];
+        for (const frame of frames) response.write(frame);
+        response.end();
       });
-      const frames = [
-        `data: ${JSON.stringify({ choices: [{ delta: { content: ANSWER } }] })}\n\n`,
-        `data: ${JSON.stringify({
-          choices: [{ delta: {}, finish_reason: "stop" }],
-          usage: { prompt_tokens: 42, completion_tokens: 8 },
-        })}\n\n`,
-        "data: [DONE]\n\n",
-      ];
-      for (const frame of frames) response.write(frame);
-      response.end();
     });
     server.on("error", reject);
     server.listen(0, "127.0.0.1", () => {
@@ -99,6 +134,7 @@ beforeAll(async () => {
           model: "e2e-assistant",
           timeoutMs: 10_000,
           maxContextMessages: 8,
+          allowWrite: true,
         },
         providers: [
           {
@@ -184,7 +220,7 @@ describe("session assistant", () => {
     });
     await answer.waitFor({ timeout: 15_000 });
     expect(await page!.locator(".assistant-readonly").innerText()).toBe(
-      "READ-ONLY · NO WRITES",
+      "WRITES NEED YOUR CONFIRMATION",
     );
 
     // The thread survives a reload: it is hub state, not a provider session.
@@ -201,5 +237,39 @@ describe("session assistant", () => {
         hasText: "why is this stuck?",
       }).count(),
     ).toBe(1);
+  });
+
+  it("proposes a reply, sends it only after confirmation, and records it", async () => {
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").fill("ACTION: send a reply");
+    await page!.locator("#assistant-input").press("Enter");
+
+    const card = page!.locator(".assistant-action");
+    await card.waitFor({ timeout: 15_000 });
+    expect(await card.locator(".assistant-action-label").innerText()).toBe(
+      "NEEDS YOUR CONFIRMATION",
+    );
+    expect(await card.locator(".assistant-action-text").inputValue()).toBe(
+      "E2E confirmed reply",
+    );
+
+    await card.locator(".assistant-action-buttons .btn.primary").click();
+    await card.locator(".assistant-action-state").waitFor({ timeout: 10_000 });
+    expect(await card.locator(".assistant-action-state").innerText()).toBe("SENT");
+
+    // The provider transcript now has the message, not just the dock.
+    await page!.reload();
+    await page!.getByRole("button", { name: "Ask", exact: true }).waitFor();
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    await page!.locator(".assistant-action.done").waitFor({ timeout: 10_000 });
+    expect(await page!.locator(".assistant-action-state").innerText()).toBe("SENT");
   });
 });

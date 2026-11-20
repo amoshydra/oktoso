@@ -989,6 +989,8 @@ components:
           type: string
         readOnly:
           type: boolean
+        canWrite:
+          type: boolean
         maxContextMessages:
           type: integer
           minimum: 0
@@ -996,7 +998,88 @@ components:
         - enabled
         - model
         - readOnly
+        - canWrite
         - maxContextMessages
+    AssistantAction:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+            - send
+            - answer
+            - interrupt
+        status:
+          type: string
+          enum:
+            - pending
+            - done
+            - cancelled
+            - failed
+        summary:
+          type: string
+        sessionRef:
+          type: string
+          minLength: 1
+        text:
+          type: string
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+                minLength: 1
+              choiceId:
+                type: string
+                minLength: 1
+              label:
+                type: string
+              messageId:
+                type: string
+                minLength: 1
+              revision:
+                type: string
+                minLength: 1
+            required:
+              - questionId
+              - choiceId
+              - label
+              - messageId
+              - revision
+        error:
+          type: string
+        createdAt:
+          type: integer
+          minimum: 0
+        decidedAt:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - kind
+        - status
+        - summary
+        - sessionRef
+        - createdAt
+    AssistantActionDecision:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+            - confirm
+            - cancel
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      required:
+        - decision
     AssistantThread:
       type: object
       properties:
@@ -1148,6 +1231,72 @@ components:
                 type: string
               error:
                 type: string
+              action:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    enum:
+                      - send
+                      - answer
+                      - interrupt
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - done
+                      - cancelled
+                      - failed
+                  summary:
+                    type: string
+                  sessionRef:
+                    type: string
+                    minLength: 1
+                  text:
+                    type: string
+                  answers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        questionId:
+                          type: string
+                          minLength: 1
+                        choiceId:
+                          type: string
+                          minLength: 1
+                        label:
+                          type: string
+                        messageId:
+                          type: string
+                          minLength: 1
+                        revision:
+                          type: string
+                          minLength: 1
+                      required:
+                        - questionId
+                        - choiceId
+                        - label
+                        - messageId
+                        - revision
+                  error:
+                    type: string
+                  createdAt:
+                    type: integer
+                    minimum: 0
+                  decidedAt:
+                    type: integer
+                    minimum: 0
+                required:
+                  - id
+                  - kind
+                  - status
+                  - summary
+                  - sessionRef
+                  - createdAt
               usage:
                 type: object
                 properties:
@@ -1221,6 +1370,7 @@ components:
             - done
             - error
             - stopped
+            - awaiting-confirm
         startedAt:
           type: integer
           minimum: 0
@@ -1255,6 +1405,7 @@ components:
                 - done
                 - error
                 - stopped
+                - awaiting-confirm
             startedAt:
               type: integer
               minimum: 0
@@ -1333,6 +1484,72 @@ components:
               type: string
             error:
               type: string
+            action:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                kind:
+                  type: string
+                  enum:
+                    - send
+                    - answer
+                    - interrupt
+                status:
+                  type: string
+                  enum:
+                    - pending
+                    - done
+                    - cancelled
+                    - failed
+                summary:
+                  type: string
+                sessionRef:
+                  type: string
+                  minLength: 1
+                text:
+                  type: string
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      questionId:
+                        type: string
+                        minLength: 1
+                      choiceId:
+                        type: string
+                        minLength: 1
+                      label:
+                        type: string
+                      messageId:
+                        type: string
+                        minLength: 1
+                      revision:
+                        type: string
+                        minLength: 1
+                    required:
+                      - questionId
+                      - choiceId
+                      - label
+                      - messageId
+                      - revision
+                error:
+                  type: string
+                createdAt:
+                  type: integer
+                  minimum: 0
+                decidedAt:
+                  type: integer
+                  minimum: 0
+              required:
+                - id
+                - kind
+                - status
+                - summary
+                - sessionRef
+                - createdAt
             usage:
               type: object
               properties:
@@ -1390,6 +1607,7 @@ components:
                     - done
                     - error
                     - stopped
+                    - awaiting-confirm
                 startedAt:
                   type: integer
                   minimum: 0
@@ -1430,6 +1648,223 @@ components:
                   type: string
                 error:
                   type: string
+                action:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      minLength: 1
+                    kind:
+                      type: string
+                      enum:
+                        - send
+                        - answer
+                        - interrupt
+                    status:
+                      type: string
+                      enum:
+                        - pending
+                        - done
+                        - cancelled
+                        - failed
+                    summary:
+                      type: string
+                    sessionRef:
+                      type: string
+                      minLength: 1
+                    text:
+                      type: string
+                    answers:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          questionId:
+                            type: string
+                            minLength: 1
+                          choiceId:
+                            type: string
+                            minLength: 1
+                          label:
+                            type: string
+                          messageId:
+                            type: string
+                            minLength: 1
+                          revision:
+                            type: string
+                            minLength: 1
+                        required:
+                          - questionId
+                          - choiceId
+                          - label
+                          - messageId
+                          - revision
+                    error:
+                      type: string
+                    createdAt:
+                      type: integer
+                      minimum: 0
+                    decidedAt:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - id
+                    - kind
+                    - status
+                    - summary
+                    - sessionRef
+                    - createdAt
+                usage:
+                  type: object
+                  properties:
+                    promptTokens:
+                      type: integer
+                      minimum: 0
+                    completionTokens:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - promptTokens
+                    - completionTokens
+              required:
+                - id
+                - threadId
+                - role
+                - text
+                - createdAt
+          required:
+            - type
+            - run
+            - turn
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - action
+            run:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                threadId:
+                  type: string
+                  minLength: 1
+                state:
+                  type: string
+                  enum:
+                    - running
+                    - done
+                    - error
+                    - stopped
+                    - awaiting-confirm
+                startedAt:
+                  type: integer
+                  minimum: 0
+                finishedAt:
+                  type: integer
+                  minimum: 0
+                model:
+                  type: string
+                error:
+                  type: string
+              required:
+                - id
+                - threadId
+                - state
+                - startedAt
+            turn:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                threadId:
+                  type: string
+                  minLength: 1
+                role:
+                  type: string
+                  enum:
+                    - user
+                    - assistant
+                text:
+                  type: string
+                createdAt:
+                  type: integer
+                  minimum: 0
+                runId:
+                  type: string
+                model:
+                  type: string
+                error:
+                  type: string
+                action:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      minLength: 1
+                    kind:
+                      type: string
+                      enum:
+                        - send
+                        - answer
+                        - interrupt
+                    status:
+                      type: string
+                      enum:
+                        - pending
+                        - done
+                        - cancelled
+                        - failed
+                    summary:
+                      type: string
+                    sessionRef:
+                      type: string
+                      minLength: 1
+                    text:
+                      type: string
+                    answers:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          questionId:
+                            type: string
+                            minLength: 1
+                          choiceId:
+                            type: string
+                            minLength: 1
+                          label:
+                            type: string
+                          messageId:
+                            type: string
+                            minLength: 1
+                          revision:
+                            type: string
+                            minLength: 1
+                        required:
+                          - questionId
+                          - choiceId
+                          - label
+                          - messageId
+                          - revision
+                    error:
+                      type: string
+                    createdAt:
+                      type: integer
+                      minimum: 0
+                    decidedAt:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - id
+                    - kind
+                    - status
+                    - summary
+                    - sessionRef
+                    - createdAt
                 usage:
                   type: object
                   properties:
@@ -1474,6 +1909,7 @@ components:
                     - done
                     - error
                     - stopped
+                    - awaiting-confirm
                 startedAt:
                   type: integer
                   minimum: 0
@@ -7627,6 +8063,161 @@ paths:
                 $ref: "#/components/schemas/Error"
         "409":
           description: A run is already in flight for this thread
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/assistant/threads/{id}/turns/{turnId}/action:
+    post:
+      tags:
+        - assistant
+      summary: Confirm or cancel a proposed action
+      description: The only path that writes to a provider. `confirm` sends, answers, or interrupts; `cancel` records the decision and does nothing. Write actions are disabled unless assistant.allowWrite is on.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+        - schema:
+            type: string
+          required: true
+          name: turnId
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantActionDecision"
+      responses:
+        "200":
+          description: Updated turn
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    minLength: 1
+                  threadId:
+                    type: string
+                    minLength: 1
+                  role:
+                    type: string
+                    enum:
+                      - user
+                      - assistant
+                  text:
+                    type: string
+                  createdAt:
+                    type: integer
+                    minimum: 0
+                  runId:
+                    type: string
+                  model:
+                    type: string
+                  error:
+                    type: string
+                  action:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                      kind:
+                        type: string
+                        enum:
+                          - send
+                          - answer
+                          - interrupt
+                      status:
+                        type: string
+                        enum:
+                          - pending
+                          - done
+                          - cancelled
+                          - failed
+                      summary:
+                        type: string
+                      sessionRef:
+                        type: string
+                        minLength: 1
+                      text:
+                        type: string
+                      answers:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            questionId:
+                              type: string
+                              minLength: 1
+                            choiceId:
+                              type: string
+                              minLength: 1
+                            label:
+                              type: string
+                            messageId:
+                              type: string
+                              minLength: 1
+                            revision:
+                              type: string
+                              minLength: 1
+                          required:
+                            - questionId
+                            - choiceId
+                            - label
+                            - messageId
+                            - revision
+                      error:
+                        type: string
+                      createdAt:
+                        type: integer
+                        minimum: 0
+                      decidedAt:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - id
+                      - kind
+                      - status
+                      - summary
+                      - sessionRef
+                      - createdAt
+                  usage:
+                    type: object
+                    properties:
+                      promptTokens:
+                        type: integer
+                        minimum: 0
+                      completionTokens:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - promptTokens
+                      - completionTokens
+                required:
+                  - id
+                  - threadId
+                  - role
+                  - text
+                  - createdAt
+        "400":
+          description: Invalid decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Turn or action not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Writes are disabled or the action was already decided
           content:
             application/json:
               schema:

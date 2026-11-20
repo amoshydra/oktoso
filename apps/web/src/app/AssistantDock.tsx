@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
 import type {
+  AssistantAction,
   AssistantEvent,
   AssistantThreadDetail,
   AssistantTurn,
@@ -20,11 +21,17 @@ const SUGGESTIONS = [
   "Draft a reply to this session",
 ];
 
+const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
+  send: "Send",
+  answer: "Answer",
+  interrupt: "Stop turn",
+};
+
 /**
- * Session-scope hub assistant (M1).
+ * Session-scope hub assistant (M1 read-only, M2 confirmed writes).
  *
- * Read-only and context-injected: the hub assembles the session context and
- * makes one completion. The dock never sends, approves, or interrupts.
+ * The model can propose one action; the card below the answer is the only way
+ * it happens. Nothing is sent until the user confirms here.
  */
 export function AssistantDock({
   client,
@@ -39,6 +46,7 @@ export function AssistantDock({
   const [runId, setRunId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(true);
+  const [canWrite, setCanWrite] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -46,13 +54,16 @@ export function AssistantDock({
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
-    client
-      .createAssistantThread({ scope: { kind: "session", sessionRef } })
-      .then((created) => client.assistantThread(created.id))
-      .then((detail) => {
+    Promise.all([
+      client.createAssistantThread({ scope: { kind: "session", sessionRef } }),
+      client.assistantStatus().catch(() => undefined),
+    ])
+      .then(async ([created, status]) => {
+        const detail = await client.assistantThread(created.id);
         if (cancelled) return;
         setThread(detail);
         setTurns(detail.turns);
+        setCanWrite(Boolean(status?.canWrite));
         textareaRef.current?.focus();
       })
       .catch((cause: unknown) => {
@@ -86,10 +97,16 @@ export function AssistantDock({
     setTurns(detail.turns);
   }, [client, thread]);
 
+  const pending = turns.find((turn) => turn.action?.status === "pending");
+
   const send = useCallback(
     async (text: string) => {
       const question = text.trim();
       if (!question || !thread || runId || busy) return;
+      if (pending) {
+        setError("Decide the pending action first");
+        return;
+      }
       setError(undefined);
       setInput("");
       setStreamText("");
@@ -108,7 +125,7 @@ export function AssistantDock({
               setStreamText((current) => current + event.text);
               return;
             }
-            if (event.type === "done") {
+            if (event.type === "done" || event.type === "action") {
               setTurns((current) => [...current, event.turn]);
               setStreamText("");
               setRunId(undefined);
@@ -126,7 +143,7 @@ export function AssistantDock({
         setRunId(undefined);
       }
     },
-    [busy, client, resync, runId, thread],
+    [busy, client, pending, resync, runId, thread],
   );
 
   const stop = useCallback(async () => {
@@ -142,7 +159,27 @@ export function AssistantDock({
     void resync();
   }, [client, resync, runId]);
 
-  const disabled = turns.length === 0;
+  const decide = useCallback(
+    async (turn: AssistantTurn, decision: "confirm" | "cancel", text?: string) => {
+      if (!thread) return;
+      try {
+        const updated = await client.decideAssistantAction(
+          thread.thread.id,
+          turn.id,
+          { decision, ...(text ? { text } : {}) },
+        );
+        setTurns((current) =>
+          current.map((entry) => (entry.id === updated.id ? updated : entry)),
+        );
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The action failed");
+        void resync();
+      }
+    },
+    [client, resync, thread],
+  );
+
+  const disabled = turns.length === 0 && !streamText && !runId;
 
   return (
     <aside
@@ -203,11 +240,18 @@ export function AssistantDock({
               {turn.role === "user" ? "You" : "Assistant"}
               {turn.error ? <span className="assistant-turn-error"> · {turn.error}</span> : null}
             </div>
-            <div className="assistant-turn-text">{turn.text || (turn.error ? "" : "…")}</div>
+            {turn.text || turn.error ? (
+              <div className="assistant-turn-text">{turn.text}</div>
+            ) : turn.action ? null : (
+              <div className="assistant-turn-text">…</div>
+            )}
             {turn.usage ? (
               <div className="assistant-turn-meta">
                 {turn.usage.promptTokens} in · {turn.usage.completionTokens} out
               </div>
+            ) : null}
+            {turn.action ? (
+              <ActionCard turn={turn} onDecide={decide} />
             ) : null}
           </article>
         ))}
@@ -230,7 +274,9 @@ export function AssistantDock({
       </div>
 
       <footer className="assistant-foot">
-        <span className="assistant-readonly">Read-only · no writes</span>
+        <span className="assistant-readonly">
+          {canWrite ? "Writes need your confirmation" : "Read-only · no writes"}
+        </span>
         <form
           className="assistant-composer"
           onSubmit={(event) => {
@@ -246,8 +292,14 @@ export function AssistantDock({
             ref={textareaRef}
             value={input}
             rows={2}
-            disabled={busy}
-            placeholder={busy ? "Reading this session…" : "Ask about this session…"}
+            disabled={busy || Boolean(pending)}
+            placeholder={
+              busy
+                ? "Reading this session…"
+                : pending
+                  ? "Decide the action above first…"
+                  : "Ask about this session…"
+            }
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -266,7 +318,7 @@ export function AssistantDock({
             <button
               className="btn small primary"
               type="submit"
-              disabled={input.trim().length === 0 || busy}
+              disabled={input.trim().length === 0 || busy || Boolean(pending)}
             >
               Ask
             </button>
@@ -275,4 +327,108 @@ export function AssistantDock({
       </footer>
     </aside>
   );
+}
+
+function ActionCard({
+  turn,
+  onDecide,
+}: {
+  turn: AssistantTurn;
+  onDecide: (
+    turn: AssistantTurn,
+    decision: "confirm" | "cancel",
+    text?: string,
+  ) => Promise<void>;
+}) {
+  const action = turn.action;
+  const [text, setText] = useState(action?.text ?? "");
+  const [saving, setSaving] = useState(false);
+  if (!action) return null;
+
+  const pending = action.status === "pending";
+  const decide = async (decision: "confirm" | "cancel") => {
+    setSaving(true);
+    try {
+      await onDecide(turn, decision, decision === "confirm" ? text : undefined);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className={`assistant-action ${action.status}`}
+      role="group"
+      aria-label="Proposed action"
+    >
+      <div className="assistant-action-head">
+        <span className="assistant-action-label">
+          {pending ? "Needs your confirmation" : actionLabel(action)}
+        </span>
+        {pending ? null : (
+          <span className="assistant-action-state">{actionLabel(action)}</span>
+        )}
+      </div>
+      <p className="assistant-action-summary">{action.summary}</p>
+
+      {action.kind === "send" ? (
+        pending ? (
+          <>
+            <label className="sr-only" htmlFor={`action-${action.id}`}>
+              Message to send
+            </label>
+            <textarea
+              id={`action-${action.id}`}
+              className="assistant-action-text"
+              value={text}
+              rows={3}
+              onChange={(event) => setText(event.target.value)}
+            />
+          </>
+        ) : (
+          <p className="assistant-action-value">{action.text}</p>
+        )
+      ) : null}
+
+      {action.kind === "answer" ? (
+        <p className="assistant-action-value">{action.text}</p>
+      ) : null}
+
+      {action.error ? (
+        <p className="assistant-action-error">{action.error}</p>
+      ) : null}
+
+      {pending ? (
+        <div className="assistant-action-buttons">
+          <button
+            className="btn small primary"
+            type="button"
+            disabled={saving || (action.kind === "send" && text.trim().length === 0)}
+            onClick={() => void decide("confirm")}
+          >
+            {saving ? "Working…" : ACTION_LABEL[action.kind]}
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            disabled={saving}
+            onClick={() => void decide("cancel")}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function actionLabel(action: AssistantAction): string {
+  if (action.status === "done") {
+    if (action.kind === "send") return "Sent";
+    if (action.kind === "answer") return "Answered";
+    return "Stopped";
+  }
+  if (action.status === "cancelled") return "Cancelled";
+  if (action.status === "failed") return "Failed";
+  return "Pending";
 }

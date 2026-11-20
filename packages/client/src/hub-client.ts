@@ -1,5 +1,6 @@
 import type {
   AssistantInput,
+  AssistantActionDecision,
   AssistantEvent,
   AssistantMessageInput,
   AssistantRun,
@@ -9,6 +10,7 @@ import type {
   AssistantThreadDetail,
   AssistantThreadInput,
   AssistantThreadPage,
+  AssistantTurn,
   AssistantView,
   Attachment,
   AttentionActionInput,
@@ -653,6 +655,18 @@ export class HubClient {
   ): Promise<AssistantRunAccepted> {
     const response = await this.request<{ data: AssistantRunAccepted }>(
       `/api/v1/assistant/threads/${encodeURIComponent(threadId)}/messages`,
+      { method: "POST", body: input },
+    );
+    return response.data;
+  }
+
+  async decideAssistantAction(
+    threadId: string,
+    turnId: string,
+    input: AssistantActionDecision,
+  ): Promise<AssistantTurn> {
+    const response = await this.request<{ data: AssistantTurn }>(
+      `/api/v1/assistant/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/action`,
       { method: "POST", body: input },
     );
     return response.data;

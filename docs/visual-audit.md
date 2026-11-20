@@ -1366,3 +1366,26 @@ list of file-configured objects.
     anchors belong with the tool loop in M2.
   - The usage line only appears when the endpoint reports usage in the stream
     (llama.cpp does; some providers do not).
+
+## Assistant write confirmations (2026-11-20)
+
+- **The card is the consent surface.** It is deliberately not a modal: the
+  answer above it is the justification, and hiding the transcript to ask for
+  consent would remove the evidence the user needs to decide. It is also not a
+  toast: a pending write must stay until it is decided.
+- **One accent edge, one primary action.** The 2px left border carries state
+  (accent pending, success done, danger failed, strong border cancelled) and
+  the head carries the same state in words. Colour never carries it alone.
+- **The message is editable before sending.** A model draft that cannot be
+  corrected is a trap; the textarea is the same size and radius as the chat
+  composer's box, 14px on desktop and 16px on mobile.
+- **Failed proposals stay.** A rejected tool call shows its error in place and
+  loses its buttons. That keeps a bad model turn auditable by the person who
+  saw it.
+- **The composer lock is visible.** Disabling the input without explanation
+  reads as a bug; the placeholder names the next action.
+- **Known follow-ups.**
+  - The audit log records decisions but is not exposed in the UI; a read-only
+    Settings view belongs with M3, when global scope makes actions less obvious.
+  - A cancelled action remains in the thread forever. That is intentional now;
+    a "clear decided actions" affordance can wait for a longer thread.
