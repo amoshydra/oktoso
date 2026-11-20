@@ -18,7 +18,7 @@ export interface AssistantDockProps {
 const SUGGESTIONS = [
   "Why is this stuck?",
   "What changed most recently?",
-  "Draft a reply to this session",
+  "Draft a reply for me",
 ];
 
 const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
