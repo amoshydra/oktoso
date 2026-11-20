@@ -165,6 +165,14 @@ instead of taking over the screen.
   to learn.
 - The glass keeps painting; only polling pauses in the case or off the face.
   A stale wear reading must never blank a reload.
+- Live updates are batched: at most one state rebuild and glass paint per
+  600 ms, with a trailing flush, so a streaming turn costs a fraction of the
+  BLE writes without reading as laggy. Only the container that changed is
+  written (live text changes the body, not the footer). Refresh work is keyed,
+  so a burst of events coalesces to one inbox/chat refresh instead of one per
+  event.
+- Polling is a fallback, not a rhythm: it runs only while the event stream is
+  down, at 4 s when awake and 30 s when the glasses are asleep.
 
 ## Regression harness
 
