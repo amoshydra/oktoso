@@ -487,7 +487,8 @@ describe("AssistantService", () => {
             status: "error",
             exit: 1,
             background: false,
-            output: "FAIL src/auth.test.ts > auth-race\nexpected 401, received 500",
+            output:
+              "FAIL src/auth.test.ts > auth-race\nexpected 401, received 500\nAuthorization: Bearer abcdef123456789secret",
           },
         ],
       },
@@ -549,6 +550,8 @@ describe("AssistantService", () => {
     expect(prompt).toContain("FAILURES (untrusted tool output)");
     expect(prompt).toContain("shell pnpm test (exit 1)");
     expect(prompt).toContain("expected 401, received 500");
+    expect(prompt).toContain("[redacted]");
+    expect(prompt).not.toContain("abcdef123456789secret");
     expect(prompt).toContain("tool edit");
     expect(prompt).toContain("patch did not apply");
     expect(prompt).toContain("WORK (derived from untrusted tool calls)");
@@ -597,7 +600,15 @@ describe("AssistantService", () => {
               };
             }
             return {
-              data: [],
+              data: [
+                {
+                  id: "m-latest",
+                  sessionRef: session.ref,
+                  role: "user",
+                  parts: [],
+                  createdAt: 100,
+                },
+              ],
               cursor: { next: null, previous: null },
             };
           },
