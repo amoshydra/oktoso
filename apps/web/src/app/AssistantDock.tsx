@@ -450,12 +450,50 @@ function ActionCard({
         )
       ) : null}
 
-      {action.kind === "answer" ? (
+      {action.kind === "answer" && action.questions?.length ? (
+        <div className="assistant-action-questions">
+          {action.questions.map((question) => {
+            const chosen = new Set(
+              (action.answers ?? [])
+                .filter((answer) => answer.questionId === question.id)
+                .map((answer) => answer.choiceId),
+            );
+            return (
+              <div key={question.id} className="assistant-action-question">
+                <p className="assistant-action-value">{question.text}</p>
+                <div className="assistant-action-choices">
+                  {question.choices.map((choice) => (
+                    <span
+                      key={choice.id}
+                      className={`assistant-action-choice ${
+                        chosen.has(choice.id) ? "chosen" : ""
+                      }`}
+                    >
+                      {choice.label}
+                    </span>
+                  ))}
+                </div>
+                {question.risk !== "normal" ? (
+                  <span className="assistant-action-risk">{question.risk}</span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : action.kind === "answer" ? (
         <p className="assistant-action-value">{action.text}</p>
       ) : null}
 
       {action.error ? (
         <p className="assistant-action-error">{action.error}</p>
+      ) : null}
+
+      {action.status === "failed" &&
+      action.kind === "answer" &&
+      action.questions?.some((question) => question.risk !== "normal") ? (
+        <a className="assistant-action-link" href="/inbox?filter=question">
+          Open the Inbox
+        </a>
       ) : null}
 
       {working ? (
@@ -471,7 +509,11 @@ function ActionCard({
               disabled={saving || (action.kind === "send" && text.trim().length === 0)}
               onClick={() => void decide("confirm")}
             >
-              {saving ? "Working…" : ACTION_LABEL[action.kind]}
+              {saving
+                ? "Working…"
+                : action.kind === "answer" && action.text
+                  ? `Answer “${action.text.length > 40 ? `${action.text.slice(0, 40)}…` : action.text}”`
+                  : ACTION_LABEL[action.kind]}
             </button>
           ) : (
             <span className="assistant-action-error">

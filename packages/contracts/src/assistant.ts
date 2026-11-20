@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zQuestionRisk } from "./questions";
 
 /**
  * Hub agent threads (M1).
@@ -53,6 +54,14 @@ export const zAssistantAnswer = z.object({
  * assistant turn so it survives reloads and can only exist with an in-thread
  * confirmation.
  */
+/** The provider question as it stood when the action was proposed. */
+export const zAssistantQuestion = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  risk: zQuestionRisk,
+  choices: z.array(z.object({ id: z.string(), label: z.string() })),
+});
+
 export const zAssistantAction = z.object({
   id: z.string().min(1),
   kind: zAssistantActionKind,
@@ -64,6 +73,8 @@ export const zAssistantAction = z.object({
   text: z.string().optional(),
   /** `answer`: the resolved choices, pinned to the question revision. */
   answers: z.array(zAssistantAnswer).optional(),
+  /** `answer`: the live questions, so the card shows the payload, not a summary. */
+  questions: z.array(zAssistantQuestion).max(3).optional(),
   error: z.string().optional(),
   createdAt: z.number().int().nonnegative(),
   decidedAt: z.number().int().nonnegative().optional(),
@@ -192,6 +203,7 @@ export type AssistantThreadDetail = z.infer<typeof zAssistantThreadDetail>;
 export type AssistantRunState = z.infer<typeof zAssistantRunState>;
 export type AssistantActionKind = z.infer<typeof zAssistantActionKind>;
 export type AssistantAnswer = z.infer<typeof zAssistantAnswer>;
+export type AssistantQuestion = z.infer<typeof zAssistantQuestion>;
 export type AssistantContext = z.infer<typeof zAssistantContext>;
 export type AssistantActionStatus = z.infer<typeof zAssistantActionStatus>;
 export type AssistantAction = z.infer<typeof zAssistantAction>;

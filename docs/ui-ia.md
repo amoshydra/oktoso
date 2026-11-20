@@ -426,8 +426,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Answers cite what they read in prose. There is no tool-call UI because the
   hub injects the context; the only structured element is an action card.
 - **Writes (M2).** When `assistant.allowWrite` is on, the model may propose one
-  action: send a message, answer the pending question, or stop the running
-  turn. The proposal renders as an **action card** inside the answer: what
+  action: send a message, answer a **normal** pending question, or stop the
+  running turn. It may not answer a permission prompt (`destructive` or
+  `sensitive`); that card is a failed proposal with a link to the Inbox, where
+  the command and risk are shown. The proposal renders as an **action card** inside the answer: what
   would happen, the message text (editable for `send`), one primary action, and
   Cancel. Nothing is sent until that primary action is pressed, and the card
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).

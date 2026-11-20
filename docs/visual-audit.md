@@ -1452,3 +1452,16 @@ list of file-configured objects.
   being discarded.
 - The evidence line counts failures so the user can see that the context knew
   about one.
+
+## Permission prompts (2026-11-20)
+
+- A permission prompt is not a Q&A choice. The card refuses to be the approval
+  UI: it shows the provider's question, choices, and risk, then points at the
+  Inbox, which already renders the command. One quiet link, no primary button.
+- Normal questions render their payload too. The chosen choice carries the
+  accent border, so the human checks the choice rather than the model's
+  sentence.
+- The model's summary remains as context but is no longer the only description
+  of what will be sent.
+- Consequence: the assistant can draft a branch choice but cannot launder a
+  destructive approval through a friendly card.

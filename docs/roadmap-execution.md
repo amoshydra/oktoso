@@ -742,6 +742,13 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   credential redactor (`Bearer`/`Basic`, `sk-`/`ghp_`/`xox`, key/value tokens)
   before it reaches the model.
 
+- [x] G12. Permission prompts stay in the Inbox. `buildAction` refuses to
+  propose an `answer` when any pending question has `risk` other than
+  `normal`; the failed card shows the provider's question, choices, and risk,
+  with an Inbox link. Normal answer cards carry the question snapshot and a
+  button that names the effect (`Answer "main"`). The write path is unchanged:
+  one human decision, one send, audited.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.
