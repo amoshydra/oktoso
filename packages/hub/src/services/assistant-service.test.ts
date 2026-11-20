@@ -1336,6 +1336,131 @@ describe("AssistantService", () => {
     ]);
   });
 
+  it("expires a day-old pending action instead of blocking the thread", async () => {
+    const { service, store, audits } = build((async () =>
+      sseResponse([delta("ok"), "data: [DONE]\n\n"])) as unknown as typeof fetch);
+    await store.update((state) => {
+      state.assistantThreads.push({
+        id: "ath_expired",
+        scope: { kind: "session", sessionRef: "desktop-opencode:ses_old" },
+        title: "old",
+        createdAt: 1,
+        updatedAt: 1,
+        messageCount: 2,
+        turns: [
+          { id: "u1", threadId: "ath_expired", role: "user", text: "q", createdAt: 1 },
+          {
+            id: "a1",
+            threadId: "ath_expired",
+            role: "assistant",
+            text: "",
+            createdAt: 2,
+            action: {
+              id: "act_old",
+              kind: "send",
+              status: "pending",
+              summary: "Send it?",
+              sessionRef: "desktop-opencode:ses_old",
+              text: "hello",
+              createdAt: 0,
+            },
+          },
+        ],
+      });
+    });
+
+    const accepted = await service.postMessage("ath_expired", { text: "next" });
+
+    expect(accepted.run.state).toBe("running");
+    const action = service
+      .getThread("ath_expired")
+      .turns.find((turn) => turn.id === "a1")?.action;
+    expect(action?.status).toBe("expired");
+    expect(action?.error).toContain("expired");
+    expect(audits.some((entry) => entry.event === "expired")).toBe(true);
+  });
+
+  it("evicts the least recently used thread but keeps a locked one", async () => {
+    const { service, store } = build((async () =>
+      sseResponse([delta("ok"), "data: [DONE]\n\n"])) as unknown as typeof fetch);
+    await store.update((state) => {
+      state.assistantThreads = Array.from({ length: 40 }, (_, index) => ({
+        id: `ath_${index}`,
+        scope: {
+          kind: "session" as const,
+          sessionRef: `desktop-opencode:ses_${index}`,
+        },
+        title: `thread ${index}`,
+        createdAt: index,
+        updatedAt: index,
+        messageCount: 1,
+        turns: [
+          {
+            id: `t_${index}`,
+            threadId: `ath_${index}`,
+            role: "assistant" as const,
+            text: "x",
+            createdAt: index,
+            ...(index === 0
+              ? {
+                  action: {
+                    id: "act_locked",
+                    kind: "send" as const,
+                    status: "pending" as const,
+                    summary: "Send it?",
+                    sessionRef: "desktop-opencode:ses_0",
+                    text: "hello",
+                    createdAt: Date.now(),
+                  },
+                }
+              : {}),
+          },
+        ],
+      }));
+    });
+
+    await service.createThread({
+      scope: { kind: "session", sessionRef: "desktop-opencode:ses_new" },
+    });
+
+    const threads = store.getState().assistantThreads;
+    expect(threads).toHaveLength(40);
+    expect(threads.some((thread) => thread.id === "ath_0")).toBe(true);
+    expect(threads.some((thread) => thread.id === "ath_1")).toBe(false);
+    expect(
+      threads.some(
+        (thread) =>
+          thread.scope.kind === "session" &&
+          thread.scope.sessionRef === "desktop-opencode:ses_new",
+      ),
+    ).toBe(true);
+  });
+
+  it("marks a run interrupted by a restart", async () => {
+    const { service, store } = build((async () =>
+      sseResponse([delta("ok"), "data: [DONE]\n\n"])) as unknown as typeof fetch);
+    await store.update((state) => {
+      state.assistantThreads.push({
+        id: "ath_cut",
+        scope: { kind: "session", sessionRef: session.ref },
+        title: "cut",
+        createdAt: 1,
+        updatedAt: 1,
+        messageCount: 1,
+        turns: [
+          { id: "u1", threadId: "ath_cut", role: "user", text: "q", createdAt: 1 },
+        ],
+      });
+    });
+
+    await service.init();
+
+    const turns = service.getThread("ath_cut").turns;
+    expect(turns).toHaveLength(2);
+    expect(turns[1]?.role).toBe("assistant");
+    expect(turns[1]?.error).toContain("interrupted");
+  });
+
   it("refuses to answer a permission prompt", async () => {
     const risky = {
       ...question,

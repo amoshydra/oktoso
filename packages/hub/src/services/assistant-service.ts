@@ -46,6 +46,7 @@ const MAX_FAILURES = 3;
 const MAX_FILES = 8;
 const MAX_COMMANDS = 6;
 const FAILURE_DETAIL_CHARS = 220;
+const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * Model settings for the hub agent. Falls back to the reply endpoint/model when
@@ -70,7 +71,7 @@ export interface AssistantAuditEntry {
   actionId: string;
   kind: AssistantActionKind;
   sessionRef: string;
-  event: "proposed" | "confirmed" | "cancelled" | "failed";
+  event: "proposed" | "confirmed" | "cancelled" | "failed" | "expired";
   ok: boolean;
   error?: string;
   durationMs?: number;
@@ -147,20 +148,23 @@ export class AssistantService {
       .assistantThreads.flatMap((thread) =>
         thread.turns.filter((turn) => turn.action?.status === "deciding"),
       );
-    if (stale.length === 0) return;
-    await this.options.store.update((state) => {
-      for (const thread of state.assistantThreads) {
-        for (const turn of thread.turns) {
-          if (turn.action?.status !== "deciding") continue;
-          turn.action = {
-            ...turn.action,
-            status: "failed",
-            error: "The hub restarted while this decision was running",
-            decidedAt: this.now(),
-          };
+    if (stale.length > 0) {
+      await this.options.store.update((state) => {
+        for (const thread of state.assistantThreads) {
+          for (const turn of thread.turns) {
+            if (turn.action?.status !== "deciding") continue;
+            turn.action = {
+              ...turn.action,
+              status: "failed",
+              error: "The hub restarted while this decision was running",
+              decidedAt: this.now(),
+            };
+          }
         }
-      }
-    });
+      });
+    }
+    await this.expireStaleActions();
+    await this.markInterruptedRuns();
   }
 
   /**
@@ -226,6 +230,74 @@ export class AssistantService {
     return updated;
   }
 
+  /** Pending actions older than a day are closed instead of blocking a thread. */
+  async expireStaleActions(): Promise<void> {
+    const now = this.now();
+    const stale: Array<{
+      threadId: string;
+      turnId: string;
+      action: AssistantAction;
+    }> = [];
+    for (const thread of this.options.store.getState().assistantThreads) {
+      for (const turn of thread.turns) {
+        if (
+          turn.action?.status === "pending" &&
+          now - turn.action.createdAt > ACTION_TTL_MS
+        ) {
+          stale.push({ threadId: thread.id, turnId: turn.id, action: turn.action });
+        }
+      }
+    }
+    if (stale.length === 0) return;
+    const ids = new Set(stale.map((entry) => entry.turnId));
+    await this.options.store.update((state) => {
+      for (const thread of state.assistantThreads) {
+        for (const turn of thread.turns) {
+          if (!ids.has(turn.id) || turn.action?.status !== "pending") continue;
+          turn.action = {
+            ...turn.action,
+            status: "expired",
+            decidedAt: now,
+            error: "This action expired before it was confirmed.",
+          };
+        }
+      }
+    });
+    for (const entry of stale) {
+      this.audit(entry.threadId, entry.turnId, entry.action, "expired", false);
+    }
+  }
+
+  /**
+   * A run lives in memory. After a restart, a thread that ends on a user turn
+   * has a question with no answer; say so instead of showing a silent gap.
+   */
+  private async markInterruptedRuns(): Promise<void> {
+    const interrupted = this.options.store
+      .getState()
+      .assistantThreads.filter(
+        (thread) => thread.turns[thread.turns.length - 1]?.role === "user",
+      );
+    if (interrupted.length === 0) return;
+    const now = this.now();
+    await this.options.store.update((state) => {
+      for (const thread of state.assistantThreads) {
+        const last = thread.turns[thread.turns.length - 1];
+        if (last?.role !== "user") continue;
+        thread.turns.push({
+          id: `atn_${randomUUID()}`,
+          threadId: thread.id,
+          role: "assistant",
+          text: "",
+          error: "The answer was interrupted by a hub restart.",
+          createdAt: now,
+        });
+        thread.updatedAt = now;
+        thread.messageCount = thread.turns.length;
+      }
+    });
+  }
+
   status(): AssistantStatus {
     return {
       enabled: this.ready(),
@@ -260,9 +332,17 @@ export class AssistantService {
 
     await this.options.store.update((state) => {
       state.assistantThreads.unshift(thread);
-      if (state.assistantThreads.length > MAX_THREADS) {
-        state.assistantThreads.length = MAX_THREADS;
-      }
+      if (state.assistantThreads.length <= MAX_THREADS) return;
+      // Evict the least recently used, never a thread that is waiting on a
+      // human decision. Locked threads may push the store slightly over the
+      // cap; a stranded card is worse than a few extra turns.
+      const sorted = [...state.assistantThreads].sort(
+        (left, right) => right.updatedAt - left.updatedAt,
+      );
+      const locked = sorted.filter(hasOpenAction);
+      const rest = sorted.filter((entry) => !hasOpenAction(entry));
+      const room = Math.max(0, MAX_THREADS - locked.length);
+      state.assistantThreads = [...locked, ...rest.slice(0, room)];
     });
     return toThread(thread);
   }
@@ -309,6 +389,7 @@ export class AssistantService {
     input: AssistantMessageInput,
   ): Promise<AssistantRunAccepted> {
     this.assertReady();
+    await this.expireStaleActions();
     const key = input.idempotencyKey
       ? `${threadId}:${input.idempotencyKey}`
       : undefined;
@@ -429,6 +510,7 @@ export class AssistantService {
     turnId: string,
     input: AssistantActionDecision,
   ): Promise<AssistantTurn> {
+    await this.expireStaleActions();
     const thread = this.findThread(threadId);
     const turn = thread.turns.find((entry) => entry.id === turnId);
     if (!turn?.action) throw notFound("Action not found");
@@ -1427,6 +1509,13 @@ function toThread(thread: {
     updatedAt: thread.updatedAt,
     messageCount: thread.messageCount,
   };
+}
+
+function hasOpenAction(thread: { turns: AssistantTurn[] }): boolean {
+  return thread.turns.some(
+    (turn) =>
+      turn.action?.status === "pending" || turn.action?.status === "deciding",
+  );
 }
 
 function trimTurns(thread: { turns: AssistantTurn[]; messageCount: number }): void {

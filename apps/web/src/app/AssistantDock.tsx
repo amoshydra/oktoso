@@ -541,6 +541,7 @@ function actionLabel(action: AssistantAction): string {
     return "Stopped";
   }
   if (action.status === "cancelled") return "Cancelled";
+  if (action.status === "expired") return "Expired";
   if (action.status === "failed") return "Failed";
   if (action.status === "deciding") return "Working…";
   return "Pending";

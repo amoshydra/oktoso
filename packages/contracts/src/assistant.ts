@@ -35,6 +35,8 @@ export const zAssistantActionStatus = z.enum([
   "done",
   "cancelled",
   "failed",
+  /** A pending action nobody decided before its deadline. */
+  "expired",
 ]);
 
 export const zAssistantAnswer = z.object({

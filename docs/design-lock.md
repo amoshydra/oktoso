@@ -1,11 +1,11 @@
-# Design Lock — v1.29
+# Design Lock — v1.30
 
 Status: **frozen**.
 
-- Version: `design-v1.29`
-- Parent: `design-v1.28`
+- Version: `design-v1.30`
+- Parent: `design-v1.29`
 - Date: 2026-11-20
-- Git tag: `design-v1.29`
+- Git tag: `design-v1.30`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -37,6 +37,7 @@ Status: **frozen**.
 - v1.28 scope: the evidence line names the compaction it used.
 - v1.29 scope: permission prompts are answered in the Inbox, and answer cards
   show the provider's question.
+- v1.30 scope: expired actions and runs interrupted by a restart.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -768,6 +769,20 @@ radius, or color token.
 - No new screen, token, or type role. The blocked state reuses the danger text
   and a quiet link.
 
+## Expired actions and interrupted runs (2026-11-20)
+
+- A pending action that nobody decides within 24 hours becomes `Expired`. The
+  card keeps its question and payload, loses its buttons, and shows the reason
+  in 12px danger text. It is a hub-state change, audited as `expired`.
+- A thread is never evicted while it holds a pending or deciding action. When
+  the 40-thread cap is reached, the least recently used unlocked thread goes.
+- A run lives in memory. If the hub restarts mid-answer, the thread's last turn
+  is a question with no answer; at boot the hub appends one assistant turn
+  whose role line reads `The answer was interrupted by a hub restart.` No
+  buttons, no retry, and the composer accepts the next question.
+- Expired and interrupted states reuse the existing error treatment: 12px
+  danger text, no new controls or tokens.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -794,4 +809,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local 27B model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.30` expired/interrupted states were verified by unit tests (24h expiry, LRU eviction with a locked thread, restart marking) and the build; the live hub has no expired action to exercise. The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local 27B model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.

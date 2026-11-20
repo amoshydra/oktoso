@@ -1465,3 +1465,13 @@ list of file-configured objects.
   of what will be sent.
 - Consequence: the assistant can draft a branch choice but cannot launder a
   destructive approval through a friendly card.
+
+## Expired actions and interrupted runs (2026-11-20)
+
+- Expiry is a correction, not a new control: the card keeps the payload so the
+  thread still explains what was proposed, drops the buttons, and says why.
+- The interrupted-run turn uses the same error role line as a failed answer.
+  There is no retry button because the run no longer exists; the composer is
+  the retry.
+- Eviction is invisible unless it strands a card, which is why the LRU pass
+  skips locked threads even when that leaves the store one or two over the cap.
