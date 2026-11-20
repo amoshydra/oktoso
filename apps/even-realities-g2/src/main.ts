@@ -56,6 +56,7 @@ import {
   type BatchAnswerDraft,
 } from "./answer-model";
 import { glassInput, type GlassInput } from "./input";
+import { LiveBatcher } from "./live-batch";
 import { sortAttention, visibleAttention } from "./attention-model";
 import {
   approvalAction,
@@ -270,7 +271,7 @@ let client: HubClient | undefined;
 let pendingSends: PendingSend[] = loadPendingSends();
 let storedToken = localStorage.getItem(TOKEN_KEY) ?? "";
 let pairingExpanded = false;
-let pollTimer: ReturnType<typeof setInterval> | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let scanController: AbortController | undefined;
 let replyRequest = 0;
 let replyPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -286,6 +287,9 @@ let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
 let lastGlassSignature = "";
+/** What the chat containers currently hold; unchanged ones skip the BLE write. */
+let lastChatBody = "";
+let lastChatFooter = "";
 /** The screen whose page is actually on the glass; incremental updates need it. */
 let paintedScreen: Screen | undefined;
 /** Menu labels painted with that page; a stale menu must force a rebuild. */
@@ -296,11 +300,23 @@ let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
 let eventStreamOpen = false;
 let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-let eventRefreshActions: Array<() => void | Promise<void>> = [];
+/**
+ * Keyed so a burst of updates coalesces to one refresh each, not one per event.
+ * A five-minute turn used to queue hundreds of identical refreshes.
+ */
+const eventRefreshActions = new Map<string, () => void | Promise<void>>();
 let failureRetry: (() => void | Promise<void>) | undefined;
 let lastChatScrollAt = 0;
 let chatScrollBurst = 0;
 let chatFollowText: string | undefined;
+/**
+ * A running turn emits about five message updates a second. One batch per
+ * 600 ms is still live to read and a fraction of the BLE and CPU work.
+ */
+const liveMessages = new LiveBatcher<Message>(
+  (messages) => applyLiveMessages(messages),
+  600,
+);
 const RELOADED = new URL(window.location.href).searchParams.has("reload");
 let launchSource: LaunchSourceName | undefined;
 let device: GlassesSnapshot = {};
@@ -388,6 +404,8 @@ function setStreamStatus(
   status: AppState["streamStatus"],
 ): void {
   state.streamStatus = status;
+  if (status === "live") stopPolling();
+  else schedulePolling();
   if (status === "live") setConnection("Connected · live");
   else if (state.failure && failureAffectsConnection(state.failure)) {
     setConnection(state.failure.title, true);
@@ -1440,10 +1458,10 @@ function startEventStream(): void {
           event.type === "session.updated" &&
           (state.screen === "inbox" || state.screen === "home")
         ) {
-          scheduleEventRefresh(() => refreshInbox());
+          scheduleEventRefresh("inbox", () => refreshInbox());
           const sessionRef = event.sessionRef;
           if (sessionRef) {
-            scheduleEventRefresh(() =>
+            scheduleEventRefresh(`questions:${sessionRef}`, () =>
               refreshQuestionSummaries([sessionRef]),
             );
           }
@@ -1454,11 +1472,11 @@ function startEventStream(): void {
           event.sessionRef === state.sessionRef
         ) {
           const message = messageFromHubEvent(event);
-          if (message) applyLiveMessage(message);
-          else scheduleEventRefresh(() => loadChat(true));
+          if (message) liveMessages.push(message.id, message);
+          else scheduleEventRefresh("chat", () => loadChat(true));
           const sessionRef = event.sessionRef;
           if (sessionRef) {
-            scheduleEventRefresh(() =>
+            scheduleEventRefresh(`questions:${sessionRef}`, () =>
               refreshQuestionSummaries([sessionRef]),
             );
           }
@@ -1472,7 +1490,7 @@ function startEventStream(): void {
         ) {
           const sessionRef = event.sessionRef;
           if (sessionRef) {
-            scheduleEventRefresh(() =>
+            scheduleEventRefresh(`questions:${sessionRef}`, () =>
               refreshQuestionSummaries([sessionRef]),
             );
           }
@@ -1482,7 +1500,7 @@ function startEventStream(): void {
           state.screen === "chat" &&
           event.sessionRef === state.sessionRef
         ) {
-          scheduleEventRefresh(() => loadChat(true));
+          scheduleEventRefresh("chat", () => loadChat(true));
         }
         if (
           event.type === "attention.created" &&
@@ -1500,7 +1518,7 @@ function startEventStream(): void {
             event.type === "automation.approval") &&
           (state.screen === "inbox" || state.screen === "home")
         ) {
-          scheduleEventRefresh(() => refreshInbox());
+          scheduleEventRefresh("inbox", () => refreshInbox());
         }
       },
     })
@@ -1527,13 +1545,52 @@ function startEventStream(): void {
     });
 }
 
-function scheduleEventRefresh(action: () => void | Promise<void>): void {
-  eventRefreshActions.push(action);
+const POLL_MS = 4_000;
+const POLL_ASLEEP_MS = 30_000;
+
+function stopPolling(): void {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = undefined;
+  }
+}
+
+/**
+ * Polling is a fallback for a dropped event stream, not a background rhythm.
+ * It stops when the stream is live, and slows down when the glasses are in the
+ * case or off the head.
+ */
+function schedulePolling(delay = POLL_MS): void {
+  if (pollTimer || !client) return;
+  pollTimer = setTimeout(() => {
+    pollTimer = undefined;
+    void pollOnce();
+  }, delay);
+}
+
+async function pollOnce(): Promise<void> {
+  if (!client || eventStreamOpen) return;
+  const awake = deviceAwake(device, deviceKnown);
+  if (awake) {
+    if (state.screen === "inbox" || state.screen === "home") {
+      await refreshInbox();
+    } else if (state.screen === "chat" && state.sessionRef) {
+      await loadChat(true);
+    }
+  }
+  schedulePolling(awake ? POLL_MS : POLL_ASLEEP_MS);
+}
+
+function scheduleEventRefresh(
+  key: string,
+  action: () => void | Promise<void>,
+): void {
+  eventRefreshActions.set(key, action);
   if (eventRefreshTimer) clearTimeout(eventRefreshTimer);
   eventRefreshTimer = setTimeout(() => {
     eventRefreshTimer = undefined;
-    const actions = eventRefreshActions;
-    eventRefreshActions = [];
+    const actions = [...eventRefreshActions.values()];
+    eventRefreshActions.clear();
     void (async () => {
       for (const queued of actions) await queued();
     })();
@@ -2519,6 +2576,8 @@ function followSentMessage(built: ChatBuild): void {
 
 async function loadChat(quiet: boolean): Promise<void> {
   if (!client || !state.sessionRef) return;
+  // The fetch includes anything still queued; replaying it would double-apply.
+  liveMessages.clear();
   const ref = state.sessionRef;
   const sequence = ++chatLoadSequence;
   try {
@@ -2606,13 +2665,26 @@ async function loadChat(quiet: boolean): Promise<void> {
   }
 }
 
-function applyLiveMessage(message: Message): void {
-  if (state.screen !== "chat" || message.sessionRef !== state.sessionRef) return;
-  const isNew = !state.chatMessages.some((item) => item.id === message.id);
+/**
+ * Apply a burst of live updates as one state change and one paint. The batcher
+ * guarantees this runs at most once per window, with the last update included.
+ */
+function applyLiveMessages(messages: Message[]): void {
+  if (state.screen !== "chat") return;
+  const relevant = messages.filter(
+    (message) => message.sessionRef === state.sessionRef,
+  );
+  if (relevant.length === 0) return;
+
+  const previousIDs = new Set(state.chatMessages.map((message) => message.id));
+  const newest = relevant.findLast((message) => !previousIDs.has(message.id));
+  const newUserMessage = relevant.some(
+    (message) => message.role === "user" && !previousIDs.has(message.id),
+  );
   const previousLines = state.chatLines;
   const previousOffset = state.chatOffset;
   const previousActivity = state.chatActivity;
-  state.chatMessages = mergeChatMessages(state.chatMessages, [message]);
+  state.chatMessages = mergeChatMessages(state.chatMessages, relevant);
   const built = buildChat(state.chatMessages);
   state.chatLines = built.lines;
   state.chatLineMessages = built.lineMessages;
@@ -2624,11 +2696,11 @@ function applyLiveMessage(message: Message): void {
     newBelow: state.chatNewBelow,
     build: built,
     visibleLines: CHAT_VISIBLE_LINES,
-    ...(isNew ? { newMessageID: message.id } : {}),
+    ...(newest ? { newMessageID: newest.id } : {}),
   });
   state.chatOffset = viewport.offset;
   state.chatNewBelow = viewport.newBelow;
-  if (isNew && message.role === "user") followSentMessage(built);
+  if (newUserMessage) followSentMessage(built);
   const changed =
     previousLines.length !== state.chatLines.length ||
     previousLines.some((line, index) => line !== state.chatLines[index]);
@@ -2751,20 +2823,28 @@ async function updateChatView(): Promise<void> {
   try {
     const view = chatView();
     if (!setPreview(view.header, view.body, view.footer)) return;
-    await bridge.textContainerUpgrade(
-      new TextContainerUpgrade({
-        containerID: 2,
-        containerName: "body",
-        content: view.body,
-      }),
-    );
-    await bridge.textContainerUpgrade(
-      new TextContainerUpgrade({
-        containerID: 3,
-        containerName: "footer",
-        content: view.footer,
-      }),
-    );
+    // Streaming changes the body far more often than the footer. Writing only
+    // the container that changed halves the BLE traffic of a live turn.
+    if (view.body !== lastChatBody) {
+      await bridge.textContainerUpgrade(
+        new TextContainerUpgrade({
+          containerID: 2,
+          containerName: "body",
+          content: view.body,
+        }),
+      );
+      lastChatBody = view.body;
+    }
+    if (view.footer !== lastChatFooter) {
+      await bridge.textContainerUpgrade(
+        new TextContainerUpgrade({
+          containerID: 3,
+          containerName: "footer",
+          content: view.footer,
+        }),
+      );
+      lastChatFooter = view.footer;
+    }
   } catch (error) {
     log(`Chat view update failed: ${errorMessage(error)}`);
   } finally {
@@ -4309,6 +4389,10 @@ async function showPage(page: RebuildPageContainer): Promise<void> {
   const started = performance.now();
   try {
     await bridge.rebuildPageContainer(page);
+    // A rebuild redeclares the containers; the next incremental update must
+    // write both.
+    lastChatBody = "";
+    lastChatFooter = "";
     frameCount += 1;
     lastFrameMs = Math.round(performance.now() - started);
     updateBridgeStats();
@@ -4513,15 +4597,6 @@ async function init(): Promise<void> {
         if (info) applyDeviceStatus(info.status);
       })
       .catch(() => undefined);
-    pollTimer = setInterval(() => {
-      if (!client || eventStreamOpen) return;
-      if (!deviceAwake(device, deviceKnown)) return;
-      if (state.screen === "inbox" || state.screen === "home") {
-        void refreshInbox();
-      } else if (state.screen === "chat" && state.sessionRef) {
-        void loadChat(true);
-      }
-    }, 4_000);
     await restoreConnection();
   } catch (error) {
     bridgeStatus.textContent = `Bridge error: ${errorMessage(error)}`;
@@ -4530,7 +4605,7 @@ async function init(): Promise<void> {
 }
 
 window.addEventListener("beforeunload", () => {
-  if (pollTimer) clearInterval(pollTimer);
+  stopPolling();
   if (voiceTimer) clearTimeout(voiceTimer);
   if (voiceActive) void bridge?.audioControl(false);
 });
