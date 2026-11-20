@@ -80,6 +80,10 @@ export const zAssistantContext = z.object({
   attention: z.number().int().nonnegative().optional(),
   /** The session's last activity when the answer was assembled. */
   asOf: z.number().int().nonnegative().optional(),
+  /** Failed commands or tools found in the recent tail. */
+  failures: z.number().int().nonnegative().optional(),
+  /** Timestamp of the provider compaction the answer used, when it found one. */
+  historyAt: z.number().int().nonnegative().optional(),
 });
 
 export const zAssistantTurn = z.object({

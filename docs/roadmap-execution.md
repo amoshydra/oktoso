@@ -730,6 +730,13 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   provider message at or before the answer; when the provider cannot answer,
   they stay unstamped and the next boot retries.
 
+- [x] G11. Assistant context blocks. The prompt separates hub facts from
+  session data and adds `SITUATION` (now, idle time, age, parent), `HISTORY`
+  (newest provider compaction, found by a cached deep scan outside the window),
+  `WORK` (files and commands derived from tool calls), and `FAILURES` (failed
+  shells with exit and output tail, failed tools, message errors). The evidence
+  line reports the failure count. No model call is added.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.
