@@ -562,6 +562,207 @@ describe("AssistantService", () => {
     expect(done.turn.context?.failures).toBe(2);
   });
 
+  it("bounds a slow history page and serves the cache once it lands", async () => {
+    let wideCalls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail: Message[] = [
+      {
+        id: "m-new",
+        sessionRef: session.ref,
+        role: "user",
+        createdAt: 100,
+        parts: [{ type: "text", text: "status?" }],
+      },
+    ];
+    const compaction: Message = {
+      id: "c1",
+      sessionRef: session.ref,
+      role: "system",
+      createdAt: 5_000,
+      parts: [
+        {
+          type: "compaction",
+          reason: "auto",
+          status: "done",
+          summary: "OBJECTIVE: keep the ask bounded.",
+        },
+      ],
+    };
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        messages: async (
+          _ref: string,
+          query: { limit?: number },
+        ): Promise<MessagePage> => {
+          if (query.limit !== 200) {
+            return { data: tail, cursor: { next: null, previous: null } };
+          }
+          wideCalls += 1;
+          // The first wide read never settles until the test releases it.
+          await gate;
+          return { data: [compaction], cursor: { next: null, previous: null } };
+        },
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+
+    const started = Date.now();
+    const accepted = await service.postMessage(thread.id, { text: "first" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"), 5_000);
+
+    const first = events.find((event) => event.type === "done");
+    if (first?.type !== "done") throw new Error("no done event");
+    // The page is still in flight, so the ask answered without history.
+    expect(Date.now() - started).toBeLessThan(4_500);
+    expect(first.turn.context?.historyAt).toBeUndefined();
+    expect(body.messages.find((message) => message.role === "user")?.content).not.toContain(
+      "HISTORY (provider compaction",
+    );
+    expect(wideCalls).toBe(1);
+
+    // Let the in-flight page land: the background scan fills the cache.
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const second = await service.postMessage(thread.id, { text: "second" });
+    const secondEvents: AssistantEvent[] = [];
+    service.subscribe(second.run.id, 0, (event) => secondEvents.push(event));
+    await waitFor(() => secondEvents.some((event) => event.type === "done"), 5_000);
+    const answered = secondEvents.find((event) => event.type === "done");
+    if (answered?.type !== "done") throw new Error("no done event");
+    // The same watermark is served from the cache: no second wide read.
+    expect(answered.turn.context?.historyAt).toBe(5_000);
+    expect(wideCalls).toBe(1);
+  }, 15_000);
+
+  it("surfaces a failure from outside the message tail without duplicates", async () => {
+    const tailFailure: Message = {
+      id: "m-tail",
+      sessionRef: session.ref,
+      role: "assistant",
+      createdAt: 50,
+      parts: [
+        {
+          type: "shell",
+          id: "sh-tail",
+          command: "pnpm lint",
+          status: "error",
+          exit: 1,
+          background: false,
+          output: "lint failed: Unexpected token",
+        },
+      ],
+    };
+    const oldFailure = {
+      id: "m-old",
+      sessionRef: session.ref,
+      role: "assistant" as const,
+      createdAt: 10,
+      // Providers sometimes attach an error string outside the modelled parts.
+      error: "auth rejected token=abcdef123456789secret",
+      parts: [
+        {
+          type: "shell" as const,
+          id: "sh-old",
+          command: "pnpm test",
+          status: "error" as const,
+          exit: 2,
+          background: false,
+          output: "2 tests failed\nAuthorization: Bearer abcdef123456789secret",
+        },
+      ],
+    };
+    const tail: Message[] = [
+      {
+        id: "m-user",
+        sessionRef: session.ref,
+        role: "user",
+        createdAt: 40,
+        parts: [{ type: "text", text: "check the build" }],
+      },
+      tailFailure,
+    ];
+    const wide = [oldFailure, ...tail];
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        messages: async (
+          _ref: string,
+          query: { limit?: number },
+        ): Promise<MessagePage> => ({
+          // The provider returns newest first; the builder restores order.
+          data: [...(query.limit === 200 ? wide : tail)].reverse(),
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 2,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "what failed?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    // Only the tail failure would have been visible before the wide digest.
+    expect(prompt).toContain("shell pnpm lint (exit 1)");
+    expect(prompt).toContain("shell pnpm test (exit 2)");
+    expect(prompt).toContain("2 tests failed");
+    expect(prompt).toContain("[redacted]");
+    expect(prompt).toContain("token=[redacted]");
+    expect(prompt).not.toContain("abcdef123456789secret");
+    expect(prompt.split("shell pnpm lint").length - 1).toBe(1);
+    expect(prompt.split("shell pnpm test").length - 1).toBe(1);
+    expect(done.turn.context?.failures).toBe(3);
+  });
+
   it("finds a compaction outside the window and caches the scan", async () => {
     let wideCalls = 0;
     const compaction: Message = {

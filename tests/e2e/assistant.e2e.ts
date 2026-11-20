@@ -248,6 +248,40 @@ describe("session assistant", () => {
     ).toBe(1);
   });
 
+  it("dates the provider compaction behind the answer", async () => {
+    await page!
+      .getByRole("button", { name: "Sessions", exact: true })
+      .click();
+    await page!
+      .getByRole("button", { name: /Refactor session index/ })
+      .first()
+      .click({ timeout: 5_000 });
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").fill("what is the goal?");
+    await page!.locator("#assistant-input").press("Enter");
+
+    await page!
+      .locator(".assistant-turn.assistant .assistant-turn-text", { hasText: ANSWER })
+      .waitFor({ timeout: 15_000 });
+    const meta = await page!
+      .locator(".assistant-turn.assistant .assistant-turn-meta")
+      .last()
+      .innerText();
+    // The session has a provider compaction, so the line names its date after
+    // the session stamp. It is not from today, so it is a date, not a time.
+    expect(meta).toContain("session as of ");
+    expect(meta).toContain("history ");
+    expect(meta.indexOf("history ")).toBeGreaterThan(meta.indexOf("session as of "));
+    expect(meta).not.toMatch(/history \d{1,2}:\d{2}/);
+  });
+
   it("proposes a reply, sends it only after confirmation, and records it", async () => {
     await page!
       .getByRole("button", { name: "Ask", exact: true })
