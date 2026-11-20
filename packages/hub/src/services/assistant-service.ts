@@ -16,9 +16,11 @@ import type {
   AssistantThreadInput,
   AssistantThreadPage,
   AssistantTurn,
+  Attention,
   Message,
   MessagePage,
   QuestionPrompt,
+  Session,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { Logger } from "../lib/logger";
@@ -310,7 +312,6 @@ export class AssistantService {
 
   async createThread(input: AssistantThreadInput): Promise<AssistantThread> {
     this.assertReady();
-    this.assertScope(input.scope);
     const existing = this.options.store
       .getState()
       .assistantThreads.find((thread) => sameScope(thread.scope, input.scope));
@@ -417,9 +418,6 @@ export class AssistantService {
     key?: string,
   ): Promise<AssistantRunAccepted> {
     const thread = this.findThread(threadId);
-    if (thread.scope.kind !== "session") {
-      throw badRequest("Only the session scope is supported in this version");
-    }
     const locked = thread.turns.find(
       (turn) =>
         turn.action?.status === "pending" ||
@@ -472,7 +470,7 @@ export class AssistantService {
     this.runs.set(run.id, record);
     this.pruneRuns();
 
-    void this.execute(record, current.scope.sessionRef, turn.text);
+    void this.execute(record, current.scope, turn.text);
 
     const accepted: AssistantRunAccepted = {
       run,
@@ -721,7 +719,7 @@ export class AssistantService {
 
   private async execute(
     record: RunRecord,
-    sessionRef: string,
+    scope: AssistantScope,
     question: string,
   ): Promise<void> {
     const { logger } = this.options;
@@ -729,19 +727,15 @@ export class AssistantService {
     let usage: AssistantTurn["usage"];
     let built: { text: string; context: AssistantContext } | undefined;
     try {
-      built = await this.buildContext(sessionRef);
+      built = await this.buildContext(scope);
+      const canPropose = scope.kind === "session" && this.writesEnabled();
       const history = this.findThread(record.run.threadId)
         .turns.slice(0, -1)
         .slice(-6)
         .map((turn) => `${turn.role.toUpperCase()}: ${turn.text.slice(0, 400)}`);
-      const prompt = renderPrompt(
-        built.text,
-        question,
-        history,
-        this.writesEnabled(),
-      );
+      const prompt = renderPrompt(built.text, question, history, canPropose, scope);
 
-      const result = await this.stream(prompt, record, (delta) => {
+      const result = await this.stream(prompt, record, canPropose, (delta) => {
         text += delta;
         this.emit(record, { type: "delta", text: delta });
       });
@@ -752,12 +746,12 @@ export class AssistantService {
       }
 
       const threadId = record.run.threadId;
-      if (result.call && this.writesEnabled()) {
+      if (result.call && canPropose && scope.kind === "session") {
         const turn = await this.appendActionTurn(
           threadId,
           text,
           result.call,
-          sessionRef,
+          scope.sessionRef,
           usage,
           built.context,
         );
@@ -800,9 +794,10 @@ export class AssistantService {
   private async stream(
     prompt: { system: string; user: string },
     record: RunRecord,
+    canPropose: boolean,
     onDelta: (delta: string) => void,
   ): Promise<{ usage?: AssistantTurn["usage"]; call?: ToolCall }> {
-    const tools = this.writesEnabled()
+    const tools = canPropose
       ? [{ type: "function", function: ACTION_TOOL }]
       : undefined;
     const response = await this.fetchImpl(
@@ -1245,8 +1240,11 @@ export class AssistantService {
   // --- context -------------------------------------------------------------
 
   private async buildContext(
-    sessionRef: string,
+    scope: AssistantScope,
   ): Promise<{ text: string; context: AssistantContext }> {
+    if (scope.kind === "project") return this.buildProjectContext(scope.project);
+    if (scope.kind === "global") return this.buildGlobalContext();
+    const sessionRef = scope.sessionRef;
     const { sessions, attention, questions, settings } = this.options;
     const [session, waiting, question, page] = await Promise.all([
       sessions.get(sessionRef),
@@ -1273,6 +1271,79 @@ export class AssistantService {
       canWrite: this.writesEnabled(),
       assistantModel: this.model(),
     });
+  }
+
+
+  private async buildProjectContext(
+    project: string,
+  ): Promise<{ text: string; context: AssistantContext }> {
+    const [page, waiting] = await Promise.all([
+      this.options.sessions.list({ project, limit: 200 }),
+      this.options.attention.list({}).catch(() => ({ data: [] })),
+    ]);
+    const refs = new Set(page.data.map((session) => session.ref));
+    const attention = waiting.data.filter((item) => refs.has(item.sessionRef));
+    const rendered = renderProjectContext({
+      project,
+      sessions: page.data,
+      attention,
+      now: this.now(),
+    });
+    return {
+      text: rendered.text,
+      context: {
+        scope: "project",
+        sessions: rendered.shown,
+        omitted: Math.max(0, page.data.length - rendered.shown),
+        chars: rendered.text.length,
+        attention: attention.length,
+        asOf:
+          page.data.reduce((max, session) => Math.max(max, session.updatedAt), 0) ||
+          this.now(),
+      },
+    };
+  }
+
+  private async buildGlobalContext(): Promise<{
+    text: string;
+    context: AssistantContext;
+  }> {
+    const [page, waiting] = await Promise.all([
+      this.options.sessions.list({ limit: 200 }),
+      this.options.attention.list({}).catch(() => ({ data: [] })),
+    ]);
+    const now = this.now();
+    const running = page.data.filter((session) => session.status === "running");
+    const errors = page.data.filter(
+      (session) =>
+        session.status === "error" && now - session.updatedAt <= 24 * 60 * 60 * 1_000,
+    );
+    const projects = new Map<string, number>();
+    for (const session of page.data) {
+      if (!session.project) continue;
+      projects.set(session.project, (projects.get(session.project) ?? 0) + 1);
+    }
+    const rendered = renderGlobalContext({
+      attention: waiting.data,
+      running,
+      errors,
+      projects,
+      total: page.data.length,
+      now,
+    });
+    return {
+      text: rendered.text,
+      context: {
+        scope: "global",
+        running: running.length,
+        omitted: 0,
+        chars: rendered.text.length,
+        attention: waiting.data.length,
+        asOf:
+          page.data.reduce((max, session) => Math.max(max, session.updatedAt), 0) ||
+          this.now(),
+      },
+    };
   }
 
   /**
@@ -1427,12 +1498,6 @@ export class AssistantService {
     return thread;
   }
 
-  private assertScope(scope: AssistantScope): void {
-    if (scope.kind !== "session") {
-      throw badRequest("Only the session scope is supported in this version");
-    }
-  }
-
   private assertReady(): void {
     if (!this.ready()) {
       throw conflict("The hub assistant is not configured");
@@ -1475,7 +1540,8 @@ export class AssistantService {
   }
 
   private async defaultTitle(scope: AssistantScope): Promise<string> {
-    if (scope.kind !== "session") return "Assistant";
+    if (scope.kind === "global") return "All sessions";
+    if (scope.kind === "project") return scope.project.slice(0, 120);
     try {
       const session = await this.options.sessions.get(scope.sessionRef);
       return session.title.slice(0, 120);
@@ -1486,11 +1552,12 @@ export class AssistantService {
 }
 
 function sameScope(left: AssistantScope, right: AssistantScope): boolean {
-  return (
-    left.kind === right.kind &&
-    (left.kind !== "session" ||
-      left.sessionRef === (right as { sessionRef: string }).sessionRef)
-  );
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "global") return true;
+  if (left.kind === "project") {
+    return left.project === (right as { project: string }).project;
+  }
+  return left.sessionRef === (right as { sessionRef: string }).sessionRef;
 }
 
 function toThread(thread: {
@@ -1559,14 +1626,116 @@ function renderPrompt(
   question: string,
   history: string[],
   canWrite: boolean,
+  scope: AssistantScope,
 ): AssistantPrompt {
   const exchange = history.length
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
     : "";
+  let system = canWrite ? `${SYSTEM_PROMPT}\n${ACTION_RULES}` : SYSTEM_PROMPT;
+  if (scope.kind === "project") {
+    system += `\n\nSCOPE\nThis thread is read-only and covers the "${scope.project}" project. You see session metadata, not transcripts. If a detail lives in a transcript, say it is outside this scope and name the session where it can be read.`;
+  }
+  if (scope.kind === "global") {
+    system += `\n\nSCOPE\nThis thread is read-only and global. The ATTENTION block is the inbox: when asked what needs the user, list exactly those items and nothing else. You see session metadata, not transcripts; name the session when a detail needs one.`;
+  }
   return {
-    system: canWrite ? `${SYSTEM_PROMPT}\n${ACTION_RULES}` : SYSTEM_PROMPT,
+    system,
     user: `${context}${exchange}\n\n---\nQUESTION\n${question}`,
   };
+}
+
+
+function renderProjectContext(input: {
+  project: string;
+  sessions: Session[];
+  attention: Attention[];
+  now: number;
+}): { text: string; shown: number } {
+  const shown = input.sessions.slice(0, 12);
+  const directory = input.sessions.find((session) => session.directory)?.directory;
+  const running = input.sessions.filter((session) => session.status === "running");
+  const cost = input.sessions.reduce(
+    (total, session) => total + (session.cost ?? 0),
+    0,
+  );
+  const titles = new Map(
+    input.sessions.map((session) => [session.ref, session.title]),
+  );
+
+  const lines: string[] = ["PROJECT (hub facts)"];
+  lines.push(`name: ${input.project}`);
+  if (directory) lines.push(`directory: ${directory}`);
+  lines.push(`now: ${stamp(input.now)}`);
+  lines.push(
+    `sessions: ${input.sessions.length} total · ${running.length} running · ${shown.length} shown below`,
+  );
+  if (cost > 0) lines.push(`cost so far: $${cost.toFixed(2)}`);
+
+  lines.push("", "SESSIONS (metadata only; no transcripts)");
+  if (shown.length === 0) lines.push("(none)");
+  for (const session of shown) {
+    const parts = [
+      session.title,
+      session.status,
+      `${stamp(session.updatedAt)} (${ago(input.now, session.updatedAt)})`,
+    ];
+    if (session.unread) parts.push("unread");
+    if (typeof session.cost === "number" && session.cost > 0) {
+      parts.push(`$${session.cost.toFixed(2)}`);
+    }
+    lines.push(`- ${parts.join(" · ")}`);
+  }
+
+  lines.push("", "ATTENTION (this project's inbox)");
+  if (input.attention.length === 0) lines.push("(nothing waiting)");
+  for (const item of input.attention.slice(0, 8)) {
+    const session = titles.get(item.sessionRef);
+    lines.push(
+      `- ${item.type}/${item.priority}: ${item.title}${session ? ` [${session}]` : ""} — ${truncate(item.summary ?? "", 200)}`,
+    );
+  }
+  return { text: lines.join("\n"), shown: shown.length };
+}
+
+function renderGlobalContext(input: {
+  attention: Attention[];
+  running: Session[];
+  errors: Session[];
+  projects: Map<string, number>;
+  total: number;
+  now: number;
+}): { text: string } {
+  const lines: string[] = ["GLOBAL (hub facts)"];
+  lines.push(`now: ${stamp(input.now)}`);
+  lines.push(`sessions: ${input.total} across ${input.projects.size} projects`);
+
+  lines.push("", "ATTENTION (the inbox; this is the authoritative list of what needs the user)");
+  if (input.attention.length === 0) lines.push("(inbox empty)");
+  for (const item of input.attention.slice(0, 20)) {
+    lines.push(
+      `- ${item.type}/${item.priority}: ${item.title} [${item.sessionRef}] — ${truncate(item.summary ?? "", 200)}`,
+    );
+  }
+
+  lines.push("", "RUNNING (context, not necessarily an item)");
+  if (input.running.length === 0) lines.push("(none)");
+  for (const session of input.running.slice(0, 8)) {
+    lines.push(`- ${session.title} · ${stamp(session.updatedAt)} (${ago(input.now, session.updatedAt)})`);
+  }
+
+  lines.push("", "ERRORS (24h)");
+  if (input.errors.length === 0) lines.push("(none)");
+  for (const session of input.errors.slice(0, 8)) {
+    lines.push(`- ${session.title} · ${stamp(session.updatedAt)}`);
+  }
+
+  const projects = [...input.projects.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([name, count]) => `${name} (${count})`);
+  if (projects.length > 0) lines.push("", `PROJECTS: ${projects.join(" · ")}`);
+
+  return { text: lines.join("\n") };
 }
 
 interface HistorySummary {
@@ -1796,6 +1965,7 @@ function renderContext(input: {
   return {
     text,
     context: {
+      scope: "session",
       messages: kept.length,
       omitted,
       chars: text.length,

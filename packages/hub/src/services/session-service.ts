@@ -213,6 +213,11 @@ export class SessionService {
         (session) => session.providerID === query.provider,
       );
     }
+    if (query.project) {
+      filtered = filtered.filter(
+        (session) => session.project === query.project,
+      );
+    }
     if (query.status) {
       filtered = filtered.filter(
         (session) => session.status === query.status,

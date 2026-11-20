@@ -13,6 +13,13 @@ export const zAssistantScope = z.discriminatedUnion("kind", [
     kind: z.literal("session"),
     sessionRef: z.string().min(1),
   }),
+  z.object({
+    kind: z.literal("project"),
+    project: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("global"),
+  }),
 ]);
 
 export const zAssistantThread = z.object({
@@ -97,6 +104,12 @@ export const zAssistantContext = z.object({
   failures: z.number().int().nonnegative().optional(),
   /** Timestamp of the provider compaction the answer used, when it found one. */
   historyAt: z.number().int().nonnegative().optional(),
+  /** Project/global scope: session summaries read instead of transcript turns. */
+  sessions: z.number().int().nonnegative().optional(),
+  /** Which scope assembled this context. */
+  scope: z.enum(["session", "project", "global"]).optional(),
+  /** Global scope: running sessions in the context. */
+  running: z.number().int().nonnegative().optional(),
 });
 
 export const zAssistantTurn = z.object({

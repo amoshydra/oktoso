@@ -17,6 +17,7 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from "@amoshydra/oktoso-contracts";
 import type {
+  AssistantScope,
   AssistantView,
   Attachment,
   Attention,
@@ -298,7 +299,11 @@ export function App() {
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     window.matchMedia("(min-width: 761px)").matches,
   );
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistant, setAssistant] = useState<{
+    scope: AssistantScope;
+    title: string;
+    project?: string;
+  } | null>(null);
   const [assistantAvailable, setAssistantAvailable] = useState(false);
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -326,8 +331,15 @@ export function App() {
   }, [client]);
 
   useEffect(() => {
-    if (!chatOpen) setAssistantOpen(false);
-  }, [chatOpen]);
+    if (!assistant) return;
+    if (assistant.scope.kind === "session") {
+      if (!chatOpen || selectedSessionRef !== assistant.scope.sessionRef) {
+        setAssistant(null);
+      }
+    } else if (assistant.scope.kind === "global" && view !== "foundation") {
+      setAssistant(null);
+    }
+  }, [assistant, chatOpen, selectedSessionRef, view]);
 
   const providerEditorRoute =
     route.name === "providers" ? route.editor : undefined;
@@ -962,12 +974,44 @@ export function App() {
             <button
               className="btn small topbar-ask"
               type="button"
-              aria-expanded={assistantOpen}
-              aria-controls={assistantOpen ? "session-assistant" : undefined}
+              aria-expanded={assistant?.scope.kind === "session"}
+              aria-controls={
+                assistant?.scope.kind === "session" ? "session-assistant" : undefined
+              }
               onClick={() => {
-                setAssistantOpen((open) => !open);
-                if (!assistantOpen) setDetailsOpen(false);
+                if (assistant) {
+                  setAssistant(null);
+                  return;
+                }
+                setAssistant({
+                  scope: {
+                    kind: "session",
+                    sessionRef: selectedSessionRef!,
+                  },
+                  title: activeSession.title,
+                  project: activeSession.project,
+                });
+                setDetailsOpen(false);
               }}
+            >
+              Ask
+            </button>
+          ) : null}
+          {view === "foundation" && assistantAvailable ? (
+            <button
+              className="btn small topbar-ask"
+              type="button"
+              aria-expanded={assistant?.scope.kind === "global"}
+              aria-controls={
+                assistant?.scope.kind === "global" ? "session-assistant" : undefined
+              }
+              onClick={() =>
+                setAssistant(
+                  assistant?.scope.kind === "global"
+                    ? null
+                    : { scope: { kind: "global" }, title: "All sessions" },
+                )
+              }
             >
               Ask
             </button>
@@ -978,7 +1022,10 @@ export function App() {
               type="button"
               aria-expanded={detailsOpen}
               aria-controls={detailsOpen ? "session-details" : undefined}
-              onClick={() => setDetailsOpen(!detailsOpen)}
+              onClick={() => {
+                if (!detailsOpen) setAssistant(null);
+                setDetailsOpen(!detailsOpen);
+              }}
             >
               Details
             </button>
@@ -1135,14 +1182,6 @@ export function App() {
                     onBack={() => backTo({ name: "sessions" })}
                   />
                 </div>
-                {assistantOpen && client ? (
-                  <AssistantDock
-                    client={client}
-                    sessionRef={selectedSessionRef}
-                    sessionTitle={activeSession?.title ?? "This session"}
-                    onClose={() => setAssistantOpen(false)}
-                  />
-                ) : null}
                 </>
               ) : (
                 <SessionsView
@@ -1237,6 +1276,17 @@ export function App() {
 
           </div>
         </main>
+
+        {assistant && client ? (
+          <AssistantDock
+            key={JSON.stringify(assistant.scope)}
+            client={client}
+            initialScope={assistant.scope}
+            title={assistant.title}
+            project={assistant.project}
+            onClose={() => setAssistant(null)}
+          />
+        ) : null}
 
         <nav className="bottom-nav" aria-label="Mobile navigation">
           {BOTTOM_VIEWS.map((id) => {

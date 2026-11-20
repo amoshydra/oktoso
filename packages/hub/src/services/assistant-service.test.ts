@@ -203,6 +203,173 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
 }
 
 describe("AssistantService", () => {
+  const projectSessions: Session[] = [
+    {
+      ...session,
+      ref: "desktop-opencode:ses_a",
+      nativeID: "ses_a",
+      title: "Fix the build",
+      project: "hub",
+      status: "running",
+      unread: false,
+      cost: 1.2,
+    },
+    {
+      ...session,
+      ref: "desktop-opencode:ses_b",
+      nativeID: "ses_b",
+      title: "Plan the release",
+      project: "hub",
+      status: "idle",
+      unread: true,
+      cost: 0.4,
+    },
+    {
+      ...session,
+      ref: "desktop-opencode:ses_c",
+      nativeID: "ses_c",
+      title: "Trip notes",
+      project: "atlas",
+      status: "idle",
+      unread: true,
+      cost: 0,
+    },
+  ];
+  const projectAttention: AttentionPage = {
+    data: [
+      {
+        id: "a-b",
+        sessionRef: "desktop-opencode:ses_b",
+        type: "unread",
+        priority: "normal",
+        title: "Plan the release",
+        summary: "New activity in hub",
+        createdAt: 3,
+        actions: [],
+      },
+      {
+        id: "a-c",
+        sessionRef: "desktop-opencode:ses_c",
+        type: "unread",
+        priority: "normal",
+        title: "Trip notes",
+        summary: "New activity in atlas",
+        createdAt: 4,
+        actions: [],
+      },
+    ],
+  };
+
+  function buildScoped(fetchImpl: typeof fetch, allowWrite = true) {
+    return new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async (query: { project?: string }) => ({
+          data: projectSessions.filter(
+            (entry) => !query.project || entry.project === query.project,
+          ),
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => projectAttention } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite,
+      },
+      fetchImpl,
+    });
+  }
+
+  it("builds a project context from session metadata only", async () => {
+    let body: {
+      messages: Array<{ role: string; content: string }>;
+      tools?: unknown;
+    } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(fetchImpl);
+    const thread = await service.createThread({
+      scope: { kind: "project", project: "hub" },
+    });
+    expect(thread.title).toBe("hub");
+
+    const accepted = await service.postMessage(thread.id, { text: "what should I pick up?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("PROJECT (hub facts)");
+    expect(prompt).toContain("name: hub");
+    expect(prompt).toContain("Fix the build");
+    expect(prompt).toContain("Plan the release");
+    expect(prompt).not.toContain("Trip notes");
+    expect(prompt).not.toContain("TRANSCRIPT");
+    expect(prompt).toContain("Plan the release");
+    expect(prompt).toContain("New activity in hub");
+    expect(prompt).not.toContain("New activity in atlas");
+    expect(body.tools).toBeUndefined();
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.sessions).toBe(2);
+    expect(done.turn.context?.messages).toBeUndefined();
+  });
+
+  it("builds a global context from the inbox and running sessions", async () => {
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(fetchImpl);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    expect(thread.title).toBe("All sessions");
+
+    const accepted = await service.postMessage(thread.id, { text: "what needs me?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("GLOBAL (hub facts)");
+    expect(prompt).toContain("ATTENTION (the inbox");
+    expect(prompt).toContain("Plan the release");
+    expect(prompt).toContain("Trip notes");
+    expect(prompt).toContain("RUNNING");
+    expect(prompt).not.toContain("SESSIONS (metadata only");
+    const system =
+      body.messages.find((message) => message.role === "system")?.content ?? "";
+    expect(system).toContain("list exactly those items");
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context).toMatchObject({ scope: "global", running: 1 });
+    expect(done.turn.context?.sessions).toBeUndefined();
+  });
+
+  it("ignores a write proposal outside the session scope", async () => {
+    const service = buildScoped((async () =>
+      toolStream({ kind: "send", text: "hello", summary: "Send it?" })) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "project", project: "hub" },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+    expect(service.getThread(thread.id).turns[1]?.action).toBeUndefined();
+  });
+
   it("reuses one thread per session scope and titles it from the session", async () => {
     const { service } = build(async () => sseResponse([]));
     const first = await service.createThread({

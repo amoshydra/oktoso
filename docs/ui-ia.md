@@ -454,6 +454,15 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.
+- **Project scope.** When the session belongs to a project, the scope chip
+  switches the thread to `This project`. Context is that project's sessions
+  (titles, status, last activity, cost, unread) and its inbox — no transcripts.
+  Answers name the session that holds a detail, or say the detail is outside
+  the scope.
+- **Global scope.** The Overview topbar carries **Ask**, which opens an
+  `All sessions` thread. Its context is the inbox (the authoritative "needs
+  me" list), running sessions, 24-hour errors, and a project rollup. It never
+  includes transcripts and never writes.
 - The G2 and VR surfaces are unchanged. The glasses are a consumer of
   conclusions (M5), not a chat client.
 

@@ -51,9 +51,29 @@ export function historyLabel(ts: number): string {
 export function turnMetaParts(turn: AssistantTurn): string[] {
   const parts: string[] = [];
   if (turn.context) {
-    const { messages, omitted, attention, asOf, failures, historyAt } =
-      turn.context;
-    if (messages !== undefined) {
+    const {
+      scope,
+      messages,
+      sessions,
+      running,
+      omitted,
+      attention,
+      asOf,
+      failures,
+      historyAt,
+    } = turn.context;
+    if (scope === "global") {
+      if (attention !== undefined && attention > 0) {
+        parts.push(
+          `${attention} attention ${attention === 1 ? "item" : "items"}`,
+        );
+      }
+      if (running !== undefined && running > 0) {
+        parts.push(`${running} running`);
+      }
+    } else if (sessions !== undefined) {
+      parts.push(`Read ${sessions} ${sessions === 1 ? "session" : "sessions"}`);
+    } else if (messages !== undefined) {
       parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
     }
     if (omitted !== undefined && omitted > 0) {
@@ -68,7 +88,7 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
     if (historyAt !== undefined) {
       parts.push(`history ${historyLabel(historyAt)}`);
     }
-    if (attention !== undefined && attention > 0) {
+    if (scope !== "global" && attention !== undefined && attention > 0) {
       parts.push(`${attention} attention ${attention === 1 ? "item" : "items"}`);
     }
   }
