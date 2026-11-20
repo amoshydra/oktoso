@@ -1326,3 +1326,43 @@ list of file-configured objects.
   reads the same way on both surfaces.
 - No token, radius, contrast, or motion change. The panel adds no primary action
   and no color.
+
+## Session assistant dock (2026-11-20)
+
+- **Why a right-side panel.** The assistant answers questions *about the
+  transcript on screen*. A separate route would hide the evidence it cites, and
+  a tab inside the transcript would compete with the composer. A panel keeps
+  both visible at wide widths and becomes a full-width surface on a phone,
+  where the transcript is too narrow to sit beside anything.
+- **Typography.** The header is the page's only in-panel title at 16px. Turn
+  text is 14px/1.6, the same reading size as chat prose, because the answer is
+  prose the user reads, not a control. Role labels, the scope chip, and the
+  usage line are 10px uppercase metadata; the session title under
+  `Assistant` is 11px. No half-step sizes were added.
+- **Hierarchy.** There is exactly one primary action (Ask, then Stop), one
+  quiet close control, and one decorative caret. The suggestion buttons are
+  quiet by design: they are a starting point, not three competing actions.
+- **Contrast.** Answer text uses `--text` on `--sidebar`, the same pair as the
+  transcript. `--muted` is used only for role labels, usage, the session title,
+  and the empty-state hint, all of which are non-structural. The `Read-only ·
+  no writes` line is deliberately muted: it is a persistent promise, not an
+  alert.
+- **State is never color-only.** A stopped or failed run says `Stopped` or the
+  error text in the turn header; the caret is hidden from assistive technology;
+  the log is a polite live region so the answer is announced as it settles.
+- **Focus.** Opening the panel moves focus to the composer; Escape closes and
+  returns focus to Ask. The textarea has the standard 2px accent outline with a
+  1px offset. The close control and the mobile primary action meet the 44px
+  target; the desktop composer controls stay 36px, matching the chat composer.
+- **Load state.** The composer is disabled until the thread's first GET
+  resolves and the placeholder says `Reading this session…`. This closes a
+  silent no-op where Enter would be ignored during the initial read.
+- **Known follow-ups.**
+  - Deltas re-render per token. At the measured ~40–90 output tokens this is
+    invisible; a faster model would want batching per animation frame.
+  - There is no thread list and no way to start a second thread for a session.
+    That is intentional in M1 and becomes a decision in M3.
+  - Answers cite evidence in prose but do not link to the message. Message
+    anchors belong with the tool loop in M2.
+  - The usage line only appears when the endpoint reports usage in the stream
+    (llama.cpp does; some providers do not).

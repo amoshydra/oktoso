@@ -100,6 +100,18 @@ import {
   zRetryInput,
 } from "./index";
 
+import {
+  zAssistantEvent,
+  zAssistantMessageInput,
+  zAssistantRun,
+  zAssistantRunAccepted,
+  zAssistantStatus,
+  zAssistantThread,
+  zAssistantThreadDetail,
+  zAssistantThreadInput,
+  zAssistantThreadPage,
+} from "./assistant";
+
 extendZodWithOpenApi(z);
 
 const registry = new OpenAPIRegistry();
@@ -156,6 +168,39 @@ const DraftSchema = registry.register("Draft", zDraft);
 const DraftInputSchema = registry.register("DraftInput", zDraftInput);
 const DraftResponseSchema = registry.register("DraftResponse", zDraftResponse);
 const AssistantViewSchema = registry.register("AssistantView", zAssistantView);
+const AssistantStatusSchema = registry.register(
+  "AssistantStatus",
+  zAssistantStatus,
+);
+const AssistantThreadSchema = registry.register(
+  "AssistantThread",
+  zAssistantThread,
+);
+const AssistantThreadPageSchema = registry.register(
+  "AssistantThreadPage",
+  zAssistantThreadPage,
+);
+const AssistantThreadDetailSchema = registry.register(
+  "AssistantThreadDetail",
+  zAssistantThreadDetail,
+);
+const AssistantThreadInputSchema = registry.register(
+  "AssistantThreadInput",
+  zAssistantThreadInput,
+);
+const AssistantMessageInputSchema = registry.register(
+  "AssistantMessageInput",
+  zAssistantMessageInput,
+);
+const AssistantRunSchema = registry.register("AssistantRun", zAssistantRun);
+const AssistantRunAcceptedSchema = registry.register(
+  "AssistantRunAccepted",
+  zAssistantRunAccepted,
+);
+const AssistantEventSchema = registry.register(
+  "AssistantEvent",
+  zAssistantEvent,
+);
 const TranscriptCacheViewSchema = registry.register(
   "TranscriptCacheView",
   zTranscriptCacheView,
@@ -1582,6 +1627,125 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/assistant/status",
+  tags: ["assistant"],
+  summary: "Hub assistant availability",
+  description:
+    "Reports whether the assistant has a model configured. M1 is read-only and session-scoped.",
+  responses: {
+    200: { description: "Assistant status", content: json(AssistantStatusSchema) },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/assistant/threads",
+  tags: ["assistant"],
+  summary: "Open the session assistant thread",
+  description:
+    "Returns the existing thread for this scope or creates one. M1 supports the session scope only.",
+  request: {
+    body: { required: true, content: json(AssistantThreadInputSchema) },
+  },
+  responses: {
+    201: { description: "Thread", content: json(AssistantThreadSchema) },
+    400: errorResponse("Invalid scope"),
+    409: errorResponse("The assistant is not configured"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/assistant/threads",
+  tags: ["assistant"],
+  summary: "List assistant threads",
+  request: {
+    query: z.object({ sessionRef: z.string().optional() }),
+  },
+  responses: {
+    200: { description: "Threads", content: json(AssistantThreadPageSchema) },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/assistant/threads/{id}",
+  tags: ["assistant"],
+  summary: "Read a thread with its turns",
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: "Thread detail", content: json(AssistantThreadDetailSchema) },
+    404: errorResponse("Thread not found"),
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/assistant/threads/{id}",
+  tags: ["assistant"],
+  summary: "Delete a thread",
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    204: { description: "Thread deleted" },
+    404: errorResponse("Thread not found"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/assistant/threads/{id}/messages",
+  tags: ["assistant"],
+  summary: "Ask a question",
+  description:
+    "Appends the user turn and starts one read-only answer. The run streams on /api/v1/assistant/runs/{id}/events.",
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { required: true, content: json(AssistantMessageInputSchema) },
+  },
+  responses: {
+    202: { description: "Run accepted", content: json(AssistantRunAcceptedSchema) },
+    400: errorResponse("Invalid message"),
+    404: errorResponse("Thread not found"),
+    409: errorResponse("A run is already in flight for this thread"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/assistant/runs/{id}/stop",
+  tags: ["assistant"],
+  summary: "Stop an answer",
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: "Run state", content: json(AssistantRunSchema) },
+    404: errorResponse("Run not found"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/assistant/runs/{id}/events",
+  tags: ["assistant"],
+  summary: "Follow an answer",
+  description:
+    "Server-sent events: delta frames carry text, and exactly one done or error frame ends the stream. Replay with ?since=<index>.",
+  request: {
+    params: z.object({ id: z.string() }),
+    query: z.object({
+      since: z.coerce.number().int().min(0).optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Assistant run events",
+      content: { "text/event-stream": { schema: AssistantEventSchema } },
+    },
+    404: errorResponse("Run not found"),
+  },
+});
+
 export function buildOpenApiDocument() {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",
@@ -1608,6 +1772,7 @@ export function buildOpenApiDocument() {
       { name: "search" },
       { name: "notifications" },
       { name: "automation" },
+      { name: "assistant" },
       { name: "diagnostics" },
     ],
     security: [{ bearerAuth: [] }],

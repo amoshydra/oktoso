@@ -667,6 +667,29 @@ Schedule one bet at a time, each with its own acceptance before it starts.
     The hub's transcription base URL is `http://127.0.0.1:8080/asr/v1`; a
     direct `:8081` call bypasses the gate and can still starve itself.
 
+- [x] G7. Session assistant (M1: read-only, session scope). The chat topbar's
+  **Ask** action opens one hub-owned thread per session
+  (`apps/web/src/app/AssistantDock.tsx`). `AssistantService` assembles session
+  meta, attention, the pending question, a deduped tool digest, and the text
+  tail, then makes one streamed completion; there is no tool loop and no write
+  route. Routes: `GET /api/v1/assistant/status`, `POST/GET
+  /api/v1/assistant/threads`, `GET/DELETE /api/v1/assistant/threads/:id`,
+  `POST /api/v1/assistant/threads/:id/messages`, `POST
+  /api/v1/assistant/runs/:id/stop`, `GET /api/v1/assistant/runs/:id/events`
+  (SSE). Threads live in hub state (40 threads, 200 turns each).
+  - Model config is `assistant` in `hub.config.json` (enabled, baseUrl, model,
+    timeoutMs, maxContextMessages), falling back to the reply endpoint and
+    model when empty. On this host it is local model at 32k.
+  - Measured live: 1.7–2.7 s warm for a 2–4k-token context; 8.4 s for the first
+    dictation after an assistant answer because the 24 GB card swaps ASR in
+    (see G6). The dock streams deltas, keeps partial text on Stop, and hides
+    itself when the hub has no model.
+  - Verified at 1440/1280/1024/390px in both themes, no overflow and no console
+    errors; `tests/e2e/assistant.e2e.ts` drives the full loop against a fake
+    model and asserts the thread survives a reload.
+  - Not in M1: tools, writes, project and global scopes, supervisor-triggered
+    drafts, G2 conclusions. Those are M2–M5 and each needs its own acceptance.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

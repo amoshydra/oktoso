@@ -12,3 +12,4 @@ export * from "./reply-audit";
 export * from "./notifications";
 export * from "./automation";
 export * from "./local-data";
+export * from "./assistant";

@@ -1,5 +1,14 @@
 import type {
   AssistantInput,
+  AssistantEvent,
+  AssistantMessageInput,
+  AssistantRun,
+  AssistantRunAccepted,
+  AssistantStatus,
+  AssistantThread,
+  AssistantThreadDetail,
+  AssistantThreadInput,
+  AssistantThreadPage,
   AssistantView,
   Attachment,
   AttentionActionInput,
@@ -61,6 +70,7 @@ import type {
   LocalRetentionInput,
 } from "@amoshydra/oktoso-contracts";
 import { HubError } from "./errors";
+import { SseParser } from "./sse-parser";
 import {
   runEventStream,
   type ConnectionStatus,
@@ -597,6 +607,112 @@ export class HubClient {
     return response.data;
   }
 
+  async assistantStatus(): Promise<AssistantStatus> {
+    const response = await this.request<{ data: AssistantStatus }>(
+      "/api/v1/assistant/status",
+    );
+    return response.data;
+  }
+
+  async assistantThreads(sessionRef?: string): Promise<AssistantThreadPage> {
+    const query = sessionRef
+      ? `?sessionRef=${encodeURIComponent(sessionRef)}`
+      : "";
+    return this.request<AssistantThreadPage>(
+      `/api/v1/assistant/threads${query}`,
+    );
+  }
+
+  async assistantThread(id: string): Promise<AssistantThreadDetail> {
+    const response = await this.request<{ data: AssistantThreadDetail }>(
+      `/api/v1/assistant/threads/${encodeURIComponent(id)}`,
+    );
+    return response.data;
+  }
+
+  async createAssistantThread(
+    input: AssistantThreadInput,
+  ): Promise<AssistantThread> {
+    const response = await this.request<{ data: AssistantThread }>(
+      "/api/v1/assistant/threads",
+      { method: "POST", body: input },
+    );
+    return response.data;
+  }
+
+  async deleteAssistantThread(id: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/assistant/threads/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async sendAssistantMessage(
+    threadId: string,
+    input: AssistantMessageInput,
+  ): Promise<AssistantRunAccepted> {
+    const response = await this.request<{ data: AssistantRunAccepted }>(
+      `/api/v1/assistant/threads/${encodeURIComponent(threadId)}/messages`,
+      { method: "POST", body: input },
+    );
+    return response.data;
+  }
+
+  async stopAssistantRun(runId: string): Promise<AssistantRun> {
+    const response = await this.request<{ data: AssistantRun }>(
+      `/api/v1/assistant/runs/${encodeURIComponent(runId)}/stop`,
+      { method: "POST" },
+    );
+    return response.data;
+  }
+
+  /**
+   * Follow one answer. The stream always terminates: the hub sends exactly one
+   * `done` or `error` event, and a dropped connection is the caller's problem
+   * (reconnect with `since` to replay).
+   */
+  async streamAssistantRun(
+    runId: string,
+    options: {
+      signal: AbortSignal;
+      since?: number;
+      onEvent: (event: AssistantEvent) => void;
+    },
+  ): Promise<void> {
+    const query = options.since ? `?since=${options.since}` : "";
+    const headers: Record<string, string> = { Accept: "text/event-stream" };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/api/v1/assistant/runs/${encodeURIComponent(runId)}/events${query}`,
+      { headers, credentials: this.credentials, signal: options.signal },
+    );
+    if (!response.ok || !response.body) {
+      throw new HubError(
+        "stream_failed",
+        `Hub returned HTTP ${response.status}`,
+        { status: response.status, retryable: response.status >= 500 },
+      );
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const parser = new SseParser();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const event of parser.push(chunk)) {
+        if (!event.data) continue;
+        try {
+          options.onEvent(JSON.parse(event.data) as AssistantEvent);
+        } catch {
+          // Ignore a malformed frame; the next one still applies.
+        }
+      }
+    }
+  }
+
   async transcribe(
     audio: Blob,
     options: {
@@ -605,8 +721,7 @@ export class HubClient {
       prompt?: string;
       signal?: AbortSignal;
     } = {},
-  ): Promise<TranscriptionResult> {
-    const form = new FormData();
+  ): Promise<TranscriptionResult> {    const form = new FormData();
     form.set(
       "audio",
       audio,

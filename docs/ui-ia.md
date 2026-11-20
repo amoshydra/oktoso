@@ -302,7 +302,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 
 ### Header
 
-- The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It is the only title in the view.
+- The fixed topbar owns the session title as the page `h1`, plus the provider and status subline, back action, and details toggle. It also carries the Ask action that opens the read-only assistant dock. It is the only title in the view.
 - The transcript opens with a quiet context strip: project, agent, model, and the status chip. It has no document title and no second sticky header.
 - Details, open in provider, copy reference, interrupt, and mark read live in the details panel and composer.
 - Details carries a **Data** row with `Export Markdown` and `Export JSON` links. The format is the choice, so there is no menu; the note says attachment files are listed, not embedded.
@@ -405,6 +405,28 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Interrupt and mark read.
 - Provider-specific actions.
 - The overlay traps Tab within the panel, re-enters the panel if focus escapes it, closes on Escape or the scrim, and returns focus to the details toggle. Below 1320px it exposes `role="dialog"` and `aria-modal="true"`; above 1320px it is a labelled column, and Escape still closes it as a shortcut.
+
+### Assistant dock
+
+- The chat topbar carries an **Ask** action next to Details when the hub has an
+  assistant model configured. It is the only entry point to the assistant in
+  M1; there is no rail destination and no sidebar entry.
+- Ask opens one hub-owned thread for the session. The thread is read-only: the
+  hub reads the session, attention, the pending question, a tool digest, and
+  the transcript tail, then answers. It never sends, answers, approves, or
+  interrupts.
+- The panel is 400px on the right below the topbar and full-width at 760px and
+  below. Opening it closes Details; Escape closes it and returns focus to Ask.
+- Reopening a session returns to the same thread, including after a reload. One
+  thread per session scope is the M1 model; there is no thread list and no new
+  button.
+- The composer offers three suggested questions before the first turn. While a
+  run streams, the primary action becomes **Stop**. The footer always reads
+  `Read-only · no writes`.
+- Answers cite what they read in prose. There is no tool-call UI in M1 because
+  there are no tool calls: the hub injects the context.
+- The G2 and VR surfaces are unchanged. The glasses are a consumer of
+  conclusions (M5), not a chat client.
 
 ## 9. New session
 

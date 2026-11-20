@@ -198,6 +198,17 @@ export const zAutomationConfig = z
     });
   });
 
+export const zAssistantAgentConfig = z.object({
+  enabled: z.boolean().default(true),
+  /** OpenAI-compatible base URL. Empty falls back to the reply endpoint. */
+  baseUrl: z.string().default(""),
+  /** Empty falls back to the reply model. */
+  model: z.string().default(""),
+  timeoutMs: z.number().int().min(5_000).max(600_000).default(90_000),
+  /** Transcript tail handed to the model. The largest useful prompt is ~4k tokens. */
+  maxContextMessages: z.number().int().min(4).max(60).default(20),
+});
+
 export const zHubConfig = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
@@ -250,6 +261,13 @@ export const zHubConfig = z.object({
     maxSessions: 50,
     audit: { enabled: true },
   }),
+  assistant: zAssistantAgentConfig.default({
+    enabled: true,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 90_000,
+    maxContextMessages: 20,
+  }),
 });
 
 /** The subset needed to probe or pair with a running hub. */
@@ -272,3 +290,4 @@ export type McpConfig = z.infer<typeof zMcpConfig>;
 export type McpTokenConfig = z.infer<typeof zMcpToken>;
 export type NotificationConfig = z.infer<typeof zNotificationConfig>;
 export type AutomationConfig = z.infer<typeof zAutomationConfig>;
+export type AssistantAgentConfig = z.infer<typeof zAssistantAgentConfig>;

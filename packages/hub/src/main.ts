@@ -66,6 +66,7 @@ import { LocalDataService } from "./services/local-data";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
+import { AssistantService } from "./services/assistant-service";
 import { WebPushTransport } from "./services/web-push-transport";
 import { loadOrCreateVapidKeys } from "./services/vapid";
 import { createApp } from "./app";
@@ -680,6 +681,24 @@ async function main(): Promise<void> {
     await localData.prune();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
+    const assistant = new AssistantService({
+      store,
+      sessions,
+      attention,
+      questions,
+      logger,
+      settings: {
+        enabled: config.assistant.enabled,
+        baseUrl: config.assistant.baseUrl,
+        model: config.assistant.model,
+        timeoutMs: config.assistant.timeoutMs,
+        maxContextMessages: config.assistant.maxContextMessages,
+        fallback: {
+          baseUrl: assistantSettings.config().reply.baseUrl,
+          model: assistantSettings.config().reply.model,
+        },
+      },
+    });
     const idempotency = new IdempotencyService(store);
     const actions = new SessionActions(sessions, questions, idempotency);
     // Generate the VAPID pair once and keep it owner-only. It is cheap, and a
@@ -774,6 +793,7 @@ async function main(): Promise<void> {
       notifications,
       actions,
       automation,
+      assistant,
       logger,
       startedAt,
       webRoot: configuredWebRoot,
