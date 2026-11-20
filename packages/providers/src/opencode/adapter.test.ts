@@ -118,6 +118,37 @@ async function retryServer(stageFiles: unknown[]): Promise<{
   };
 }
 
+describe("OpenCodeAdapter.readFile", () => {
+  it("names the path when a project file is missing", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "not found" }));
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+
+    const adapter = new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    });
+
+    await expect(
+      adapter.readFile(
+        {
+          ref: "ses_test",
+          directory: "/tmp/project",
+          path: "docs/reports/missing.html",
+        },
+        AbortSignal.timeout(5_000),
+      ),
+    ).rejects.toThrow(
+      "File not found in this session's working directory: docs/reports/missing.html",
+    );
+  });
+});
+
 describe("OpenCodeAdapter form attention", () => {
   it("keeps option descriptions, the custom answer, and required fields", async () => {
     const server = createServer((request, response) => {
