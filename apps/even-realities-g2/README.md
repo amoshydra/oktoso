@@ -172,7 +172,11 @@ instead of taking over the screen.
   so a burst of events coalesces to one inbox/chat refresh instead of one per
   event.
 - Polling is a fallback, not a rhythm: it runs only while the event stream is
-  down, at 4 s when awake and 30 s when the glasses are asleep.
+  down, starting at 4 s and backing off to 30 s while it stays down; asleep
+  glasses poll at 30 s.
+- The stream resumes from the last seen event sequence, so reopening the app
+  does not replay the hub's whole buffer. It also asks for a 60 s keepalive
+  instead of the browser's 15 s, which cuts idle radio wakeups by four.
 
 ## Regression harness
 
