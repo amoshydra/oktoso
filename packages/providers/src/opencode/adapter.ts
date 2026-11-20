@@ -747,7 +747,21 @@ export class OpenCodeAdapter implements ProviderAdapter {
     const url = new URL(`/api/fs/read/${encoded}`, this.baseUrl);
     url.searchParams.set("location[directory]", directory);
 
-    const resource = await this.readResource(url.toString(), signal);
+    let resource;
+    try {
+      resource = await this.readResource(url.toString(), signal);
+    } catch (error) {
+      // A missing project file is not a missing attachment; name the path and
+      // the scope so the UI can say something useful.
+      if (error instanceof ProviderError && error.code === "not_found") {
+        throw new ProviderError(
+          "not_found",
+          `File not found in this session's working directory: ${path}`,
+          { status: 404, retryable: false },
+        );
+      }
+      throw error;
+    }
     return {
       ...resource,
       filename: resource.filename ?? path.split("/").at(-1),
