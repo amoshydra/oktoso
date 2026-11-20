@@ -712,6 +712,7 @@ export class HubClient {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const parser = new SseParser();
+    let terminal = false;
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -719,11 +720,30 @@ export class HubClient {
       for (const event of parser.push(chunk)) {
         if (!event.data) continue;
         try {
-          options.onEvent(JSON.parse(event.data) as AssistantEvent);
+          const parsed = JSON.parse(event.data) as AssistantEvent;
+          if (parsed.type !== "delta") terminal = true;
+          options.onEvent(parsed);
         } catch {
           // Ignore a malformed frame; the next one still applies.
         }
       }
+    }
+    for (const event of parser.end()) {
+      if (!event.data) continue;
+      try {
+        const parsed = JSON.parse(event.data) as AssistantEvent;
+        if (parsed.type !== "delta") terminal = true;
+        options.onEvent(parsed);
+      } catch {
+        // Ignore.
+      }
+    }
+    if (!terminal) {
+      throw new HubError(
+        "stream_ended",
+        "The answer stream ended before the result",
+        { retryable: true },
+      );
     }
   }
 

@@ -50,10 +50,33 @@ export function AssistantDock({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    return () => {
+      const target = returnFocus.current;
+      if (target && document.contains(target)) target.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (busy) return;
+    textareaRef.current?.focus();
+  }, [busy]);
 
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
+    setThread(null);
+    setTurns([]);
+    setError(undefined);
+    setRunId(undefined);
+    setStreamText("");
+    setInput("");
     Promise.all([
       client.createAssistantThread({ scope: { kind: "session", sessionRef } }),
       client.assistantStatus().catch(() => undefined),
@@ -64,7 +87,6 @@ export function AssistantDock({
         setThread(detail);
         setTurns(detail.turns);
         setCanWrite(Boolean(status?.canWrite));
-        textareaRef.current?.focus();
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -97,7 +119,10 @@ export function AssistantDock({
     setTurns(detail.turns);
   }, [client, thread]);
 
-  const pending = turns.find((turn) => turn.action?.status === "pending");
+  const pending = turns.find(
+    (turn) =>
+      turn.action?.status === "pending" || turn.action?.status === "deciding",
+  );
 
   const send = useCallback(
     async (text: string) => {
@@ -114,7 +139,7 @@ export function AssistantDock({
         const accepted = await client.sendAssistantMessage(thread.thread.id, {
           text: question,
         });
-        setTurns((current) => [...current, accepted.turn]);
+        setTurns((current) => addTurn(current, accepted.turn));
         setRunId(accepted.run.id);
         const controller = new AbortController();
         streamAbort.current = controller;
@@ -126,7 +151,7 @@ export function AssistantDock({
               return;
             }
             if (event.type === "done" || event.type === "action") {
-              setTurns((current) => [...current, event.turn]);
+              setTurns((current) => addTurn(current, event.turn));
               setStreamText("");
               setRunId(undefined);
               return;
@@ -140,6 +165,9 @@ export function AssistantDock({
       } catch (cause) {
         if ((cause as { name?: string })?.name === "AbortError") return;
         setError(cause instanceof Error ? cause.message : "The answer failed");
+        setRunId(undefined);
+        void resync();
+      } finally {
         setRunId(undefined);
       }
     },
@@ -247,7 +275,7 @@ export function AssistantDock({
             )}
             <TurnMeta turn={turn} />
             {turn.action ? (
-              <ActionCard turn={turn} onDecide={decide} />
+              <ActionCard turn={turn} canWrite={canWrite} onDecide={decide} />
             ) : null}
           </article>
         ))}
@@ -288,6 +316,7 @@ export function AssistantDock({
             ref={textareaRef}
             value={input}
             rows={2}
+            maxLength={4_000}
             disabled={busy || Boolean(pending)}
             placeholder={
               busy
@@ -325,6 +354,13 @@ export function AssistantDock({
   );
 }
 
+/** SSE replay can resend a turn; keep one row per id. */
+function addTurn(current: AssistantTurn[], turn: AssistantTurn): AssistantTurn[] {
+  return current.some((entry) => entry.id === turn.id)
+    ? current
+    : [...current, turn];
+}
+
 function TurnMeta({ turn }: { turn: AssistantTurn }) {
   const parts: string[] = [];
   if (turn.context) {
@@ -346,9 +382,11 @@ function TurnMeta({ turn }: { turn: AssistantTurn }) {
 
 function ActionCard({
   turn,
+  canWrite,
   onDecide,
 }: {
   turn: AssistantTurn;
+  canWrite: boolean;
   onDecide: (
     turn: AssistantTurn,
     decision: "confirm" | "cancel",
@@ -361,6 +399,7 @@ function ActionCard({
   if (!action) return null;
 
   const pending = action.status === "pending";
+  const working = action.status === "deciding";
   const decide = async (decision: "confirm" | "cancel") => {
     setSaving(true);
     try {
@@ -378,7 +417,7 @@ function ActionCard({
     >
       <div className="assistant-action-head">
         <span className="assistant-action-label">
-          {pending ? "Needs your confirmation" : actionLabel(action)}
+          {pending ? "Needs your confirmation" : ACTION_LABEL[action.kind]}
         </span>
         {pending ? null : (
           <span className="assistant-action-state">{actionLabel(action)}</span>
@@ -397,6 +436,7 @@ function ActionCard({
               className="assistant-action-text"
               value={text}
               rows={3}
+              maxLength={4_000}
               onChange={(event) => setText(event.target.value)}
             />
           </>
@@ -413,16 +453,26 @@ function ActionCard({
         <p className="assistant-action-error">{action.error}</p>
       ) : null}
 
+      {working ? (
+        <p className="assistant-action-error">Working…</p>
+      ) : null}
+
       {pending ? (
         <div className="assistant-action-buttons">
-          <button
-            className="btn small primary"
-            type="button"
-            disabled={saving || (action.kind === "send" && text.trim().length === 0)}
-            onClick={() => void decide("confirm")}
-          >
-            {saving ? "Working…" : ACTION_LABEL[action.kind]}
-          </button>
+          {canWrite ? (
+            <button
+              className="btn small primary"
+              type="button"
+              disabled={saving || (action.kind === "send" && text.trim().length === 0)}
+              onClick={() => void decide("confirm")}
+            >
+              {saving ? "Working…" : ACTION_LABEL[action.kind]}
+            </button>
+          ) : (
+            <span className="assistant-action-error">
+              Writes are disabled. Cancel to unlock the thread.
+            </span>
+          )}
           <button
             className="btn small"
             type="button"
@@ -445,5 +495,6 @@ function actionLabel(action: AssistantAction): string {
   }
   if (action.status === "cancelled") return "Cancelled";
   if (action.status === "failed") return "Failed";
+  if (action.status === "deciding") return "Working…";
   return "Pending";
 }

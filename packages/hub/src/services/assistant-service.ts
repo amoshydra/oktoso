@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   AssistantAction,
   AssistantActionDecision,
@@ -35,6 +35,7 @@ const MAX_CONTEXT_CHARS = 24_000;
 const MAX_MESSAGE_CHARS = 1_600;
 const MESSAGE_TAIL_CHARS = 500;
 const MAX_TOOL_DIGEST = 40;
+const ACCEPTED_TTL_MS = 10 * 60 * 1_000;
 
 /**
  * Model settings for the hub agent. Falls back to the reply endpoint/model when
@@ -63,6 +64,10 @@ export interface AssistantAuditEntry {
   ok: boolean;
   error?: string;
   durationMs?: number;
+  /** Confirmed payload only: proves what was sent without storing it. */
+  payloadHash?: string;
+  payloadLength?: number;
+  model?: string;
 }
 
 export interface AssistantServiceOptions {
@@ -100,12 +105,46 @@ interface RunRecord {
  */
 export class AssistantService {
   private readonly runs = new Map<string, RunRecord>();
+  /** A synchronous guard: the async checks below can both pass otherwise. */
+  private readonly starting = new Set<string>();
+  /** Duplicate POST protection for retried submits. */
+  private readonly accepted = new Map<
+    string,
+    { value: AssistantRunAccepted; at: number }
+  >();
   private readonly now: () => number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(private readonly options: AssistantServiceOptions) {
     this.now = options.now ?? (() => Date.now());
     this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  /**
+   * Called once at startup. A decision interrupted by a restart stayed
+   * `deciding` with no one to finish it; mark it failed so the thread is not
+   * silently locked.
+   */
+  async init(): Promise<void> {
+    const stale = this.options.store
+      .getState()
+      .assistantThreads.flatMap((thread) =>
+        thread.turns.filter((turn) => turn.action?.status === "deciding"),
+      );
+    if (stale.length === 0) return;
+    await this.options.store.update((state) => {
+      for (const thread of state.assistantThreads) {
+        for (const turn of thread.turns) {
+          if (turn.action?.status !== "deciding") continue;
+          turn.action = {
+            ...turn.action,
+            status: "failed",
+            error: "The hub restarted while this decision was running",
+            decidedAt: this.now(),
+          };
+        }
+      }
+    });
   }
 
   status(): AssistantStatus {
@@ -191,14 +230,43 @@ export class AssistantService {
     input: AssistantMessageInput,
   ): Promise<AssistantRunAccepted> {
     this.assertReady();
+    const key = input.idempotencyKey
+      ? `${threadId}:${input.idempotencyKey}`
+      : undefined;
+    if (key) {
+      const cached = this.accepted.get(key);
+      if (cached && this.now() - cached.at < ACCEPTED_TTL_MS) {
+        return cached.value;
+      }
+      if (cached) this.accepted.delete(key);
+    }
+    if (this.starting.has(threadId)) {
+      throw conflict("A message is already starting for this thread");
+    }
+    this.starting.add(threadId);
+    try {
+      return await this.startRun(threadId, input, key);
+    } finally {
+      this.starting.delete(threadId);
+    }
+  }
+
+  private async startRun(
+    threadId: string,
+    input: AssistantMessageInput,
+    key?: string,
+  ): Promise<AssistantRunAccepted> {
     const thread = this.findThread(threadId);
     if (thread.scope.kind !== "session") {
       throw badRequest("Only the session scope is supported in this version");
     }
-    if (thread.turns.some((turn) => turn.action?.status === "pending")) {
-      throw conflict("Decide the pending action first", {
-        turnId: thread.turns.find((turn) => turn.action?.status === "pending")?.id,
-      });
+    const locked = thread.turns.find(
+      (turn) =>
+        turn.action?.status === "pending" ||
+        turn.action?.status === "deciding",
+    );
+    if (locked) {
+      throw conflict("Decide the pending action first", { turnId: locked.id });
     }
     const running = [...this.runs.values()].find(
       (record) => record.run.threadId === threadId && record.run.state === "running",
@@ -246,14 +314,27 @@ export class AssistantService {
 
     void this.execute(record, current.scope.sessionRef, turn.text);
 
-    return { run, thread: toThread(current), turn };
+    const accepted: AssistantRunAccepted = {
+      run,
+      thread: toThread(current),
+      turn,
+    };
+    if (key) {
+      this.accepted.set(key, { value: accepted, at: this.now() });
+      if (this.accepted.size > 100) {
+        const oldest = this.accepted.keys().next().value;
+        if (oldest) this.accepted.delete(oldest);
+      }
+    }
+    return accepted;
   }
 
   stop(runId: string): AssistantRun {
     const record = this.runs.get(runId);
     if (!record) throw notFound("Run not found");
     if (record.run.state === "running") record.controller.abort();
-    return record.run;
+    // Abort is asynchronous: report the state the record is in now.
+    return { ...record.run };
   }
 
   getRun(runId: string): AssistantRun | undefined {
@@ -269,54 +350,126 @@ export class AssistantService {
     turnId: string,
     input: AssistantActionDecision,
   ): Promise<AssistantTurn> {
-    if (!this.writesEnabled()) {
-      throw conflict("Writes are disabled for the hub assistant");
-    }
     const thread = this.findThread(threadId);
     const turn = thread.turns.find((entry) => entry.id === turnId);
     if (!turn?.action) throw notFound("Action not found");
-    if (turn.action.status !== "pending") {
-      throw conflict("This action was already decided", {
-        status: turn.action.status,
-      });
+
+    // Cancelling needs no GPU, no model, and no provider: it must always work,
+    // even after an operator turns writes off. Only confirming is gated.
+    if (input.decision === "cancel") {
+      const saved = await this.transition(threadId, turnId, "cancelled", (action) => ({
+        ...action,
+        decidedAt: this.now(),
+      }));
+      this.audit(threadId, turnId, saved.action!, "cancelled", true);
+      return saved;
     }
 
-    const now = this.now();
-    if (input.decision === "cancel") {
-      const action: AssistantAction = {
-        ...turn.action,
-        status: "cancelled",
-        decidedAt: now,
-      };
-      const saved = await this.saveAction(threadId, turnId, action);
-      this.audit(threadId, turnId, turn.action, "cancelled", true);
-      return saved;
+    if (!this.writesEnabled()) {
+      throw conflict("Writes are disabled for the hub assistant");
     }
 
     const text = input.text?.trim();
-    const action: AssistantAction = {
-      ...turn.action,
-      ...(text && turn.action.kind === "send" ? { text } : {}),
-    };
+    // Reserve the action first: two devices can otherwise both pass the
+    // pending check and one can report Cancelled for a message that was sent.
+    const reserved = await this.transition(threadId, turnId, "deciding", (action) => ({
+      ...action,
+      ...(text && action.kind === "send" ? { text } : {}),
+    }));
+    const action = reserved.action!;
     const started = Date.now();
+    const payloadHash = hashPayload(action);
+    const payloadLength = (action.text ?? "").length;
     try {
       await this.executeAction(action);
-      const done: AssistantAction = { ...action, status: "done", decidedAt: now };
-      const saved = await this.saveAction(threadId, turnId, done);
-      this.audit(threadId, turnId, done, "confirmed", true, Date.now() - started);
-      return saved;
+      const done = await this.finishDecision(threadId, turnId, {
+        status: "done",
+        decidedAt: this.now(),
+      });
+      this.audit(threadId, turnId, done.action!, "confirmed", true, Date.now() - started, {
+        payloadHash,
+        payloadLength,
+      });
+      return done;
     } catch (error) {
       const message = describeError(error);
-      const failed: AssistantAction = {
-        ...action,
+      const failed = await this.finishDecision(threadId, turnId, {
         status: "failed",
         error: message,
-        decidedAt: now,
-      };
-      const saved = await this.saveAction(threadId, turnId, failed);
-      this.audit(threadId, turnId, failed, "failed", false, Date.now() - started, message);
-      return saved;
+        decidedAt: this.now(),
+      });
+      this.audit(
+        threadId,
+        turnId,
+        failed.action!,
+        "failed",
+        false,
+        Date.now() - started,
+        { error: message, payloadHash, payloadLength },
+      );
+      return failed;
     }
+  }
+
+  /**
+   * Compare-and-set the action status. `from` is always `pending`; the mutator
+   * runs only when the stored action is still pending, so a second caller gets
+   * a 409 instead of a second send.
+   */
+  private async transition(
+    threadId: string,
+    turnId: string,
+    to: "deciding" | "cancelled",
+    mutate: (action: AssistantAction) => AssistantAction,
+  ): Promise<AssistantTurn> {
+    let moved = false;
+    const updated = await this.options.store.update((state) => {
+      const target = state.assistantThreads.find((entry) => entry.id === threadId);
+      const turn = target?.turns.find((entry) => entry.id === turnId);
+      if (!turn?.action) return;
+      if (turn.action.status !== "pending") return;
+      turn.action = { ...mutate(turn.action), status: to };
+      moved = true;
+      target!.updatedAt = this.now();
+    });
+    if (!moved) {
+      const current = updated.assistantThreads
+        .find((entry) => entry.id === threadId)
+        ?.turns.find((entry) => entry.id === turnId);
+      if (!current?.action) throw notFound("Action not found");
+      throw conflict("This action is no longer pending", {
+        status: current.action.status,
+      });
+    }
+    const turn = updated.assistantThreads
+      .find((entry) => entry.id === threadId)
+      ?.turns.find((entry) => entry.id === turnId);
+    if (!turn) throw notFound("Action not found");
+    return turn;
+  }
+
+  /** Complete a reserved (`deciding`) action. */
+  private async finishDecision(
+    threadId: string,
+    turnId: string,
+    patch: {
+      status: "done" | "failed";
+      decidedAt: number;
+      error?: string;
+    },
+  ): Promise<AssistantTurn> {
+    const updated = await this.options.store.update((state) => {
+      const target = state.assistantThreads.find((entry) => entry.id === threadId);
+      const turn = target?.turns.find((entry) => entry.id === turnId);
+      if (!turn?.action) return;
+      turn.action = { ...turn.action, ...patch };
+      target!.updatedAt = this.now();
+    });
+    const turn = updated.assistantThreads
+      .find((entry) => entry.id === threadId)
+      ?.turns.find((entry) => entry.id === turnId);
+    if (!turn) throw notFound("Action not found");
+    return turn;
   }
 
   private async executeAction(action: AssistantAction): Promise<void> {
@@ -337,7 +490,9 @@ export class AssistantService {
         await this.options.actions.send(
           action.sessionRef,
           {
-            text: action.text?.trim() || answers.map((answer) => answer.label).join(" / "),
+            text:
+              action.text?.trim() ||
+              answers.map((answer) => answer.text ?? answer.label).join(" / "),
             answers: answers.map((answer) => ({
               questionId: answer.questionId,
               messageId: answer.messageId,
@@ -387,7 +542,13 @@ export class AssistantService {
   ): (() => void) | undefined {
     const record = this.runs.get(runId);
     if (!record) return undefined;
-    for (const event of record.events.slice(Math.max(0, since))) {
+    // A reconnect that asks past the end of a finished run must still see the
+    // terminal event, or its stream parks on heartbeats forever.
+    const start = Math.min(
+      Math.max(0, since),
+      Math.max(0, record.events.length - 1),
+    );
+    for (const event of record.events.slice(start)) {
       listener(event);
     }
     if (record.run.state !== "running") return () => undefined;
@@ -764,6 +925,7 @@ export class AssistantService {
         questionId: question.id,
         choiceId: choice.id,
         label: choice.label,
+        text: choice.text,
         messageId: prompt.messageId,
         revision: prompt.revision,
       });
@@ -786,7 +948,9 @@ export class AssistantService {
       status: "pending",
       summary,
       answers: resolved,
-      text: resolved.map((answer) => answer.label).join(" / "),
+      // The provider receives the full option text; labels are truncated for
+      // the card, so sending them would post a string ending in "…".
+      text: resolved.map((answer) => answer.text).join(" / "),
     };
   }
 
@@ -797,21 +961,29 @@ export class AssistantService {
     event: AssistantAuditEntry["event"],
     ok: boolean,
     durationMs?: number,
-    error?: string,
+    extra: { error?: string; payloadHash?: string; payloadLength?: number } = {},
   ): void {
     if (!this.options.audit) return;
+    const entry: AssistantAuditEntry = {
+      time: new Date(this.now()).toISOString(),
+      threadId,
+      turnId,
+      actionId: action.id,
+      kind: action.kind,
+      sessionRef: action.sessionRef,
+      event,
+      ok,
+      model: this.model() || undefined,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      ...extra,
+    };
     try {
-      void this.options.audit({
-        time: new Date(this.now()).toISOString(),
-        threadId,
-        turnId,
-        actionId: action.id,
-        kind: action.kind,
-        sessionRef: action.sessionRef,
-        event,
-        ok,
-        ...(durationMs === undefined ? {} : { durationMs }),
-        ...(error ? { error } : {}),
+      // appendFile returns a promise: a `.catch` is the difference between a
+      // failed audit entry and a dead hub.
+      void Promise.resolve(this.options.audit(entry)).catch((cause: unknown) => {
+        this.options.logger.warn("assistant audit write failed", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
       });
     } catch (cause) {
       this.options.logger.warn("assistant audit write failed", {
@@ -1265,6 +1437,19 @@ function truncate(value: string, max: number): string {
 
 function trimSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+/**
+ * Audit proves what was sent without storing the text: a hash plus a length is
+ * enough to compare against the provider's copy later.
+ */
+function hashPayload(action: AssistantAction): string | undefined {
+  if (action.kind === "interrupt") return undefined;
+  const payload = JSON.stringify({
+    text: action.text ?? "",
+    answers: action.answers ?? [],
+  });
+  return createHash("sha256").update(payload).digest("hex");
 }
 
 function describeError(error: unknown): string {

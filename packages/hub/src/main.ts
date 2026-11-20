@@ -692,7 +692,10 @@ async function main(): Promise<void> {
       attention,
       questions,
       logger,
-      audit: (entry) => appendFile(assistantAudit, `${JSON.stringify(entry)}\n`),
+      audit: (entry) =>
+        appendFile(assistantAudit, `${JSON.stringify(entry)}\n`, {
+          mode: 0o600,
+        }),
       settings: {
         enabled: config.assistant.enabled,
         baseUrl: config.assistant.baseUrl,
@@ -743,6 +746,7 @@ async function main(): Promise<void> {
       notifications,
     });
     automation.start();
+    await assistant.init();
     providerEvents = new ProviderEventService(
       registry,
       eventBus,
