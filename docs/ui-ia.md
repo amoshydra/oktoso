@@ -439,8 +439,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The thread shows when it happened: a day label (`Today`, `Yesterday`, or a
   date) before the first turn of each day, and a 10px time on every role line.
 - Every answer carries one 10px evidence line: turns read, older turns omitted
-  when the context budget dropped any, attention items in the context, and
-  token usage. It is how a partial answer announces itself.
+  when the context budget dropped any, failures found in the recent tail,
+  attention items in the context, the session's last-activity time (`session as
+  of …`), and token usage. It is how a partial or stale answer announces
+  itself.
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.
