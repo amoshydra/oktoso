@@ -1321,11 +1321,6 @@ components:
                   asOf:
                     type: integer
                     minimum: 0
-                required:
-                  - messages
-                  - omitted
-                  - chars
-                  - attention
               usage:
                 type: object
                 properties:
@@ -1600,11 +1595,6 @@ components:
                 asOf:
                   type: integer
                   minimum: 0
-              required:
-                - messages
-                - omitted
-                - chars
-                - attention
             usage:
               type: object
               properties:
@@ -1790,11 +1780,6 @@ components:
                     asOf:
                       type: integer
                       minimum: 0
-                  required:
-                    - messages
-                    - omitted
-                    - chars
-                    - attention
                 usage:
                   type: object
                   properties:
@@ -1967,11 +1952,6 @@ components:
                     asOf:
                       type: integer
                       minimum: 0
-                  required:
-                    - messages
-                    - omitted
-                    - chars
-                    - attention
                 usage:
                   type: object
                   properties:
@@ -8314,11 +8294,6 @@ paths:
                       asOf:
                         type: integer
                         minimum: 0
-                    required:
-                      - messages
-                      - omitted
-                      - chars
-                      - attention
                   usage:
                     type: object
                     properties:
