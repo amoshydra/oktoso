@@ -57,6 +57,11 @@ import {
 } from "./answer-model";
 import { glassInput, type GlassInput } from "./input";
 import { LiveBatcher } from "./live-batch";
+import {
+  hasPendingQuestionTool,
+  holdsQuestionDraft,
+  shouldRefreshQuestion,
+} from "./question-live";
 import { sortAttention, visibleAttention } from "./attention-model";
 import {
   approvalAction,
@@ -298,6 +303,9 @@ let paintedScreen: Screen | undefined;
 /** Menu labels painted with that page; a stale menu must force a rebuild. */
 let paintedMenu = "";
 let chatLoadSequence = 0;
+let questionLoadSequence = 0;
+let questionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let questionRefreshRef: string | undefined;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
@@ -1529,6 +1537,9 @@ function startEventStream(): void {
           if (message) liveMessages.push(message.id, message);
           else scheduleEventRefresh("chat", () => loadChat(true));
           const sessionRef = event.sessionRef;
+          if (message && sessionRef && hasPendingQuestionTool(message)) {
+            scheduleQuestionRefresh(sessionRef);
+          }
           if (sessionRef) {
             scheduleEventRefresh(`questions:${sessionRef}`, () =>
               refreshQuestionSummaries([sessionRef]),
@@ -2078,13 +2089,18 @@ async function openChat(
 
 async function loadQuestion(ref: string): Promise<void> {
   if (!client) return;
+  const sequence = ++questionLoadSequence;
   try {
     const question = await client.question(ref);
-    if (state.sessionRef !== ref) return;
+    // A slow answer for an old request must never overwrite a newer one.
+    if (sequence !== questionLoadSequence || state.sessionRef !== ref) return;
     state.question = question ?? undefined;
-    resetBatchAnswers();
-    state.answerMode = false;
-    state.answerError = undefined;
+    // An answer screen may hold a draft; refreshing behind it must not wipe it.
+    if (!holdsQuestionDraft(state.screen)) {
+      resetBatchAnswers();
+      state.answerMode = false;
+      state.answerError = undefined;
+    }
     if (rememberQuestionSummary(ref, question ?? null) && state.screen !== "chat") {
       render();
     }
@@ -2093,6 +2109,46 @@ async function loadQuestion(ref: string): Promise<void> {
   } catch (error) {
     log(`Question load failed: ${errorMessage(error)}`);
   }
+}
+
+const QUESTION_REFRESH_MS = 600;
+
+/**
+ * The footer reads `state.question`, so it must learn about a question while
+ * the chat is open. The summary refresh already runs on every message event;
+ * the full prompt is a provider fetch, so refresh only when the revision
+ * differs, at most once per debounce window, and never over a draft.
+ */
+function scheduleQuestionRefresh(ref: string): void {
+  if (!client || state.sessionRef !== ref) return;
+  if (holdsQuestionDraft(state.screen)) return;
+  questionRefreshRef = ref;
+  if (questionRefreshTimer) clearTimeout(questionRefreshTimer);
+  questionRefreshTimer = setTimeout(() => {
+    questionRefreshTimer = undefined;
+    const target = questionRefreshRef;
+    questionRefreshRef = undefined;
+    if (!target || !client || state.sessionRef !== target) return;
+    if (holdsQuestionDraft(state.screen)) return;
+    const summary = state.questionSummaries[target];
+    if (
+      !shouldRefreshQuestion({
+        ...(summary ? { summaryRevision: summary.revision } : {}),
+        ...(state.question ? { currentRevision: state.question.revision } : {}),
+      })
+    ) {
+      return;
+    }
+    void loadQuestion(target);
+  }, QUESTION_REFRESH_MS);
+}
+
+/** A question usually becomes visible only when the turn stops working. */
+function noteActivityChange(previous: string): void {
+  if (!state.sessionRef) return;
+  const wasWorking = /working|running/i.test(previous);
+  const isWorking = /working|running/i.test(state.chatActivity);
+  if (wasWorking && !isWorking) scheduleQuestionRefresh(state.sessionRef);
 }
 
 function openAnswer(): void {
@@ -2652,6 +2708,7 @@ async function loadChat(quiet: boolean): Promise<void> {
     state.chatLineMessages = built.lineMessages;
     state.chatMessageCount = built.messageCount;
     state.chatActivity = activityForMessages(state.chatMessages);
+    noteActivityChange(previousActivity);
     const viewport = quiet
       ? nextViewport({
           previousOffset,
@@ -2746,6 +2803,7 @@ function applyLiveMessages(messages: Message[]): void {
   state.chatLineMessages = built.lineMessages;
   state.chatMessageCount = built.messageCount;
   state.chatActivity = activityForMessages(state.chatMessages);
+  noteActivityChange(previousActivity);
   const viewport = nextViewport({
     previousOffset,
     previousLineCount: previousLines.length,
@@ -3360,8 +3418,8 @@ async function executeReply(option: ReplyOption): Promise<void> {
         );
         clearPendingSend(idempotencyKey);
         chatFollowText = text.replace(/\s+/g, " ").trim();
-        state.question = undefined;
-        rememberQuestionSummary(state.sessionRef, null);
+        // A plain reply does not answer the pending question. Keep the marker
+        // until the question actually changes; the live refresh will settle it.
         updatePhoneQuestion();
         state.screen = "chat";
         state.notice = "Reply sent.";
