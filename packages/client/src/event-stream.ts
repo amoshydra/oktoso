@@ -15,6 +15,8 @@ export interface EventStreamOptions {
   fetchImpl?: typeof fetch;
   minReconnectMs?: number;
   maxReconnectMs?: number;
+  /** Keepalive interval. The hub caps it at 5–120 s. */
+  heartbeatMs?: number;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -62,11 +64,18 @@ export async function runEventStream(options: EventStreamOptions): Promise<void>
       const headers: Record<string, string> = { Accept: "text/event-stream" };
       if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
-      const response = await fetchImpl(`${baseUrl}/api/v1/events?after=${cursor}`, {
-        headers,
-        credentials: options.credentials ?? "same-origin",
-        signal: options.signal,
-      });
+      const query = new URLSearchParams({ after: String(cursor) });
+      if (options.heartbeatMs !== undefined) {
+        query.set("heartbeat", String(options.heartbeatMs));
+      }
+      const response = await fetchImpl(
+        `${baseUrl}/api/v1/events?${query.toString()}`,
+        {
+          headers,
+          credentials: options.credentials ?? "same-origin",
+          signal: options.signal,
+        },
+      );
 
       if (!response.ok) {
         let body: unknown;

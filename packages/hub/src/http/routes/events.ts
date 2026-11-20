@@ -27,6 +27,18 @@ export function registerEventRoutes(
       throw badRequest("after must be a non-negative integer");
     }
 
+    // Belt-and-braces keepalive. A wearable may ask for a quieter connection
+    // than the browser default; the default stays 15 s for every other client.
+    const rawHeartbeat = c.req.query("heartbeat");
+    let heartbeatMs = eventBus.heartbeatIntervalMs;
+    if (rawHeartbeat !== undefined) {
+      const requested = Number(rawHeartbeat);
+      if (!Number.isInteger(requested) || requested < 5_000 || requested > 120_000) {
+        throw badRequest("heartbeat must be between 5000 and 120000 ms");
+      }
+      heartbeatMs = requested;
+    }
+
     c.header("Cache-Control", "no-cache");
     c.header("X-Accel-Buffering", "no");
 
@@ -87,7 +99,7 @@ export function registerEventRoutes(
             continue;
           }
 
-          if (Date.now() - lastHeartbeat >= eventBus.heartbeatIntervalMs) {
+          if (Date.now() - lastHeartbeat >= heartbeatMs) {
             await stream.write(": heartbeat\n\n");
             lastHeartbeat = Date.now();
           }
