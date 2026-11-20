@@ -28,6 +28,30 @@ describe("assistant evidence line", () => {
     expect(parts[history]).toBe(`history ${historyLabel(historyAt)}`);
   });
 
+  it("counts session summaries for project and global scopes", () => {
+    const parts = turnMetaParts(
+      turn({
+        scope: "project",
+        sessions: 12,
+        omitted: 7,
+        asOf: Date.now(),
+        attention: 1,
+      }),
+    );
+    expect(parts[0]).toBe("Read 12 sessions");
+    expect(parts).toContain("7 older omitted");
+    expect(parts).toContain("1 attention item");
+  });
+
+  it("reports inbox and running counts for the global scope", () => {
+    const parts = turnMetaParts(
+      turn({ scope: "global", attention: 2, running: 1, asOf: Date.now() }),
+    );
+    expect(parts[0]).toBe("2 attention items");
+    expect(parts).toContain("1 running");
+    expect(parts.some((part) => part.startsWith("Read "))).toBe(false);
+  });
+
   it("dates an older compaction and only times a same-day one", () => {
     const older = Date.now() - 7 * 86_400_000;
     expect(historyLabel(older)).toBe(

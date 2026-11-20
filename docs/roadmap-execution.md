@@ -755,6 +755,17 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   thread left on a user turn by a restart gains one assistant turn saying the
   answer was interrupted. `init()` applies all three at boot.
 
+- [x] G14. Assistant project and global scopes (M3, read-only). `scope` is now
+  `session | project | global`; project context is the project's sessions plus
+  its inbox (cap 12), global is the inbox + running + 24-hour errors + project
+  rollup. Neither includes transcripts and neither offers the action tool. The
+  dock's scope chip toggles `This session` ↔ `This project`; Overview's topbar
+  Ask opens the global thread. `zSessionListQuery` gains `project`. Evidence
+  reads `Read N sessions` (project) or `N attention items · N running`
+  (global). Acceptance checked live: the project answer names sessions, the
+  global answer matches the inbox, both are read-only, and the project prompt
+  is ~1.3k tokens versus ~3.4k for a session prompt.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

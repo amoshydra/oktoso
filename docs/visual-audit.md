@@ -1475,3 +1475,17 @@ list of file-configured objects.
   the retry.
 - Eviction is invisible unless it strands a card, which is why the LRU pass
   skips locked threads even when that leaves the store one or two over the cap.
+
+## Project and global scopes (2026-11-20)
+
+- The scope chip turns into the scope switcher. That is the smallest possible
+  entry: one control that already says what the thread is scoped to, no new
+  screen, no second dock.
+- Global Ask lives in the Overview topbar because global questions are about
+  the whole workspace, and Overview is the workspace-level surface. Adding a
+  rail destination would have created a place with one button.
+- Read-only scopes keep the same footer promise. Their evidence line counts
+  session summaries (project) or inbox/running items (global), never turns,
+  because no transcript is read.
+- 12 sessions is the project cap: enough to answer "what should I pick up",
+  short enough to stay under ~1.5k tokens.

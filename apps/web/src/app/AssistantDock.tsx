@@ -3,6 +3,7 @@ import type { HubClient } from "@amoshydra/oktoso-client";
 import type {
   AssistantAction,
   AssistantEvent,
+  AssistantScope,
   AssistantThreadDetail,
   AssistantTurn,
 } from "@amoshydra/oktoso-contracts";
@@ -11,8 +12,10 @@ import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
 
 export interface AssistantDockProps {
   client: HubClient;
-  sessionRef: string;
-  sessionTitle: string;
+  /** The scope this dock opens on. The user can switch session ↔ project. */
+  initialScope: AssistantScope;
+  title: string;
+  project?: string;
   onClose: () => void;
 }
 
@@ -36,10 +39,20 @@ const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
  */
 export function AssistantDock({
   client,
-  sessionRef,
-  sessionTitle,
+  initialScope,
+  title,
+  project,
   onClose,
 }: AssistantDockProps) {
+  const [scope, setScope] = useState<AssistantScope>(initialScope);
+  const sessionRef =
+    initialScope.kind === "session" ? initialScope.sessionRef : undefined;
+  const label =
+    scope.kind === "project"
+      ? scope.project
+      : scope.kind === "global"
+        ? "All sessions"
+        : title;
   const [thread, setThread] = useState<AssistantThreadDetail | null>(null);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [input, setInput] = useState("");
@@ -48,6 +61,7 @@ export function AssistantDock({
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(true);
   const [canWrite, setCanWrite] = useState(false);
+  const canWriteHere = scope.kind === "session" && canWrite;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -79,7 +93,7 @@ export function AssistantDock({
     setStreamText("");
     setInput("");
     Promise.all([
-      client.createAssistantThread({ scope: { kind: "session", sessionRef } }),
+      client.createAssistantThread({ scope }),
       client.assistantStatus().catch(() => undefined),
     ])
       .then(async ([created, status]) => {
@@ -100,7 +114,7 @@ export function AssistantDock({
       cancelled = true;
       streamAbort.current?.abort();
     };
-  }, [client, sessionRef]);
+  }, [client, scope]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -214,7 +228,7 @@ export function AssistantDock({
     <aside
       className="assistant-dock"
       id="session-assistant"
-      aria-label={`Assistant for ${sessionTitle}`}
+      aria-label={`Assistant for ${label}`}
     >
       <header className="assistant-head">
         <div className="assistant-head-title">
@@ -223,11 +237,34 @@ export function AssistantDock({
           </span>
           <div>
             <h2>Assistant</h2>
-            <p>{sessionTitle}</p>
+            <p>{label}</p>
           </div>
         </div>
         <div className="assistant-head-actions">
-          <span className="assistant-scope">This session</span>
+          {project && sessionRef ? (
+            <button
+              className="assistant-scope"
+              type="button"
+              aria-label={
+                scope.kind === "project"
+                  ? "Switch to this session"
+                  : "Switch to this project"
+              }
+              onClick={() =>
+                setScope(
+                  scope.kind === "project"
+                    ? { kind: "session", sessionRef }
+                    : { kind: "project", project },
+                )
+              }
+            >
+              {scope.kind === "project" ? "This project" : "This session"}
+            </button>
+          ) : (
+            <span className="assistant-scope">
+              {scope.kind === "global" ? "All sessions" : "This session"}
+            </span>
+          )}
           <button
             className="icon-btn"
             type="button"
@@ -291,7 +328,7 @@ export function AssistantDock({
                 )}
                 <TurnMeta turn={turn} />
                 {turn.action ? (
-                  <ActionCard turn={turn} canWrite={canWrite} onDecide={decide} />
+                  <ActionCard turn={turn} canWrite={canWriteHere} onDecide={decide} />
                 ) : null}
               </article>
             </Fragment>
@@ -317,7 +354,7 @@ export function AssistantDock({
 
       <footer className="assistant-foot">
         <span className="assistant-readonly">
-          {canWrite ? "Writes need your confirmation" : "Read-only · no writes"}
+          {canWriteHere ? "Writes need your confirmation" : "Read-only · no writes"}
         </span>
         <form
           className="assistant-composer"

@@ -6103,3 +6103,14 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 .assistant-action.expired {
   border-left-color: var(--border-strong);
 }
+
+button.assistant-scope {
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.assistant-scope:hover {
+  color: var(--text);
+  border-color: var(--border);
+}

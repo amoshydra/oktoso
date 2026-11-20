@@ -1138,6 +1138,26 @@ components:
               required:
                 - kind
                 - sessionRef
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - project
+                project:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - project
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - global
+              required:
+                - kind
         title:
           type: string
         createdAt:
@@ -1181,6 +1201,26 @@ components:
                     required:
                       - kind
                       - sessionRef
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - project
+                      project:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                      - project
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - global
+                    required:
+                      - kind
               title:
                 type: string
               createdAt:
@@ -1224,6 +1264,26 @@ components:
                   required:
                     - kind
                     - sessionRef
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - project
+                    project:
+                      type: string
+                      minLength: 1
+                  required:
+                    - kind
+                    - project
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - global
+                  required:
+                    - kind
             title:
               type: string
             createdAt:
@@ -1397,6 +1457,18 @@ components:
                   historyAt:
                     type: integer
                     minimum: 0
+                  sessions:
+                    type: integer
+                    minimum: 0
+                  scope:
+                    type: string
+                    enum:
+                      - session
+                      - project
+                      - global
+                  running:
+                    type: integer
+                    minimum: 0
               usage:
                 type: object
                 properties:
@@ -1435,6 +1507,26 @@ components:
               required:
                 - kind
                 - sessionRef
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - project
+                project:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - project
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - global
+              required:
+                - kind
         title:
           type: string
           minLength: 1
@@ -1541,6 +1633,26 @@ components:
                   required:
                     - kind
                     - sessionRef
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - project
+                    project:
+                      type: string
+                      minLength: 1
+                  required:
+                    - kind
+                    - project
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - global
+                  required:
+                    - kind
             title:
               type: string
             createdAt:
@@ -1710,6 +1822,18 @@ components:
                   type: integer
                   minimum: 0
                 historyAt:
+                  type: integer
+                  minimum: 0
+                sessions:
+                  type: integer
+                  minimum: 0
+                scope:
+                  type: string
+                  enum:
+                    - session
+                    - project
+                    - global
+                running:
                   type: integer
                   minimum: 0
             usage:
@@ -1938,6 +2062,18 @@ components:
                     historyAt:
                       type: integer
                       minimum: 0
+                    sessions:
+                      type: integer
+                      minimum: 0
+                    scope:
+                      type: string
+                      enum:
+                        - session
+                        - project
+                        - global
+                    running:
+                      type: integer
+                      minimum: 0
                 usage:
                   type: object
                   properties:
@@ -2149,6 +2285,18 @@ components:
                       type: integer
                       minimum: 0
                     historyAt:
+                      type: integer
+                      minimum: 0
+                    sessions:
+                      type: integer
+                      minimum: 0
+                    scope:
+                      type: string
+                      enum:
+                        - session
+                        - project
+                        - global
+                    running:
                       type: integer
                       minimum: 0
                 usage:
@@ -8532,6 +8680,18 @@ paths:
                         type: integer
                         minimum: 0
                       historyAt:
+                        type: integer
+                        minimum: 0
+                      sessions:
+                        type: integer
+                        minimum: 0
+                      scope:
+                        type: string
+                        enum:
+                          - session
+                          - project
+                          - global
+                      running:
                         type: integer
                         minimum: 0
                   usage:

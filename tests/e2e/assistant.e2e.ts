@@ -282,6 +282,32 @@ describe("session assistant", () => {
     expect(meta).not.toMatch(/history \d{1,2}:\d{2}/);
   });
 
+  it("opens the global thread from the Overview", async () => {
+    await page!.goto(BASE_URL);
+    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    await page!.locator("#assistant-input").waitFor({ timeout: 10_000 });
+    expect(await page!.locator(".assistant-head p").innerText()).toBe(
+      "All sessions",
+    );
+    expect(await page!.locator(".assistant-scope").innerText()).toBe(
+      "ALL SESSIONS",
+    );
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").fill("what needs me?");
+    await page!.locator("#assistant-input").press("Enter");
+    await page!
+      .locator(".assistant-turn.assistant .assistant-turn-text", {
+        hasText: ANSWER,
+      })
+      .waitFor({ timeout: 15_000 });
+    expect(
+      await page!.locator(".assistant-turn.assistant .assistant-turn-meta").last().innerText(),
+    ).toContain("session as of");
+  });
+
   it("proposes a reply, sends it only after confirmation, and records it", async () => {
     await page!
       .getByRole("button", { name: "Ask", exact: true })
