@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   AssistantEvent,
+  AssistantRunAccepted,
   AttentionPage,
   Message,
   MessagePage,
@@ -86,8 +87,20 @@ const question: QuestionPrompt = {
       text: "Allow running pnpm test?",
       kind: "boolean",
       choices: [
-        { id: "yes", label: "Allow", text: "Allow", kind: "boolean", source: "explicit" },
-        { id: "no", label: "Deny", text: "Deny", kind: "boolean", source: "explicit" },
+        {
+          id: "yes",
+          label: "Allow",
+          text: "Allow running pnpm test in /repo",
+          kind: "boolean",
+          source: "explicit",
+        },
+        {
+          id: "no",
+          label: "Deny",
+          text: "Deny running pnpm test in /repo",
+          kind: "boolean",
+          source: "explicit",
+        },
       ],
       allowsFreeText: false,
       allowsVoice: false,
@@ -144,6 +157,7 @@ function build(fetchImpl: typeof fetch, overrides: {
   allowWrite?: boolean;
 } = {}) {
   const store = new MemoryStateStore();
+  const audits: Array<Record<string, unknown>> = [];
   const sent: Array<{ ref: string; input: Record<string, unknown>; key?: string }> = [];
   const actions = {
     send: async (ref: string, input: Record<string, unknown>, key?: string) => {
@@ -162,6 +176,9 @@ function build(fetchImpl: typeof fetch, overrides: {
       get: async () => question,
     } as unknown as QuestionService,
     logger: logger(),
+    audit: (entry) => {
+      audits.push(entry as unknown as Record<string, unknown>);
+    },
     settings: {
       enabled: true,
       baseUrl: "http://model.test/v1",
@@ -172,7 +189,7 @@ function build(fetchImpl: typeof fetch, overrides: {
     },
     fetchImpl,
   });
-  return { service, store, sent };
+  return { service, store, sent, audits };
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
@@ -454,6 +471,267 @@ describe("AssistantService", () => {
     expect(prompt.length).toBeLessThanOrEqual(24_500);
   });
 
+  it("lets a human cancel even after writes are disabled", async () => {
+    const fetchImpl = (async () =>
+      toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch;
+    const { service, store } = build(fetchImpl, { allowWrite: true });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    // Same data, writes now off: confirming must refuse, cancelling must work.
+    const readOnly = new AssistantService({
+      store,
+      sessions: fakeSessions(),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: false,
+      },
+      fetchImpl,
+    });
+
+    await expect(
+      readOnly.decide(thread.id, action.turn.id, { decision: "confirm" }),
+    ).rejects.toThrow(/disabled/i);
+    const cancelled = await readOnly.decide(thread.id, action.turn.id, {
+      decision: "cancel",
+    });
+    expect(cancelled.action?.status).toBe("cancelled");
+
+    const after = await readOnly.postMessage(thread.id, { text: "next question" });
+    expect(after.run.state).toBe("running");
+  });
+
+  it("sends once when two devices confirm at the same time", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: string[] = [];
+    const actions = {
+      send: async (ref: string, input: { text: string }) => {
+        sent.push(input.text);
+        await gate;
+        return { accepted: true, messageId: "m" };
+      },
+    } as unknown as SessionActions;
+
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions(),
+      actions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl: (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    const first = service.decide(thread.id, action.turn.id, { decision: "confirm" });
+    const second = service.decide(thread.id, action.turn.id, { decision: "confirm" });
+    // Let both reach the reservation, then let the winner's send finish.
+    release();
+    const results = await Promise.allSettled([first, second]);
+
+    expect(results.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((entry) => entry.status === "rejected")).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+    const detail = service.getThread(thread.id);
+    const stored = detail.turns.find((turn) => turn.id === action.turn.id);
+    await waitFor(() => stored?.action?.status === "done");
+    expect(
+      detail.turns.find((turn) => turn.id === action.turn.id)?.action?.status,
+    ).toBe("done");
+  });
+
+  it("keeps one outcome when confirm and cancel race", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: string[] = [];
+    const actions = {
+      send: async (ref: string, input: { text: string }) => {
+        sent.push(input.text);
+        await gate;
+        return { accepted: true, messageId: "m" };
+      },
+    } as unknown as SessionActions;
+
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions(),
+      actions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl: (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    const confirm = service.decide(thread.id, action.turn.id, { decision: "confirm" });
+    const cancel = service.decide(thread.id, action.turn.id, { decision: "cancel" });
+    release();
+    const results = await Promise.allSettled([confirm, cancel]);
+
+    expect(results.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    const status = service
+      .getThread(thread.id)
+      .turns.find((turn) => turn.id === action.turn.id)?.action?.status;
+    if (status === "cancelled") {
+      expect(sent).toHaveLength(0);
+    } else {
+      expect(sent).toHaveLength(1);
+      expect(status).toBe("done");
+    }
+  });
+
+  it("starts one run for two concurrent messages", async () => {
+    const { service } = build((async () =>
+      sseResponse([delta("ok"), "data: [DONE]\n\n"])) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+
+    const results = await Promise.allSettled([
+      service.postMessage(thread.id, { text: "first" }),
+      service.postMessage(thread.id, { text: "second" }),
+    ]);
+    const accepted = results.filter(
+      (entry): entry is PromiseFulfilledResult<AssistantRunAccepted> =>
+        entry.status === "fulfilled",
+    );
+    expect(accepted).toHaveLength(1);
+    expect(results.some((entry) => entry.status === "rejected")).toBe(true);
+  });
+
+  it("returns the same run for a retried idempotency key", async () => {
+    const { service } = build((async () =>
+      sseResponse([delta("ok"), "data: [DONE]\n\n"])) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+
+    const first = await service.postMessage(thread.id, {
+      text: "status?",
+      idempotencyKey: "retry-1",
+    });
+    const second = await service.postMessage(thread.id, {
+      text: "status?",
+      idempotencyKey: "retry-1",
+    });
+
+    expect(second.run.id).toBe(first.run.id);
+    expect(service.getThread(thread.id).turns).toHaveLength(1);
+  });
+
+  it("returns the terminal event when a reconnect asks past the end", async () => {
+    const { service } = build((async () =>
+      sseResponse([
+        delta("answer"),
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ])) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "why?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const replay: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 999, (event) => replay.push(event));
+    expect(replay.some((event) => event.type === "done")).toBe(true);
+  });
+
+  it("survives an audit write that rejects", async () => {
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions(),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      audit: () => Promise.reject(new Error("disk full")),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl: (async () =>
+        toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+
+    const decided = await service.decide(thread.id, action.turn.id, {
+      decision: "cancel",
+    });
+    expect(decided.action?.status).toBe("cancelled");
+  });
+
   it("proposes a send action instead of sending", async () => {
     const { service, sent } = build(
       (async () =>
@@ -477,7 +755,7 @@ describe("AssistantService", () => {
   });
 
   it("sends once with the human's edit after confirmation", async () => {
-    const { service, sent } = build(
+    const { service, sent, audits } = build(
       (async () =>
         toolStream({ kind: "send", text: "Hello", summary: "Send it?" })) as unknown as typeof fetch,
       { allowWrite: true },
@@ -501,6 +779,10 @@ describe("AssistantService", () => {
     expect(sent[0]?.input.text).toBe("Edited before sending");
     expect(sent[0]?.key).toContain("assistant:act_");
     expect(decided.action?.status).toBe("done");
+    const confirmed = audits.find((entry) => entry.event === "confirmed");
+    expect(confirmed).toMatchObject({ ok: true, model: "test-model" });
+    expect(String(confirmed?.payloadHash)).toMatch(/^[0-9a-f]{64}$/);
+    expect(confirmed?.payloadLength).toBe("Edited before sending".length);
   });
 
   it("cancels without sending", async () => {
@@ -555,6 +837,7 @@ describe("AssistantService", () => {
 
     await service.decide(thread.id, action.turn.id, { decision: "confirm" });
     expect(sent).toHaveLength(1);
+    expect(sent[0]?.input.text).toBe("Allow running pnpm test in /repo");
     expect(sent[0]?.input.answers).toMatchObject([
       { questionId: "q1", choiceId: "yes", revision: "r1" },
     ]);

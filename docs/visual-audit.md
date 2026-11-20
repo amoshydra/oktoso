@@ -1401,3 +1401,16 @@ list of file-configured objects.
   not a colour.
 - It stays one line on desktop and mobile. Numbers use the inherited tabular
   figures from `.assistant-turn-meta`.
+
+## Approval hardening (2026-11-20)
+
+- **Cancel is not a write.** It changes hub state only, so it stays available
+  when `allowWrite` is off; otherwise a config change can strand a card that
+  blocks the whole thread with no recovery in the UI.
+- **A decided card never shows two outcomes.** The head carries the verb, the
+  right edge carries the state. `SENT / SENT` was a real defect, not a style
+  choice.
+- **In-flight is its own state.** `Working…` replaces the buttons while a
+  decision executes, so a double tap cannot look like two successes.
+- **Audit without content.** The confirmed payload is recorded as a SHA-256 and
+  a byte length, with the model id; the message text is not stored.

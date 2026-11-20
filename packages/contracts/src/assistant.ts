@@ -29,6 +29,8 @@ export const zAssistantActionKind = z.enum(["send", "answer", "interrupt"]);
 
 export const zAssistantActionStatus = z.enum([
   "pending",
+  /** Reserved by one decision; a second decision is refused. */
+  "deciding",
   "done",
   "cancelled",
   "failed",
@@ -37,7 +39,11 @@ export const zAssistantActionStatus = z.enum([
 export const zAssistantAnswer = z.object({
   questionId: z.string().min(1),
   choiceId: z.string().min(1),
+  /** Short label for the card. */
   label: z.string(),
+  /** The full option text, which is what the provider receives. Older turns
+   * predate this field and fall back to the label. */
+  text: z.string().optional(),
   messageId: z.string().min(1),
   revision: z.string().min(1),
 });

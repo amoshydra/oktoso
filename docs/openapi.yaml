@@ -1016,6 +1016,7 @@ components:
           type: string
           enum:
             - pending
+            - deciding
             - done
             - cancelled
             - failed
@@ -1038,6 +1039,8 @@ components:
                 type: string
                 minLength: 1
               label:
+                type: string
+              text:
                 type: string
               messageId:
                 type: string
@@ -1247,6 +1250,7 @@ components:
                     type: string
                     enum:
                       - pending
+                      - deciding
                       - done
                       - cancelled
                       - failed
@@ -1269,6 +1273,8 @@ components:
                           type: string
                           minLength: 1
                         label:
+                          type: string
+                        text:
                           type: string
                         messageId:
                           type: string
@@ -1520,6 +1526,7 @@ components:
                   type: string
                   enum:
                     - pending
+                    - deciding
                     - done
                     - cancelled
                     - failed
@@ -1542,6 +1549,8 @@ components:
                         type: string
                         minLength: 1
                       label:
+                        type: string
+                      text:
                         type: string
                       messageId:
                         type: string
@@ -1704,6 +1713,7 @@ components:
                       type: string
                       enum:
                         - pending
+                        - deciding
                         - done
                         - cancelled
                         - failed
@@ -1726,6 +1736,8 @@ components:
                             type: string
                             minLength: 1
                           label:
+                            type: string
+                          text:
                             type: string
                           messageId:
                             type: string
@@ -1875,6 +1887,7 @@ components:
                       type: string
                       enum:
                         - pending
+                        - deciding
                         - done
                         - cancelled
                         - failed
@@ -1897,6 +1910,8 @@ components:
                             type: string
                             minLength: 1
                           label:
+                            type: string
+                          text:
                             type: string
                           messageId:
                             type: string
@@ -8216,6 +8231,7 @@ paths:
                         type: string
                         enum:
                           - pending
+                          - deciding
                           - done
                           - cancelled
                           - failed
@@ -8238,6 +8254,8 @@ paths:
                               type: string
                               minLength: 1
                             label:
+                              type: string
+                            text:
                               type: string
                             messageId:
                               type: string

@@ -433,6 +433,9 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
 - While an action is pending the composer is disabled with
   `Decide the action above first…`. One action at a time.
+- Cancel is always available, even when writes are disabled; the primary
+  action is then replaced by `Writes are disabled. Cancel to unlock the
+  thread.` While a decision is in flight the card reads `Working…`.
 - Every answer carries one 10px evidence line: turns read, older turns omitted
   when the context budget dropped any, attention items in the context, and
   token usage. It is how a partial answer announces itself.

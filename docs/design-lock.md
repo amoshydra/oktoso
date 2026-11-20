@@ -1,11 +1,11 @@
-# Design Lock — v1.24
+# Design Lock — v1.25
 
 Status: **frozen**.
 
-- Version: `design-v1.24`
-- Parent: `design-v1.23`
+- Version: `design-v1.25`
+- Parent: `design-v1.24`
 - Date: 2026-11-20
-- Git tag: `design-v1.24`
+- Git tag: `design-v1.25`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -31,6 +31,7 @@ Status: **frozen**.
 - v1.23 scope: assistant write confirmations, the action card, and the opt-in
   write badge.
 - v1.24 scope: the assistant evidence line under each answer.
+- v1.25 scope: the action card's disabled-writes, in-flight, and outcome states.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -668,9 +669,20 @@ radius, or color token.
   not silently dropped, and it has no buttons.
 - The card reuses `.btn small`, the card radius (8px), and the existing
   surface and border tokens. No new tokens, type roles, or radii.
+- **Cancel always works.** It is a local state change, so it is not gated by
+  `allowWrite`. If writes are turned off while a card is pending, the primary
+  action is replaced by `Writes are disabled. Cancel to unlock the thread.`
+  and Cancel stays available. A pending card can never strand a thread.
+- **One decision.** A confirmed action is reserved before it executes; the card
+  reads `Working…` and offers no second action until it resolves. A second
+  device gets `409`, not a second send.
+- The card head names the action kind (`Send`, `Answer`, `Stop turn`) and the
+  right side names the outcome (`Sent`, `Cancelled`, …). The state is never
+  printed twice.
 - Writes are audited to `dataDir/assistant-audit.jsonl` with the thread, turn,
-  action id, kind, session ref, event, outcome, and duration. Message text is
-  never written to the audit.
+  action id, kind, session ref, event, outcome, duration, model, and a SHA-256
+  plus length of the confirmed payload. Message text is never written to the
+  audit.
 
 ## Assistant evidence line (2026-11-20)
 
@@ -685,6 +697,18 @@ radius, or color token.
 - It is static text in the existing metadata role. No chip, no expansion, no
   "what the model saw" panel; that would be a debugging tool, not a trust line.
 - Turns written before this revision simply have no line. There is no backfill.
+
+## Approval state corrections (2026-11-20)
+
+- A pending card with writes disabled replaces the primary action with
+  `Writes are disabled. Cancel to unlock the thread.` and keeps Cancel. Cancel
+  is a hub-state change, never a provider write.
+- A decision in flight renders `Working…` in place of the buttons. The dropped
+  state names the verb on the left (`Send`, `Answer`, `Stop turn`) and the
+  outcome on the right (`Sent`, `Cancelled`, `Failed`), never the same word
+  twice.
+- No layout, token, radius, or type-role change: these are states of the
+  existing card.
 
 ## Change policy
 

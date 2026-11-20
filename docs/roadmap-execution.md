@@ -705,6 +705,14 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   - Verified live against Qwen 27B (proposal, editable text, cancel) and in
     `tests/e2e/assistant.e2e.ts` against a fake provider (confirm → send →
     `Sent` → reload).
+  - Hardening after audit: cancel is no longer gated by `allowWrite`; a
+    decision is a compare-and-set through a transient `deciding` status (one
+    send, one audit row, 409 for the second device); `postMessage` is
+    single-flight per thread and honours `idempotencyKey`; a rejected audit
+    write is contained instead of crashing the hub; an SSE reconnect past the
+    end of a run replays its terminal event; `answer` sends the full option
+    text, not the 80-char label; interrupted decisions become `failed` at
+    startup.
   - Still out of scope: approvals, automation actions, project/global scopes.
 
 - [x] G9. Assistant evidence line. Every assistant turn stores
