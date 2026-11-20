@@ -1414,3 +1414,15 @@ list of file-configured objects.
   decision executes, so a double tap cannot look like two successes.
 - **Audit without content.** The confirmed payload is recorded as a SHA-256 and
   a byte length, with the model id; the message text is not stored.
+
+## Thread time markers (2026-11-20)
+
+- A thread that persists across days needs two facts the UI did not show: when
+  a turn was written, and how old the session was when the answer read it.
+- Day labels use a hairline rule on both sides so they read as separators, not
+  as another message. Times are right-aligned and tabular so a column of turns
+  scans without the eye moving.
+- `session as of` is deliberately the session's last activity, not the answer
+  time: it answers "could this be stale?" in one clause. Same-day sessions show
+  a bare time; older ones carry the date.
+- No colour is used for age. A stale answer is a fact, not a warning.

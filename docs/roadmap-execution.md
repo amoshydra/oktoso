@@ -722,6 +722,11 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   clips each message head + tail, so a conclusion at the end of a long message
   is never the part that gets cut.
 
+- [x] G10. Assistant thread time markers. Day separators (`Today`,
+  `Yesterday`, date) and per-turn `HH:MM` make persisted history legible; each
+  answer's context carries the session's last-activity time and renders it as
+  `session as of …`, so an answer based on an older session says so.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

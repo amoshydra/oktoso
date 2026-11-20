@@ -6015,3 +6015,40 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     font-size: 16px;
   }
 }
+
+/* --- Assistant thread time markers -------------------------------------- */
+
+.assistant-turn-role {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.assistant-turn-time {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.assistant-day {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assistant-day::before,
+.assistant-day::after {
+  flex: 1;
+  height: 1px;
+  content: "";
+  background: var(--border-subtle);
+}

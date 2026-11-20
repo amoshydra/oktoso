@@ -78,6 +78,8 @@ export const zAssistantContext = z.object({
   chars: z.number().int().nonnegative(),
   /** Attention items in the context. */
   attention: z.number().int().nonnegative(),
+  /** The session's last activity when the answer was assembled. */
+  asOf: z.number().int().nonnegative().optional(),
 });
 
 export const zAssistantTurn = z.object({

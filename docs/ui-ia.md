@@ -436,6 +436,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Cancel is always available, even when writes are disabled; the primary
   action is then replaced by `Writes are disabled. Cancel to unlock the
   thread.` While a decision is in flight the card reads `Working…`.
+- The thread shows when it happened: a day label (`Today`, `Yesterday`, or a
+  date) before the first turn of each day, and a 10px time on every role line.
 - Every answer carries one 10px evidence line: turns read, older turns omitted
   when the context budget dropped any, attention items in the context, and
   token usage. It is how a partial answer announces itself.
