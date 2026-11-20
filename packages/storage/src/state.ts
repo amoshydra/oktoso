@@ -10,6 +10,8 @@ import {
   zNotificationRouting,
   zTranscriptCacheSettings,
   zLocalRetention,
+  zAssistantThread,
+  zAssistantTurn,
 } from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
@@ -50,6 +52,10 @@ export const zNotificationSubscriptionState = z.object({
 export const zNotificationOverrideState = z.object({
   enabled: z.boolean().optional(),
   routing: zNotificationRouting.optional(),
+});
+
+export const zAssistantThreadState = zAssistantThread.extend({
+  turns: z.array(zAssistantTurn).max(200),
 });
 
 /**
@@ -104,6 +110,8 @@ export const zHubState = z.object({
     markersDays: 30,
     feedbackDays: 30,
   }),
+  /** Hub-owned assistant threads. Bounded: the oldest thread is dropped. */
+  assistantThreads: z.array(zAssistantThreadState).max(50).default([]),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -114,6 +122,7 @@ export type NotificationSubscriptionState = z.infer<
 export type AutomationApprovalState = z.infer<
   typeof zAutomationApprovalState
 >;
+export type AssistantThreadState = z.infer<typeof zAssistantThreadState>;
 
 export function createInitialState(): HubState {
   return {
@@ -135,6 +144,7 @@ export function createInitialState(): HubState {
     automationWatcherPause: {},
     transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 500 },
     localRetention: { draftsDays: 0, markersDays: 30, feedbackDays: 30 },
+    assistantThreads: [],
   };
 }
 

@@ -22,6 +22,7 @@ tags:
   - name: search
   - name: notifications
   - name: automation
+  - name: assistant
   - name: diagnostics
 security:
   - bearerAuth: []
@@ -979,6 +980,521 @@ components:
       required:
         - reply
         - transcription
+    AssistantStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        model:
+          type: string
+        readOnly:
+          type: boolean
+        maxContextMessages:
+          type: integer
+          minimum: 0
+      required:
+        - enabled
+        - model
+        - readOnly
+        - maxContextMessages
+    AssistantThread:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+        scope:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - session
+                sessionRef:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - sessionRef
+        title:
+          type: string
+        createdAt:
+          type: integer
+          minimum: 0
+        updatedAt:
+          type: integer
+          minimum: 0
+        messageCount:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - scope
+        - title
+        - createdAt
+        - updatedAt
+        - messageCount
+    AssistantThreadPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                minLength: 1
+              scope:
+                oneOf:
+                  - type: object
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - session
+                      sessionRef:
+                        type: string
+                        minLength: 1
+                    required:
+                      - kind
+                      - sessionRef
+              title:
+                type: string
+              createdAt:
+                type: integer
+                minimum: 0
+              updatedAt:
+                type: integer
+                minimum: 0
+              messageCount:
+                type: integer
+                minimum: 0
+            required:
+              - id
+              - scope
+              - title
+              - createdAt
+              - updatedAt
+              - messageCount
+      required:
+        - data
+    AssistantThreadDetail:
+      type: object
+      properties:
+        thread:
+          type: object
+          properties:
+            id:
+              type: string
+              minLength: 1
+            scope:
+              oneOf:
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - session
+                    sessionRef:
+                      type: string
+                      minLength: 1
+                  required:
+                    - kind
+                    - sessionRef
+            title:
+              type: string
+            createdAt:
+              type: integer
+              minimum: 0
+            updatedAt:
+              type: integer
+              minimum: 0
+            messageCount:
+              type: integer
+              minimum: 0
+          required:
+            - id
+            - scope
+            - title
+            - createdAt
+            - updatedAt
+            - messageCount
+        turns:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                minLength: 1
+              threadId:
+                type: string
+                minLength: 1
+              role:
+                type: string
+                enum:
+                  - user
+                  - assistant
+              text:
+                type: string
+              createdAt:
+                type: integer
+                minimum: 0
+              runId:
+                type: string
+              model:
+                type: string
+              error:
+                type: string
+              usage:
+                type: object
+                properties:
+                  promptTokens:
+                    type: integer
+                    minimum: 0
+                  completionTokens:
+                    type: integer
+                    minimum: 0
+                required:
+                  - promptTokens
+                  - completionTokens
+            required:
+              - id
+              - threadId
+              - role
+              - text
+              - createdAt
+      required:
+        - thread
+        - turns
+    AssistantThreadInput:
+      type: object
+      properties:
+        scope:
+          oneOf:
+            - type: object
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - session
+                sessionRef:
+                  type: string
+                  minLength: 1
+              required:
+                - kind
+                - sessionRef
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - scope
+    AssistantMessageInput:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        idempotencyKey:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - text
+    AssistantRun:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+        threadId:
+          type: string
+          minLength: 1
+        state:
+          type: string
+          enum:
+            - running
+            - done
+            - error
+            - stopped
+        startedAt:
+          type: integer
+          minimum: 0
+        finishedAt:
+          type: integer
+          minimum: 0
+        model:
+          type: string
+        error:
+          type: string
+      required:
+        - id
+        - threadId
+        - state
+        - startedAt
+    AssistantRunAccepted:
+      type: object
+      properties:
+        run:
+          type: object
+          properties:
+            id:
+              type: string
+              minLength: 1
+            threadId:
+              type: string
+              minLength: 1
+            state:
+              type: string
+              enum:
+                - running
+                - done
+                - error
+                - stopped
+            startedAt:
+              type: integer
+              minimum: 0
+            finishedAt:
+              type: integer
+              minimum: 0
+            model:
+              type: string
+            error:
+              type: string
+          required:
+            - id
+            - threadId
+            - state
+            - startedAt
+        thread:
+          type: object
+          properties:
+            id:
+              type: string
+              minLength: 1
+            scope:
+              oneOf:
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - session
+                    sessionRef:
+                      type: string
+                      minLength: 1
+                  required:
+                    - kind
+                    - sessionRef
+            title:
+              type: string
+            createdAt:
+              type: integer
+              minimum: 0
+            updatedAt:
+              type: integer
+              minimum: 0
+            messageCount:
+              type: integer
+              minimum: 0
+          required:
+            - id
+            - scope
+            - title
+            - createdAt
+            - updatedAt
+            - messageCount
+        turn:
+          type: object
+          properties:
+            id:
+              type: string
+              minLength: 1
+            threadId:
+              type: string
+              minLength: 1
+            role:
+              type: string
+              enum:
+                - user
+                - assistant
+            text:
+              type: string
+            createdAt:
+              type: integer
+              minimum: 0
+            runId:
+              type: string
+            model:
+              type: string
+            error:
+              type: string
+            usage:
+              type: object
+              properties:
+                promptTokens:
+                  type: integer
+                  minimum: 0
+                completionTokens:
+                  type: integer
+                  minimum: 0
+              required:
+                - promptTokens
+                - completionTokens
+          required:
+            - id
+            - threadId
+            - role
+            - text
+            - createdAt
+      required:
+        - run
+        - thread
+        - turn
+    AssistantEvent:
+      oneOf:
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - delta
+            text:
+              type: string
+          required:
+            - type
+            - text
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - done
+            run:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                threadId:
+                  type: string
+                  minLength: 1
+                state:
+                  type: string
+                  enum:
+                    - running
+                    - done
+                    - error
+                    - stopped
+                startedAt:
+                  type: integer
+                  minimum: 0
+                finishedAt:
+                  type: integer
+                  minimum: 0
+                model:
+                  type: string
+                error:
+                  type: string
+              required:
+                - id
+                - threadId
+                - state
+                - startedAt
+            turn:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                threadId:
+                  type: string
+                  minLength: 1
+                role:
+                  type: string
+                  enum:
+                    - user
+                    - assistant
+                text:
+                  type: string
+                createdAt:
+                  type: integer
+                  minimum: 0
+                runId:
+                  type: string
+                model:
+                  type: string
+                error:
+                  type: string
+                usage:
+                  type: object
+                  properties:
+                    promptTokens:
+                      type: integer
+                      minimum: 0
+                    completionTokens:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - promptTokens
+                    - completionTokens
+              required:
+                - id
+                - threadId
+                - role
+                - text
+                - createdAt
+          required:
+            - type
+            - run
+            - turn
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - error
+            run:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                threadId:
+                  type: string
+                  minLength: 1
+                state:
+                  type: string
+                  enum:
+                    - running
+                    - done
+                    - error
+                    - stopped
+                startedAt:
+                  type: integer
+                  minimum: 0
+                finishedAt:
+                  type: integer
+                  minimum: 0
+                model:
+                  type: string
+                error:
+                  type: string
+              required:
+                - id
+                - threadId
+                - state
+                - startedAt
+            message:
+              type: string
+          required:
+            - type
+            - run
+            - message
     TranscriptCacheView:
       type: object
       properties:
@@ -6964,6 +7480,210 @@ paths:
                 $ref: "#/components/schemas/Error"
         "409":
           description: Approval expired, already decided, or the question changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/assistant/status:
+    get:
+      tags:
+        - assistant
+      summary: Hub assistant availability
+      description: Reports whether the assistant has a model configured. M1 is read-only and session-scoped.
+      responses:
+        "200":
+          description: Assistant status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantStatus"
+  /api/v1/assistant/threads:
+    post:
+      tags:
+        - assistant
+      summary: Open the session assistant thread
+      description: Returns the existing thread for this scope or creates one. M1 supports the session scope only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantThreadInput"
+      responses:
+        "201":
+          description: Thread
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantThread"
+        "400":
+          description: Invalid scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The assistant is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      tags:
+        - assistant
+      summary: List assistant threads
+      parameters:
+        - schema:
+            type: string
+          required: false
+          name: sessionRef
+          in: query
+      responses:
+        "200":
+          description: Threads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantThreadPage"
+  /api/v1/assistant/threads/{id}:
+    get:
+      tags:
+        - assistant
+      summary: Read a thread with its turns
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "200":
+          description: Thread detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantThreadDetail"
+        "404":
+          description: Thread not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - assistant
+      summary: Delete a thread
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Thread deleted
+        "404":
+          description: Thread not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/assistant/threads/{id}/messages:
+    post:
+      tags:
+        - assistant
+      summary: Ask a question
+      description: Appends the user turn and starts one read-only answer. The run streams on /api/v1/assistant/runs/{id}/events.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantMessageInput"
+      responses:
+        "202":
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantRunAccepted"
+        "400":
+          description: Invalid message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Thread not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: A run is already in flight for this thread
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/assistant/runs/{id}/stop:
+    post:
+      tags:
+        - assistant
+      summary: Stop an answer
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+      responses:
+        "200":
+          description: Run state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantRun"
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/assistant/runs/{id}/events:
+    get:
+      tags:
+        - assistant
+      summary: Follow an answer
+      description: "Server-sent events: delta frames carry text, and exactly one done or error frame ends the stream. Replay with ?since=<index>."
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: id
+          in: path
+        - schema:
+            type:
+              - integer
+              - "null"
+            minimum: 0
+          required: false
+          name: since
+          in: query
+      responses:
+        "200":
+          description: Assistant run events
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/AssistantEvent"
+        "404":
+          description: Run not found
           content:
             application/json:
               schema:

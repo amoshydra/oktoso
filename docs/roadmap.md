@@ -426,6 +426,9 @@ Goal: extend the surfaces only after the loop is closed.
   blocking attention, and an offline queue.
 - Local reply drafting through Ollama behind the hub, feeding the existing
   feedback loop.
+- Session assistant: a hub-owned, read-only thread that explains one session
+  using the context the hub already has, then acts through the existing tools
+  only after a confirmation.
 - VR client, only after G2 hardware acceptance.
 - Multi-user and teams, only with demonstrated demand.
 

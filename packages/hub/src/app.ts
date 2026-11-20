@@ -23,6 +23,7 @@ import type { LocalDataService } from "./services/local-data";
 import type { SearchService } from "./services/search-service";
 import type { TranscriptCacheService } from "./services/transcript-cache";
 import type { AutomationService } from "./services/automation-service";
+import type { AssistantService } from "./services/assistant-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import { ProviderError } from "@amoshydra/oktoso-providers";
@@ -55,6 +56,7 @@ import { registerEventRoutes } from "./http/routes/events";
 import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerAutomationRoutes } from "./http/routes/automation";
+import { registerAssistantRoutes } from "./http/routes/assistant";
 import { registerMcpRoutes } from "./mcp/http";
 import { createServiceMcpApi } from "./mcp/api";
 import { SessionActions } from "./services/session-actions";
@@ -83,6 +85,7 @@ export interface AppDependencies {
   notifications?: NotificationService;
   actions?: SessionActions;
   automation?: AutomationService;
+  assistant?: AssistantService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -169,6 +172,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   }
   if (deps.automation) {
     registerAutomationRoutes(app, deps.automation);
+  }
+  if (deps.assistant) {
+    registerAssistantRoutes(app, deps.assistant);
   }
   registerEventRoutes(app, deps.eventBus);
   registerMcpRoutes(app, {

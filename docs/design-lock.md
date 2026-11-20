@@ -1,11 +1,11 @@
-# Design Lock — v1.21
+# Design Lock — v1.22
 
 Status: **frozen**.
 
-- Version: `design-v1.21`
-- Parent: `design-v1.20`
-- Date: 2026-11-18
-- Git tag: `design-v1.21`
+- Version: `design-v1.22`
+- Parent: `design-v1.21`
+- Date: 2026-11-20
+- Git tag: `design-v1.22`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -27,6 +27,7 @@ Status: **frozen**.
 - v1.18 scope: login QR focus handling, inline-panel focus restore, and the Inbox live region.
 - v1.20 scope: transcript loading, waiting, and error states in the chat shell.
 - v1.21 scope: the Settings Automation Templates panel and human reason labels.
+- v1.22 scope: the read-only session assistant dock and its topbar Ask action.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -600,6 +601,44 @@ radius, or color token.
   degrades to the code with spaces.
 - No new tokens, radii, type roles, routes, or navigation.
 
+## Session assistant dock (2026-11-20)
+
+- The chat topbar gains one quiet `.btn small` **Ask** action between the
+  title block and Details. It renders only when the hub reports a configured
+  assistant (`GET /api/v1/assistant/status`, `enabled: true`); a hub without a
+  model shows nothing.
+- Ask opens a 400px right-hand panel fixed below the topbar, from the topbar
+  edge to the viewport bottom. Opening it closes Details, because both are
+  right-side panels and two would overlap; the reverse also holds.
+- At 760px and below the panel is full-width. It is not a bottom sheet: the
+  composer sits on the viewport floor and the transcript fills the rest.
+- The header carries a 16px `Assistant` title, the session title at 11px muted,
+  a `This session` scope chip at 10px uppercase, and a 44px close control.
+  There is no second page heading.
+- The log is a `role="log"` polite live region. Turns use two roles only:
+  `You` and `Assistant`, both at 10px uppercase; the answer text is 14px/1.6
+  with `white-space: pre-wrap`. Usage, when the model reports it, is a 10px
+  tabular-figures line under the answer.
+- The empty state is one muted sentence plus three quiet suggestion buttons
+  (`Why is this stuck?`, `What changed most recently?`, `Draft a reply to this
+  session`). They are 40px tall, `--surface-2`, and only appear before the
+  first turn.
+- The composer is a two-row textarea with one primary `Ask` button. Enter sends,
+  Shift+Enter adds a line. While an answer streams, the primary action is
+  replaced by a quiet **Stop**. The textarea is disabled until the thread has
+  loaded, and its placeholder says `Reading this session…` in that state.
+- The footer carries one 10px uppercase line, `Read-only · no writes`. This is
+  the product promise of M1 and it is always visible.
+- Streaming shows the partial answer with a 6px accent caret; the caret is
+  hidden from assistive technology, and the text itself is announced through
+  the polite log.
+- Errors render as a 12px danger line inside the log, below the last turn. A
+  stopped answer keeps its partial text and shows `Stopped` as the turn error.
+- Escape closes the panel. Focus moves to the composer when the panel opens;
+  closing returns focus to the Ask action.
+- No new tokens, radii, or type roles. The panel reuses the surface, border,
+  radius, and control grammar of the details panel.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -626,4 +665,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3).
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.

@@ -52,6 +52,7 @@ import {
   scanPairingQr,
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
+import { AssistantDock } from "./AssistantDock";
 import { BrandMark } from "./BrandMark";
 import { pastedFiles } from "./clipboard";
 import { Icon, type IconName } from "./Icon";
@@ -297,6 +298,8 @@ export function App() {
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     window.matchMedia("(min-width: 761px)").matches,
   );
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantAvailable, setAssistantAvailable] = useState(false);
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const contentRef = useRef<HTMLElement | null>(null);
@@ -305,6 +308,26 @@ export function App() {
   routeRef.current = route;
   const autoDetailsKey = useRef<string | undefined>(undefined);
   const detailsPushed = useRef(false);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    client
+      .assistantStatus()
+      .then((status) => {
+        if (!cancelled) setAssistantAvailable(status.enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setAssistantAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (!chatOpen) setAssistantOpen(false);
+  }, [chatOpen]);
 
   const providerEditorRoute =
     route.name === "providers" ? route.editor : undefined;
@@ -935,6 +958,20 @@ export function App() {
             </h1>
             <span className="topbar-sub">{pageSub}</span>
           </div>
+          {chatOpen && activeSession && assistantAvailable ? (
+            <button
+              className="btn small topbar-ask"
+              type="button"
+              aria-expanded={assistantOpen}
+              aria-controls={assistantOpen ? "session-assistant" : undefined}
+              onClick={() => {
+                setAssistantOpen((open) => !open);
+                if (!assistantOpen) setDetailsOpen(false);
+              }}
+            >
+              Ask
+            </button>
+          ) : null}
           {chatOpen && activeSession ? (
             <button
               className="btn small topbar-details"
@@ -1061,6 +1098,7 @@ export function App() {
               />
             ) : view === "sessions" ? (
               selectedSessionRef ? (
+                <>
                 <div className="chat-shell">
                   {sidebarVisible ? (
                     <ChatSidebar
@@ -1097,6 +1135,15 @@ export function App() {
                     onBack={() => backTo({ name: "sessions" })}
                   />
                 </div>
+                {assistantOpen && client ? (
+                  <AssistantDock
+                    client={client}
+                    sessionRef={selectedSessionRef}
+                    sessionTitle={activeSession?.title ?? "This session"}
+                    onClose={() => setAssistantOpen(false)}
+                  />
+                ) : null}
+                </>
               ) : (
                 <SessionsView
                   client={client as HubClient}
