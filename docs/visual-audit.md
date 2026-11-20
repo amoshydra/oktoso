@@ -1389,3 +1389,15 @@ list of file-configured objects.
     Settings view belongs with M3, when global scope makes actions less obvious.
   - A cancelled action remains in the thread forever. That is intentional now;
     a "clear decided actions" affordance can wait for a longer thread.
+
+## Assistant evidence line (2026-11-20)
+
+- The line exists because the context window is invisible. A session assistant
+  that answers from eight of forty turns must say eight, or the answer reads as
+  complete when it is not.
+- It reuses the 10px metadata role and muted colour already used for token
+  counts; no new tokens, no border, no control. When nothing was omitted it is
+  quiet; when turns were dropped the words `older omitted` carry the warning,
+  not a colour.
+- It stays one line on desktop and mobile. Numbers use the inherited tabular
+  figures from `.assistant-turn-meta`.

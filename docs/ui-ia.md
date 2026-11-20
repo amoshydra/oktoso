@@ -433,6 +433,9 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
 - While an action is pending the composer is disabled with
   `Decide the action above first…`. One action at a time.
+- Every answer carries one 10px evidence line: turns read, older turns omitted
+  when the context budget dropped any, attention items in the context, and
+  token usage. It is how a partial answer announces itself.
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.

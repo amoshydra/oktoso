@@ -1297,6 +1297,26 @@ components:
                   - summary
                   - sessionRef
                   - createdAt
+              context:
+                type: object
+                properties:
+                  messages:
+                    type: integer
+                    minimum: 0
+                  omitted:
+                    type: integer
+                    minimum: 0
+                  chars:
+                    type: integer
+                    minimum: 0
+                  attention:
+                    type: integer
+                    minimum: 0
+                required:
+                  - messages
+                  - omitted
+                  - chars
+                  - attention
               usage:
                 type: object
                 properties:
@@ -1550,6 +1570,26 @@ components:
                 - summary
                 - sessionRef
                 - createdAt
+            context:
+              type: object
+              properties:
+                messages:
+                  type: integer
+                  minimum: 0
+                omitted:
+                  type: integer
+                  minimum: 0
+                chars:
+                  type: integer
+                  minimum: 0
+                attention:
+                  type: integer
+                  minimum: 0
+              required:
+                - messages
+                - omitted
+                - chars
+                - attention
             usage:
               type: object
               properties:
@@ -1714,6 +1754,26 @@ components:
                     - summary
                     - sessionRef
                     - createdAt
+                context:
+                  type: object
+                  properties:
+                    messages:
+                      type: integer
+                      minimum: 0
+                    omitted:
+                      type: integer
+                      minimum: 0
+                    chars:
+                      type: integer
+                      minimum: 0
+                    attention:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - messages
+                    - omitted
+                    - chars
+                    - attention
                 usage:
                   type: object
                   properties:
@@ -1865,6 +1925,26 @@ components:
                     - summary
                     - sessionRef
                     - createdAt
+                context:
+                  type: object
+                  properties:
+                    messages:
+                      type: integer
+                      minimum: 0
+                    omitted:
+                      type: integer
+                      minimum: 0
+                    chars:
+                      type: integer
+                      minimum: 0
+                    attention:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - messages
+                    - omitted
+                    - chars
+                    - attention
                 usage:
                   type: object
                   properties:
@@ -8186,6 +8266,26 @@ paths:
                       - summary
                       - sessionRef
                       - createdAt
+                  context:
+                    type: object
+                    properties:
+                      messages:
+                        type: integer
+                        minimum: 0
+                      omitted:
+                        type: integer
+                        minimum: 0
+                      chars:
+                        type: integer
+                        minimum: 0
+                      attention:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - messages
+                      - omitted
+                      - chars
+                      - attention
                   usage:
                     type: object
                     properties:

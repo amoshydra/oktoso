@@ -707,6 +707,13 @@ Schedule one bet at a time, each with its own acceptance before it starts.
     `Sent` → reload).
   - Still out of scope: approvals, automation actions, project/global scopes.
 
+- [x] G9. Assistant evidence line. Every assistant turn stores
+  `{messages, omitted, chars, attention}` for the context it actually read and
+  renders it at 10px with token usage (`Read 8 turns · 1 attention item · 3252
+  in · 94 out`). The transcript budget now drops the oldest turns first and
+  clips each message head + tail, so a conclusion at the end of a long message
+  is never the part that gets cut.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

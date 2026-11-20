@@ -4,6 +4,7 @@ import type {
   AssistantActionDecision,
   AssistantActionKind,
   AssistantAnswer,
+  AssistantContext,
   AssistantEvent,
   AssistantMessageInput,
   AssistantRun,
@@ -404,13 +405,19 @@ export class AssistantService {
     const { logger } = this.options;
     let text = "";
     let usage: AssistantTurn["usage"];
+    let built: { text: string; context: AssistantContext } | undefined;
     try {
-      const context = await this.buildContext(sessionRef);
+      built = await this.buildContext(sessionRef);
       const history = this.findThread(record.run.threadId)
         .turns.slice(0, -1)
         .slice(-6)
         .map((turn) => `${turn.role.toUpperCase()}: ${turn.text.slice(0, 400)}`);
-      const prompt = renderPrompt(context, question, history, this.writesEnabled());
+      const prompt = renderPrompt(
+        built.text,
+        question,
+        history,
+        this.writesEnabled(),
+      );
 
       const result = await this.stream(prompt, record, (delta) => {
         text += delta;
@@ -430,6 +437,7 @@ export class AssistantService {
           result.call,
           sessionRef,
           usage,
+          built.context,
         );
         if (turn.action?.status === "pending") {
           this.finishAction(record, turn);
@@ -439,7 +447,13 @@ export class AssistantService {
         return;
       }
 
-      const turn = await this.appendAnswer(threadId, text, usage);
+      const turn = await this.appendAnswer(
+        threadId,
+        text,
+        usage,
+        undefined,
+        built.context,
+      );
       this.finish(record, "done", { turn });
     } catch (error) {
       const message = describeError(error);
@@ -455,6 +469,7 @@ export class AssistantService {
         text,
         usage,
         message,
+        built?.context,
       );
       this.finish(record, state, { turn, message });
     }
@@ -579,6 +594,7 @@ export class AssistantService {
     text: string,
     usage?: AssistantTurn["usage"],
     error?: string,
+    context?: AssistantContext,
   ): Promise<AssistantTurn> {
     return this.appendTurn({
       id: `atn_${randomUUID()}`,
@@ -590,6 +606,7 @@ export class AssistantService {
       model: this.model(),
       ...(usage ? { usage } : {}),
       ...(error ? { error } : {}),
+      ...(context ? { context } : {}),
     });
   }
 
@@ -599,6 +616,7 @@ export class AssistantService {
     call: ToolCall,
     sessionRef: string,
     usage?: AssistantTurn["usage"],
+    context?: AssistantContext,
   ): Promise<AssistantTurn> {
     const action = await this.buildAction(call, sessionRef);
     const turn: AssistantTurn = {
@@ -611,6 +629,7 @@ export class AssistantService {
       model: this.model(),
       action,
       ...(usage ? { usage } : {}),
+      ...(context ? { context } : {}),
     };
     await this.appendTurn(turn);
     // `proposed` is audited even when validation failed, so a bad model turn
@@ -867,7 +886,9 @@ export class AssistantService {
 
   // --- context -------------------------------------------------------------
 
-  private async buildContext(sessionRef: string): Promise<string> {
+  private async buildContext(
+    sessionRef: string,
+  ): Promise<{ text: string; context: AssistantContext }> {
     const { sessions, attention, questions, settings } = this.options;
     const [session, waiting, question, page] = await Promise.all([
       sessions.get(sessionRef),
@@ -1048,7 +1069,7 @@ function renderContext(input: {
   messages: Message[];
   canWrite: boolean;
   assistantModel: string;
-}): string {
+}): { text: string; context: AssistantContext } {
   const lines: string[] = ["ASSISTANT"];
   lines.push(`model: ${input.assistantModel}`);
   lines.push(
@@ -1142,13 +1163,23 @@ function renderContext(input: {
   const omitted = blocks.length - kept.length;
   const note = omitted > 0 ? [`\n[${omitted} older turns omitted]`] : [];
 
-  return [
+  const text = [
     header,
     "",
     `TRANSCRIPT (last ${input.messages.length} turns, text only, oldest first)`,
     ...note,
     ...kept,
   ].join("\n");
+
+  return {
+    text,
+    context: {
+      messages: kept.length,
+      omitted,
+      chars: text.length,
+      attention: input.attention.length,
+    },
+  };
 }
 
 const TOOL_ARG_KEYS = [

@@ -63,6 +63,17 @@ export const zAssistantAction = z.object({
   decidedAt: z.number().int().nonnegative().optional(),
 });
 
+/** What the run actually read, so the answer can say so. */
+export const zAssistantContext = z.object({
+  /** Transcript turns included after the budget dropped the oldest. */
+  messages: z.number().int().nonnegative(),
+  /** Turns the budget left out. */
+  omitted: z.number().int().nonnegative(),
+  chars: z.number().int().nonnegative(),
+  /** Attention items in the context. */
+  attention: z.number().int().nonnegative(),
+});
+
 export const zAssistantTurn = z.object({
   id: z.string().min(1),
   threadId: z.string().min(1),
@@ -74,6 +85,7 @@ export const zAssistantTurn = z.object({
   /** Set when the run ended without an answer. */
   error: z.string().optional(),
   action: zAssistantAction.optional(),
+  context: zAssistantContext.optional(),
   usage: z
     .object({
       promptTokens: z.number().int().nonnegative(),
@@ -168,6 +180,7 @@ export type AssistantThreadDetail = z.infer<typeof zAssistantThreadDetail>;
 export type AssistantRunState = z.infer<typeof zAssistantRunState>;
 export type AssistantActionKind = z.infer<typeof zAssistantActionKind>;
 export type AssistantAnswer = z.infer<typeof zAssistantAnswer>;
+export type AssistantContext = z.infer<typeof zAssistantContext>;
 export type AssistantActionStatus = z.infer<typeof zAssistantActionStatus>;
 export type AssistantAction = z.infer<typeof zAssistantAction>;
 export type AssistantActionDecision = z.infer<
