@@ -1054,6 +1054,40 @@ components:
               - label
               - messageId
               - revision
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                minLength: 1
+              text:
+                type: string
+              risk:
+                type: string
+                enum:
+                  - normal
+                  - destructive
+                  - sensitive
+              choices:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                  required:
+                    - id
+                    - label
+            required:
+              - id
+              - text
+              - risk
+              - choices
+          maxItems: 3
         error:
           type: string
         createdAt:
@@ -1288,6 +1322,40 @@ components:
                         - label
                         - messageId
                         - revision
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          minLength: 1
+                        text:
+                          type: string
+                        risk:
+                          type: string
+                          enum:
+                            - normal
+                            - destructive
+                            - sensitive
+                        choices:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                              label:
+                                type: string
+                            required:
+                              - id
+                              - label
+                      required:
+                        - id
+                        - text
+                        - risk
+                        - choices
+                    maxItems: 3
                   error:
                     type: string
                   createdAt:
@@ -1568,6 +1636,40 @@ components:
                       - label
                       - messageId
                       - revision
+                questions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                      text:
+                        type: string
+                      risk:
+                        type: string
+                        enum:
+                          - normal
+                          - destructive
+                          - sensitive
+                      choices:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                          required:
+                            - id
+                            - label
+                    required:
+                      - id
+                      - text
+                      - risk
+                      - choices
+                  maxItems: 3
                 error:
                   type: string
                 createdAt:
@@ -1759,6 +1861,40 @@ components:
                           - label
                           - messageId
                           - revision
+                    questions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            minLength: 1
+                          text:
+                            type: string
+                          risk:
+                            type: string
+                            enum:
+                              - normal
+                              - destructive
+                              - sensitive
+                          choices:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                label:
+                                  type: string
+                              required:
+                                - id
+                                - label
+                        required:
+                          - id
+                          - text
+                          - risk
+                          - choices
+                      maxItems: 3
                     error:
                       type: string
                     createdAt:
@@ -1937,6 +2073,40 @@ components:
                           - label
                           - messageId
                           - revision
+                    questions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            minLength: 1
+                          text:
+                            type: string
+                          risk:
+                            type: string
+                            enum:
+                              - normal
+                              - destructive
+                              - sensitive
+                          choices:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                label:
+                                  type: string
+                              required:
+                                - id
+                                - label
+                        required:
+                          - id
+                          - text
+                          - risk
+                          - choices
+                      maxItems: 3
                     error:
                       type: string
                     createdAt:
@@ -8285,6 +8455,40 @@ paths:
                             - label
                             - messageId
                             - revision
+                      questions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              minLength: 1
+                            text:
+                              type: string
+                            risk:
+                              type: string
+                              enum:
+                                - normal
+                                - destructive
+                                - sensitive
+                            choices:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: string
+                                  label:
+                                    type: string
+                                required:
+                                  - id
+                                  - label
+                          required:
+                            - id
+                            - text
+                            - risk
+                            - choices
+                        maxItems: 3
                       error:
                         type: string
                       createdAt:

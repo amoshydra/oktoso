@@ -1322,6 +1322,11 @@ describe("AssistantService", () => {
       choiceId: "yes",
       revision: "r1",
     });
+    expect(action.turn.action?.questions?.[0]).toMatchObject({
+      id: "q1",
+      text: "Allow running pnpm test?",
+      risk: "normal",
+    });
 
     await service.decide(thread.id, action.turn.id, { decision: "confirm" });
     expect(sent).toHaveLength(1);
@@ -1329,6 +1334,67 @@ describe("AssistantService", () => {
     expect(sent[0]?.input.answers).toMatchObject([
       { questionId: "q1", choiceId: "yes", revision: "r1" },
     ]);
+  });
+
+  it("refuses to answer a permission prompt", async () => {
+    const risky = {
+      ...question,
+      questions: [
+        {
+          ...question.questions[0]!,
+          text: "Allow running rm -rf dist && pnpm build?",
+          risk: "destructive" as const,
+        },
+      ],
+    };
+    const store = new MemoryStateStore();
+    const sent: Array<Record<string, unknown>> = [];
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions(),
+      actions: {
+        send: async (_ref: string, input: Record<string, unknown>) => {
+          sent.push(input);
+          return {};
+        },
+      } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => risky } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl: (async () =>
+        toolStream({
+          kind: "answer",
+          answers: [{ questionId: "q1", choiceId: "yes" }],
+          summary: "Answer Allow?",
+        })) as unknown as typeof fetch,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "approve it" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.action?.status).toBe("failed");
+    expect(turn?.action?.error).toContain("permission prompt");
+    expect(turn?.action?.questions?.[0]?.risk).toBe("destructive");
+    expect(sent).toHaveLength(0);
+
+    // It cannot be forced through the decide endpoint either.
+    await expect(
+      service.decide(thread.id, turn!.id, { decision: "confirm" }),
+    ).rejects.toThrow(/no longer pending/i);
+    expect(sent).toHaveLength(0);
   });
 
   it("ignores a tool call when writes are disabled", async () => {

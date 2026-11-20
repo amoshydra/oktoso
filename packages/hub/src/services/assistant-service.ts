@@ -982,6 +982,30 @@ export class AssistantService {
         error: "This session has no pending question",
       };
     }
+    const questions = prompt.questions.slice(0, 3).map((question) => ({
+      id: question.id,
+      text: truncate(question.text, 500),
+      risk: question.risk,
+      choices: question.choices
+        .slice(0, 6)
+        .map((choice) => ({ id: choice.id, label: choice.label })),
+    }));
+
+    // A permission prompt is answered in the Inbox, where the command and its
+    // risk are rendered by the surface that owns them. The assistant must not
+    // turn a destructive question into a one-click "Answer".
+    if (prompt.questions.some((question) => question.risk !== "normal")) {
+      return {
+        ...base,
+        kind,
+        status: "failed",
+        summary,
+        questions,
+        error:
+          "This is a permission prompt. Answer it in the Inbox, where the command and its risk are shown.",
+      };
+    }
+
     const resolved: AssistantAnswer[] = [];
     for (const item of proposed) {
       if (typeof item !== "object" || item === null) continue;
@@ -1027,6 +1051,7 @@ export class AssistantService {
       status: "pending",
       summary,
       answers: resolved,
+      questions,
       // The provider receives the full option text; labels are truncated for
       // the card, so sending them would post a string ending in "…".
       text: resolved.map((answer) => answer.text).join(" / "),
