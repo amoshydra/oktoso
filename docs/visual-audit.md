@@ -1401,6 +1401,11 @@ list of file-configured objects.
   not a colour.
 - It stays one line on desktop and mobile. Numbers use the inherited tabular
   figures from `.assistant-turn-meta`.
+- `history Oct 26` names the provider compaction the answer read, placed after
+  the session stamp. It carries a date rather than a clock time because a
+  compaction is a long-horizon fact; one from today falls back to a bare time,
+  the same branch as `session as of`. Without the clause, an answer built on a
+  month-old summary reads as current as one that re-read the tail.
 
 ## Approval hardening (2026-11-20)
 
@@ -1438,6 +1443,12 @@ list of file-configured objects.
   available without a new model call.
 - `FAILURES` renders failed shells with exit codes and the tail of their output,
   plus failed tools and message errors. `WORK` lists touched files and commands.
-  Both are derived from the same tail; neither adds a provider read.
+  Both start from the 20-message tail and merge what the wider 200-message page
+  saw, so a failure that scrolled out of the window still appears; the tail wins
+  ties and the merged lists are deduped and capped.
+- The wide history read is bounded at two seconds per page. When it misses the
+  deadline the answer proceeds from the cache and the same request finishes in
+  the background; a late success refreshes the cache for the next ask instead of
+  being discarded.
 - The evidence line counts failures so the user can see that the context knew
   about one.

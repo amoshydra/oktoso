@@ -17,6 +17,7 @@ import type {
   AssistantThreadPage,
   AssistantTurn,
   Message,
+  MessagePage,
   QuestionPrompt,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -38,8 +39,12 @@ const MAX_TOOL_DIGEST = 40;
 const ACCEPTED_TTL_MS = 10 * 60 * 1_000;
 const HISTORY_TTL_MS = 60_000;
 const HISTORY_MAX_CHARS = 1_500;
+const HISTORY_PAGE_TIMEOUT_MS = 2_000;
 const DEEP_HISTORY_PAGES = 5;
+const DEEP_HISTORY_BUDGET_MS = 3_000;
 const MAX_FAILURES = 3;
+const MAX_FILES = 8;
+const MAX_COMMANDS = 6;
 const FAILURE_DETAIL_CHARS = 220;
 
 /**
@@ -118,10 +123,9 @@ export class AssistantService {
     { value: AssistantRunAccepted; at: number }
   >();
   /** Newest provider compaction per session; negative results are cached too. */
-  private readonly history = new Map<
-    string,
-    { at: number; watermark: string; value: HistorySummary | undefined }
-  >();
+  private readonly history = new Map<string, CachedHistory>();
+  /** A wide read that is still in flight, shared by every ask for a session. */
+  private readonly historyScans = new Map<string, PendingHistoryScan>();
   /** A deep scan runs once per session per process. */
   private readonly deepScanned = new Set<string>();
   private readonly now: () => number;
@@ -1156,7 +1160,8 @@ export class AssistantService {
       attention: waiting.data,
       question,
       messages,
-      history,
+      history: history?.summary,
+      historyDigest: history?.digest,
       now: this.now(),
       canWrite: this.writesEnabled(),
       assistantModel: this.model(),
@@ -1168,11 +1173,16 @@ export class AssistantService {
    * window. Page one is re-read every minute; a one-off deep scan covers the
    * case where the session was compacted long ago. The result is a summary of
    * untrusted content, so it is labelled and never treated as instructions.
+   *
+   * The wide read is bounded: a slow provider page must not hold the ask open.
+   * When it misses its deadline the cached answer is returned and the same
+   * request keeps running; if it lands, it refreshes the cache for the next
+   * ask (stale-while-revalidate).
    */
   private async loadHistory(
     sessionRef: string,
     newestMessageID?: string,
-  ): Promise<HistorySummary | undefined> {
+  ): Promise<HistorySnapshot | undefined> {
     // An empty session cannot hold a compaction; do not buy a 200-message page
     // for it.
     if (!newestMessageID) return undefined;
@@ -1185,18 +1195,70 @@ export class AssistantService {
       cached.watermark === newestMessageID &&
       this.now() - cached.at < HISTORY_TTL_MS
     ) {
-      return cached.value;
+      return { summary: cached.value, digest: cached.digest };
     }
 
-    const page = await this.options.sessions.messages(sessionRef, {
+    let scan = this.historyScans.get(sessionRef);
+    if (!scan) {
+      scan = this.beginHistoryScan(sessionRef, newestMessageID);
+      this.historyScans.set(sessionRef, scan);
+      // `done` settles after the deep pass and the cache write; the entry is
+      // dropped then so a later ask can start a fresh scan. Both arms swallow
+      // the rejection: only the cache matters here.
+      void scan.done.then(
+        () => this.historyScans.delete(sessionRef),
+        () => this.historyScans.delete(sessionRef),
+      );
+    }
+
+    const outcome = await scan.ready;
+    if (outcome) return outcome;
+    // The wide page missed its deadline. Answer from the cache and let the
+    // request finish in the background; a first ask simply omits history.
+    return cached ? { summary: cached.value, digest: cached.digest } : undefined;
+  }
+
+  /**
+   * Start one wide read and expose two views of it: `ready` stops waiting at
+   * the page deadline, `done` follows the request to the end so a late page
+   * still fills the cache.
+   */
+  private beginHistoryScan(
+    sessionRef: string,
+    watermark: string,
+  ): PendingHistoryScan {
+    const request = this.options.sessions.messages(sessionRef, {
       limit: 200,
       order: "desc",
     });
+    let finished: Promise<HistorySnapshot> | undefined;
+    const finish = (page: MessagePage): Promise<HistorySnapshot> => {
+      // `ready` and `done` can both reach this point; the deep scan must run
+      // once.
+      finished ??= this.finishHistory(sessionRef, watermark, page);
+      return finished;
+    };
+    const ready = within(request, HISTORY_PAGE_TIMEOUT_MS).then((page) =>
+      page === TIMED_OUT ? undefined : finish(page),
+    );
+    const done = request.then(finish);
+    return { ready, done };
+  }
+
+  /** Digest the wide page, look further for a compaction, then cache both. */
+  private async finishHistory(
+    sessionRef: string,
+    watermark: string,
+    page: MessagePage,
+  ): Promise<HistorySnapshot> {
+    // The page arrives newest first; the digest expects reading order so its
+    // caps keep the newest entries.
+    const digest = digestMessages([...page.data].reverse());
     let found = newestCompaction(page.data);
     if (!found && !this.deepScanned.has(sessionRef)) {
       // Bound the one-off deep scan: a remote provider on a huge session must
       // not add seconds to a question.
-      const deadline = this.now() + 3_000;
+      const deadline = this.now() + DEEP_HISTORY_BUDGET_MS;
       let cursor = page.cursor.next;
       let scanned = 0;
       while (
@@ -1205,11 +1267,20 @@ export class AssistantService {
         scanned < DEEP_HISTORY_PAGES &&
         this.now() <= deadline
       ) {
-        const next = await this.options.sessions.messages(sessionRef, {
-          limit: 200,
-          order: "desc",
-          cursor,
-        });
+        const next = await within(
+          this.options.sessions.messages(sessionRef, {
+            limit: 200,
+            order: "desc",
+            cursor,
+          }),
+          HISTORY_PAGE_TIMEOUT_MS,
+        );
+        if (next === TIMED_OUT) {
+          // Return the stale summary plus the fresh wide digest without
+          // caching either: the deep scan is incomplete, so the next ask must
+          // be free to retry it.
+          return { summary: this.history.get(sessionRef)?.value, digest };
+        }
         found = newestCompaction(next.data);
         cursor = next.cursor.next;
         scanned += 1;
@@ -1219,12 +1290,24 @@ export class AssistantService {
         this.deepScanned.add(sessionRef);
       }
     }
+    return this.rememberHistory(sessionRef, watermark, {
+      summary: found,
+      digest,
+    });
+  }
+
+  private rememberHistory(
+    sessionRef: string,
+    watermark: string,
+    snapshot: HistorySnapshot,
+  ): HistorySnapshot {
     this.history.set(sessionRef, {
       at: this.now(),
-      watermark: newestMessageID ?? "",
-      value: found,
+      watermark,
+      value: snapshot.summary,
+      digest: snapshot.digest,
     });
-    return found;
+    return snapshot;
   }
 
   // --- helpers -------------------------------------------------------------
@@ -1377,6 +1460,50 @@ interface HistorySummary {
   at: number;
 }
 
+interface CachedHistory {
+  at: number;
+  watermark: string;
+  value: HistorySummary | undefined;
+  digest: SessionDigest | undefined;
+}
+
+interface HistorySnapshot {
+  summary?: HistorySummary;
+  digest?: SessionDigest;
+}
+
+interface PendingHistoryScan {
+  /** Settles when the wide page lands or its deadline passes. */
+  ready: Promise<HistorySnapshot | undefined>;
+  /** Follows the request to the end, then writes the cache. */
+  done: Promise<HistorySnapshot>;
+}
+
+const TIMED_OUT = Symbol("history-page-timeout");
+
+/**
+ * Settle with the work, or with the marker at the deadline. The work is not
+ * cancelled: its result is still delivered to whoever holds the promise.
+ */
+function within<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | typeof TIMED_OUT> {
+  return new Promise<T | typeof TIMED_OUT>((resolve, reject) => {
+    const timer = setTimeout(() => resolve(TIMED_OUT), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 interface SessionFailure {
   label: string;
   detail: string;
@@ -1409,12 +1536,13 @@ function renderContext(input: {
   question: QuestionPrompt | null;
   messages: Message[];
   history?: HistorySummary;
+  historyDigest?: SessionDigest;
   now: number;
   canWrite: boolean;
   assistantModel: string;
 }): { text: string; context: AssistantContext } {
   const { session } = input;
-  const digest = digestMessages(input.messages);
+  const digest = mergeDigests(digestMessages(input.messages), input.historyDigest);
   const lines: string[] = ["ASSISTANT (hub facts)"];
   lines.push(`model: ${input.assistantModel}`);
   lines.push(
@@ -1450,7 +1578,7 @@ function renderContext(input: {
 
   lines.push("", "FAILURES (untrusted tool output)");
   if (digest.failures.length === 0) {
-    lines.push("(none in the recent tail)");
+    lines.push("(none in the session history)");
   } else {
     for (const failure of digest.failures) {
       lines.push(
@@ -1579,7 +1707,7 @@ function newestCompaction(messages: Message[]): HistorySummary | undefined {
   return newest;
 }
 
-/** Failures, touched files, and commands from the recent turns. */
+/** Failures, touched files, and commands from a page of turns, oldest first. */
 function digestMessages(messages: Message[]): SessionDigest {
   const failures: SessionFailure[] = [];
   const files: string[] = [];
@@ -1591,7 +1719,7 @@ function digestMessages(messages: Message[]): SessionDigest {
     if (typeof messageError === "string" && messageError.trim()) {
       failures.push({
         label: "assistant message",
-        detail: truncate(messageError, FAILURE_DETAIL_CHARS),
+        detail: truncate(redact(messageError), FAILURE_DETAIL_CHARS),
       });
     }
     for (const part of message.parts) {
@@ -1642,8 +1770,38 @@ function digestMessages(messages: Message[]): SessionDigest {
 
   return {
     failures: failures.slice(-MAX_FAILURES),
-    files: files.slice(-8),
-    commands: commands.slice(-6),
+    files: files.slice(-MAX_FILES),
+    commands: commands.slice(-MAX_COMMANDS),
+  };
+}
+
+/**
+ * The tail is the freshest evidence, so it wins every tie. The wide page fills
+ * in a failure or file that scrolled out of the 20-message window; entries are
+ * deduped and capped so a long session cannot flood the prompt.
+ */
+function mergeDigests(
+  fresh: SessionDigest,
+  wide: SessionDigest | undefined,
+): SessionDigest {
+  if (!wide) return fresh;
+  const failures: SessionFailure[] = [];
+  const seen = new Set<string>();
+  // Wide failures are chronological; walk them newest first so the most
+  // recent out-of-window entry survives the cap.
+  for (const failure of [...fresh.failures, ...[...wide.failures].reverse()]) {
+    const key = `${failure.label}\u0000${failure.detail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    failures.push(failure);
+  }
+  return {
+    failures: failures.slice(0, MAX_FAILURES),
+    files: [...new Set([...fresh.files, ...wide.files])].slice(0, MAX_FILES),
+    commands: [...new Set([...fresh.commands, ...wide.commands])].slice(
+      0,
+      MAX_COMMANDS,
+    ),
   };
 }
 
