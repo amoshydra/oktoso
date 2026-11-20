@@ -120,7 +120,7 @@ export class AssistantService {
   /** Newest provider compaction per session; negative results are cached too. */
   private readonly history = new Map<
     string,
-    { at: number; value: HistorySummary | undefined }
+    { at: number; watermark: string; value: HistorySummary | undefined }
   >();
   /** A deep scan runs once per session per process. */
   private readonly deepScanned = new Set<string>();
@@ -1137,7 +1137,7 @@ export class AssistantService {
     sessionRef: string,
   ): Promise<{ text: string; context: AssistantContext }> {
     const { sessions, attention, questions, settings } = this.options;
-    const [session, waiting, question, page, history] = await Promise.all([
+    const [session, waiting, question, page] = await Promise.all([
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
       questions.get(sessionRef).catch(() => null),
@@ -1145,8 +1145,11 @@ export class AssistantService {
         limit: settings.maxContextMessages,
         order: "desc",
       }),
-      this.loadHistory(sessionRef).catch(() => undefined),
     ]);
+    const history = await this.loadHistory(
+      sessionRef,
+      page.data[0]?.id,
+    ).catch(() => undefined);
     const messages = [...page.data].reverse();
     return renderContext({
       session,
@@ -1168,9 +1171,22 @@ export class AssistantService {
    */
   private async loadHistory(
     sessionRef: string,
+    newestMessageID?: string,
   ): Promise<HistorySummary | undefined> {
+    // An empty session cannot hold a compaction; do not buy a 200-message page
+    // for it.
+    if (!newestMessageID) return undefined;
     const cached = this.history.get(sessionRef);
-    if (cached && this.now() - cached.at < HISTORY_TTL_MS) return cached.value;
+    // A compaction always arrives as a new message, so an unchanged tail means
+    // there is nothing new to find and the 200-message page can be skipped.
+    if (
+      cached &&
+      newestMessageID &&
+      cached.watermark === newestMessageID &&
+      this.now() - cached.at < HISTORY_TTL_MS
+    ) {
+      return cached.value;
+    }
 
     const page = await this.options.sessions.messages(sessionRef, {
       limit: 200,
@@ -1203,7 +1219,11 @@ export class AssistantService {
         this.deepScanned.add(sessionRef);
       }
     }
-    this.history.set(sessionRef, { at: this.now(), value: found });
+    this.history.set(sessionRef, {
+      at: this.now(),
+      watermark: newestMessageID ?? "",
+      value: found,
+    });
     return found;
   }
 
@@ -1576,7 +1596,7 @@ function digestMessages(messages: Message[]): SessionDigest {
     }
     for (const part of message.parts) {
       if (part.type === "shell") {
-        const command = part.command.replace(/\s+/g, " ").trim();
+        const command = redact(part.command.replace(/\s+/g, " ").trim());
         if (command) pushUnique(commands, truncate(command, 100));
         const failed =
           part.status === "error" ||
@@ -1587,7 +1607,7 @@ function digestMessages(messages: Message[]): SessionDigest {
           failures.push({
             label: `shell ${truncate(command, 60)}${typeof part.exit === "number" ? ` (exit ${part.exit})` : ""}`,
             detail: output
-              ? output.slice(-FAILURE_DETAIL_CHARS)
+              ? redact(output.slice(-FAILURE_DETAIL_CHARS))
               : `status ${part.status}`,
           });
         }
@@ -1613,7 +1633,7 @@ function digestMessages(messages: Message[]): SessionDigest {
         failures.push({
           label: `tool ${part.name}`,
           detail: output
-            ? output.slice(-FAILURE_DETAIL_CHARS)
+            ? redact(output.slice(-FAILURE_DETAIL_CHARS))
             : `status ${part.status}`,
         });
       }
@@ -1625,6 +1645,21 @@ function digestMessages(messages: Message[]): SessionDigest {
     files: files.slice(-8),
     commands: commands.slice(-6),
   };
+}
+
+/**
+ * Tool output is now sent to the model, so obvious credentials are stripped
+ * before they leave the hub. This is a guard, not a guarantee.
+ */
+function redact(value: string): string {
+  return value
+    .replace(/\b(sk-[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g, "[redacted]")
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, "$1[redacted]")
+    .replace(/\b(Basic\s+)[A-Za-z0-9+/=]{12,}/gi, "$1[redacted]")
+    .replace(
+      /\b(token|password|secret|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s"']{6,}/gi,
+      "$1=[redacted]",
+    );
 }
 
 function pushUnique(list: string[], value: string): void {
@@ -1648,6 +1683,7 @@ function ago(now: number, then: number): string {
 
 function duration(ms: number): string {
   const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return "<1m";
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours}h`;

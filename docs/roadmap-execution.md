@@ -735,7 +735,12 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   (newest provider compaction, found by a cached deep scan outside the window),
   `WORK` (files and commands derived from tool calls), and `FAILURES` (failed
   shells with exit and output tail, failed tools, message errors). The evidence
-  line reports the failure count. No model call is added.
+  line reports the failure count. No model call is added. Hardening: the
+  200-message history page is skipped when the tail's newest message id has not
+  changed; an empty session never fetches it; the one-off deep scan is bounded
+  by 5 pages and a 3-second budget; failure detail is passed through a
+  credential redactor (`Bearer`/`Basic`, `sk-`/`ghp_`/`xox`, key/value tokens)
+  before it reaches the model.
 
 ## Cross-cutting work
 
