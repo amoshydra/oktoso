@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
 import type {
   AssistantAction,
@@ -258,27 +258,44 @@ export function AssistantDock({
           </div>
         ) : null}
 
-        {turns.map((turn) => (
-          <article
-            key={turn.id}
-            className={`assistant-turn ${turn.role}`}
-            aria-label={turn.role === "user" ? "Your question" : "Assistant answer"}
-          >
-            <div className="assistant-turn-role">
-              {turn.role === "user" ? "You" : "Assistant"}
-              {turn.error ? <span className="assistant-turn-error"> · {turn.error}</span> : null}
-            </div>
-            {turn.text || turn.error ? (
-              <div className="assistant-turn-text">{turn.text}</div>
-            ) : turn.action ? null : (
-              <div className="assistant-turn-text">…</div>
-            )}
-            <TurnMeta turn={turn} />
-            {turn.action ? (
-              <ActionCard turn={turn} canWrite={canWrite} onDecide={decide} />
-            ) : null}
-          </article>
-        ))}
+        {turns.map((turn, index) => {
+          const day = dayLabel(turn.createdAt);
+          const newDay =
+            index === 0 || dayLabel(turns[index - 1]!.createdAt) !== day;
+          return (
+            <Fragment key={turn.id}>
+              {newDay ? <div className="assistant-day">{day}</div> : null}
+              <article
+                className={`assistant-turn ${turn.role}`}
+                aria-label={turn.role === "user" ? "Your question" : "Assistant answer"}
+              >
+                <div className="assistant-turn-role">
+                  <span>
+                    {turn.role === "user" ? "You" : "Assistant"}
+                    {turn.error ? (
+                      <span className="assistant-turn-error"> · {turn.error}</span>
+                    ) : null}
+                  </span>
+                  <time
+                    className="assistant-turn-time"
+                    dateTime={new Date(turn.createdAt).toISOString()}
+                  >
+                    {timeLabel(turn.createdAt)}
+                  </time>
+                </div>
+                {turn.text || turn.error ? (
+                  <div className="assistant-turn-text">{turn.text}</div>
+                ) : turn.action ? null : (
+                  <div className="assistant-turn-text">…</div>
+                )}
+                <TurnMeta turn={turn} />
+                {turn.action ? (
+                  <ActionCard turn={turn} canWrite={canWrite} onDecide={decide} />
+                ) : null}
+              </article>
+            </Fragment>
+          );
+        })}
 
         {runId ? (
           <article className="assistant-turn assistant" aria-label="Assistant is answering">
@@ -361,12 +378,50 @@ function addTurn(current: AssistantTurn[], turn: AssistantTurn): AssistantTurn[]
     : [...current, turn];
 }
 
+function startOfDay(ts: number): number {
+  const date = new Date(ts);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function dayLabel(ts: number): string {
+  const day = startOfDay(ts);
+  const today = startOfDay(Date.now());
+  if (day === today) return "Today";
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === yesterday.getTime()) return "Yesterday";
+  return new Date(ts).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function timeLabel(ts: number): string {
+  return new Date(ts).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** The session's last activity, not the answer time. */
+function asOfLabel(ts: number): string {
+  if (startOfDay(ts) === startOfDay(Date.now())) return timeLabel(ts);
+  return `${new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} ${timeLabel(ts)}`;
+}
+
 function TurnMeta({ turn }: { turn: AssistantTurn }) {
   const parts: string[] = [];
   if (turn.context) {
     const { messages, omitted, attention } = turn.context;
     parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
     if (omitted > 0) parts.push(`${omitted} older omitted`);
+    if (turn.context.asOf) {
+      parts.push(`session as of ${asOfLabel(turn.context.asOf)}`);
+    }
     if (attention > 0) {
       parts.push(`${attention} attention ${attention === 1 ? "item" : "items"}`);
     }

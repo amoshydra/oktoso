@@ -1350,6 +1350,7 @@ function renderContext(input: {
       omitted,
       chars: text.length,
       attention: input.attention.length,
+      asOf: input.session.updatedAt,
     },
   };
 }

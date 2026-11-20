@@ -227,7 +227,10 @@ describe("session assistant", () => {
         .locator(".assistant-turn.assistant .assistant-turn-meta")
         .last()
         .innerText(),
-    ).toContain("Read ");
+    ).toContain("session as of ");
+    expect(await page!.locator(".assistant-day").last().innerText()).toBe(
+      "TODAY",
+    );
 
     // The thread survives a reload: it is hub state, not a provider session.
     await page!.reload();

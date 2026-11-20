@@ -268,6 +268,7 @@ describe("AssistantService", () => {
       messages: 2,
       omitted: 0,
       attention: 1,
+      asOf: session.updatedAt,
     });
     expect(done.turn.context?.chars).toBeGreaterThan(0);
 
