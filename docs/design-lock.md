@@ -1,11 +1,11 @@
-# Design Lock — v1.22
+# Design Lock — v1.23
 
 Status: **frozen**.
 
-- Version: `design-v1.22`
-- Parent: `design-v1.21`
+- Version: `design-v1.23`
+- Parent: `design-v1.22`
 - Date: 2026-11-20
-- Git tag: `design-v1.22`
+- Git tag: `design-v1.23`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -28,6 +28,8 @@ Status: **frozen**.
 - v1.20 scope: transcript loading, waiting, and error states in the chat shell.
 - v1.21 scope: the Settings Automation Templates panel and human reason labels.
 - v1.22 scope: the read-only session assistant dock and its topbar Ask action.
+- v1.23 scope: assistant write confirmations, the action card, and the opt-in
+  write badge.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -639,6 +641,36 @@ radius, or color token.
 - No new tokens, radii, or type roles. The panel reuses the surface, border,
   radius, and control grammar of the details panel.
 
+## Assistant write confirmations (2026-11-20)
+
+- The assistant stays read-only unless the hub config sets
+  `assistant.allowWrite`. The footer says `Read-only · no writes` when it is
+  off and `Writes need your confirmation` when it is on. There is no third
+  state and no auto-send mode.
+- When allowed, the model may propose exactly one action per answer. The
+  proposal is a card inside the assistant turn, not a dialog and not a banner:
+  - a 10px uppercase head, `Needs your confirmation` on the left and the
+    outcome on the right (`Sent`, `Answered`, `Stopped`, `Cancelled`,
+    `Failed`);
+  - one 12px sentence that states exactly what would happen;
+  - `send`: the proposed message in an editable 3-row field, 14px on desktop
+    and 16px on mobile;
+  - `answer`: the resolved choice as read-only text;
+  - one primary action (`Send`, `Answer`, `Stop turn`) and one quiet `Cancel`.
+- The card is a left-accent surface: 2px `--accent` while pending,
+  `--success` when done, `--danger` when failed, `--border-strong` when
+  cancelled. The status word is always present, so state is never color-only.
+- While a card is pending, the dock composer is disabled and its placeholder
+  says `Decide the action above first…`. One action at a time is a product
+  rule, not a layout accident.
+- A failed proposal stays visible with its error in 12px danger text. It is
+  not silently dropped, and it has no buttons.
+- The card reuses `.btn small`, the card radius (8px), and the existing
+  surface and border tokens. No new tokens, type roles, or radii.
+- Writes are audited to `dataDir/assistant-audit.jsonl` with the thread, turn,
+  action id, kind, session ref, event, outcome, and duration. Message text is
+  never written to the audit.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -665,4 +697,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.23` write confirmation was verified live against the local 27B model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.

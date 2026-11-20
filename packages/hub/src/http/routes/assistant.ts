@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AssistantEvent } from "@amoshydra/oktoso-contracts";
 import {
+  zAssistantActionDecision,
   zAssistantMessageInput,
   zAssistantThreadInput,
 } from "@amoshydra/oktoso-contracts";
@@ -50,6 +51,20 @@ export function registerAssistantRoutes(
     }
     const result = await assistant.postMessage(c.req.param("id"), parsed.data);
     return c.json({ data: result }, 202);
+  });
+
+  app.post("/api/v1/assistant/threads/:id/turns/:turnId/action", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zAssistantActionDecision.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid action decision", { issues: parsed.error.issues });
+    }
+    const turn = await assistant.decide(
+      c.req.param("id"),
+      c.req.param("turnId"),
+      parsed.data,
+    );
+    return c.json({ data: turn });
   });
 
   app.post("/api/v1/assistant/runs/:id/stop", (c) => {

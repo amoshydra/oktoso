@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -681,26 +682,30 @@ async function main(): Promise<void> {
     await localData.prune();
     const transcription = new TranscriptionService(assistantSettings, logger);
     const questions = new QuestionService(sessions);
+    const idempotency = new IdempotencyService(store);
+    const actions = new SessionActions(sessions, questions, idempotency);
+    const assistantAudit = join(resolve(config.dataDir), "assistant-audit.jsonl");
     const assistant = new AssistantService({
       store,
       sessions,
+      actions,
       attention,
       questions,
       logger,
+      audit: (entry) => appendFile(assistantAudit, `${JSON.stringify(entry)}\n`),
       settings: {
         enabled: config.assistant.enabled,
         baseUrl: config.assistant.baseUrl,
         model: config.assistant.model,
         timeoutMs: config.assistant.timeoutMs,
         maxContextMessages: config.assistant.maxContextMessages,
+        allowWrite: config.assistant.allowWrite,
         fallback: {
           baseUrl: assistantSettings.config().reply.baseUrl,
           model: assistantSettings.config().reply.model,
         },
       },
     });
-    const idempotency = new IdempotencyService(store);
-    const actions = new SessionActions(sessions, questions, idempotency);
     // Generate the VAPID pair once and keep it owner-only. It is cheap, and a
     // later runtime enable should not need a restart to start delivering.
     const vapidKeys =

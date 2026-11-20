@@ -690,6 +690,23 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   - Not in M1: tools, writes, project and global scopes, supervisor-triggered
     drafts, G2 conclusions. Those are M2–M5 and each needs its own acceptance.
 
+- [x] G8. Assistant writes (M2: session scope, confirmed). `assistant.allowWrite`
+  (default false) adds one model tool, `propose_session_action`, with kinds
+  `send`, `answer`, and `interrupt`. The proposal is stored on the assistant
+  turn and surfaced as an action card; nothing reaches a provider until the
+  human presses the primary action. `POST /api/v1/assistant/threads/:id/turns/
+  :turnId/action` is the only write path, and it reuses `SessionActions` and
+  `sessions.interrupt`, so answers still validate against the live question
+  revision.
+  - Decisions append to `dataDir/assistant-audit.jsonl` (thread, turn, action,
+    kind, session, event, outcome, duration; never message text).
+  - A pending action locks the thread: a second question returns 409 and the
+    composer explains why. A failed proposal stays visible with its error.
+  - Verified live against the local model 27B (proposal, editable text, cancel) and in
+    `tests/e2e/assistant.e2e.ts` against a fake provider (confirm → send →
+    `Sent` → reload).
+  - Still out of scope: approvals, automation actions, project/global scopes.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

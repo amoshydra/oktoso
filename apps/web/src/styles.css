@@ -5917,3 +5917,101 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     min-height: 44px;
   }
 }
+
+/* --- Assistant action confirmation (M2) --------------------------------- */
+
+.assistant-action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.assistant-action.done {
+  border-left-color: var(--success);
+}
+
+.assistant-action.cancelled {
+  border-left-color: var(--border-strong);
+}
+
+.assistant-action.failed {
+  border-left-color: var(--danger);
+}
+
+.assistant-action-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assistant-action-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.assistant-action-summary {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.assistant-action-text {
+  min-height: 72px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.assistant-action-text:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.assistant-action-value {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.assistant-action-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.assistant-action-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@media (max-width: 760px) {
+  .assistant-action-buttons .btn {
+    min-height: 44px;
+  }
+
+  .assistant-action-text {
+    font-size: 16px;
+  }
+}

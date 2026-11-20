@@ -101,6 +101,8 @@ import {
 } from "./index";
 
 import {
+  zAssistantAction,
+  zAssistantActionDecision,
   zAssistantEvent,
   zAssistantMessageInput,
   zAssistantRun,
@@ -110,6 +112,7 @@ import {
   zAssistantThreadDetail,
   zAssistantThreadInput,
   zAssistantThreadPage,
+  zAssistantTurn,
 } from "./assistant";
 
 extendZodWithOpenApi(z);
@@ -171,6 +174,14 @@ const AssistantViewSchema = registry.register("AssistantView", zAssistantView);
 const AssistantStatusSchema = registry.register(
   "AssistantStatus",
   zAssistantStatus,
+);
+const AssistantActionSchema = registry.register(
+  "AssistantAction",
+  zAssistantAction,
+);
+const AssistantActionDecisionSchema = registry.register(
+  "AssistantActionDecision",
+  zAssistantActionDecision,
 );
 const AssistantThreadSchema = registry.register(
   "AssistantThread",
@@ -1709,6 +1720,25 @@ registry.registerPath({
     400: errorResponse("Invalid message"),
     404: errorResponse("Thread not found"),
     409: errorResponse("A run is already in flight for this thread"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/assistant/threads/{id}/turns/{turnId}/action",
+  tags: ["assistant"],
+  summary: "Confirm or cancel a proposed action",
+  description:
+    "The only path that writes to a provider. `confirm` sends, answers, or interrupts; `cancel` records the decision and does nothing. Write actions are disabled unless assistant.allowWrite is on.",
+  request: {
+    params: z.object({ id: z.string(), turnId: z.string() }),
+    body: { required: true, content: json(AssistantActionDecisionSchema) },
+  },
+  responses: {
+    200: { description: "Updated turn", content: json(zAssistantTurn) },
+    400: errorResponse("Invalid decision"),
+    404: errorResponse("Turn or action not found"),
+    409: errorResponse("Writes are disabled or the action was already decided"),
   },
 });
 
