@@ -31,7 +31,8 @@ const MAX_THREADS = 40;
 const RUN_RETENTION_MS = 5 * 60 * 1_000;
 const MAX_RUNS = 20;
 const MAX_CONTEXT_CHARS = 24_000;
-const MAX_MESSAGE_CHARS = 1_200;
+const MAX_MESSAGE_CHARS = 1_600;
+const MESSAGE_TAIL_CHARS = 500;
 const MAX_TOOL_DIGEST = 40;
 
 /**
@@ -1105,19 +1106,19 @@ function renderContext(input: {
   if (actions.length === 0) lines.push("(no tool calls)");
   for (const action of actions.slice(-MAX_TOOL_DIGEST)) lines.push(`- ${action}`);
 
-  lines.push(
-    "",
-    `TRANSCRIPT (last ${input.messages.length} turns, text only, oldest first)`,
-  );
+  // The transcript is budgeted from the newest turn backwards: a long session
+  // must drop its oldest turns, never the turn that just happened.
+  const header = lines.join("\n");
+  const blocks: string[] = [];
   let turn = 0;
   for (const message of input.messages) {
     const texts: string[] = [];
     for (const part of message.parts) {
       if (part.type === "text") {
-        const text = truncate(part.text.trim(), MAX_MESSAGE_CHARS);
+        const text = clipMessage(part.text.trim());
         if (text) texts.push(text);
       } else if (part.type === "compaction") {
-        const text = truncate(part.summary.trim(), MAX_MESSAGE_CHARS);
+        const text = clipMessage(part.summary.trim());
         if (text) texts.push(`[compaction] ${text}`);
       } else if (part.type === "file") {
         texts.push(`[file ${part.name}]`);
@@ -1125,15 +1126,29 @@ function renderContext(input: {
     }
     if (texts.length === 0) continue;
     turn += 1;
-    lines.push("", `${turn}. ${message.role.toUpperCase()}`);
-    lines.push(...texts);
+    blocks.push(["", `${turn}. ${message.role.toUpperCase()}`, ...texts].join("\n"));
   }
-  if (turn === 0) lines.push("", "(no text turns)");
+  if (blocks.length === 0) blocks.push("\n(no text turns)");
 
-  const context = lines.join("\n");
-  return context.length > MAX_CONTEXT_CHARS
-    ? `${context.slice(0, MAX_CONTEXT_CHARS)}\n[context truncated]`
-    : context;
+  const budget = MAX_CONTEXT_CHARS - header.length - 200;
+  const kept: string[] = [];
+  let used = 0;
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index]!;
+    if (used + block.length > budget && kept.length > 0) break;
+    kept.unshift(block);
+    used += block.length;
+  }
+  const omitted = blocks.length - kept.length;
+  const note = omitted > 0 ? [`\n[${omitted} older turns omitted]`] : [];
+
+  return [
+    header,
+    "",
+    `TRANSCRIPT (last ${input.messages.length} turns, text only, oldest first)`,
+    ...note,
+    ...kept,
+  ].join("\n");
 }
 
 const TOOL_ARG_KEYS = [
@@ -1202,6 +1217,16 @@ const ACTION_TOOL = {
     required: ["kind", "summary"],
   },
 } as const;
+
+/**
+ * Long assistant messages carry their conclusion at the end (a summary, a next
+ * step). Keep both ends so the tail is never what gets cut.
+ */
+function clipMessage(value: string): string {
+  if (value.length <= MAX_MESSAGE_CHARS) return value;
+  const head = MAX_MESSAGE_CHARS - MESSAGE_TAIL_CHARS;
+  return `${value.slice(0, head)}\n…\n${value.slice(-MESSAGE_TAIL_CHARS)}`;
+}
 
 function truncate(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max)}…`;

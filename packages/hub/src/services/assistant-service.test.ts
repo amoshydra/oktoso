@@ -338,6 +338,116 @@ describe("AssistantService", () => {
     ]);
   }
 
+  it("keeps the end of a long message, where the conclusion lives", async () => {
+    const long = `${"x".repeat(2_600)}\nM3: project and global read-only scopes.`;
+    const longMessages: Message[] = [
+      {
+        id: "m1",
+        sessionRef: session.ref,
+        role: "user",
+        createdAt: 1,
+        parts: [{ type: "text", text: "plan the next milestone" }],
+      },
+      {
+        id: "m2",
+        sessionRef: session.ref,
+        role: "assistant",
+        createdAt: 2,
+        parts: [{ type: "text", text: long }],
+      },
+    ];
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions({
+        messages: async (): Promise<MessagePage> => ({
+          data: longMessages,
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    await service.postMessage(thread.id, { text: "what is m3?" });
+    await waitFor(() => body.messages.length > 0);
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("M3: project and global read-only scopes.");
+  });
+
+  it("drops the oldest turns first when the transcript exceeds its budget", async () => {
+    const bulk: Message[] = Array.from({ length: 20 }, (_, index) => ({
+      id: `m${index}`,
+      sessionRef: session.ref,
+      role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      createdAt: index,
+      parts: [
+        {
+          type: "text" as const,
+          text: `${index === 19 ? "NEWEST-TURN " : ""}${"y".repeat(2_000)}`,
+        },
+      ],
+    }));
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions({
+        // The provider returns newest first; the builder restores reading order.
+        messages: async (): Promise<MessagePage> => ({
+          data: [...bulk].reverse(),
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    await service.postMessage(thread.id, { text: "status?" });
+    await waitFor(() => body.messages.length > 0);
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("NEWEST-TURN");
+    expect(prompt).toMatch(/older turns omitted/);
+    expect(prompt.length).toBeLessThanOrEqual(24_500);
+  });
+
   it("proposes a send action instead of sending", async () => {
     const { service, sent } = build(
       (async () =>
