@@ -472,6 +472,181 @@ describe("AssistantService", () => {
     expect(prompt.length).toBeLessThanOrEqual(24_500);
   });
 
+  it("labels trusted blocks and surfaces failures", async () => {
+    const failed: Message[] = [
+      {
+        id: "m1",
+        sessionRef: session.ref,
+        role: "assistant",
+        createdAt: 10,
+        parts: [
+          {
+            type: "shell",
+            id: "sh1",
+            command: "pnpm test",
+            status: "error",
+            exit: 1,
+            background: false,
+            output: "FAIL src/auth.test.ts > auth-race\nexpected 401, received 500",
+          },
+        ],
+      },
+      {
+        id: "m2",
+        sessionRef: session.ref,
+        role: "assistant",
+        createdAt: 11,
+        parts: [
+          {
+            type: "tool",
+            id: "t1",
+            name: "edit",
+            status: "error",
+            input: { path: "/repo/src/auth.ts" },
+            output: "patch did not apply",
+          },
+        ],
+      },
+    ];
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const store = new MemoryStateStore();
+    const service = new AssistantService({
+      store,
+      sessions: fakeSessions({
+        messages: async (): Promise<MessagePage> => ({
+          data: [...failed].reverse(),
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "what failed?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("SITUATION (hub facts)");
+    expect(prompt).toContain("FAILURES (untrusted tool output)");
+    expect(prompt).toContain("shell pnpm test (exit 1)");
+    expect(prompt).toContain("expected 401, received 500");
+    expect(prompt).toContain("tool edit");
+    expect(prompt).toContain("patch did not apply");
+    expect(prompt).toContain("WORK (derived from untrusted tool calls)");
+    expect(prompt).toContain("/repo/src/auth.ts");
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.failures).toBe(2);
+  });
+
+  it("finds a compaction outside the window and caches the scan", async () => {
+    let wideCalls = 0;
+    const compaction: Message = {
+      id: "c1",
+      sessionRef: session.ref,
+      role: "system",
+      createdAt: 5_000,
+      parts: [
+        {
+          type: "compaction",
+          reason: "auto",
+          status: "done",
+          summary: "OBJECTIVE: ship the confirmed-write assistant.",
+        },
+      ],
+    };
+    const serviceFor = (fetchImpl: typeof fetch) =>
+      new AssistantService({
+        store: new MemoryStateStore(),
+        sessions: fakeSessions({
+          messages: async (
+            _ref: string,
+            query: { limit?: number; cursor?: string },
+          ): Promise<MessagePage> => {
+            if (query.limit === 200) {
+              wideCalls += 1;
+              if (!query.cursor) {
+                return {
+                  data: [],
+                  cursor: { next: "page-2", previous: null },
+                };
+              }
+              return {
+                data: [compaction],
+                cursor: { next: null, previous: null },
+              };
+            }
+            return {
+              data: [],
+              cursor: { next: null, previous: null },
+            };
+          },
+        }),
+        actions: { send: async () => ({}) } as unknown as SessionActions,
+        attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+        questions: { get: async () => null } as unknown as QuestionService,
+        logger: logger(),
+        settings: {
+          enabled: true,
+          baseUrl: "http://model.test/v1",
+          model: "test-model",
+          timeoutMs: 5_000,
+          maxContextMessages: 20,
+        },
+        fetchImpl,
+      });
+
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = serviceFor(fetchImpl);
+
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "what is the goal?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("HISTORY (provider compaction");
+    expect(prompt).toContain("OBJECTIVE: ship the confirmed-write assistant.");
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.historyAt).toBe(5_000);
+    // One page plus one deep page; a second question inside the TTL reuses it.
+    expect(wideCalls).toBe(2);
+
+    const second = await service.postMessage(thread.id, { text: "and now?" });
+    const secondEvents: AssistantEvent[] = [];
+    service.subscribe(second.run.id, 0, (event) => secondEvents.push(event));
+    await waitFor(() => secondEvents.some((event) => event.type === "done"));
+    expect(wideCalls).toBe(2);
+  });
+
   it("backfills as-of from the newest message before each answer", async () => {
     const store = new MemoryStateStore();
     await store.update((state) => {

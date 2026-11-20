@@ -1321,6 +1321,12 @@ components:
                   asOf:
                     type: integer
                     minimum: 0
+                  failures:
+                    type: integer
+                    minimum: 0
+                  historyAt:
+                    type: integer
+                    minimum: 0
               usage:
                 type: object
                 properties:
@@ -1595,6 +1601,12 @@ components:
                 asOf:
                   type: integer
                   minimum: 0
+                failures:
+                  type: integer
+                  minimum: 0
+                historyAt:
+                  type: integer
+                  minimum: 0
             usage:
               type: object
               properties:
@@ -1780,6 +1792,12 @@ components:
                     asOf:
                       type: integer
                       minimum: 0
+                    failures:
+                      type: integer
+                      minimum: 0
+                    historyAt:
+                      type: integer
+                      minimum: 0
                 usage:
                   type: object
                   properties:
@@ -1950,6 +1968,12 @@ components:
                       type: integer
                       minimum: 0
                     asOf:
+                      type: integer
+                      minimum: 0
+                    failures:
+                      type: integer
+                      minimum: 0
+                    historyAt:
                       type: integer
                       minimum: 0
                 usage:
@@ -8292,6 +8316,12 @@ paths:
                         type: integer
                         minimum: 0
                       asOf:
+                        type: integer
+                        minimum: 0
+                      failures:
+                        type: integer
+                        minimum: 0
+                      historyAt:
                         type: integer
                         minimum: 0
                   usage:

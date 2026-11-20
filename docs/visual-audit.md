@@ -1426,3 +1426,18 @@ list of file-configured objects.
   time: it answers "could this be stale?" in one clause. Same-day sessions show
   a bare time; older ones carry the date.
 - No colour is used for age. A stale answer is a fact, not a warning.
+
+## Assistant context blocks (2026-11-20)
+
+- The prompt now separates hub facts (`ASSISTANT`, `SITUATION`, `ATTENTION`,
+  `PENDING QUESTION`) from session data (`HISTORY`, `WORK`, `FAILURES`,
+  `RECENT ACTIONS`, `TRANSCRIPT`). The headings carry the trust level so the
+  model describes untrusted text instead of obeying it.
+- `HISTORY` is the newest provider compaction even when it sits outside the
+  message window, with its timestamp. It is the only long-horizon memory
+  available without a new model call.
+- `FAILURES` renders failed shells with exit codes and the tail of their output,
+  plus failed tools and message errors. `WORK` lists touched files and commands.
+  Both are derived from the same tail; neither adds a provider read.
+- The evidence line counts failures so the user can see that the context knew
+  about one.

@@ -1,11 +1,11 @@
-# Design Lock — v1.26
+# Design Lock — v1.27
 
 Status: **frozen**.
 
-- Version: `design-v1.26`
-- Parent: `design-v1.25`
+- Version: `design-v1.27`
+- Parent: `design-v1.26`
 - Date: 2026-11-20
-- Git tag: `design-v1.26`
+- Git tag: `design-v1.27`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -33,6 +33,7 @@ Status: **frozen**.
 - v1.24 scope: the assistant evidence line under each answer.
 - v1.25 scope: the action card's disabled-writes, in-flight, and outcome states.
 - v1.26 scope: assistant thread time markers and the session as-of stamp.
+- v1.27 scope: the evidence line reports failures found in the context.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -724,6 +725,16 @@ radius, or color token.
   how a stale answer announces itself.
 - No new tokens, radii, type roles, or controls. The markers are metadata in
   the existing 10px role.
+
+## Evidence line: failures (2026-11-20)
+
+- The evidence line gains one clause when the recent tail contains failed
+  commands or tools: `1 failure`. It sits after `Read N turns` and before
+  `session as of …`.
+- It is a count, not a link. The answer's prose says what failed; the line says
+  whether anything did, so "nothing is wrong" is never asserted from a context
+  the reader cannot see.
+- No new tokens or controls.
 
 ## Change policy
 
