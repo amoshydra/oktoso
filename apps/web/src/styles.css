@@ -6099,3 +6099,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   color: var(--accent);
   font-size: var(--text-sm);
 }
+
+.assistant-action.expired {
+  border-left-color: var(--border-strong);
+}

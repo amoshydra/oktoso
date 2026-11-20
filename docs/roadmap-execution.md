@@ -749,6 +749,12 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   button that names the effect (`Answer "main"`). The write path is unchanged:
   one human decision, one send, audited.
 
+- [x] G13. Expiry, eviction, and restart markers. Pending actions expire after
+  24 hours (lazily, audited as `expired`); thread eviction is LRU by
+  `updatedAt` and never removes a thread with a pending/deciding action; a
+  thread left on a user turn by a restart gains one assistant turn saying the
+  answer was interrupted. `init()` applies all three at boot.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

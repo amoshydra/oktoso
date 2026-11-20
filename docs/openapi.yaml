@@ -1020,6 +1020,7 @@ components:
             - done
             - cancelled
             - failed
+            - expired
         summary:
           type: string
         sessionRef:
@@ -1288,6 +1289,7 @@ components:
                       - done
                       - cancelled
                       - failed
+                      - expired
                   summary:
                     type: string
                   sessionRef:
@@ -1602,6 +1604,7 @@ components:
                     - done
                     - cancelled
                     - failed
+                    - expired
                 summary:
                   type: string
                 sessionRef:
@@ -1827,6 +1830,7 @@ components:
                         - done
                         - cancelled
                         - failed
+                        - expired
                     summary:
                       type: string
                     sessionRef:
@@ -2039,6 +2043,7 @@ components:
                         - done
                         - cancelled
                         - failed
+                        - expired
                     summary:
                       type: string
                     sessionRef:
@@ -8421,6 +8426,7 @@ paths:
                           - done
                           - cancelled
                           - failed
+                          - expired
                       summary:
                         type: string
                       sessionRef:

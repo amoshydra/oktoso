@@ -433,6 +433,11 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   would happen, the message text (editable for `send`), one primary action, and
   Cancel. Nothing is sent until that primary action is pressed, and the card
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
+- A pending action expires after 24 hours: the card reads `Expired`, keeps its
+  payload, and loses its buttons. A thread is never evicted while an action is
+  pending.
+- If the hub restarts mid-answer, the thread shows one assistant turn reading
+  `The answer was interrupted by a hub restart.` and accepts the next question.
 - While an action is pending the composer is disabled with
   `Decide the action above first…`. One action at a time.
 - Cancel is always available, even when writes are disabled; the primary
