@@ -5,8 +5,7 @@ const DRAFT_SCREENS = new Set([
   "answer",
   "answer-type",
   "answer-confirm",
-  "answer-more",
-  "answer-sent",
+  "answer-suggestions",
   "answer-stale",
 ]);
 

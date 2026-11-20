@@ -1504,3 +1504,123 @@ describe("ReplyService choices", () => {
     });
   });
 });
+
+describe("ReplyService answer mode", () => {
+  function pending(): Message[] {
+    return [
+      textMessage("m1", "user", "Fix the pull"),
+      message("m2", "assistant", [
+        {
+          type: "tool",
+          id: "q",
+          name: "question",
+          status: "running",
+          input: {
+            questions: [
+              {
+                header: "Direction",
+                question: "Should I switch to the mirror?",
+                options: [
+                  { label: "Use the mirror" },
+                  { label: "Retry the pull" },
+                ],
+              },
+            ],
+          },
+        },
+      ]),
+    ];
+  }
+
+  it("returns short model answers for the pending question", async () => {
+    const fetchMock = vi.fn(async () =>
+      completion(
+        JSON.stringify({
+          answers: ["Use the mirror", "Retry the pull once", "Check the mirror first"],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(
+      settings(),
+      sessions(pending()),
+      logger,
+    );
+    const result = await service.list("desktop-opencode:ses_1", "answer", "g2");
+
+    expect(result.mode).toBe("answer");
+    expect(result.data.map((option) => option.text)).toEqual([
+      "Use the mirror",
+      "Retry the pull once",
+      "Check the mirror first",
+    ]);
+    for (const option of result.data) {
+      expect(option.source).toBe("model");
+      expect(option.action).toBe("send");
+      expect(option.text.length).toBeLessThanOrEqual(46);
+    }
+    const body = requestBody(fetchMock);
+    expect(body.messages[0]?.content).toContain("pending question");
+    expect(body.messages[1]?.content).toContain("Should I switch to the mirror?");
+    expect(body.messages[1]?.content).toContain("Use the mirror");
+    expect(body.messages[1]?.content).toContain("user: Fix the pull");
+  });
+
+  it("drops long and duplicate answers and keeps at most three", async () => {
+    const fetchMock = vi.fn(async () =>
+      completion(
+        JSON.stringify({
+          answers: [
+            "Use the mirror",
+            "use the mirror",
+            "A very long answer that is definitely over the forty six character limit",
+            "Retry the pull",
+            "Check the logs",
+            "Rerun the build",
+          ],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(pending()), logger);
+    const result = await service.list("desktop-opencode:ses_1", "answer", "g2");
+
+    expect(result.data.map((option) => option.text)).toEqual([
+      "Use the mirror",
+      "Retry the pull",
+      "Check the logs",
+    ]);
+  });
+
+  it("returns no answers without a pending question", async () => {
+    const data = [
+      textMessage("m1", "user", "Ship it"),
+      textMessage("m2", "assistant", "Done. Published 1.2.3."),
+    ];
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const result = await service.list("desktop-opencode:ses_1", "answer", "g2");
+
+    expect(result.data).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns no answers when the reply model is disabled", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(
+      settings({ enabled: false }),
+      sessions(pending()),
+      logger,
+    );
+    const result = await service.list("desktop-opencode:ses_1", "answer", "g2");
+
+    expect(result.data).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

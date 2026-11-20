@@ -2545,6 +2545,7 @@ components:
           enum:
             - reply
             - choices
+            - answer
         state:
           type: string
           enum:
@@ -2593,6 +2594,7 @@ components:
           enum:
             - reply
             - choices
+            - answer
         model:
           type: string
         generatedAt:
@@ -2770,6 +2772,7 @@ components:
           enum:
             - reply
             - choices
+            - answer
         model:
           type: string
           maxLength: 200
@@ -2883,6 +2886,7 @@ components:
           enum:
             - reply
             - choices
+            - answer
         model:
           type: string
           maxLength: 200
@@ -3007,6 +3011,7 @@ components:
                 enum:
                   - reply
                   - choices
+                  - answer
               model:
                 type: string
                 maxLength: 200

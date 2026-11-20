@@ -69,7 +69,11 @@ Screenshot capture and framing are documented in
   them.
 - **Questions** — yes/no, explicit choices, free-form answers, destructive
   confirmation, stale-question protection, and idempotent retries on every
-  send. Provider-native `question` tool calls use the same chat answer flow as
+  send. A provider choice that only means "Other" becomes `Type your own
+  answer`, so the sentinel itself is never sent. The answer screen also offers
+  `Speak answer` when transcription is configured, 2–3 `Suggested answers`
+  from the local reply model, `Read chat`, and a confirmed `Stop agent`.
+  Provider-native `question` tool calls use the same chat answer flow as
   text questions; the Inbox form remains the formal alternative.
 - **Batch answers** — every question in a multi-question turn is shown on the
   phone and sent as one numbered message.
@@ -98,7 +102,11 @@ remains the keyboard for long or free-form answers.
 **Voice reply is the first row of the first reply page**, and it is offered
 while the suggestions are still loading. Opening the reply screen and tapping
 once starts the recording; no paging or scrolling is involved. Later pages show
-their full set of suggestions without repeating the shortcut.
+their full set of suggestions without repeating the shortcut. On the answer
+screen voice sits after the choices, because a stray first tap must never open
+the microphone; a free-form question has no choice under the first tap, so it
+may lead with `Speak answer`. Back and Cancel return to the screen that opened
+the microphone.
 
 The voice screen owns the whole exchange. It paints first and opens the
 microphone second, because rebuilding the page container after `audioControl`
@@ -131,13 +139,14 @@ Inbox
 └─ More             additional items beyond the glass cap
 
 Chat
-├─ Answer           choices + Type answer / More / Read chat
-├─ Batch            Answer on phone / More / Read chat
-├─ More             More replies / Read chat / Stop
+├─ Answer           choices / Type your own answer / Speak answer /
+│                   Suggested answers / Failure › / Read chat / Stop agent
+├─ Batch            Answer on phone / Failure › / Read chat / Stop agent
+├─ Suggested        model answers for the open question, tap to send
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
-├─ Stop agent       confirmation, always available
+├─ Stop agent       confirmation, from chat or the answer screen
 ├─ Turn failed      provider error + Retry / Back
 └─ Phone keyboard   longer text fallback
 
@@ -154,7 +163,8 @@ instead of taking over the screen.
 - One primary action per screen; secondary actions stay quiet.
 - The glass speaks in sentences. Sizes, frame counts, and timings belong in the
   phone log.
-- Voice reply is the first row of the first reply page, nowhere else.
+- Voice reply is the first row of the first reply page. On the answer screen it
+  follows the choices, never leads them.
 - Lists scroll with the platform gesture. Recent pages five at a time, and Back
   steps one page back before it leaves.
 - The contextual menu holds a shortcut that has no other control, not a second
