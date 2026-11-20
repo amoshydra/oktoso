@@ -52,6 +52,7 @@ import {
   buildAnswerSummary,
   buildBatchAnswerMetadata,
   composeBatchAnswer,
+  replyModelConfigured,
   type AnswerRow,
   type BatchAnswerDraft,
 } from "./answer-model";
@@ -128,11 +129,11 @@ type Screen =
   | "chat"
   | "pending"
   | "answer"
-  | "answer-more"
   | "answer-type"
   | "answer-sent"
   | "answer-confirm"
   | "answer-stale"
+  | "answer-suggestions"
   | "reply"
   | "choices"
   | "voice"
@@ -175,6 +176,9 @@ interface AppState {
   replyReturnScreen: Screen;
   choiceOptions: ReplyOption[];
   choicePage: number;
+  suggestions: ReplyOption[];
+  suggestionLoading: boolean;
+  suggestionError?: string;
   question?: QuestionPrompt;
   questionSummaries: Record<string, PendingQuestionSummary>;
   batchAnswers: Record<string, BatchAnswerState>;
@@ -193,6 +197,9 @@ interface AppState {
   notice?: string;
   failure?: FailureInfo;
   failureReturnScreen: Screen;
+  voiceReturnScreen: Screen;
+  interruptReturnScreen: Screen;
+  turnFailureReturnScreen: Screen;
   chatFailure?: FailureInfo;
   streamStatus: "connecting" | "live" | "reconnecting" | "polling";
   settingsBusy: boolean;
@@ -232,6 +239,8 @@ const state: AppState = {
   replyReturnScreen: "chat",
   choiceOptions: [],
   choicePage: 0,
+  suggestions: [],
+  suggestionLoading: false,
   question: undefined,
   questionSummaries: {},
   batchAnswers: {},
@@ -248,6 +257,9 @@ const state: AppState = {
   messageBusy: false,
   pendingAnswerChoice: undefined,
   failureReturnScreen: "home",
+  voiceReturnScreen: "chat",
+  interruptReturnScreen: "chat",
+  turnFailureReturnScreen: "chat",
   streamStatus: "connecting",
   settingsBusy: false,
 };
@@ -269,6 +281,7 @@ let voiceCaption = "";
 let voiceHeard = "";
 let voiceTapGuardUntil = 0;
 let voiceAvailable = false;
+let replyAvailable = false;
 let voiceTimer: ReturnType<typeof setTimeout> | undefined;
 
 let bridge: EvenAppBridge | undefined;
@@ -282,6 +295,7 @@ let lastEventSeq = 0;
 let eventSeqTimer: ReturnType<typeof setTimeout> | undefined;
 let scanController: AbortController | undefined;
 let replyRequest = 0;
+let suggestionRequest = 0;
 let replyPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
 let replyPrefetchKey = "";
 let inputCount = 0;
@@ -306,6 +320,7 @@ let chatLoadSequence = 0;
 let questionLoadSequence = 0;
 let questionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let questionRefreshRef: string | undefined;
+let questionRefreshForce = false;
 let chatUpdateInFlight = false;
 let chatUpdateQueued = false;
 let eventController: AbortController | undefined;
@@ -928,8 +943,16 @@ async function refreshQuestionSummaries(refs?: string[]): Promise<void> {
 function answerRows(): AnswerRow[] {
   const question = activeQuestion();
   return question && state.question
-    ? buildAnswerRows(question, state.question)
+    ? buildAnswerRows(question, state.question, {
+        voice: voiceAvailable,
+        suggested: replyAvailable,
+        failure: answerHasFailure(),
+      })
     : [];
+}
+
+function answerHasFailure(): boolean {
+  return Boolean(state.chatFailure || providerIssue() || turnFailure());
 }
 
 function isBatchQuestion(): boolean {
@@ -1302,13 +1325,13 @@ async function refreshProviders(): Promise<void> {
   }
 }
 
-function showProviderFailure(): void {
+function showProviderFailure(returnScreen: Screen = "chat"): void {
   const status = providerStates[sessionProviderID() ?? ""];
   if (status !== "offline" && status !== "auth-error") return;
   showFailure(
     { code: status === "auth-error" ? "provider_auth_error" : "provider_offline" },
     {
-      returnScreen: "chat",
+      returnScreen,
       retry: () => {
         void refreshProviders();
         void loadChat(false);
@@ -1327,6 +1350,18 @@ function turnFailure(): TurnFailure | undefined {
     .reverse()
     .find((message) => message.role === "assistant");
   if (!last || last.id === dismissedTurnID) return undefined;
+  // A user message after the failed turn is the response to it. Keeping the
+  // old error active would make every later tap reopen a failure the user
+  // already moved past.
+  const index = state.chatMessages.indexOf(last);
+  if (
+    index >= 0 &&
+    state.chatMessages
+      .slice(index + 1)
+      .some((message) => message.role === "user")
+  ) {
+    return undefined;
+  }
   const message = turnErrorText(last.metadata?.error);
   return message ? { id: last.id, message } : undefined;
 }
@@ -1335,12 +1370,15 @@ function turnFailure(): TurnFailure | undefined {
 function dismissTurnFailure(): void {
   const failure = turnFailure();
   if (failure) dismissedTurnID = failure.id;
-  state.screen = "chat";
+  const target = state.turnFailureReturnScreen;
+  state.turnFailureReturnScreen = "chat";
+  state.screen = target;
   render();
 }
 
-function openTurnFailure(): void {
+function openTurnFailure(returnScreen: Screen = "chat"): void {
   if (!turnFailure()) return;
+  state.turnFailureReturnScreen = returnScreen;
   state.screen = "turn-failed";
   render();
 }
@@ -1349,6 +1387,7 @@ async function retryTurn(): Promise<void> {
   const failure = turnFailure();
   if (!client || !state.sessionRef || !failure) return;
   const ref = state.sessionRef;
+  state.turnFailureReturnScreen = "chat";
   state.screen = "chat";
   render();
   try {
@@ -2060,6 +2099,12 @@ async function openChat(
   state.messageKeyText = undefined;
   state.messageBusy = false;
   state.pendingAnswerChoice = undefined;
+  state.suggestions = [];
+  state.suggestionLoading = false;
+  state.suggestionError = undefined;
+  state.voiceReturnScreen = "chat";
+  state.interruptReturnScreen = "chat";
+  state.turnFailureReturnScreen = "chat";
   lastChatScrollAt = 0;
   chatScrollBurst = 0;
   chatFollowText = undefined;
@@ -2083,6 +2128,7 @@ async function openChat(
     })
     .catch(() => undefined);
   void loadQuestion(ref);
+  void refreshAssistantAvailability();
   await loadChat(false);
   if (client) void client.markRead(ref).catch(() => undefined);
 }
@@ -2119,19 +2165,26 @@ const QUESTION_REFRESH_MS = 600;
  * the full prompt is a provider fetch, so refresh only when the revision
  * differs, at most once per debounce window, and never over a draft.
  */
-function scheduleQuestionRefresh(ref: string): void {
+function scheduleQuestionRefresh(
+  ref: string,
+  options: { force?: boolean } = {},
+): void {
   if (!client || state.sessionRef !== ref) return;
   if (holdsQuestionDraft(state.screen)) return;
   questionRefreshRef = ref;
+  questionRefreshForce = questionRefreshForce || options.force === true;
   if (questionRefreshTimer) clearTimeout(questionRefreshTimer);
   questionRefreshTimer = setTimeout(() => {
     questionRefreshTimer = undefined;
     const target = questionRefreshRef;
+    const force = questionRefreshForce;
     questionRefreshRef = undefined;
+    questionRefreshForce = false;
     if (!target || !client || state.sessionRef !== target) return;
     if (holdsQuestionDraft(state.screen)) return;
     const summary = state.questionSummaries[target];
     if (
+      !force &&
       !shouldRefreshQuestion({
         ...(summary ? { summaryRevision: summary.revision } : {}),
         ...(state.question ? { currentRevision: state.question.revision } : {}),
@@ -2164,8 +2217,32 @@ function openAnswer(): void {
   state.pendingAnswerText = undefined;
   state.pendingAnswerChoice = undefined;
   state.answerMode = false;
+  void refreshAssistantAvailability();
   updatePhoneQuestion();
   render();
+}
+
+/**
+ * Voice and suggested answers are optional rows. The hub owns the config, so
+ * read it once per chat open (and again when the answer screen opens) instead
+ * of guessing from the previous reply screen.
+ */
+async function refreshAssistantAvailability(): Promise<void> {
+  if (!client) return;
+  const ref = state.sessionRef;
+  try {
+    const settings = await client.assistantSettings();
+    if (state.sessionRef !== ref) return;
+    const voice = transcriptionConfigured(settings);
+    const reply = replyModelConfigured(settings);
+    if (voice === voiceAvailable && reply === replyAvailable) return;
+    voiceAvailable = voice;
+    replyAvailable = reply;
+    if (state.screen === "answer" || state.screen === "reply") render();
+  } catch {
+    // Keep the last known capability: a failed settings read is not a reason
+    // to remove a row the user can still use.
+  }
 }
 
 async function sendAnswer(
@@ -2195,17 +2272,18 @@ async function sendAnswer(
     clearPendingSend(idempotencyKey);
     state.answerBusy = false;
     if (state.sessionRef !== ref) return;
-    state.question = undefined;
+    // Keep the marker until the provider answers. The answer may resolve the
+    // question, replace it, or fail to register at all; only a refresh knows.
     state.answerMode = false;
     state.answerStale = undefined;
     state.answerKey = undefined;
     state.answerKeyText = undefined;
     state.pendingAnswerText = undefined;
     state.pendingAnswerChoice = undefined;
-    rememberQuestionSummary(ref, null);
     markRequestSuccess();
     state.screen = "answer-sent";
     updatePhoneQuestion();
+    scheduleQuestionRefresh(ref, { force: true });
     if (source === "phone") {
       phoneText.value = "";
       setPhoneStatus("Answer sent.");
@@ -2321,23 +2399,8 @@ async function performAnswerRow(index: number): Promise<void> {
     return;
   }
 
-  if (state.screen === "answer-more") {
-    if (index === 0) {
-      await openReply();
-    } else if (index === 1) {
-      state.screen = "chat";
-      state.answerMode = false;
-      updatePhoneQuestion();
-      render();
-    } else if (index === 2 && client && state.sessionRef) {
-      try {
-        await client.interrupt(state.sessionRef);
-      } catch (error) {
-        log(`Interrupt failed: ${errorMessage(error)}`);
-      }
-      state.screen = "chat";
-      render();
-    }
+  if (state.screen === "answer-suggestions") {
+    await performSuggestion(index);
     return;
   }
 
@@ -2359,9 +2422,15 @@ async function performAnswerRow(index: number): Promise<void> {
     focusPhoneBatch();
   } else if (row.action === "type") {
     openTypeAnswer();
-  } else if (row.action === "more") {
-    state.screen = "answer-more";
-    render();
+  } else if (row.action === "voice") {
+    state.voiceReturnScreen = "answer";
+    void startVoice();
+  } else if (row.action === "suggested") {
+    await openAnswerSuggestions();
+  } else if (row.action === "failure") {
+    openAnswerFailure();
+  } else if (row.action === "stop") {
+    openInterruptConfirm("answer");
   } else if (row.action === "read") {
     state.screen = "chat";
     state.answerMode = false;
@@ -2372,6 +2441,90 @@ async function performAnswerRow(index: number): Promise<void> {
   }
 }
 
+/** Candidate answers are model text: they send as ordinary free text. */
+async function openAnswerSuggestions(): Promise<void> {
+  if (!client || !state.sessionRef) return;
+  const ref = state.sessionRef;
+  const request = ++suggestionRequest;
+  state.suggestions = [];
+  state.suggestionLoading = true;
+  state.suggestionError = undefined;
+  state.screen = "answer-suggestions";
+  render();
+  try {
+    const options = await client.replyOptions(ref, "answer", "g2");
+    if (request !== suggestionRequest || state.sessionRef !== ref) return;
+    state.suggestions = options.data.slice(0, 3);
+    state.suggestionLoading = false;
+    markRequestSuccess();
+    render();
+  } catch (error) {
+    if (request !== suggestionRequest) return;
+    state.suggestionLoading = false;
+    state.suggestionError = failureMessage(error);
+    render();
+    log(`Suggested answers failed: ${failureMessage(error)}`);
+  }
+}
+
+async function performSuggestion(index: number): Promise<void> {
+  const option = state.suggestions[index];
+  const ref = state.sessionRef;
+  const text = option?.text.trim() ?? "";
+  if (!client || !ref || !text || state.messageBusy) return;
+  state.messageBusy = true;
+  state.suggestionError = undefined;
+  render();
+  try {
+    const idempotencyKey = messageKeyFor(text);
+    const payload: SendInput = { text };
+    trackPendingSend(payload, idempotencyKey);
+    await client.sendMessage(ref, payload, {
+      idempotencyKey,
+      signal: sendSignal(),
+    });
+    clearPendingSend(idempotencyKey);
+    if (state.sessionRef !== ref) return;
+    chatFollowText = text.replace(/\s+/g, " ").trim();
+    state.messageBusy = false;
+    state.messageKey = undefined;
+    state.messageKeyText = undefined;
+    scheduleQuestionRefresh(ref, { force: true });
+    state.screen = "chat";
+    state.notice = "Suggestion sent.";
+    updatePhoneQuestion();
+    render();
+    await loadChat(false);
+  } catch (error) {
+    state.messageBusy = false;
+    showFailure(error, {
+      returnScreen: "answer-suggestions",
+      retry: () => performSuggestion(index),
+    });
+    log(`Suggestion send failed: ${failureMessage(error)}`);
+  } finally {
+    state.messageBusy = false;
+  }
+}
+
+/** Failures are an affordance on the answer screen, never the chat tap. */
+function openAnswerFailure(): void {
+  if (state.chatFailure) {
+    state.failure = state.chatFailure;
+    state.failureReturnScreen = "answer";
+    failureRetry = () => loadChat(false);
+    state.screen = "failure";
+    updatePhoneState();
+    render();
+    return;
+  }
+  if (providerIssue()) {
+    showProviderFailure("answer");
+    return;
+  }
+  if (turnFailure()) openTurnFailure("answer");
+}
+
 function updatePhoneQuestion(): void {
   const question = activeQuestion();
   const visible =
@@ -2379,7 +2532,6 @@ function updatePhoneQuestion(): void {
     [
       "chat",
       "answer",
-      "answer-more",
       "answer-type",
       "answer-sent",
       "answer-confirm",
@@ -2600,16 +2752,15 @@ async function sendBatchAnswers(): Promise<void> {
     clearPendingSend(idempotencyKey);
     state.answerBusy = false;
     if (state.sessionRef !== ref) return;
-    state.question = undefined;
     resetBatchAnswers();
     state.answerStale = undefined;
     state.answerKey = undefined;
     state.answerKeyText = undefined;
-    rememberQuestionSummary(ref, null);
     markRequestSuccess();
     state.screen = "answer-sent";
     setPhoneStatus("Answers sent.");
     updatePhoneQuestion();
+    scheduleQuestionRefresh(ref, { force: true });
     render();
   } catch (error) {
     state.answerBusy = false;
@@ -2880,15 +3031,19 @@ function chatView(): { header: string; body: string; footer: string } {
           ? "Swipe down"
           : "Swipe";
   const issue = providerIssue();
+  const failedTurn = turnFailure();
+  const hasFailure = Boolean(state.chatFailure || issue || failedTurn);
+  // While a question is open the tap answers it. A failure is an affordance on
+  // that screen (and a token here), never the tap destination.
   const actionHint =
     state.answerBusy || state.messageBusy
       ? "Sending…"
-      : state.chatFailure || issue
-        ? "Tap retry"
-        : turnFailure()
-          ? "Tap for error"
-          : state.question
-            ? "? Answer"
+      : state.question
+        ? "? Answer"
+        : state.chatFailure || issue
+          ? "Tap retry"
+          : failedTurn
+            ? "Tap for error"
             : "Tap reply";
   const stream = streamLabel();
   const base = [
@@ -2896,9 +3051,13 @@ function chatView(): { header: string; body: string; footer: string } {
     `${first}-${last}/${total}`,
     messageLabel,
     state.chatActivity,
-    issue ?? "",
+    state.question
+      ? hasFailure
+        ? "Failure ›"
+        : ""
+      : (issue ?? ""),
+    state.question ? "" : (state.chatFailure?.short ?? ""),
     stream !== "Live" ? stream : "",
-    state.chatFailure?.short ?? "",
     state.chatNewBelow ? "New below" : "",
   ]
     .filter(Boolean)
@@ -3019,8 +3178,7 @@ async function openReply(): Promise<void> {
   }
   const sessionRef = state.sessionRef;
   const request = ++replyRequest;
-  state.replyReturnScreen =
-    state.screen === "answer-more" ? "answer-more" : "chat";
+  state.replyReturnScreen = "chat";
   state.replyPage = 0;
   // Offer voice immediately, before the suggestions arrive: the endpoint state
   // is cached from the previous reply screen, so the first row never waits on
@@ -3042,6 +3200,7 @@ async function openReply(): Promise<void> {
       return;
     }
     voiceAvailable = transcriptionConfigured(settings);
+    replyAvailable = replyModelConfigured(settings);
     state.replyOptions = withVoiceOption(options.data, voiceAvailable);
     state.replyLoading = false;
     clearFailure();
@@ -3125,12 +3284,19 @@ async function performReply(index: number): Promise<void> {
 
 async function startVoice(): Promise<void> {
   if (!client || !bridge || voiceActive || voiceBusy) return;
+  const origin = state.screen;
+  // A retry from the VOICE failure screen keeps the original destination.
+  if (origin !== "voice") {
+    state.voiceReturnScreen =
+      origin === "answer" || origin === "reply" ? origin : "chat";
+  }
   voiceBusy = true;
   const settings = await client.assistantSettings().catch(() => undefined);
   if (!transcriptionConfigured(settings)) {
     voiceAvailable = false;
     voiceBusy = false;
-    state.screen = "chat";
+    state.screen = state.voiceReturnScreen;
+    state.voiceReturnScreen = "chat";
     setPhoneStatus("Voice transcription is not configured.", true);
     render();
     return;
@@ -3284,7 +3450,7 @@ async function cancelVoice(): Promise<void> {
   } catch {
     // The microphone may already be closed.
   }
-  state.screen = "chat";
+  closeVoice();
   setPhoneStatus("Voice cancelled.");
   render();
 }
@@ -3339,13 +3505,21 @@ function voiceInputHandler(input: GlassInput | undefined): void {
 }
 
 function closeVoice(): void {
-  state.screen = "chat";
+  const target = state.voiceReturnScreen;
+  state.voiceReturnScreen = "chat";
+  state.screen = target;
   render();
 }
 
 function editVoiceOnPhone(): void {
   voicePhase = "listening";
   voiceHeard = "";
+  if (state.voiceReturnScreen === "answer" && state.question) {
+    state.voiceReturnScreen = "chat";
+    openTypeAnswer();
+    setPhoneStatus("Edit on the phone, then send.");
+    return;
+  }
   phoneText.focus();
   const end = phoneText.value.length;
   phoneText.setSelectionRange(end, end);
@@ -3358,6 +3532,7 @@ async function sendVoiceTranscript(): Promise<void> {
   if (!text || !client || !state.sessionRef || state.messageBusy) return;
   phoneText.value = "";
   syncPhoneSession();
+  state.voiceReturnScreen = "chat";
   await executeReply({
     id: "voice-send",
     label: "Send",
@@ -3370,9 +3545,10 @@ async function sendVoiceTranscript(): Promise<void> {
 async function executeReply(option: ReplyOption): Promise<void> {
   if (!client || !state.sessionRef) return;
   if (state.messageBusy) return;
+  const ref = state.sessionRef;
   try {
     if (option.action === "interrupt") {
-      await client.interrupt(state.sessionRef);
+      await client.interrupt(ref);
       state.screen = "chat";
       render();
       await loadChat(false);
@@ -3386,7 +3562,7 @@ async function executeReply(option: ReplyOption): Promise<void> {
       return;
     }
     if (option.action === "choices") {
-      const choices = await client.replyOptions(state.sessionRef, "choices");
+      const choices = await client.replyOptions(ref, "choices");
       if (choices.data.length === 0) {
         state.screen = "chat";
         state.notice = "No numbered choices found in the latest reply.";
@@ -3412,17 +3588,19 @@ async function executeReply(option: ReplyOption): Promise<void> {
         const payload: SendInput = { text };
         trackPendingSend(payload, idempotencyKey);
         await client.sendMessage(
-          state.sessionRef,
+          ref,
           payload,
           { idempotencyKey, signal: sendSignal() },
         );
         clearPendingSend(idempotencyKey);
+        if (state.sessionRef !== ref) return;
         chatFollowText = text.replace(/\s+/g, " ").trim();
-        // A plain reply does not answer the pending question. Keep the marker
-        // until the question actually changes; the live refresh will settle it.
-        updatePhoneQuestion();
+        // A plain reply may or may not settle the pending question. Keep the
+        // marker until the provider says what happened; the refresh decides.
         state.screen = "chat";
         state.notice = "Reply sent.";
+        scheduleQuestionRefresh(ref, { force: true });
+        updatePhoneQuestion();
         // Paint the chat before awaiting the reload. A concurrent event refresh
         // can supersede loadChat, and the glass must not stay on the voice page.
         render();
@@ -3527,30 +3705,39 @@ function handleMenuAction(itemID: number): void {
   else if (itemID === MENU_ID.bottom) scrollChatToBottom();
 }
 
-function openInterruptConfirm(): void {
+function openInterruptConfirm(returnScreen: Screen = "chat"): void {
   if (!client || !state.sessionRef) return;
+  state.interruptReturnScreen = returnScreen;
   state.screen = "interrupt-confirm";
   render();
 }
 
-async function confirmInterrupt(): Promise<void> {
+async function confirmInterrupt(
+  returnScreen: Screen = state.interruptReturnScreen,
+): Promise<void> {
   if (!client || !state.sessionRef) return;
   const ref = state.sessionRef;
-  // Paint the chat before the call: a slow or failed provider must not leave
-  // the confirmation (or the menu) on the glass.
-  state.screen = "chat";
+  state.interruptReturnScreen = "chat";
+  // Paint the destination before the call: a slow or failed provider must not
+  // leave the confirmation (or the menu) on the glass.
+  state.screen = returnScreen;
   render();
   try {
     await client.interrupt(ref);
   } catch (error) {
+    state.interruptReturnScreen = returnScreen;
     showFailure(error, {
-      returnScreen: "chat",
-      retry: () => confirmInterrupt(),
+      returnScreen,
+      retry: () => confirmInterrupt(returnScreen),
     });
     log(`Interrupt failed: ${failureMessage(error)}`);
     return;
   }
   await loadChat(false);
+  if (state.sessionRef === ref && state.screen === "chat") {
+    state.screen = returnScreen;
+    render();
+  }
 }
 
 function scrollChatToBottom(): void {
@@ -3583,7 +3770,9 @@ function back(): void {
     render();
     return;
   }
-  if (state.screen === "answer-more") {
+  if (state.screen === "answer-suggestions") {
+    suggestionRequest += 1;
+    state.suggestionLoading = false;
     state.screen = "answer";
     render();
     return;
@@ -3692,7 +3881,9 @@ function back(): void {
     return;
   }
   if (state.screen === "interrupt-confirm") {
-    state.screen = "chat";
+    const target = state.interruptReturnScreen;
+    state.interruptReturnScreen = "chat";
+    state.screen = target;
     render();
     return;
   }
@@ -3765,7 +3956,9 @@ function handleListClick(index: number): void {
     case "interrupt-confirm": {
       if (index === 0) void confirmInterrupt();
       else {
-        state.screen = "chat";
+        const target = state.interruptReturnScreen;
+        state.interruptReturnScreen = "chat";
+        state.screen = target;
         render();
       }
       break;
@@ -3838,9 +4031,9 @@ function handleListClick(index: number): void {
       void performAttention(index);
       break;
     case "answer":
-    case "answer-more":
     case "answer-confirm":
     case "answer-stale":
+    case "answer-suggestions":
       void performAnswerRow(index);
       break;
     case "reply":
@@ -3880,6 +4073,12 @@ function handleTextClick(): void {
     return;
   }
   if (state.screen === "chat") {
+    // A pending question is the reason the user is here. Failures stay
+    // reachable from the answer screen once the question is settled.
+    if (state.question) {
+      openAnswer();
+      return;
+    }
     if (state.chatFailure) {
       void loadChat(false);
       return;
@@ -3892,8 +4091,7 @@ function handleTextClick(): void {
       openTurnFailure();
       return;
     }
-    if (state.question) openAnswer();
-    else void openReply();
+    void openReply();
     return;
   }
   if (state.screen === "answer-type") {
@@ -4213,7 +4411,6 @@ function render(): void {
   }
   if (
     state.screen === "answer" ||
-    state.screen === "answer-more" ||
     state.screen === "answer-confirm"
   ) {
     const question = activeQuestion();
@@ -4234,16 +4431,6 @@ function render(): void {
       return;
     }
 
-    if (state.screen === "answer-more") {
-      const header = answerHeader("MORE");
-      const body = clampLine(`Q  ${question.text}`, 54);
-      const items = ["More replies", "Read chat", "Stop"];
-      if (setPreview(header, body, "Tap choose · Back ×2", items)) {
-        void showPage(listPage(header, items, "Tap choose · Back ×2", body));
-      }
-      return;
-    }
-
     const header = answerHeader();
     const body = answerSummary();
     const rows = answerRows();
@@ -4256,6 +4443,24 @@ function render(): void {
         : hasChoices
           ? "Swipe choose · Tap send · Back ×2"
           : "Tap choose · Back ×2";
+    if (setPreview(header, body, footer, items)) {
+      void showPage(listPage(header, items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "answer-suggestions") {
+    const header = answerHeader("SUGGESTED");
+    const body = answerSummary();
+    const items = state.suggestionLoading
+      ? ["Reading suggestions…"]
+      : state.suggestions.length > 0
+        ? state.suggestions.map((option) => clampLine(option.label, 46))
+        : ["No suggestions"];
+    const footer = state.messageBusy
+      ? "Sending…"
+      : state.suggestionError
+        ? clampLine(state.suggestionError, 60)
+        : "Tap send · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));
     }

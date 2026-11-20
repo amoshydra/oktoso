@@ -117,6 +117,8 @@ const COMPACT_LIMITS: LintLimits = {
   maxChars: COMPACT_SUGGESTION_CHARS,
 };
 const MAX_CHOICES = 5;
+const MAX_ANSWER_SUGGESTIONS = 3;
+const MAX_ANSWER_CHARS = 46;
 
 const COURTESY =
   /^(anything else|does (that|this) make sense|any questions|all good|sound good|thoughts|let me know|thanks|thank you|cheers)\b/i;
@@ -287,6 +289,28 @@ const CHOICE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const ANSWER_SYSTEM_PROMPT = `Write 2-3 short answers the user can send to the agent's pending question.
+Rules:
+- Each answer is what the user would type, never a description of the answer.
+- Use the question's choices when they fit; never invent a new option.
+- Prefer concrete and distinct answers.
+- At most 46 characters and eight words each. Plain text, no quotes, no numbering.
+- Return only a JSON object with an "answers" array of strings.`;
+
+const ANSWER_SCHEMA = {
+  type: "object",
+  properties: {
+    answers: {
+      type: "array",
+      items: { type: "string" },
+      minItems: 2,
+      maxItems: MAX_ANSWER_SUGGESTIONS,
+    },
+  },
+  required: ["answers"],
+  additionalProperties: false,
+} as const;
+
 export class ReplyService {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inflight = new Map<string, Promise<ReplyOptions>>();
@@ -441,6 +465,22 @@ export class ReplyService {
       return value;
     }
 
+    if (mode === "answer") {
+      const generation = await this.answers(messages, config, question);
+      const value: ReplyOptions = {
+        data: generation.options,
+        generatedAt: Date.now(),
+        mode,
+        ...(config.reply.enabled ? { model: config.reply.model } : {}),
+      };
+      this.cache.set(cacheKey, {
+        value,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+      this.trimCache();
+      return value;
+    }
+
     const moment = momentContext.moment;
     const canned = cannedOptions();
     const base: ReplyOptions = {
@@ -527,11 +567,42 @@ export class ReplyService {
     const context = buildMomentPrompt(momentContext);
     const moment = momentContext.moment;
     const systemPrompt =
-      mode === "reply" ? replySystemPrompt(surface) : CHOICE_SYSTEM_PROMPT;
+      mode === "reply"
+        ? replySystemPrompt(surface)
+        : mode === "answer"
+          ? ANSWER_SYSTEM_PROMPT
+          : CHOICE_SYSTEM_PROMPT;
     const modelStarted = Date.now();
 
     if (mode === "choices") {
       const generation = await this.choices(messages, config, question);
+      return {
+        sessionRef: ref,
+        ...(session?.title ? { sessionTitle: session.title } : {}),
+        ...(session?.status ? { sessionStatus: session.status } : {}),
+        mode,
+        ...(config.reply.enabled && config.reply.model
+          ? { model: config.reply.model }
+          : {}),
+        generatedAt: Date.now(),
+        durationMs: Date.now() - started,
+        modelMs: Date.now() - modelStarted,
+        systemPrompt,
+        context,
+        moment,
+        rejected: [],
+        ...(question ? { question } : {}),
+        options: generation.options,
+        raw: generation.raw,
+        reasoning: generation.reasoning,
+        ...(generation.finishReason
+          ? { finishReason: generation.finishReason }
+          : {}),
+      };
+    }
+
+    if (mode === "answer") {
+      const generation = await this.answers(messages, config, question);
       return {
         sessionRef: ref,
         ...(session?.title ? { sessionTitle: session.title } : {}),
@@ -833,6 +904,54 @@ export class ReplyService {
       reasoning,
       ...(finishReason ? { finishReason } : {}),
     };
+  }
+
+  private async answers(
+    messages: Message[],
+    config: AssistantConfig,
+    question: ReplyAuditQuestion | undefined,
+  ): Promise<ChoiceGeneration> {
+    if (!question || !replyModelReady(config)) {
+      return { options: [], raw: "", reasoning: "" };
+    }
+    try {
+      const result = await this.completion(
+        config,
+        [
+          { role: "system", content: ANSWER_SYSTEM_PROMPT },
+          { role: "user", content: buildAnswerPrompt(question, messages) },
+        ],
+        { maxTokens: 240, schema: ANSWER_SCHEMA },
+      );
+      const seen = new Set<string>();
+      const options: ReplyOption[] = [];
+      for (const raw of normalizeSuggestions(result.content)) {
+        const answer = raw.replace(/\s+/g, " ").trim();
+        if (!answer || answer.length > MAX_ANSWER_CHARS) continue;
+        const key = answer.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        options.push({
+          id: `answer-${options.length}`,
+          label: answer,
+          text: answer,
+          source: "model",
+          action: "send",
+        });
+        if (options.length >= MAX_ANSWER_SUGGESTIONS) break;
+      }
+      return {
+        options,
+        raw: result.content,
+        reasoning: result.reasoning,
+        ...(result.finishReason ? { finishReason: result.finishReason } : {}),
+      };
+    } catch (error) {
+      this.logger.warn("Answer suggestion generation failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { options: [], raw: "", reasoning: "" };
+    }
   }
 
   private async modelChoices(
@@ -1231,6 +1350,25 @@ function buildMomentContext(input: {
     ...(latestTurn ? { latestTurn } : {}),
     ...(recommendation ? { recommendation } : {}),
   };
+}
+
+function buildAnswerPrompt(
+  question: ReplyAuditQuestion,
+  messages: Message[],
+): string {
+  const recent = messages
+    .filter((message) => messageText(message).length > 0)
+    .slice(-6)
+    .map((message) => `${message.role}: ${clip(messageText(message), 300)}`);
+  return [
+    "question:",
+    `  text: ${question.text}`,
+    ...(question.choices.length > 0
+      ? ["  choices:", ...question.choices.map((choice) => `    - ${choice.label}`)]
+      : []),
+    "recent messages:",
+    ...recent.map((line) => `  ${line}`),
+  ].join("\n");
 }
 
 function buildMomentPrompt(context: MomentContext): string {
@@ -1896,7 +2034,7 @@ function normalizeSuggestions(raw: string): string[] {
     );
   } else if (parsed && typeof parsed === "object") {
     const record = parsed as Record<string, unknown>;
-    for (const key of ["choices", "replies", "options", "suggestions", "follow_ups"]) {
+    for (const key of ["choices", "replies", "options", "suggestions", "answers", "follow_ups"]) {
       const value = record[key];
       if (Array.isArray(value)) {
         candidates = value.filter(

@@ -1,14 +1,14 @@
 # G2 Question Flow
 
-Status: **design + core Slice 1-2 implementation**. Revised after the isolated
-G2 answer-flow spike. Question detection, the ANSWER list, phone handoff, stale
-revision checks, and idempotent retry are implemented. The distinct offline/auth
-error copy and multiple-question batch remain. Does not modify `glass-ux.md`, `wearables.md`, or `ui-ia.md`; those need a
-short amendment when this is approved.
+Status: **design + implemented**. Revised after the isolated G2 answer-flow
+spike. Question detection, the ANSWER response surface, phone handoff, stale
+revision checks, idempotent retry, voice, and model-written suggested answers are
+implemented. Does not modify `glass-ux.md`, `wearables.md`, or `ui-ia.md`; those
+need a short amendment when this is approved.
 
-Scope: non-voice answering of AI-agent questions from Even G2 glasses and the
-G2 phone companion. Voice and model-generated suggestions are designed for, but
-not in the first slice.
+Scope: answering AI-agent questions from Even G2 glasses and the G2 phone
+companion. The glasses support choices, sentinel-aware free text, voice, and a
+short list of suggested answers; the phone remains the keyboard.
 
 ---
 
@@ -23,7 +23,8 @@ advertises `? Answer`. Tapping opens a single-purpose screen containing:
 
 - the question in a two-line summary,
 - **one event-capturing list** containing the agent's choices followed by the
-  action rows (`Type answer`, `More`, `Read chat`),
+  action rows (`Type answer`, `Speak answer`, `Suggested answers`, `Read chat`,
+  `Stop agent`),
 - a non-interactive footer hint.
 
 The list, not the footer, owns input. This is a measured SDK constraint: only one
@@ -35,9 +36,13 @@ six-item list scrolls and selects beyond the visible four rows.
 A choice sends in one tap. Destructive choices open a `CONFIRM` screen first;
 sensitive questions add a text warning but still send normally. Free text and
 multiple questions hand off to the phone card, which puts the existing composer
-into answer mode. Every send carries the question revision and an idempotency
-key; if the question changed, the hub rejects the send and the glasses ask the
-user to review instead of silently answering the wrong question.
+into answer mode. A sentinel choice such as `Other` becomes `Type your own
+answer` instead of a row that would send the literal word. When transcription or
+the reply model is configured, the same screen offers `Speak answer` and 2–3
+`Suggested answers`; both reuse the normal message path. Every send carries the
+question revision and an idempotency key; if the question changed, the hub
+rejects the send and the glasses ask the user to review instead of silently
+answering the wrong question.
 
 This is better than the draft because it:
 
@@ -61,16 +66,19 @@ This is better than the draft because it:
 3. Swipe to a choice and tap. Destructive choices open `CONFIRM`.
 4. `SENT` shows the exact text sent. Tap the body, or wait 1.2 s, to return to
    chat.
-5. Scroll if needed to `Type answer`, `More`, or `Read chat` and tap. Typing
-   hands off to the phone; `More` opens the secondary list; `Read chat` returns
-   to the transcript.
+5. Scroll if needed to `Type answer`, `Speak answer`, `Suggested answers`, or
+   `Read chat` and tap. Typing hands off to the phone, voice opens the
+   microphone, suggestions list candidate answers, and `Read chat` returns to
+   the transcript.
 
 | Action from an open chat | Taps | Scroll |
 |---|---:|---|
 | Common choice / yes/no | 2 (chat, choice) | none for the first four rows |
 | Typing | 2 (chat, `Type answer`) + phone send | only if the row is below the fold |
-| `More` | 2 (chat, `More`) | only if the row is below the fold |
-| `Read chat` under `More` | 3 (chat, `More`, `Read chat`) | possible on the first two steps |
+| Voice | 2 (chat, `Speak answer`) + stop | follows the choices |
+| Suggested answer | 2 (chat, `Suggested answers`, candidate) | none for three candidates |
+| `Read chat` | 2 (chat, `Read chat`) | only if the row is below the fold |
+| `Stop agent` | 3 (chat, `Stop agent`, confirm) | only if the row is below the fold |
 | Destructive answer | 3 (chat, choice, `Send`) | none for the first rows |
 
 No long-press, no color on the glasses, no new gesture.
@@ -119,8 +127,8 @@ The hard parts are not rendering a list:
 4. **Never guess a choice from prose.** A list is a choice list only when it is
    adjacent to the question and passes the plan/task filters. Low confidence
    becomes free text, not a button.
-5. **The transcript is never more than one back away.** `More` always contains
-   `Read chat`; back returns to the exact line.
+5. **The transcript is never more than one back away.** `Read chat` is always on
+   the answer screen; back returns to the exact line.
 6. **The phone is the keyboard, not the product.** Choices work on the glasses.
    Free text and multiple questions use the phone.
 7. **Monochrome state uses position and borders.** No color-only meaning; no
@@ -140,7 +148,7 @@ The hard parts are not rendering a list:
 | Draft assumption | Problem | Fix in this spec |
 |---|---|---|
 | Question metadata on `reply-options` | Reading chat would trigger reply generation or require a generation endpoint just to know a question exists. | Hub-owned `QuestionService` + `GET /sessions/:ref/question`. |
-| `ANSWER` shows 3 choices + Type + More replies + Read chat | Six rows cannot all be visible in 156 px; the draft did not specify what happens below the fold. | Choices + action rows in one scrollable list; four rows visible; footer is a hint. |
+| `ANSWER` shows 3 choices + Type + More replies + Read chat | Six rows cannot all be visible in 156 px; the draft did not specify what happens below the fold. | Choices + action rows in one scrolling list; four rows visible; footer is a hint. No `More` detour: free text is a first-class row. |
 | Tapping chat opens `ANSWER` | Fine, but chat still opens at the start of the latest message, so the question may be off-screen. | Chat opens at the question line when pending. |
 | Tap a choice sends | A walking tap or ring tap can send the wrong answer. | Send on tap, except `requiresConfirmation` choices. |
 | Extract numbered/bulleted choices | Agent plans and task lists become buttons. | Adjacency, plan, task, code, and quote filters; confidence floor. |
@@ -199,10 +207,10 @@ Q  Should I squash the three fix commits into one?
   ...
 ```
 
-Four rows are visible; `More` and `Read chat` are below the fold. The first row
-is selected by border. She swipes once to `No, keep them separate` and taps. The
-screen says `SENT` with the exact text, then returns to chat. Total: three taps,
-one swipe, about four seconds.
+Four rows are visible; the free-text and utility rows are below the fold. The
+first row is selected by border. She swipes once to `No, keep them separate` and
+taps. The screen says `SENT` with the exact text, then returns to chat. Total:
+three taps, one swipe, about four seconds.
 
 Later, the agent asks which branch to target. There are no choices, so the list
 starts with `Type answer`. She may need one scroll if the list has scrolled
@@ -218,8 +226,9 @@ was.
    `? Answer · L456-461/461 · M30/30`. Tap anywhere in the body.
 2. **`ANSWER`.** Header `ANSWER · oktoso`. Summary `Q  <question>` plus one
    context line. The only capture is the list: choices in the agent's order,
-   then `Type answer` (when free text is allowed), `More`, and `Read chat`. Four
-   rows are visible; the rest are below the fold. Footer hint:
+   then `Type answer` (when free text is allowed), `Speak answer`,
+   `Suggested answers`, and `Read chat`. Four rows are visible; the rest are
+   below the fold. Footer hint:
    `Swipe choose · Tap send · Back ×2` when there are choice rows, otherwise
    `Tap choose · Back ×2`.
 3. **Choose.** Swipe moves the selection border. Tap the selected row. Normal
@@ -231,15 +240,16 @@ was.
    but ignores input; back is ignored until the hub accepts or fails (short
    timeout). Footer hint `Sending…`.
 6. **`SENT`.** Summary `Sent` plus the exact text. The text body is the only
-   capture; tap it, or wait 1.2 s, to return to chat. The question marker clears
-   once the user message appears or the local answer suppression is set. Footer
+   capture; tap it, or wait 1.2 s, to return to chat. The question marker is
+   kept until a question refresh confirms what the provider did with it. Footer
    hint `Tap to return · Back ×2`.
 7. **`ANSWER_ERROR`.** Summary `Couldn’t send.` + reason on line 1 and the exact
    answer on line 2. List `Retry`, `Choose again`, `Read chat`; footer hint
    `Tap choose · Back ×2`. Back → `ANSWER`.
-8. **`MORE`.** List `More replies`, `Read chat`, and `Stop` when the session is
-   interruptible; `Find choices` is a fourth row when the answer screen had no
-   choices. Footer hint `Tap choose · Back ×2`. Back → `ANSWER`.
+8. **Optional rows.** `Speak answer` when transcription is configured (after the
+   choices), 2–3 `Suggested answers` from the local reply model, `Failure ›`
+   when the chat has a recoverable failure, `Read chat`, and a confirmed
+   `Stop agent`. Footer hint `Tap choose · Back ×2`. Back → `ANSWER`.
 9. **`TYPE`.** Summary question. Body `Type on the phone.` / `The answer sends
    from there.` The text body is the only capture; tapping it re-focuses the
    phone handoff. Footer hint `Tap to focus phone · Back ×2`. Back → `ANSWER`.
@@ -263,8 +273,7 @@ was.
   questions.
 - **Versus reply-menu-first:** the generic reply menu hides the question and
   mixes `Continue`, `Explain risk`, and the actual choices. The question screen
-  shows the decision first. The reply menu stays under `More` (possibly one
-  scroll, then a tap).
+  shows the decision first. The reply menu remains the no-question path.
 
 ---
 
@@ -276,7 +285,7 @@ was.
 |---|---|---|
 | `chat` | Read transcript. Footer advertises a pending question. | Existing six-line chat, text containers. |
 | `answer` | Choose or start a free-form answer. | Header, summary, one list (choices + action rows), footer hint. List is the only capture. |
-| `more` | Secondary actions without crowding choices. | Header, one-line summary, list `More replies`/`Read chat`/`Stop`/`Find choices`, footer hint. |
+| `suggested` | Pick a model-written candidate answer. | Header, question summary, one list of 2–3 suggestions, footer hint. Back → `ANSWER`. |
 | `confirm` | Review a destructive answer. | Header, summary, list `Send`/`Cancel`, footer hint. |
 | `type` | Wait for the phone keyboard. | Header, summary, text body (only capture), footer hint. |
 | `sending` | Lock input until the hub accepts or fails. | Header, status summary, text body (capture ignores input), footer hint. |
@@ -287,16 +296,17 @@ was.
 | `choices` | Existing manually extracted choices. | Unchanged. |
 
 State identifiers are lower-case; screen headers use the corresponding
-upper-case label (`ANSWER`, `MORE`, `CONFIRM`, `TYPE`, `SENT`, `SESSION`).
+upper-case label (`ANSWER`, `SUGGESTED`, `CONFIRM`, `TYPE`, `SENT`, `SESSION`).
 `sending` keeps the `ANSWER` header as a status state; `sent` uses `SENT`.
 
-Every state has **exactly one event-capturing container**. `answer`, `more`,
-`confirm`, `error`, and `stale` use the list. `type`, `sending`, and `sent` use a
-text body. The footer is always `isEventCapture: 0` and is a hint, not an action.
+Every state has **exactly one event-capturing container**. `answer`,
+`suggested`, `confirm`, `error`, and `stale` use the list. `type`, `sending`,
+and `sent` use a text body. The footer is always `isEventCapture: 0` and is a
+hint, not an action.
 
-`answer`, `more`, `confirm`, `type`, `sending`, `sent`, `error`, and `stale` are
-sub-states of the answer flow, not new navigation destinations. They are entered
-from chat and always return to chat or `answer`.
+`answer`, `suggested`, `confirm`, `type`, `sending`, `sent`, `error`, and
+`stale` are sub-states of the answer flow, not new navigation destinations.
+They are entered from chat and always return to chat or `answer`.
 
 ### 3.2 Transitions
 
@@ -310,24 +320,24 @@ from chat and always return to chat or `answer`.
 | `answer` | Tap confirm choice row | `confirm` | Exact text + consequence shown. |
 | `answer` | Tap `Type answer` row | `type` | Focus phone composer. |
 | `answer` | Tap `Answer on phone` row | `type` | Multiple questions; phone form. |
-| `answer` | Tap `More on phone…` row | `type` | More than six choices; phone shows all. |
 | `answer` | Tap `Answer in Inbox` row | `attention` (existing) | Provider-native question wins. |
-| `answer` | Tap `More` row | `more` | Question summary retained. |
+| `answer` | Tap `Speak answer` row | `voice` | Recording; back/cancel returns to `answer`. |
+| `answer` | Tap `Suggested answers` row | `suggested` | Model candidates; back returns to `answer`. |
+| `answer` | Tap `Failure ›` row | `failure` / `turn-failed` | The failure screen, with back to `answer`. |
 | `answer` | Tap `Read chat` row | `chat` | Opens at question line. |
+| `answer` | Tap `Stop agent` row | `interrupt-confirm` | Confirm/cancel return to `answer`. |
 | `answer` | Scroll | `answer` | List scroll/selection only; no send. |
 | `answer` | Double tap | `chat` | Exact line preserved. |
 | `confirm` | Tap `Send` | `sending` | Reuses the same draft/idempotency key. |
 | `confirm` | Tap `Cancel` / back | `answer` | Selection resets to first row; note below. |
-| `more` | Tap `More replies` | `reply` | Back returns to `more`, not chat. |
-| `more` | Tap `Read chat` | `chat` | Opens at question line. |
-| `more` | Tap `Stop` | `chat` | Calls interrupt; existing behavior. |
-| `more` | Tap `Find choices` | `choices` | Only when no choices; back to `more`. |
+| `suggested` | Tap a suggestion | `chat` | Sends it as ordinary free text. |
+| `suggested` | Back | `answer` | Candidates are not a draft. |
 | `type` | Phone send | `sending` → `sent` | Shared app state; glasses update. |
 | `type` | Tap body | `type` | Re-focus phone handoff; no other action. |
 | `type` | Double tap / back | `answer` | Composer keeps text. |
 | `sending` | 202 | `sent` | Input locked; back ignored. |
 | `sending` | Error | `error` | Answer preserved. |
-| `sent` | Tap body / 1.2 s | `chat` | Load latest; clear local question prompt. |
+| `sent` | Tap body / 1.2 s | `chat` | Load latest; keep the marker until the question refresh settles it. |
 | `error` | Tap `Retry` | `sending` | Same draft and idempotency key. |
 | `error` | Tap `Choose again` | `answer` | Same question if not stale. |
 | `error` | Tap `Read chat` | `chat` | Question line; answer not sent. |
@@ -349,18 +359,24 @@ hard-coded footer index.
 
 | Layout | Rows, in index order |
 |---|---|
-| Provider-native question (`attentionID`) | `0 Answer in Inbox`, `1 Read chat` |
-| Multiple questions | `0 Answer on phone`, `1 More`, `2 Read chat` |
-| Free-form, no choices | `0 Type answer`, `1 More`, `2 Read chat` |
-| Choices, free text allowed | `0..C-1` choices; `C Type answer`; `C+1 More`; `C+2 Read chat` |
-| Choices, no free text | `0..C-1` choices; `C More`; `C+1 Read chat` |
-| More than six choices | `0..5` first six choices; `6 More on phone…`; `7 Type answer`; `8 More`; `9 Read chat` |
+| Provider-native question (`attentionID`) | `Answer in Inbox`, then optional `Failure ›`, then `Read chat`, `Stop agent` |
+| Multiple questions | `Answer on phone`, then optional `Failure ›`, then `Read chat`, `Stop agent` |
+| Free-form, no choices | optional `Speak answer` first, then `Type answer` (or `Type your own answer` for a sentinel), optional `Suggested answers`, optional `Failure ›`, `Read chat`, `Stop agent` |
+| Choices, free text allowed | choices; `Type answer` (or `Type your own answer`); `Speak answer`; `Suggested answers`; `Failure ›`; `Read chat`; `Stop agent` |
+| Choices, no free text | choices; `Speak answer`; `Suggested answers`; `Failure ›`; `Read chat`; `Stop agent` |
+| More than six choices | first six choices, then the same action rows; the phone shows all |
 
 `C = min(primary.choices.length, 6)`. A choice row sends; an action row performs
-its labelled action. If `allowsFreeText` is false, omit the `Type answer` row and
-shift the rows after it up. If a future variant adds a row, append it after
-`Read chat` or before `More`; do not renumber existing rows without updating the
-routing and tests.
+its labelled action. A free-answer sentinel (`Other`, `Something else`, `Custom`,
+`Type your own…`) is never a choice row: it becomes `Type your own answer`, and
+the literal sentinel is never sent. Voice follows the choices so a stray first
+tap cannot open the microphone; it may lead only when the question has no
+choices. Suggested answers are model text and always send as free text. The
+`Failure ›` row is present only when the chat has a recoverable failure, and the
+`Stop agent` row keeps the same confirmation screen as the chat menu.
+
+If a future variant adds a row, append it before `Read chat` and `Stop agent`,
+and do not renumber existing rows without updating the routing and tests.
 
 The footer hint never receives the click. If the list is the only capture, a tap
 outside the list (the footer) produces no list event; this is intentional.
@@ -467,9 +483,8 @@ not a rendered glyph. `[ … ]` in the phone wireframe is a button.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-The first four rows are visible: three choices plus `Type answer`. `More` and
-`Read chat` are below the fold. The list is the only capture; the footer hint is
-not tappable.
+The first four rows are visible: three choices plus `Type answer`. `Read chat` is
+below the fold. The list is the only capture; the footer hint is not tappable.
 
 ### 4.2 Yes/no
 
@@ -483,15 +498,15 @@ not tappable.
 │ ▸ Yes                                                        │ 156
 │   No                                                         │
 │   Type answer                                                │
-│   More                                                       │
+│   Read chat                                                  │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │ Swipe choose · Tap send · Back ×2                            │ 42
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Synthesized choices send exactly `Yes` or `No`. `Read chat` is below the fold.
-Do not invent a third answer.
+Synthesized choices send exactly `Yes` or `No`. `Speak answer`, `Suggested
+answers`, and `Stop agent` follow below the fold. Do not invent a third answer.
 
 ### 4.3 Free-form question
 
@@ -503,7 +518,7 @@ Do not invent a third answer.
 │    No options suggested.                                     │
 ├──────────────────────────────────────────────────────────────┤
 │ ▸ Type answer                                                │ 156
-│   More                                                       │
+│   Speak answer                                               │
 │   Read chat                                                  │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
@@ -512,7 +527,9 @@ Do not invent a third answer.
 ```
 
 The free-form screen is still a list, not a text body. Tapping `Type answer`
-opens the phone handoff. The list is the only capture.
+opens the phone handoff. `Speak answer` appears when transcription is
+configured and may lead the list when there are no choices; `Suggested answers`
+follows it. The list is the only capture.
 
 ### 4.4 Long question, many choices
 
@@ -534,9 +551,9 @@ opens the phone handoff. The list is the only capture.
 ```
 
 Rows 5–6 (for example `Restore from backup`, `Skip legacy users`) are below the
-fold, followed by `Type answer`, `More`, and `Read chat`. More than six choices:
-show the first six, then `More on phone…`, then the normal action rows. There is
-no paging; one list scrolls. The header never shows `1/2`.
+fold, followed by the free-text, voice, suggested, and read rows. More than six
+choices: show the first six, then the same action rows; the phone shows all.
+There is no paging; one list scrolls. The header never shows `1/2`.
 
 ### 4.4.1 No free text
 
@@ -550,15 +567,15 @@ no paging; one list scrolls. The header never shows `1/2`.
 │ ▸ ap-southeast-1                                              │ 156
 │   eu-west-1                                                  │
 │   us-east-1                                                  │
-│   More                                                       │
+│   Read chat                                                  │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │ Swipe choose · Tap send · Back ×2                            │ 42
 └──────────────────────────────────────────────────────────────┘
 ```
 
-No `Type answer` row. `Read chat` follows `More` below the fold if there is room;
-`More` always has `Read chat` as a safety path.
+No `Type answer` row. `Read chat` stays on the same list; voice and suggested
+answers follow it when configured.
 
 ### 4.5 No question: existing reply menu
 
@@ -669,27 +686,28 @@ the exact answer. Back returns to `ANSWER` (or chat via `Read chat`).
 `stale` replaces the answer list with `Review` / `Read chat`; the old choices are
 not selectable. Back goes to chat.
 
-### 4.7 More
+### 4.7 Suggested answers
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ MORE · oktoso                                             │ 32
+│ SUGGESTED · oktoso                                        │ 32
 ├──────────────────────────────────────────────────────────────┤
 │ Q  Should I squash the three fix commits into one?           │ 56
 ├──────────────────────────────────────────────────────────────┤
-│ ▸ More replies                                               │ 156
-│   Read chat                                                  │
-│   Stop                                                       │
-│   Find choices                                               │
+│ ▸ Yes, squash them                                           │ 156
+│   Keep the three commits                                     │
+│   Squash, then rerun the tests                               │
+│                                                              │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
-│ Tap choose · Back ×2                                         │ 42
+│ Tap send · Back ×2                                           │ 42
 └──────────────────────────────────────────────────────────────┘
 ```
 
-`Stop` appears only when the session is interruptible. `Find choices` is a fourth
-row when the question has no choices; it scrolls if needed. If neither applies,
-the list has two rows (`More replies`, `Read chat`).
+The hub's reply model returns 2–3 candidates of at most 46 characters. They are
+suggestions only: tapping one sends it as ordinary free text, no `answer`
+metadata, and returns to chat. Back returns to `ANSWER`. The row is hidden when
+the reply model is disabled or missing a base URL/model.
 
 ### 4.8 Confirm
 
@@ -787,7 +805,7 @@ with a second non-capturing footer hint is possible but adds nothing; keep four.
 
 ### 5.1 Grammar
 
-| Input | Chat | Answer list | `more` / `confirm` / `error` / `stale` list | Sending | Sent | Type |
+| Input | Chat | Answer list | `suggested` / `confirm` / `error` / `stale` list | Sending | Sent | Type |
 |---|---|---|---|---|---|---|
 | Tap / R1 tap | Open `answer` if pending, else `reply` when the gate allows a decision, else `session` actions | Activate the selected row: choice sends, action acts | Activate the selected row | Ignored | Return to chat | Retry phone focus |
 | Double tap / left temple / R1 double | Back to origin | Back to chat | Back to answer or chat per §5.5 | Ignored | Back to chat | Back to `answer` |
@@ -808,14 +826,13 @@ a click when the user taps it.
 
 ### 5.2 Primary and secondary
 
-- `answer`: the selected choice is primary. `Type answer`, `More`, and
-  `Read chat` are secondary action rows after the choices; they may require one
-  scroll. The list is the only place to act.
+- `answer`: the selected choice is primary. `Type answer`, `Speak answer`,
+  `Suggested answers`, `Read chat`, and `Stop agent` are secondary action rows;
+  they may require one scroll. The list is the only place to act.
 - `confirm`: `Send` is row 1 and primary; `Cancel` is row 2 and secondary. The
   confirmation screen itself is the safety gate; the choice that opened it was
   already deliberate.
-- `more`: `More replies` is row 1, the common escape; `Read chat` is the safe
-  exit; `Stop` is destructive and should be labeled `Stop` (no icon).
+- `suggested`: every row is an equally weighted send; Back is the safe exit.
 - `type`: the phone composer is primary. The glass body is a retry target for the
   handoff, not a second input.
 - `phone`: `Send answer` is primary only when the composer has text; otherwise
@@ -826,9 +843,10 @@ a click when the user taps it.
 1. **Opening the answer screen is not a send.** A stray tap only changes screens.
 2. **Scrolling never sends.** Selection changes; activation requires a tap.
 3. **One row is selected and bordered.** The list uses the existing
-   tap-to-activate grammar. Action rows are labelled (`Type answer`, `More`,
-   `Read chat`), not icon-only. If hardware testing shows first-time confusion,
-   add `More below` to the footer hint when the list overflows, not a new action.
+   tap-to-activate grammar. Action rows are labelled (`Type answer`,
+   `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent`), not
+   icon-only. If hardware testing shows first-time confusion, add a row count or
+   a scroll cue to the footer hint when the list overflows, not a new action.
 4. **Footer taps do nothing.** The footer is a hint. Do not move actions there;
    the spike showed only one capture is allowed and a text tap has no container
    identity.
@@ -949,9 +967,13 @@ The answer text is exactly `Yes` or `No`; do not embellish.
 ### 6.4 Free-form
 
 `kind: "freeform"`, no choices, `allowsFreeText: true`. The glass list is
-`Type answer`, `More`, `Read chat`. The phone card shows the full question and
-focuses the composer. If the reply model is configured, `More` includes
-`Find choices` as a manual fallback.
+`Speak answer` (when transcription is configured and there are no choices),
+`Type answer`, `Suggested answers` (when the reply model is configured),
+`Read chat`, `Stop agent`. The phone card shows the full question and focuses
+the composer. A provider sentinel choice (`Other`, `Something else`, `Custom`,
+`Type your own…`) is not a choice; it becomes `Type your own answer` and the
+sentinel text is never sent. There is no separate `More` list; free text,
+suggestions, and Stop are first-class rows.
 
 ### 6.5 Multiple questions
 
@@ -959,12 +981,13 @@ The API returns `questions[]`, not a single object. If more than one question is
 detected in the latest message:
 
 - Glass: `ANSWER · 2 questions`; summary shows `Q1`; list is
-  `Answer on phone`, `More`, `Read chat`.
+  `Answer on phone`, `Read chat`, `Stop agent`, with `Failure ›` when the chat
+  has a recoverable failure.
 - Phone: card shows every question, each with its choices or a text field; one
   `Send answers` composes a numbered message.
 - Do not let the user answer only the last question on the glass by default; the
-  agent may proceed without the others. `More` may offer `Answer last only` as
-  an explicit escape hatch, with the copy `Only the last question will be sent.`
+  agent may proceed without the others. There is no `Answer last only` escape in
+  v1.
 - The hub rejects a partial batch with `question_incomplete`. Answering only
   the last question on the glass is not supported in v1.
 - The phone composes the numbered message and includes every question ID in the
@@ -991,8 +1014,8 @@ detected in the latest message:
 - Preserve the agent's order. Do not re-rank by model likelihood or safety; the
   order may encode the agent's recommendation.
 - Explicit choices come before model suggestions. Never merge them in v1.
-- If more than six choices, show the first six; the phone shows all. Add
-  `More on phone…` after the sixth choice and before the action rows.
+- If more than six choices, show the first six; the phone shows all. The normal
+  action rows follow the sixth choice; there is no `More on phone…` row.
 - Do not move a destructive choice to the top or bottom. Keep order and rely on
   `CONFIRM`.
 
@@ -1114,49 +1137,88 @@ export interface AnswerBatch {
 // One rendered list row. The list is the only capture; a tap is routed by kind.
 export type AnswerRow =
   | { kind: "choice"; choice: AnswerChoice }
-  | { kind: "type"; label: "Type answer" }
-  | { kind: "phone"; label: "Answer on phone" | "More on phone…" }
-  | { kind: "more"; label: "More" }
-  | { kind: "read"; label: "Read chat" }
-  | { kind: "attention"; label: "Answer in Inbox" };
+  | {
+      kind: "action";
+      action:
+        | "type"
+        | "voice"
+        | "suggested"
+        | "failure"
+        | "phone"
+        | "read"
+        | "stop"
+        | "attention";
+      label: string;
+    };
 ```
 
 `QuestionPrompt` is the only render input. `AnswerDraft` is the only send input.
 The renderer derives everything else:
 
 ```ts
-function rowsFor(prompt: QuestionPrompt): AnswerRow[] {
-  const primary = prompt.questions.at(-1)!;
+function rowsFor(
+  prompt: QuestionPrompt,
+  options: { voice?: boolean; suggested?: boolean; failure?: boolean } = {},
+): AnswerRow[] {
+  const primary = prompt.questions[0]!;
   if (prompt.attentionID) {
     return [
-      { kind: "attention", label: "Answer in Inbox" },
-      { kind: "read", label: "Read chat" },
+      { kind: "action", action: "attention", label: "Answer in Inbox" },
+      ...(options.failure
+        ? [{ kind: "action", action: "failure", label: "Failure ›" } as const]
+        : []),
+      { kind: "action", action: "read", label: "Read chat" },
+      { kind: "action", action: "stop", label: "Stop agent" },
     ];
   }
   if (prompt.questions.length > 1) {
     return [
-      { kind: "phone", label: "Answer on phone" },
-      { kind: "more", label: "More" },
-      { kind: "read", label: "Read chat" },
+      { kind: "action", action: "phone", label: "Answer on phone" },
+      ...(options.failure
+        ? [{ kind: "action", action: "failure", label: "Failure ›" } as const]
+        : []),
+      { kind: "action", action: "read", label: "Read chat" },
+      { kind: "action", action: "stop", label: "Stop agent" },
     ];
   }
 
-  const rows: AnswerRow[] = primary.choices
+  const sentinel = primary.choices.some((choice) =>
+    /^(other|type your own|something else|custom)\b/i.test(choice.label),
+  );
+  const choices: AnswerRow[] = primary.choices
+    .filter((choice) => !isFreeAnswerSentinel(choice))
     .slice(0, 6)
     .map((choice) => ({ kind: "choice", choice }));
 
-  if (primary.choices.length > 6) {
-    rows.push({ kind: "phone", label: "More on phone…" });
+  const freeRow: AnswerRow | undefined = sentinel
+    ? { kind: "action", action: "type", label: "Type your own answer" }
+    : primary.allowsFreeText
+      ? { kind: "action", action: "type", label: "Type answer" }
+      : undefined;
+  const voiceRow: AnswerRow | undefined = options.voice
+    ? { kind: "action", action: "voice", label: "Speak answer" }
+    : undefined;
+
+  const rows: AnswerRow[] = [...choices];
+  if (choices.length === 0) {
+    if (voiceRow) rows.push(voiceRow);
+    if (freeRow) rows.push(freeRow);
+  } else {
+    if (freeRow) rows.push(freeRow);
+    if (voiceRow) rows.push(voiceRow);
   }
-  if (primary.allowsFreeText) {
-    rows.push({ kind: "type", label: "Type answer" });
+  if (options.suggested) {
+    rows.push({ kind: "action", action: "suggested", label: "Suggested answers" });
   }
-  rows.push({ kind: "more", label: "More" });
-  rows.push({ kind: "read", label: "Read chat" });
+  if (options.failure) {
+    rows.push({ kind: "action", action: "failure", label: "Failure ›" });
+  }
+  rows.push({ kind: "action", action: "read", label: "Read chat" });
+  rows.push({ kind: "action", action: "stop", label: "Stop agent" });
   return rows;
 }
 
-const rows = rowsFor(prompt);
+const rows = rowsFor(prompt, { voice, suggested, failure });
 const hint = rows.some((row) => row.kind === "choice")
   ? "Swipe choose · Tap send · Back ×2"
   : "Tap choose · Back ×2";
@@ -1174,12 +1236,15 @@ ignores input.
 | Choice | `choices[]` | `{ choiceId, text }` | List row; tap sends | Choice button |
 | Yes/no | synthesized choices | `{ choiceId: "yes", text: "Yes" }` | Two list rows | Two buttons |
 | Free text | `allowsFreeText` | `{ text: composer }` | `Type answer` list row → `type` | Composer answer mode |
-| Voice (future) | `allowsVoice` | `{ text: transcript, source: "voice" }` | `MORE` → `Speak answer` → `CONFIRM` | Mic button → confirm |
-| Suggestion (future) | `suggestions[]` | `{ choiceId, text }` | `MORE` → `Suggested answers` | Chips above composer |
+| Sentinel | choice label `Other` etc. | `{ text: composer }` | `Type your own answer` row → `type` | Composer answer mode |
+| Voice | configured transcription | `{ text: transcript }` | `Speak answer` → voice → Send | Transcript into the composer |
+| Suggestion | reply model (`mode=answer`) | `{ text: candidate }` | `Suggested answers` → candidate | Chips above composer |
 | Multiple | `questions.length > 1` | `AnswerBatch` | `Answer on phone` list row | Form of all questions |
 
-Voice and suggestions are additive: they produce the same `AnswerDraft` and
-reuse `sending` / `sent` / `error`.
+Voice and suggestions are additive: both send ordinary text, so they reuse the
+message and error paths rather than adding a second wire shape. A voice
+transcript answers the open question only in the conversational sense; it carries
+no `answer` metadata.
 
 ### 7.3 Hub API
 
@@ -1332,18 +1397,26 @@ Hub behavior:
 The glass generates one idempotency key per `AnswerDraft`. `Retry` reuses it;
 `Choose again` creates a new draft and key.
 
-### 7.5 Future voice and autocomplete
+### 7.5 Voice, suggestions, and autocomplete
 
-**Voice.** `MORE` → `Speak answer` only when `allowsVoice` and transcription is
-configured. States: `LISTENING` (tap to stop), `TRANSCRIBING`, then `CONFIRM`
-with the transcript. `CONFIRM` actions: `Send`, `Retry`, `Type instead`. Never
-auto-send; STT errors and ambient speech are too likely. The SDK exposes
-`audioControl` and `audioEvent` PCM, but the STT path is not wired in v1.
+**Voice.** `Speak answer` appears when transcription is configured. It is a
+normal `AnswerDraft` method: the transcript is sent as ordinary text, not with
+answer metadata. States: `LISTENING` (tap to stop), `TRANSCRIBING`, then the
+result screen with `Send` / `Edit on phone`. Never auto-send; STT errors and
+ambient speech are too likely. On the answer screen voice follows the choices;
+it may lead only when there are no choices. Back and Cancel return to the screen
+that opened the microphone.
+
+**Suggestions.** `Suggested answers` calls `reply-options` with `mode=answer`.
+The hub passes the pending question (text + choices) and the last messages to
+the configured reply model and returns 2–3 candidates of at most 46 characters.
+Tapping one sends ordinary free text and returns to chat; Back returns to
+`ANSWER`. The row is hidden when the reply model is disabled or missing a base
+URL/model. The model never replaces the agent's choices.
 
 **Autocomplete.** On the phone, debounce typing and show up to three suggestion
-chips above the composer. Tap inserts, never sends. On the glasses, suggestions
-live in `MORE` → `Suggested answers`, labeled `Suggested`, after the explicit
-choices. The model never replaces the agent's choices.
+chips above the composer. Tap inserts, never sends. This remains a phone-only
+convenience; the glasses use the `Suggested answers` list.
 
 **Model extraction.** Same `AnswerChoice` shape with `source: "model"`; label
 `Suggested` in the summary. The deterministic parser remains the baseline.
@@ -1527,12 +1600,12 @@ prompt may not propagate to the parent UI and can stall the parent turn.
 | Provider send after 202 fails | Chat shows error attention; glass does not claim failure. | Existing error item |
 | Long question | Two-line summary; full text in chat/phone. | `…` |
 | Long choice label | 52-char label; full text sent. | `…` |
-| More than six choices | First six; `More on phone…`. | Phone shows all |
+| More than six choices | First six; the phone shows all. | Normal action rows follow |
 | Long free text | Phone only; max length validated on phone. | `Too long (N/4000)` |
-| Question with no options | Free-form list. | `Type answer` / `More` / `Read chat` |
+| Question with no options | Free-form list. | `Speak answer` / `Type answer` / `Suggested answers` / `Read chat` |
 | Plan/task list next to a binary question | Not choices; yes/no synthesized. | `Yes` / `No` |
 | Quoted/courtesy question | No prompt. | Chat only |
-| Open `Why`/`How` question | Free-form, not yes/no. | `Type answer` / `More` / `Read chat` |
+| Open `Why`/`How` question | Free-form, not yes/no. | `Speak answer` / `Type answer` / `Suggested answers` |
 | Question in code block | No prompt. | Chat only |
 | Provider-native question exists | Attention form wins. | `Answer in Inbox` |
 | Session deleted / 404 | Back to inbox; short error. | `Session not found.` |
@@ -1593,9 +1666,9 @@ the only reminder that an answer is owed.
 - State is conveyed by position, text, and border: `ANSWER`, `CONFIRM`, `Sent`,
   `Question changed`.
 - No color is required to understand any glass state.
-- All actions are labeled list rows, not icons. `Type answer`, `More`, and
-  `Read chat` follow the choices in a stable order; the footer is a hint and is
-  not tappable.
+- All actions are labeled list rows, not icons. `Type answer`, `Speak answer`,
+  `Suggested answers`, `Failure ›`, `Read chat`, and `Stop agent` follow the
+  choices in a stable order; the footer is a hint and is not tappable.
 - The `!` warning is text plus a sentence (`This cannot be undone.`), not a
   color-only signal.
 
@@ -1732,8 +1805,8 @@ provider.
 
 - Fetch `/question` on chat open, in parallel with messages.
 - Open chat at the question line when pending; footer `? Answer`.
-- Add `ANSWER` with **one capturing list** (choices + `Type answer`, `More`,
-  `Read chat`) and a non-interactive footer hint.
+- Add `ANSWER` with **one capturing list** (choices + `Type answer`,
+  `Read chat`, `Stop agent`) and a non-interactive footer hint.
 - Add `SENDING`/`SENT` text bodies and `ERROR` list; no footer actions.
 - Add the phone question card with full question and choice buttons.
 - Wire the `Type answer` row to focus the existing composer (free-form works, but
@@ -1741,10 +1814,10 @@ provider.
 - Add `requiresConfirmation` + `CONFIRM` list for destructive choices.
 
 **Acceptance:** yes/no answers in two taps from chat; three choices + `Type
-answer` visible in four rows; `More`/`Read chat` reachable by scrolling; send
-failure preserves the answer in an error list; back returns to the same chat
-line; no page is rebuilt on poll when the frame is unchanged; exactly one
-capture per page.
+answer` visible in four rows; `Read chat` reachable by scrolling; send failure
+preserves the answer in an error list; back returns to the same chat line; no
+page is rebuilt on poll when the frame is unchanged; exactly one capture per
+page.
 
 ### Slice 2 — free text, phone handoff, stale, idempotency
 
@@ -1762,19 +1835,22 @@ tapping the sent body returns to chat; a stale send shows `Question changed` and
 never sends; retry does not duplicate; offline keeps the answer; every status
 screen has exactly one capture.
 
-### Slice 3 — long lists, multiple questions, `MORE`
+### Slice 3 — long lists, multiple questions, response surface
 
-- Scroll rule: four rows visible; up to six choices; `More on phone…` beyond
-  six. No paging.
-- Multiple questions route to the phone; list `Answer on phone`, `More`,
-  `Read chat`.
-- `MORE` with `More replies`, `Read chat`, `Stop`, conditional `Find choices`.
-- `replyReturn` so back from reply goes to `more`.
+- Scroll rule: four rows visible; up to six choices; the normal action rows
+  follow the sixth. No paging.
+- Multiple questions route to the phone; list `Answer on phone`, `Read chat`,
+  `Stop agent`.
+- Free-answer sentinels become `Type your own answer`; the literal sentinel is
+  never sent. There is no separate `MORE` list.
+- Voice, `Suggested answers`, and `Failure ›` are rows on `ANSWER`; voice follows
+  the choices, and suggestions open a list that returns to `ANSWER`.
 - Chat `Read chat` returns to the question line.
 
 **Acceptance:** all six choices reachable with scrolling; two questions answered
-on the phone; `Stop` reachable in two taps while running (chat tap → `Stop`);
-`Read chat` under `More` is one more tap; back paths are correct.
+on the phone; `Stop agent` reachable from `ANSWER` and confirmed; voice and
+suggestions never auto-send; a failure does not take the chat tap while a
+question is open; back paths are correct.
 
 ### Slice 4 — inbox/home markers, accessibility, polish
 
@@ -1789,13 +1865,16 @@ state; drafts survive a phone reload; no horizontal overflow at 320 px.
 
 ### Slice 5 — model suggestions and voice
 
-- `MORE` → `Suggested answers`; suggestions from the configured reply model.
+- `Suggested answers` row; `reply-options?mode=answer` returns 2–3 candidates of
+  at most 46 characters from the configured reply model.
 - Model extraction fallback for medium/low confidence, labeled `Suggested`.
-- Voice capture/STT with `LISTENING` → `CONFIRM`; never auto-send.
-- Phone mic button and suggestion chips.
+- Voice `Speak answer` with `LISTENING` → `TRANSCRIBING` → result; never
+  auto-send, and Back/Cancel return to the screen that opened the microphone.
+- Phone suggestion chips remain a follow-up.
 
-**Acceptance:** suggestions never auto-send; voice transcript requires confirm;
-model disabled still gives the full deterministic flow.
+**Acceptance:** suggestions never auto-send and send as free text; voice
+transcript requires confirmation; model or transcription disabled still gives
+the full deterministic flow.
 
 ### Test plan
 
@@ -1822,7 +1901,7 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 
 | # | Question | Why it matters | How to resolve |
 |---:|---|---|---|
-| 1 | Can users find `Type answer` / `More` below the fourth row without a cue? | The action rows may be one scroll away; poor discoverability costs taps. | User test; consider `More below` in the footer hint or a row count. |
+| 1 | Can users find `Type answer` / `Speak answer` / `Read chat` below the fourth row without a cue? | The action rows may be one scroll away; poor discoverability costs taps. | User test; consider a row count or scroll cue in the footer hint. |
 | 2 | How many choices before deferring to the phone? | Six is the current cap; a long scroll may be worse than the phone. | User test with real questions; keep six unless data says otherwise. |
 | 3 | Does a ring tap activate a list row, or only temple tap? | The ring is a primary hands-free input. | Hardware test; document limitation. |
 | 4 | How reliable is tap vs double-tap timing while walking? | Accidental back or send. | Scripted hardware checklist. |
@@ -1846,26 +1925,30 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | Context | Copy |
 |---|---|
 | Chat footer with question | `? Answer · L456-461/461 · M30/30` |
+| Chat footer, question + failure | `? Answer · … · Failure ›` |
 | Answer header | `ANSWER · <session>` |
 | Answer header, multiple | `ANSWER · 2 questions` |
 | Answer header, stale | `ANSWER · changed` |
 | Answer header, resolved | `ANSWER · resolved` |
 | Question prefix | `Q  ` |
-| More header | `MORE · <session>` |
+| Suggested header | `SUGGESTED · <session>` |
 | Confirm header | `CONFIRM · <session>` |
 | Type header | `TYPE · <session>` |
-| List rows, yes/no | `Yes`, `No`, `Type answer`, `More`, `Read chat` |
-| List rows, choice + free text | choices, `Type answer`, `More`, `Read chat` |
-| List rows, free-form | `Type answer`, `More`, `Read chat` |
-| List rows, multiple | `Answer on phone`, `More`, `Read chat` |
-| List rows, no free text | choices, `More`, `Read chat` |
-| List rows, >6 choices | first six, `More on phone…`, then the normal action rows |
-| List rows, provider-native | `Answer in Inbox`, `Read chat` |
+| List rows, yes/no | `Yes`, `No`, `Type answer`, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
+| List rows, choice + free text | choices, `Type answer`, `Speak answer`, `Suggested answers`, `Failure ›`, `Read chat`, `Stop agent` |
+| List rows, free-form | `Speak answer`, `Type answer`, `Suggested answers`, `Failure ›`, `Read chat`, `Stop agent` |
+| List rows, sentinel | choices without the sentinel, `Type your own answer`, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
+| List rows, multiple | `Answer on phone`, `Failure ›`, `Read chat`, `Stop agent` |
+| List rows, no free text | choices, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
+| List rows, >6 choices | first six, then the normal action rows |
+| List rows, provider-native | `Answer in Inbox`, `Failure ›`, `Read chat`, `Stop agent` |
 | Error list | `Retry`, `Choose again`, `Read chat` |
 | Stale list | `Review`, `Read chat` |
 | Confirm list | `Send`, `Cancel` |
 | Footer hint, choices | `Swipe choose · Tap send · Back ×2` |
 | Footer hint, action list | `Tap choose · Back ×2` |
+| Footer hint, suggestions | `Tap send · Back ×2` |
+| Footer hint, voice | `Tap to stop` / `Please wait` / `Tap choose   Back ×2` |
 | Footer hint, sending | `Sending…` |
 | Footer hint, sent | `Tap to return · Back ×2` |
 | Footer hint, type | `Tap to focus phone · Back ×2` |
@@ -1878,8 +1961,8 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | Confirm summary | `Send this answer?` + exact answer |
 | Confirm warning | `This cannot be undone.` |
 | Sensitive warning | `This may ask for sensitive information.` |
-| More items | `More replies`, `Read chat`, `Stop`, `Find choices`, `Answer last only` |
-| Choice overflow | `More on phone…` |
+| Suggested items | the model's candidates, each ≤46 characters |
+| Stop row | `Stop agent` |
 
 ### Phone
 

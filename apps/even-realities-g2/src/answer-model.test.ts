@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   AnswerChoice,
+  AssistantView,
   PendingQuestion,
   QuestionPrompt,
 } from "@amoshydra/oktoso-contracts";
@@ -10,6 +11,8 @@ import {
   buildAnswerSummary,
   buildBatchAnswerMetadata,
   composeBatchAnswer,
+  isFreeAnswerSentinel,
+  replyModelConfigured,
 } from "./answer-model";
 
 function choice(
@@ -52,14 +55,18 @@ function prompt(
   };
 }
 
+function labels(rows: ReturnType<typeof buildAnswerRows>): string[] {
+  return rows.map((row) => row.label);
+}
+
 describe("G2 answer model", () => {
   it("puts choices before the action rows", () => {
-    expect(buildAnswerRows(question(), prompt()).map((row) => row.label)).toEqual([
+    expect(labels(buildAnswerRows(question(), prompt()))).toEqual([
       "Yes",
       "No",
       "Type answer",
-      "More",
       "Read chat",
+      "Stop agent",
     ]);
   });
 
@@ -68,20 +75,13 @@ describe("G2 answer model", () => {
       question({ allowsFreeText: false }),
       prompt(),
     );
-    expect(rows.map((row) => row.label)).toEqual([
-      "Yes",
-      "No",
-      "More",
-      "Read chat",
-    ]);
+    expect(labels(rows)).toEqual(["Yes", "No", "Read chat", "Stop agent"]);
   });
 
   it("routes provider-native questions to the inbox form", () => {
     expect(
-      buildAnswerRows(question(), prompt({ attentionID: "attention-1" })).map(
-        (row) => row.label,
-      ),
-    ).toEqual(["Answer in Inbox", "Read chat"]);
+      labels(buildAnswerRows(question(), prompt({ attentionID: "attention-1" }))),
+    ).toEqual(["Answer in Inbox", "Read chat", "Stop agent"]);
   });
 
   it("routes multiple questions to the phone", () => {
@@ -89,13 +89,122 @@ describe("G2 answer model", () => {
       questions: [question(), question({ id: "msg_1:q1" })],
     });
     expect(
-      buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo).map(
-        (row) => row.label,
+      labels(
+        buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo),
       ),
-    ).toEqual(["Answer on phone", "More", "Read chat"]);
+    ).toEqual(["Answer on phone", "Read chat", "Stop agent"]);
     expect(buildAnswerSummary(promptWithTwo.questions[0]!, promptWithTwo)).toContain(
       "+1 more on phone",
     );
+  });
+
+  it("detects free-answer sentinel choices regardless of case", () => {
+    for (const label of [
+      "Other",
+      "other",
+      "Type your own",
+      "Something else",
+      "Custom",
+      "Other…",
+    ]) {
+      expect(isFreeAnswerSentinel(choice("c", label))).toBe(true);
+    }
+    for (const label of ["Yes", "Another branch", "Others welcome", "Customize"]) {
+      expect(isFreeAnswerSentinel(choice("c", label))).toBe(false);
+    }
+  });
+
+  it("maps a sentinel to Type your own answer, never to a literal choice", () => {
+    const rows = buildAnswerRows(
+      question({
+        kind: "choice",
+        choices: [choice("c0", "Use the mirror"), choice("c1", "Other")],
+      }),
+      prompt(),
+    );
+    expect(labels(rows)).toEqual([
+      "Use the mirror",
+      "Type your own answer",
+      "Read chat",
+      "Stop agent",
+    ]);
+    expect(
+      rows.some((row) => row.kind === "choice" && row.choice.id === "c1"),
+    ).toBe(false);
+    expect(
+      rows.some((row) => row.label.toLowerCase() === "other"),
+    ).toBe(false);
+  });
+
+  it("treats a sentinel-only question as free-form", () => {
+    const rows = buildAnswerRows(
+      question({
+        kind: "freeform",
+        choices: [choice("c0", "Other")],
+      }),
+      prompt(),
+      { voice: true, suggested: true },
+    );
+    // No real choice sits under the first tap, so voice may lead.
+    expect(labels(rows)).toEqual([
+      "Speak answer",
+      "Type your own answer",
+      "Suggested answers",
+      "Read chat",
+      "Stop agent",
+    ]);
+  });
+
+  it("never puts voice before a real choice", () => {
+    const rows = buildAnswerRows(question(), prompt(), {
+      voice: true,
+      suggested: true,
+      failure: true,
+    });
+    expect(labels(rows)).toEqual([
+      "Yes",
+      "No",
+      "Type answer",
+      "Speak answer",
+      "Suggested answers",
+      "Failure ›",
+      "Read chat",
+      "Stop agent",
+    ]);
+    expect(rows[0]?.kind).toBe("choice");
+  });
+
+  it("places voice and suggestions in the free-form order", () => {
+    const rows = buildAnswerRows(
+      question({ kind: "freeform", choices: [] }),
+      prompt(),
+      { voice: true, suggested: true },
+    );
+    expect(labels(rows)).toEqual([
+      "Speak answer",
+      "Type answer",
+      "Suggested answers",
+      "Read chat",
+      "Stop agent",
+    ]);
+  });
+
+  it("keeps failure, read, and stop reachable on the batch form", () => {
+    const promptWithTwo = prompt({
+      questions: [question(), question({ id: "msg_1:q1" })],
+    });
+    expect(
+      labels(
+        buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo, {
+          failure: true,
+        }),
+      ),
+    ).toEqual([
+      "Answer on phone",
+      "Failure ›",
+      "Read chat",
+      "Stop agent",
+    ]);
   });
 
   it("builds batch metadata and a numbered message", () => {
@@ -162,5 +271,33 @@ describe("G2 answer model", () => {
 
   it("marks a free-form answer as text", () => {
     expect(buildAnswerMetadata(prompt())?.source).toBe("text");
+  });
+
+  it("hides suggestions when the reply model is unavailable", () => {
+    const view = (overrides: Partial<AssistantView["reply"]> = {}) =>
+      ({
+        reply: {
+          enabled: true,
+          baseUrl: "http://model.test/v1",
+          model: "small",
+          timeoutMs: 1_000,
+          hasApiKey: false,
+          disableThinking: true,
+          ...overrides,
+        },
+        transcription: {
+          enabled: false,
+          baseUrl: "",
+          model: "",
+          timeoutMs: 1_000,
+          hasApiKey: false,
+        },
+      }) satisfies AssistantView;
+
+    expect(replyModelConfigured(view())).toBe(true);
+    expect(replyModelConfigured(view({ enabled: false }))).toBe(false);
+    expect(replyModelConfigured(view({ baseUrl: " " }))).toBe(false);
+    expect(replyModelConfigured(view({ model: "" }))).toBe(false);
+    expect(replyModelConfigured(undefined)).toBe(false);
   });
 });

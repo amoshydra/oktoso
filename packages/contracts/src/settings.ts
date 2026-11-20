@@ -154,14 +154,14 @@ export const zReplyOptions = z.object({
   data: z.array(zReplyOption),
   generatedAt: z.number().int(),
   model: z.string().optional(),
-  mode: z.enum(["reply", "choices"]),
+  mode: z.enum(["reply", "choices", "answer"]),
   state: zReplyState.optional(),
   kind: zReplyMomentKind.optional(),
   pending: z.string().optional(),
   confidence: zReplyConfidence.optional(),
 });
 
-export const zReplyMode = z.enum(["reply", "choices"]);
+export const zReplyMode = z.enum(["reply", "choices", "answer"]);
 
 export const DEFAULT_ASSISTANT_CONFIG = {
   reply: {

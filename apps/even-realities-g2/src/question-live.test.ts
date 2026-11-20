@@ -54,11 +54,12 @@ describe("live question refresh", () => {
       "answer",
       "answer-type",
       "answer-confirm",
-      "answer-sent",
+      "answer-suggestions",
       "answer-stale",
     ]) {
       expect(holdsQuestionDraft(screen)).toBe(true);
     }
+    expect(holdsQuestionDraft("answer-sent")).toBe(false);
     expect(holdsQuestionDraft("chat")).toBe(false);
     expect(holdsQuestionDraft("reply")).toBe(false);
   });

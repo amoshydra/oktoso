@@ -256,6 +256,24 @@ async function openFirstSession(): Promise<void> {
   await openSession(/Fix auth race/);
 }
 
+/** Older fixtures sit past the first Recent page. */
+async function openAncientSession(title: RegExp): Promise<void> {
+  await listTap(1);
+  await previewMatches(/RECENT/);
+  for (let page = 0; page < 4; page += 1) {
+    const labels = await listLabels();
+    if (labels.some((label) => title.test(label))) break;
+    const more = labels.findIndex((label) => /More sessions/.test(label));
+    if (more < 0) {
+      throw new Error(`No row matches ${title}: ${labels.join(" | ")}`);
+    }
+    await listTap(more);
+    await requirePage().waitForTimeout(200);
+  }
+  await tapRowMatching(title);
+  await previewMatches(/Tap reply|\? Answer/);
+}
+
 describe("G2 hosted app", () => {
   it("boots to Home and navigates through the empty Inbox", async () => {
     const home = await preview();
@@ -360,5 +378,184 @@ describe("G2 hosted app", () => {
     expect(
       await requirePage().evaluate(() => (window as any).__g2.audioOpen),
     ).toBe(false);
+  });
+
+  it("opens the answer screen before a stale turn failure", async () => {
+    // The Rust session ends in an error and a question. The question wins the
+    // tap; the failure stays reachable from the answer screen.
+    await openAncientSession(/Port hub to Rust/);
+    await previewMatches(/\? Answer/);
+    await textTap();
+    const answer = await previewMatches(/ANSWER/);
+    expect(answer).not.toContain("TURN FAILED");
+    expect(await listLabels()).toContain("Failure ›");
+
+    await tapRowMatching(/Failure/);
+    await previewMatches(/TURN FAILED/);
+
+    await doubleTap();
+    await previewMatches(/ANSWER/);
+    expect(await listLabels()).toContain("Type answer");
+  });
+
+  it("sends a suggested answer as free text", async () => {
+    const target = requirePage();
+    await target.route("**/api/v1/sessions/*/question", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            sessionRef: "desktop-opencode:ses_index",
+            messageId: "msg_free",
+            revision: "msg_free:1",
+            askedAt: 1,
+            generatedAt: 1,
+            questions: [
+              {
+                id: "msg_free:q0",
+                text: "Which branch should I target?",
+                kind: "freeform",
+                choices: [],
+                allowsFreeText: true,
+                allowsVoice: false,
+                multiSelect: false,
+                risk: "normal",
+                confidence: "high",
+                source: "explicit",
+              },
+            ],
+          },
+        }),
+      });
+    });
+    await target.route("**/reply-options**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("mode") !== "answer") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: "answer-0",
+              label: "Ship it.",
+              text: "Ship it.",
+              source: "model",
+              action: "send",
+            },
+            {
+              id: "answer-1",
+              label: "Not yet.",
+              text: "Not yet.",
+              source: "model",
+              action: "send",
+            },
+          ],
+          generatedAt: 1,
+          mode: "answer",
+        }),
+      });
+    });
+    let sentText = "";
+    await target.route("**/api/v1/sessions/*/messages", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      sentText = route.request().postDataJSON()?.text ?? "";
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ accepted: true }),
+      });
+    });
+
+    await openSession(/Refactor session index/);
+    await previewMatches(/\? Answer/);
+    await textTap();
+    await previewMatches(/ANSWER/);
+    await tapRowMatching(/Suggested answers/);
+
+    await previewMatches(/SUGGESTED/);
+    expect(await listLabels()).toEqual(["Ship it.", "Not yet."]);
+
+    await listTap(0);
+    await previewMatches(/Refactor session index/);
+    expect(sentText).toBe("Ship it.");
+  });
+
+  it("turns an Other sentinel into Type your own answer", async () => {
+    await requirePage().route(
+      "**/api/v1/sessions/*/question",
+      async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              sessionRef: "desktop-opencode:ses_index",
+              messageId: "msg_sentinel",
+              revision: "msg_sentinel:1",
+              askedAt: 1,
+              generatedAt: 1,
+              questions: [
+                {
+                  id: "msg_sentinel:q0",
+                  text: "Which branch should I target?",
+                  kind: "choice",
+                  choices: [
+                    {
+                      id: "c0",
+                      label: "main",
+                      text: "main",
+                      kind: "choice",
+                      source: "explicit",
+                    },
+                    {
+                      id: "c1",
+                      label: "Other",
+                      text: "Other",
+                      kind: "choice",
+                      source: "explicit",
+                    },
+                  ],
+                  allowsFreeText: true,
+                  allowsVoice: false,
+                  multiSelect: false,
+                  risk: "normal",
+                  confidence: "high",
+                  source: "explicit",
+                },
+              ],
+            },
+          }),
+        });
+      },
+    );
+
+    await openSession(/Refactor session index/);
+    await previewMatches(/\? Answer/);
+    await textTap();
+    await previewMatches(/ANSWER/);
+
+    const labels = await listLabels();
+    expect(labels).toContain("main");
+    expect(labels).toContain("Type your own answer");
+    expect(labels).not.toContain("Other");
+
+    await tapRowMatching(/Type your own answer/);
+    await previewMatches(/TYPE/);
   });
 });
