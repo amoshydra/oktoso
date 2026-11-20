@@ -109,7 +109,13 @@ describe("G2 answer model", () => {
     ]) {
       expect(isFreeAnswerSentinel(choice("c", label))).toBe(true);
     }
-    for (const label of ["Yes", "Another branch", "Others welcome", "Customize"]) {
+    for (const label of [
+      "Yes",
+      "Another branch",
+      "Others welcome",
+      "Customize",
+      "Other database",
+    ]) {
       expect(isFreeAnswerSentinel(choice("c", label))).toBe(false);
     }
   });
