@@ -234,6 +234,7 @@ describe("AssistantService", () => {
 
     const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
     expect(body.stream).toBe(true);
+    expect(prompt).toContain("model: test-model");
     expect(prompt).toContain("ref: desktop-opencode:ses_a");
     expect(prompt).toContain("unread/normal: Fix the build");
     expect(prompt).toContain("Allow running pnpm test?");
