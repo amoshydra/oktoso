@@ -907,6 +907,8 @@ export class HubClient {
   startEvents(options: {
     after?: number;
     signal: AbortSignal;
+    /** A wearable can ask for a quieter keepalive (5–120 s). */
+    heartbeatMs?: number;
     onEvent: Parameters<typeof runEventStream>[0]["onEvent"];
     onStatus?: (status: ConnectionStatus) => void;
   }): Promise<void> {
@@ -915,6 +917,7 @@ export class HubClient {
       token: this.token,
       credentials: this.credentials,
       after: options.after,
+      heartbeatMs: options.heartbeatMs,
       signal: options.signal,
       onEvent: options.onEvent,
       onStatus: options.onStatus,

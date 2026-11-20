@@ -2210,7 +2210,7 @@ describe("hub app", () => {
 
   it("opens an authenticated SSE stream and replay", async () => {
     const { app, eventBus } = await createTestApp();
-    const response = await app.request("/api/v1/events?after=0", {
+    const response = await app.request("/api/v1/events?after=0&heartbeat=60000", {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(response.status).toBe(200);
@@ -2223,6 +2223,17 @@ describe("hub app", () => {
     const next = await reader!.read();
     expect(new TextDecoder().decode(next.value)).toContain("provider.status");
     await reader!.cancel();
+  });
+
+  it("rejects a heartbeat outside the supported range", async () => {
+    const { app } = await createTestApp();
+    const response = await app.request("/api/v1/events?after=0&heartbeat=1000", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_request" },
+    });
   });
   it("accepts a batch answer covering every pending question", async () => {
     const { app } = await createTestApp();
