@@ -668,6 +668,16 @@ async function main(): Promise<void> {
       logger,
     );
     const assistantSettings = new AssistantSettingsService(store);
+    // First boot with the new settings store: show the config-file endpoint in
+    // Settings instead of an empty form. Later saves are runtime-owned.
+    await assistantSettings.seedAgent({
+      enabled: config.assistant.enabled,
+      baseUrl: config.assistant.baseUrl,
+      model: config.assistant.model,
+      timeoutMs: config.assistant.timeoutMs,
+      maxContextMessages: config.assistant.maxContextMessages,
+      allowWrite: config.assistant.allowWrite,
+    });
     const replies = new ReplyService(assistantSettings, sessions, logger);
     const replyFeedback = new ReplyFeedbackStore({
       filePath: join(resolve(config.dataDir), "reply-feedback.jsonl"),
@@ -697,17 +707,17 @@ async function main(): Promise<void> {
         appendFile(assistantAudit, `${JSON.stringify(entry)}\n`, {
           mode: 0o600,
         }),
-      settings: {
-        enabled: config.assistant.enabled,
-        baseUrl: config.assistant.baseUrl,
-        model: config.assistant.model,
-        timeoutMs: config.assistant.timeoutMs,
-        maxContextMessages: config.assistant.maxContextMessages,
-        allowWrite: config.assistant.allowWrite,
-        fallback: {
-          baseUrl: assistantSettings.config().reply.baseUrl,
-          model: assistantSettings.config().reply.model,
-        },
+      settings: () => {
+        const agent = assistantSettings.config().agent;
+        const reply = assistantSettings.config().reply;
+        return {
+          enabled: agent.enabled,
+          baseUrl: agent.baseUrl || config.assistant.baseUrl || reply.baseUrl,
+          model: agent.model || config.assistant.model || reply.model,
+          timeoutMs: agent.timeoutMs,
+          maxContextMessages: agent.maxContextMessages,
+          allowWrite: agent.allowWrite,
+        };
       },
     });
     // Generate the VAPID pair once and keep it owner-only. It is cheap, and a

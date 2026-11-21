@@ -793,12 +793,13 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   The global assistant renders as a modal `<dialog>` (bottom sheet on mobile);
   session/project stay docked; scope icons distinguish them.
 
-- [ ] G18. Assistant endpoint settings (planned). Move the assistant's
-  `enabled`/`baseUrl`/`model`/`apiKey`/`timeoutMs`/`maxContextMessages`/
-  `allowWrite` into runtime settings with the config file as a one-time
-  bootstrap; add a Settings → Assistant agent panel with load-models and test,
-  and a "Change endpoint" link from the dock. The assistant reads the effective
-  config per run, so no restart. Scope:
+- [x] G18. Assistant endpoint settings. The `agent` block moved into runtime
+  settings with the config file seeding it on first boot; `AssistantService`
+  reads a settings getter per run, so a save applies without a restart. The
+  Settings → Assistant agent panel edits enable/writes/base URL/model/context/
+  timeout/API key, loads models, and tests the unsaved endpoint with a
+  one-token completion. The dock's model menu links to it. Key handling matches
+  reply/transcription: masked, never returned, cleared explicitly. Scope:
   `docs/reports/assistant-endpoint-scope.md`.
 
 ## Cross-cutting work

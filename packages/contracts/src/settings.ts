@@ -22,12 +22,41 @@ export const zAssistantTranscriptionConfig = z.object({
   timeoutMs: z.number().int().min(1_000).max(120_000),
 });
 
+export const zAssistantAgentConfig = z.object({
+  enabled: z.boolean().default(true),
+  baseUrl: z.string().default(""),
+  model: z.string().default(""),
+  apiKey: z.string().optional(),
+  timeoutMs: z.number().int().min(5_000).max(600_000).default(90_000),
+  maxContextMessages: z.number().int().min(4).max(60).default(20),
+  allowWrite: z.boolean().default(false),
+});
+
 export const zAssistantConfig = z.object({
+  agent: zAssistantAgentConfig.default({
+    enabled: true,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 90_000,
+    maxContextMessages: 20,
+    allowWrite: false,
+  }),
   reply: zAssistantReplyConfig,
   transcription: zAssistantTranscriptionConfig,
 });
 
 export const zAssistantView = z.object({
+  agent: z
+    .object({
+      enabled: z.boolean(),
+      baseUrl: z.string(),
+      model: z.string(),
+      timeoutMs: z.number().int(),
+      maxContextMessages: z.number().int(),
+      allowWrite: z.boolean(),
+      hasApiKey: z.boolean(),
+    })
+    .optional(),
   reply: z.object({
     enabled: z.boolean(),
     baseUrl: z.string(),
@@ -62,9 +91,34 @@ export const zAssistantTranscriptionInput = z.object({
   timeoutMs: z.number().int().min(1_000).max(120_000).optional(),
 });
 
+export const zAssistantAgentInput = z.object({
+  enabled: z.boolean().optional(),
+  baseUrl: z.string().optional(),
+  model: z.string().optional(),
+  apiKey: z.string().nullable().optional(),
+  timeoutMs: z.number().int().min(5_000).max(600_000).optional(),
+  maxContextMessages: z.number().int().min(4).max(60).optional(),
+  allowWrite: z.boolean().optional(),
+});
+
 export const zAssistantInput = z.object({
+  agent: zAssistantAgentInput.optional(),
   reply: zAssistantReplyInput.optional(),
   transcription: zAssistantTranscriptionInput.optional(),
+});
+
+export const zAssistantAgentTestInput = z.object({
+  baseUrl: z.string().min(1),
+  model: z.string().min(1),
+  apiKey: z.string().optional(),
+});
+
+export const zAssistantAgentTest = z.object({
+  ok: z.boolean(),
+  status: z.number().int().optional(),
+  latencyMs: z.number().int().nonnegative(),
+  model: z.string().optional(),
+  error: z.string().optional(),
 });
 
 /**
@@ -164,6 +218,14 @@ export const zReplyOptions = z.object({
 export const zReplyMode = z.enum(["reply", "choices", "answer"]);
 
 export const DEFAULT_ASSISTANT_CONFIG = {
+  agent: {
+    enabled: true,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 90_000,
+    maxContextMessages: 20,
+    allowWrite: false,
+  },
   reply: {
     enabled: true,
     baseUrl: DEFAULT_REPLY_BASE_URL,
@@ -179,6 +241,10 @@ export const DEFAULT_ASSISTANT_CONFIG = {
   },
 } satisfies z.infer<typeof zAssistantConfig>;
 
+export type AssistantAgentConfig = z.infer<typeof zAssistantAgentConfig>;
+export type AssistantAgentInput = z.infer<typeof zAssistantAgentInput>;
+export type AssistantAgentTest = z.infer<typeof zAssistantAgentTest>;
+export type AssistantAgentTestInput = z.infer<typeof zAssistantAgentTestInput>;
 export type AssistantReplyConfig = z.infer<typeof zAssistantReplyConfig>;
 export type AssistantTranscriptionConfig = z.infer<
   typeof zAssistantTranscriptionConfig

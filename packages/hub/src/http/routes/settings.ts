@@ -1,5 +1,8 @@
 import type { Hono } from "hono";
-import { zAssistantInput } from "@amoshydra/oktoso-contracts";
+import {
+  zAssistantAgentTestInput,
+  zAssistantInput,
+} from "@amoshydra/oktoso-contracts";
 import type { AssistantSettingsService } from "../../services/assistant-settings";
 import type { AppEnv } from "../types";
 import { badRequest } from "../../domain/errors";
@@ -23,6 +26,15 @@ export function registerSettingsRoutes(
     return c.json({ data: await settings.update(parsed.data) });
   });
 
+  app.post("/api/v1/settings/assistant/agent/test", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zAssistantAgentTestInput.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid endpoint test", { issues: parsed.error.issues });
+    }
+    return c.json({ data: await settings.testAgent(parsed.data) });
+  });
+
   app.get("/api/v1/settings/assistant/:target/models", async (c) => {
     const target = parseTarget(c.req.param("target"));
     try {
@@ -35,7 +47,9 @@ export function registerSettingsRoutes(
   });
 }
 
-function parseTarget(value: string): "reply" | "transcription" {
-  if (value === "reply" || value === "transcription") return value;
+function parseTarget(value: string): "agent" | "reply" | "transcription" {
+  if (value === "agent" || value === "reply" || value === "transcription") {
+    return value;
+  }
   throw badRequest("Unknown assistant settings target");
 }

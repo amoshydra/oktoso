@@ -1256,7 +1256,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.21 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.36 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -1287,6 +1287,10 @@ export function App() {
             presentation={
               assistant.scope.kind === "global" ? "dialog" : "dock"
             }
+            onOpenSettings={() => {
+              setAssistant(null);
+              navigate({ name: "settings" });
+            }}
             onClose={() => setAssistant(null)}
           />
         ) : null}
@@ -1512,8 +1516,21 @@ const ATTENTION_LABELS: Record<AttentionType, string> = {
 
 function AssistantSettingsPanel(props: { client: HubClient }) {
   const [view, setView] = useState<AssistantView>();
+  const [agentModels, setAgentModels] = useState<string[]>([]);
   const [replyModels, setReplyModels] = useState<string[]>([]);
   const [transcriptionModels, setTranscriptionModels] = useState<string[]>([]);
+  const [agent, setAgent] = useState({
+    enabled: false,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 90_000,
+    maxContextMessages: 20,
+    allowWrite: false,
+    apiKey: "",
+  });
+  const [clearAgentKey, setClearAgentKey] = useState(false);
+  const [agentTest, setAgentTest] = useState<{ ok: boolean; text: string }>();
+  const [testingAgent, setTestingAgent] = useState(false);
   const [reply, setReply] = useState({
     enabled: false,
     baseUrl: "",
@@ -1530,7 +1547,7 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     apiKey: "",
   });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<"reply" | "transcription">();
+  const [saving, setSaving] = useState<"agent" | "reply" | "transcription">();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
@@ -1540,6 +1557,17 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     try {
       const next = await props.client.assistantSettings();
       setView(next);
+      const agentView = next.agent;
+      setAgent({
+        enabled: agentView?.enabled ?? false,
+        baseUrl: agentView?.baseUrl ?? "",
+        model: agentView?.model ?? "",
+        timeoutMs: agentView?.timeoutMs ?? 90_000,
+        maxContextMessages: agentView?.maxContextMessages ?? 20,
+        allowWrite: agentView?.allowWrite ?? false,
+        apiKey: "",
+      });
+      setClearAgentKey(false);
       setReply({
         enabled: next.reply.enabled,
         baseUrl: next.reply.baseUrl,
@@ -1566,28 +1594,56 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     void load();
   }, [props.client]);
 
-  const save = async (target: "reply" | "transcription") => {
+  const save = async (target: "agent" | "reply" | "transcription") => {
     setSaving(target);
     setError(undefined);
     setNotice(undefined);
     try {
-      const value = target === "reply" ? reply : transcription;
+      const value =
+        target === "agent" ? agent : target === "reply" ? reply : transcription;
       const next = await props.client.saveAssistantSettings({
         [target]: {
           enabled: value.enabled,
           baseUrl: value.baseUrl.trim(),
           model: value.model.trim(),
           timeoutMs: value.timeoutMs,
+          ...(target === "agent"
+            ? {
+                maxContextMessages: agent.maxContextMessages,
+                allowWrite: agent.allowWrite,
+                ...(clearAgentKey
+                  ? { apiKey: null }
+                  : agent.apiKey.trim()
+                    ? { apiKey: agent.apiKey.trim() }
+                    : {}),
+              }
+            : {}),
           ...(target === "reply"
             ? { disableThinking: reply.disableThinking }
             : {}),
-          ...(value.apiKey.trim() ? { apiKey: value.apiKey.trim() } : {}),
+          ...(target !== "agent" && value.apiKey.trim()
+            ? { apiKey: value.apiKey.trim() }
+            : {}),
         },
       });
       setView(next);
-      setNotice(`${target === "reply" ? "Reply assistance" : "Voice transcription"} saved.`);
-      if (target === "reply") setReply((current) => ({ ...current, apiKey: "" }));
-      else setTranscription((current) => ({ ...current, apiKey: "" }));
+      setNotice(
+        `${
+          target === "agent"
+            ? "Assistant endpoint"
+            : target === "reply"
+              ? "Reply assistance"
+              : "Voice transcription"
+        } saved.`,
+      );
+      if (target === "agent") {
+        setAgent((current) => ({ ...current, apiKey: "" }));
+        setClearAgentKey(false);
+      } else if (target === "reply") {
+        setReply((current) => ({ ...current, apiKey: "" }));
+      } else {
+        setTranscription((current) => ({ ...current, apiKey: "" }));
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save settings");
     } finally {
@@ -1595,12 +1651,17 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     }
   };
 
-  const loadModels = async (target: "reply" | "transcription") => {
+  const loadModels = async (target: "agent" | "reply" | "transcription") => {
     setError(undefined);
     setNotice(undefined);
     try {
       const result = await props.client.assistantModels(target);
-      if (target === "reply") {
+      if (target === "agent") {
+        setAgentModels(result.data);
+        setNotice(
+          `Loaded ${result.data.length} assistant model${result.data.length === 1 ? "" : "s"} from ${result.baseUrl}.`,
+        );
+      } else if (target === "reply") {
         setReplyModels(result.data);
         setNotice(`Loaded ${result.data.length} reply model${result.data.length === 1 ? "" : "s"}.`);
       } else {
@@ -1612,8 +1673,206 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     }
   };
 
+  const testAgent = async () => {
+    setError(undefined);
+    setAgentTest(undefined);
+    setTestingAgent(true);
+    try {
+      const result = await props.client.testAssistantAgent({
+        baseUrl: agent.baseUrl.trim(),
+        model: agent.model.trim(),
+        ...(agent.apiKey.trim() ? { apiKey: agent.apiKey.trim() } : {}),
+      });
+      setAgentTest({
+        ok: result.ok,
+        text: result.ok
+          ? `Answered in ${result.latencyMs} ms · ${result.model ?? "model"}`
+          : `${result.error ?? "The endpoint failed"}${result.status ? ` (HTTP ${result.status})` : ""}`,
+      });
+    } catch (reason) {
+      setAgentTest({
+        ok: false,
+        text: reason instanceof Error ? reason.message : "Unable to test the endpoint",
+      });
+    } finally {
+      setTestingAgent(false);
+    }
+  };
+
   return (
     <section className="grid-two settings-assistant">
+      <article className="panel settings-agent">
+        <div className="panel-head">
+          <div>
+            <h2>Assistant agent</h2>
+            <p>
+              The model that answers Ask threads. Separate from reply
+              suggestions and voice transcription.
+            </p>
+          </div>
+          <span className="mode-badge">
+            {view?.agent?.hasApiKey ? "key saved" : "server-side"}
+          </span>
+        </div>
+        <div className="form-grid">
+          <label className="check-field span-2">
+            <input
+              type="checkbox"
+              checked={agent.enabled}
+              onChange={(event) => {
+                const enabled = (event.currentTarget as HTMLInputElement).checked;
+                setAgent((current) => ({ ...current, enabled }));
+              }}
+            />
+            <span>Enable the assistant</span>
+          </label>
+          <label className="check-field span-2">
+            <input
+              type="checkbox"
+              checked={agent.allowWrite}
+              onChange={(event) => {
+                const allowWrite = (event.currentTarget as HTMLInputElement).checked;
+                setAgent((current) => ({ ...current, allowWrite }));
+              }}
+            />
+            <span>
+              Allow confirmed writes
+              <span className="form-note">
+                Actions always require confirmation in the thread. This only
+                lets the assistant propose them.
+              </span>
+            </span>
+          </label>
+          <label className="form-field span-2">
+            <span>OpenAI-compatible base URL</span>
+            <input
+              value={agent.baseUrl}
+              placeholder="https://host/llamacpp/v1"
+              onChange={(event) => {
+                const baseUrl = (event.currentTarget as HTMLInputElement).value;
+                setAgent((current) => ({ ...current, baseUrl }));
+              }}
+            />
+          </label>
+          <label className="form-field">
+            <span>Model</span>
+            <input
+              value={agent.model}
+              list="agent-model-options"
+              placeholder="Model id"
+              onChange={(event) => {
+                const model = (event.currentTarget as HTMLInputElement).value;
+                setAgent((current) => ({ ...current, model }));
+              }}
+            />
+            <datalist id="agent-model-options">
+              {agentModels.map((model) => (
+                <option value={model} key={model} />
+              ))}
+            </datalist>
+          </label>
+          <label className="form-field">
+            <span>Context messages</span>
+            <input
+              type="number"
+              min={4}
+              max={60}
+              value={agent.maxContextMessages}
+              onChange={(event) => {
+                const maxContextMessages = Number(
+                  (event.currentTarget as HTMLInputElement).value,
+                );
+                setAgent((current) => ({ ...current, maxContextMessages }));
+              }}
+            />
+          </label>
+          <label className="form-field">
+            <span>Timeout (ms)</span>
+            <input
+              type="number"
+              min={5000}
+              max={600000}
+              value={agent.timeoutMs}
+              onChange={(event) => {
+                const timeoutMs = Number(
+                  (event.currentTarget as HTMLInputElement).value,
+                );
+                setAgent((current) => ({ ...current, timeoutMs }));
+              }}
+            />
+          </label>
+          <label className="form-field">
+            <span>
+              API key{" "}
+              {view?.agent?.hasApiKey
+                ? "(saved; leave blank to keep)"
+                : "(optional)"}
+            </span>
+            <input
+              type="password"
+              value={agent.apiKey}
+              autoComplete="off"
+              placeholder={view?.agent?.hasApiKey ? "••••••••" : "No key required"}
+              onChange={(event) => {
+                const apiKey = (event.currentTarget as HTMLInputElement).value;
+                setAgent((current) => ({ ...current, apiKey }));
+                setClearAgentKey(false);
+              }}
+            />
+          </label>
+          {view?.agent?.hasApiKey ? (
+            <div className="form-field span-2">
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => {
+                  setClearAgentKey(true);
+                  setAgent((current) => ({ ...current, apiKey: "" }));
+                }}
+              >
+                {clearAgentKey ? "The saved key will be cleared on save" : "Clear saved key"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="form-actions">
+          <button
+            className="btn small"
+            type="button"
+            aria-label="Load assistant models"
+            onClick={() => void loadModels("agent")}
+          >
+            Load models
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            aria-label="Test the assistant endpoint"
+            disabled={testingAgent || !agent.baseUrl.trim() || !agent.model.trim()}
+            onClick={() => void testAgent()}
+          >
+            {testingAgent ? "Testing…" : "Test connection"}
+          </button>
+          <button
+            className="btn primary small"
+            type="button"
+            aria-label="Save assistant agent"
+            disabled={saving === "agent"}
+            onClick={() => void save("agent")}
+          >
+            {saving === "agent" ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {agentTest ? (
+          <p
+            className={`form-note ${agentTest.ok ? "" : "form-error"}`}
+            role={agentTest.ok ? "status" : "alert"}
+          >
+            {agentTest.text}
+          </p>
+        ) : null}
+      </article>
+
       <article className="panel">
         <div className="panel-head">
           <div>

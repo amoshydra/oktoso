@@ -477,6 +477,55 @@ describe("AssistantService", () => {
     expect(turn?.error).toContain("unavailable");
   });
 
+  it("reads the agent settings on every run, not at boot", async () => {
+    let current = {
+      enabled: true,
+      baseUrl: "http://a.test/v1",
+      model: "model-a",
+      timeoutMs: 5_000,
+      maxContextMessages: 20,
+    };
+    const urls: string[] = [];
+    const models: string[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      urls.push(url);
+      models.push((JSON.parse(String(init.body)) as { model: string }).model);
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions(),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: () => current,
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const first = await service.postMessage(thread.id, { text: "one" });
+    const firstEvents: AssistantEvent[] = [];
+    service.subscribe(first.run.id, 0, (event) => firstEvents.push(event));
+    await waitFor(() => firstEvents.some((event) => event.type === "done"));
+
+    current = { ...current, baseUrl: "http://b.test/v1", model: "model-b" };
+    const second = await service.postMessage(thread.id, { text: "two" });
+    const secondEvents: AssistantEvent[] = [];
+    service.subscribe(second.run.id, 0, (event) => secondEvents.push(event));
+    await waitFor(() => secondEvents.some((event) => event.type === "done"));
+
+    expect(urls).toEqual([
+      "http://a.test/v1/chat/completions",
+      "http://b.test/v1/chat/completions",
+    ]);
+    expect(models).toEqual(["model-a", "model-b"]);
+    const done = secondEvents.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.model).toBe("model-b");
+  });
+
   it("uses the thread model and records the steps", async () => {
     let body: { model?: string } = {};
     const fetchImpl = (async (_url: string, init: RequestInit) => {
