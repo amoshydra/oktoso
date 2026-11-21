@@ -817,7 +817,7 @@ describe("AssistantService", () => {
       parts: [
         {
           type: "text" as const,
-          text: `${index === 19 ? "NEWEST-TURN " : ""}${"y".repeat(2_000)}`,
+          text: `${index === 19 ? "NEWEST-TURN " : ""}${"y".repeat(3_500)}`,
         },
       ],
     }));
@@ -859,7 +859,73 @@ describe("AssistantService", () => {
     const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
     expect(prompt).toContain("NEWEST-TURN");
     expect(prompt).toMatch(/older turns omitted/);
-    expect(prompt.length).toBeLessThanOrEqual(24_500);
+    expect(prompt.length).toBeLessThanOrEqual(49_500);
+  });
+
+  it("renders tool output and reasoning, not just prose", async () => {
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const turns: Message[] = [
+      {
+        id: "m1",
+        sessionRef: session.ref,
+        role: "assistant",
+        createdAt: 1,
+        parts: [
+          {
+            type: "reasoning",
+            text: "The 401 means the auth header never reached the handler.",
+          },
+          {
+            type: "tool",
+            id: "t1",
+            name: "shell",
+            status: "completed",
+            input: { command: "pnpm test auth" },
+            output: "FAIL src/auth.test.ts\nexpected 401, received 500",
+          },
+          { type: "text", text: "The test failed in the handler." },
+        ],
+      },
+    ];
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        messages: async (): Promise<MessagePage> => ({
+          data: turns,
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "why did it fail?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("[reasoning] The 401 means");
+    expect(prompt).toContain("[tool shell · completed]");
+    expect(prompt).toContain("pnpm test auth");
+    expect(prompt).toContain("→ FAIL src/auth.test.ts");
+    expect(prompt).toContain("expected 401, received 500");
   });
 
   it("labels trusted blocks and surfaces failures", async () => {

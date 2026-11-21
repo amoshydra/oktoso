@@ -40,10 +40,19 @@ const MAX_TURNS = 200;
 const MAX_THREADS = 40;
 const RUN_RETENTION_MS = 5 * 60 * 1_000;
 const MAX_RUNS = 20;
-const MAX_CONTEXT_CHARS = 24_000;
-const MAX_MESSAGE_CHARS = 1_600;
-const MESSAGE_TAIL_CHARS = 500;
-const MAX_TOOL_DIGEST = 40;
+/**
+ * The transcript is the evidence. The budget is a character budget, not a
+ * message count: a turn with a 40 KB file read must be allowed to crowd out
+ * five turns of chatter, because it is what answers the question.
+ */
+const MAX_CONTEXT_CHARS = 48_000;
+const MAX_MESSAGE_CHARS = 4_000;
+const MESSAGE_TAIL_CHARS = 1_200;
+const MAX_REASONING_CHARS = 1_200;
+const MAX_TOOL_INPUT_CHARS = 600;
+const MAX_TOOL_OUTPUT_CHARS = 3_000;
+const MAX_SHELL_OUTPUT_CHARS = 2_000;
+const MAX_TOOL_DIGEST = 20;
 const ACCEPTED_TTL_MS = 10 * 60 * 1_000;
 const HISTORY_TTL_MS = 60_000;
 const HISTORY_MAX_CHARS = 1_500;
@@ -2369,6 +2378,125 @@ interface SessionDigest {
   commands: string[];
 }
 
+/**
+ * One message as transcript lines: prose, reasoning, and tool calls with their
+ * results.
+ *
+ * The previous builder kept prose only, which made the transcript a summary of
+ * the conversation rather than the conversation. A question like "why did the
+ * second test fail?" is answered by the failing output, not by the sentence
+ * around it, so the evidence is rendered here and clipped per part.
+ */
+function renderMessageParts(message: Message): string[] {
+  const parts: string[] = [];
+  for (const part of message.parts) {
+    switch (part.type) {
+      case "text": {
+        const text = clipMessage(part.text.trim());
+        if (text) parts.push(text);
+        break;
+      }
+      case "reasoning": {
+        const text = part.text.trim();
+        if (text) {
+          parts.push(`[reasoning] ${clipText(redact(text), MAX_REASONING_CHARS)}`);
+        }
+        break;
+      }
+      case "compaction": {
+        const text = clipMessage(part.summary.trim());
+        if (text) parts.push(`[compaction] ${text}`);
+        break;
+      }
+      case "file":
+        parts.push(`[file ${part.name}]`);
+        break;
+      case "tool": {
+        const input = describeInput(part.input);
+        parts.push(
+          `[tool ${part.name} · ${part.status}]${input ? ` ${input}` : ""}`,
+        );
+        const output = describeOutput(part.output, MAX_TOOL_OUTPUT_CHARS);
+        if (output) parts.push(`  → ${output}`);
+        break;
+      }
+      case "shell": {
+        parts.push(
+          `[shell · ${part.status}] ${clipText(redact(part.command), MAX_TOOL_INPUT_CHARS)}`,
+        );
+        const output = part.output
+          ? clipText(redact(part.output), MAX_SHELL_OUTPUT_CHARS)
+          : "";
+        if (output) parts.push(`  → ${output}`);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  const error = (message as { error?: unknown }).error;
+  if (typeof error === "string" && error.trim()) {
+    parts.push(`[message error] ${clipText(redact(error), FAILURE_DETAIL_CHARS)}`);
+  }
+  return parts;
+}
+
+function describeInput(input: unknown): string {
+  if (input === undefined || input === null) return "";
+  if (typeof input === "string") {
+    return clipText(redact(input), MAX_TOOL_INPUT_CHARS);
+  }
+  try {
+    return clipText(redact(JSON.stringify(input)), MAX_TOOL_INPUT_CHARS);
+  } catch {
+    return "";
+  }
+}
+
+function describeOutput(output: unknown, max: number): string {
+  return clipHeadTail(redact(toolOutputText(output).trim()), max);
+}
+
+/**
+ * Providers wrap tool results differently (a content array, `{output}`, a bare
+ * string). Flatten to the text a reader would see, so the transcript is not a
+ * page of JSON escapes.
+ */
+function toolOutputText(value: unknown, depth = 0): string {
+  if (value === undefined || value === null || depth > 3) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => toolOutputText(entry, depth + 1))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["text", "output", "content", "stdout", "result", "message"]) {
+      const found = toolOutputText(record[key], depth + 1);
+      if (found) return found;
+    }
+    try {
+      return JSON.stringify(value) ?? "";
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+/** Keep both ends: a tool's conclusion is as often at the tail as the head. */
+function clipHeadTail(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const tail = Math.min(Math.floor(max / 3), value.length);
+  const head = max - tail;
+  return `${value.slice(0, head)}\n…\n${value.slice(-tail)}`;
+}
+
 function renderContext(input: {
   session: {
     ref: string;
@@ -2487,7 +2615,7 @@ function renderContext(input: {
     }
   }
 
-  lines.push("", "RECENT ACTIONS (untrusted tool calls, oldest first, deduped)");
+  lines.push("", "RECENT ACTIONS (index of untrusted tool calls, oldest first, deduped)");
   const actions: string[] = [];
   for (const message of input.messages) {
     for (const part of message.parts) {
@@ -2505,23 +2633,12 @@ function renderContext(input: {
   const blocks: string[] = [];
   let turn = 0;
   for (const message of input.messages) {
-    const texts: string[] = [];
-    for (const part of message.parts) {
-      if (part.type === "text") {
-        const text = clipMessage(part.text.trim());
-        if (text) texts.push(text);
-      } else if (part.type === "compaction") {
-        const text = clipMessage(part.summary.trim());
-        if (text) texts.push(`[compaction] ${text}`);
-      } else if (part.type === "file") {
-        texts.push(`[file ${part.name}]`);
-      }
-    }
-    if (texts.length === 0) continue;
+    const rendered = renderMessageParts(message);
+    if (rendered.length === 0) continue;
     turn += 1;
-    blocks.push(["", `${turn}. ${message.role.toUpperCase()}`, ...texts].join("\n"));
+    blocks.push(["", `${turn}. ${message.role.toUpperCase()}`, ...rendered].join("\n"));
   }
-  if (blocks.length === 0) blocks.push("\n(no text turns)");
+  if (blocks.length === 0) blocks.push("\n(no turns)");
 
   const budget = MAX_CONTEXT_CHARS - header.length - 200;
   const kept: string[] = [];
@@ -2538,7 +2655,7 @@ function renderContext(input: {
   const text = [
     header,
     "",
-    `TRANSCRIPT (last ${input.messages.length} turns, untrusted, text only, oldest first)`,
+    `TRANSCRIPT (last ${input.messages.length} turns, untrusted: prose, reasoning, and tool input/output, oldest first)`,
     ...note,
     ...kept,
   ].join("\n");

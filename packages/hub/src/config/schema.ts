@@ -206,7 +206,7 @@ export const zAssistantAgentConfig = z.object({
   model: z.string().default(""),
   timeoutMs: z.number().int().min(5_000).max(600_000).default(90_000),
   /** Transcript tail handed to the model. The largest useful prompt is ~4k tokens. */
-  maxContextMessages: z.number().int().min(4).max(60).default(20),
+  maxContextMessages: z.number().int().min(4).max(200).default(40),
   /** Opt-in write actions. Every write still needs an in-thread confirmation. */
   allowWrite: z.boolean().default(false),
 });
@@ -268,7 +268,7 @@ export const zHubConfig = z.object({
     baseUrl: "",
     model: "",
     timeoutMs: 90_000,
-    maxContextMessages: 20,
+    maxContextMessages: 40,
     allowWrite: false,
   }),
 });
