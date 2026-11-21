@@ -22,6 +22,16 @@ describe("HubClient.replyOptions", () => {
     expect(captured).toBe(
       "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=reply",
     );
+
+    await hub.replyOptions(
+      "desktop-opencode:ses_auth",
+      "answer",
+      "g2",
+      "msg_1:q1",
+    );
+    expect(captured).toBe(
+      "http://hub/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=answer&surface=g2&questionId=msg_1%3Aq1",
+    );
   });
 });
 

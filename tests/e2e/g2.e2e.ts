@@ -559,6 +559,138 @@ describe("G2 hosted app", () => {
     await previewMatches(/TYPE/);
   });
 
+  it("fills a batch question from its own suggested answers", async () => {
+    await requirePage().route(
+      "**/api/v1/sessions/*/question",
+      async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              sessionRef: "desktop-opencode:ses_index",
+              messageId: "msg_batch",
+              revision: "msg_batch:1",
+              askedAt: 1,
+              generatedAt: 1,
+              questions: [
+                {
+                  id: "msg_batch:q0",
+                  text: "Which branch should I target?",
+                  kind: "choice",
+                  choices: [
+                    {
+                      id: "b0",
+                      label: "main",
+                      text: "main",
+                      kind: "choice",
+                      source: "explicit",
+                    },
+                  ],
+                  allowsFreeText: false,
+                  allowsVoice: false,
+                  multiSelect: false,
+                  risk: "normal",
+                  confidence: "high",
+                  source: "explicit",
+                },
+                {
+                  id: "msg_batch:q1",
+                  text: "How should I land the history?",
+                  kind: "freeform",
+                  choices: [],
+                  allowsFreeText: true,
+                  allowsVoice: false,
+                  multiSelect: false,
+                  risk: "normal",
+                  confidence: "high",
+                  source: "explicit",
+                },
+              ],
+            },
+          }),
+        });
+      },
+    );
+    const suggestionRequests: Array<string | null> = [];
+    await requirePage().route("**/reply-options**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("mode") !== "answer") {
+        await route.continue();
+        return;
+      }
+      suggestionRequests.push(url.searchParams.get("questionId"));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: "answer-0",
+              label: "Rebase onto main.",
+              text: "Rebase onto main.",
+              source: "model",
+              action: "send",
+            },
+            {
+              id: "answer-1",
+              label: "Keep the merge commit.",
+              text: "Keep the merge commit.",
+              source: "model",
+              action: "send",
+            },
+          ],
+          generatedAt: 1,
+          mode: "answer",
+        }),
+      });
+    });
+    let sent: { text?: string; answers?: unknown[] } | undefined;
+    await requirePage().route("**/api/v1/sessions/*/messages", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      sent = route.request().postDataJSON() ?? {};
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ accepted: true }),
+      });
+    });
+
+    await openSession(/Refactor session index/);
+    await previewMatches(/\? Answer/);
+    await textTap();
+    await previewMatches(/ANSWER · 2 questions/);
+    await tapRowMatching(/^› Answer 2 questions$/);
+
+    // Answer Q1 with a choice, then open Q2's own suggestions.
+    await previewMatches(/ANSWER · Q1\/2/);
+    await tapRowMatching(/^1 main$/);
+    await previewMatches(/ANSWER · Q2\/2/);
+    expect(await listLabels()).toContain("› Suggested answers");
+
+    await tapRowMatching(/^› Suggested answers$/);
+    const suggestion = await previewMatches(/SUGGESTED · Q2\/2/);
+    expect(suggestion).toContain("How should I land the history?");
+    expect(await listLabels()).toEqual([
+      "Rebase onto main.",
+      "Keep the merge commit.",
+    ]);
+    expect(suggestionRequests).toEqual(["msg_batch:q1"]);
+    expect(sent).toBeUndefined();
+
+    await tapRowMatching(/^Rebase onto main\.$/);
+    const review = await previewMatches(/REVIEW · 2 answers/);
+    expect(review).toContain("2 Rebase onto main.");
+    expect(sent).toBeUndefined();
+  });
+
   it("answers a two-question batch on the glass and sends from review", async () => {
     await requirePage().route(
       "**/api/v1/sessions/*/question",

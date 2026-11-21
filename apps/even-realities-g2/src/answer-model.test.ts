@@ -17,6 +17,7 @@ import {
   firstMissingBatchAnswer,
   isFreeAnswerSentinel,
   replyModelConfigured,
+  suggestionQuestionId,
 } from "./answer-model";
 
 function choice(
@@ -253,6 +254,35 @@ describe("G2 answer model", () => {
         buildBatchQuestionRows(question({ allowsFreeText: false })),
       ),
     ).toEqual(["1 Yes", "2 No", "› Answer on phone", "› Back"]);
+  });
+
+  it("adds Suggested answers before the batch phone fallback", () => {
+    const rows = buildBatchQuestionRows(question(), {
+      voice: true,
+      suggested: true,
+    });
+    expect(labels(rows)).toEqual([
+      "1 Yes",
+      "2 No",
+      "› Type answer",
+      "› Speak answer",
+      "› Suggested answers",
+      "› Answer on phone",
+      "› Back",
+    ]);
+    expect(
+      rows
+        .filter((row) => row.kind === "action")
+        .map((row) => row.action),
+    ).toEqual(["type", "voice", "suggested", "phone", "back"]);
+  });
+
+  it("targets no question for a single answer and the id for a batch", () => {
+    expect(suggestionQuestionId(undefined)).toBeUndefined();
+    expect(suggestionQuestionId({ kind: "answer" })).toBeUndefined();
+    expect(
+      suggestionQuestionId({ kind: "batch", questionId: "msg_1:q1" }),
+    ).toBe("msg_1:q1");
   });
 
   it("numbers a batch review and offers Send all and Back", () => {

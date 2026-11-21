@@ -36,6 +36,21 @@ export interface AnswerRowOptions {
 }
 
 /**
+ * What the suggestions screen will do with a tapped candidate: send it, or
+ * store it as one batch question's answer.
+ */
+export type SuggestionTarget =
+  | { kind: "answer" }
+  | { kind: "batch"; questionId: string };
+
+/** The question a suggestions request must target, if any. */
+export function suggestionQuestionId(
+  target: SuggestionTarget | undefined,
+): string | undefined {
+  return target?.kind === "batch" ? target.questionId : undefined;
+}
+
+/**
  * A provider choice that stands for "none of these": its label is an
  * instruction to type, not an answer. Sending the literal sentinel would tell
  * the agent "Other" instead of what the user meant.
@@ -168,6 +183,9 @@ export function buildBatchQuestionRows(
     rows.push(actionRow("type", "Type answer"));
   }
   if (options.voice) rows.push(actionRow("voice", "Speak answer"));
+  if (options.suggested) {
+    rows.push(actionRow("suggested", "Suggested answers"));
+  }
   rows.push(actionRow("phone", "Answer on phone"));
   rows.push(actionRow("back", "Back"));
   return rows;

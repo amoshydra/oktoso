@@ -1197,10 +1197,12 @@ registry.registerPath({
     query: z.object({
       mode: z.enum(["reply", "choices"]).optional(),
       surface: z.enum(["web", "g2"]).optional(),
+      questionId: z.string().min(1).optional(),
     }),
   },
   responses: {
     200: { description: "Reply options", content: json(ReplyOptionsSchema) },
+    400: errorResponse("Invalid or unknown question id"),
     404: errorResponse("Session not found"),
     502: errorResponse("Provider failure"),
   },
