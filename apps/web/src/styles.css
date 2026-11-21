@@ -6125,3 +6125,237 @@ button.assistant-scope:hover {
   color: var(--text);
   font-weight: 500;
 }
+
+/* --- Assistant model picker --------------------------------------------- */
+
+.assistant-model-wrap {
+  position: relative;
+  display: flex;
+}
+
+.assistant-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+}
+
+.assistant-model-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.assistant-model-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 3;
+  width: 300px;
+  max-height: 300px;
+  padding: 6px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.assistant-model-head {
+  padding: 6px 8px 4px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assistant-model-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+}
+
+.assistant-model-item:hover,
+.assistant-model-item.on {
+  background: var(--surface-2);
+}
+
+.assistant-model-radio {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.assistant-model-item.on .assistant-model-radio {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.assistant-model-name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-model-note {
+  padding: 6px 8px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.assistant-model-empty {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* --- Assistant activity (same grammar as the chat) ---------------------- */
+
+.assistant-dock .agent-activity {
+  margin-top: var(--space-2);
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.assistant-dock .agent-activity-grid {
+  padding: 2px 0;
+}
+
+.assistant-dock .activity-tile {
+  width: 52px;
+  min-height: 52px;
+}
+
+.activity-tile-dot.ok {
+  background: var(--success);
+}
+
+.activity-tile-dot.running {
+  background: var(--warning);
+}
+
+.activity-tile-dot.error {
+  background: var(--danger);
+}
+
+.agent-activity [data-kind="model"] {
+  --kind: #a9bdff;
+}
+
+.assistant-activity-detail {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-xs);
+}
+
+.assistant-activity-detail span {
+  font-weight: 600;
+}
+
+/* --- Global assistant as a modal dialog --------------------------------- */
+
+.assistant-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+  max-height: min(80vh, 760px);
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.assistant-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.assistant-dialog .assistant-dock {
+  position: static;
+  width: 100%;
+  height: min(80vh, 760px);
+  max-height: inherit;
+  border: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .assistant-dialog {
+    width: 100%;
+    max-width: none;
+    margin: auto 0 0;
+    max-height: 85vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .assistant-dialog .assistant-dock {
+    height: 85vh;
+  }
+
+  .assistant-model-menu {
+    width: min(300px, calc(100vw - 32px));
+  }
+}
+
+/* --- Assistant composer meta (model at the point of sending) ------------ */
+
+.assistant-composer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.assistant-composer-meta .assistant-readonly {
+  margin-left: auto;
+}
+
+.assistant-model-menu.up {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+.assistant-model-source {
+  padding: 0 8px 6px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}

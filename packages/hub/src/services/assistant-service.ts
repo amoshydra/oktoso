@@ -9,8 +9,11 @@ import type {
   AssistantMessageInput,
   AssistantRun,
   AssistantRunAccepted,
+  AssistantModels,
   AssistantScope,
   AssistantStatus,
+  AssistantStep,
+  AssistantStepKind,
   AssistantThread,
   AssistantThreadDetail,
   AssistantThreadInput,
@@ -104,6 +107,17 @@ interface ToolCall {
   id?: string;
   name: string;
   arguments: string;
+}
+
+interface StepSink {
+  done(
+    kind: AssistantStepKind,
+    label: string,
+    detail?: string,
+    durationMs?: number,
+  ): void;
+  begin(kind: AssistantStepKind, label: string, detail?: string): AssistantStep;
+  finish(step: AssistantStep, detail?: string): void;
 }
 
 interface RunRecord {
@@ -304,6 +318,49 @@ export class AssistantService {
     });
   }
 
+  async setThreadModel(
+    id: string,
+    model: string | null,
+  ): Promise<AssistantThread> {
+    this.findThread(id);
+    const trimmed = model?.trim() || undefined;
+    const updated = await this.options.store.update((state) => {
+      const target = state.assistantThreads.find((entry) => entry.id === id);
+      if (!target) return;
+      target.model = trimmed;
+      target.updatedAt = this.now();
+    });
+    const thread = updated.assistantThreads.find((entry) => entry.id === id);
+    if (!thread) throw notFound("Thread not found");
+    return toThread(thread);
+  }
+
+  async listModels(): Promise<AssistantModels> {
+    const baseUrl = this.baseUrl();
+    const current = this.model();
+    if (!baseUrl) return { data: current ? [current] : [], current, baseUrl };
+    try {
+      const response = await this.fetchImpl(`${trimSlash(baseUrl)}/models`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = (await response.json()) as { data?: Array<{ id?: unknown }> };
+      const data = Array.isArray(payload.data)
+        ? payload.data
+            .map((entry) => (typeof entry.id === "string" ? entry.id : undefined))
+            .filter((id): id is string => Boolean(id))
+        : [];
+      return {
+        data: data.length > 0 ? data : current ? [current] : [],
+        current,
+        baseUrl,
+      };
+    } catch {
+      return { data: current ? [current] : [], current, baseUrl };
+    }
+  }
+
   status(): AssistantStatus {
     return {
       enabled: this.ready(),
@@ -463,7 +520,7 @@ export class AssistantService {
       threadId,
       state: "running",
       startedAt: now,
-      model: this.model(),
+      model: thread.model?.trim() || this.model(),
     };
     const record: RunRecord = {
       run,
@@ -727,31 +784,90 @@ export class AssistantService {
     question: string,
   ): Promise<void> {
     const { logger } = this.options;
+    const thread = this.findThread(record.run.threadId);
+    const model = thread.model?.trim() || this.model();
+    const steps: AssistantStep[] = [];
+    const push = (step: AssistantStep): void => {
+      steps.push(step);
+      this.emit(record, { type: "step", step });
+    };
+    const sink: StepSink = {
+      done: (kind, label, detail, durationMs) => {
+        push({
+          id: `stp_${randomUUID()}`,
+          kind,
+          label,
+          status: "ok",
+          at: this.now(),
+          ...(detail ? { detail } : {}),
+          ...(durationMs === undefined ? {} : { durationMs }),
+        });
+      },
+      begin: (kind, label, detail) => {
+        const step: AssistantStep = {
+          id: `stp_${randomUUID()}`,
+          kind,
+          label,
+          status: "running",
+          at: this.now(),
+          ...(detail ? { detail } : {}),
+        };
+        push(step);
+        return step;
+      },
+      finish: (step, detail) => {
+        step.status = "ok";
+        step.durationMs = this.now() - step.at;
+        if (detail) step.detail = detail;
+        this.emit(record, { type: "step", step: { ...step } });
+      },
+    };
+
     let text = "";
     let usage: AssistantTurn["usage"];
     let built:
       | { text: string; context: AssistantContext; targets: Map<string, string> }
       | undefined;
     try {
-      built = await this.buildContext(scope, question);
+      built = await this.buildContext(scope, question, sink, model);
       const canPropose = this.writesEnabled();
-      const history = this.findThread(record.run.threadId)
-        .turns.slice(0, -1)
+      const history = thread.turns
+        .slice(0, -1)
         .slice(-6)
         .map((turn) => `${turn.role.toUpperCase()}: ${turn.text.slice(0, 400)}`);
       const prompt = renderPrompt(built.text, question, history, canPropose, scope);
 
-      const result = await this.stream(prompt, record, canPropose, (delta) => {
-        text += delta;
-        this.emit(record, { type: "delta", text: delta });
-      });
+      const modelStep = sink.begin("model", "Model", model);
+      const result = await this.stream(
+        prompt,
+        record,
+        canPropose,
+        (delta) => {
+          text += delta;
+          this.emit(record, { type: "delta", text: delta });
+        },
+        model,
+      );
       usage = result.usage;
+      sink.finish(
+        modelStep,
+        usage
+          ? `${model} · ${usage.promptTokens} in / ${usage.completionTokens} out`
+          : model,
+      );
       // A provider may end the stream cleanly on abort; a stop still wins.
       if (record.controller.signal.aborted) {
         throw new DOMException("The run was stopped", "AbortError");
       }
 
       const threadId = record.run.threadId;
+      if (result.call) {
+        sink.done(
+          "tool",
+          result.call.name,
+          canPropose ? truncate(result.call.arguments, 140) : "ignored · writes off",
+        );
+      }
       if (result.call && canPropose) {
         const turn = await this.appendActionTurn(
           threadId,
@@ -761,6 +877,8 @@ export class AssistantService {
           built.targets,
           usage,
           built.context,
+          steps,
+          model,
         );
         if (turn.action?.status === "pending") {
           this.finishAction(record, turn);
@@ -776,6 +894,8 @@ export class AssistantService {
         usage,
         undefined,
         built.context,
+        steps,
+        model,
       );
       this.finish(record, "done", { turn });
     } catch (error) {
@@ -787,12 +907,21 @@ export class AssistantService {
       if (!stopped) {
         logger.warn("assistant run failed", { runId: record.run.id, error: message });
       }
+      for (const step of steps) {
+        if (step.status !== "running") continue;
+        step.status = "error";
+        step.detail = message;
+        step.durationMs = this.now() - step.at;
+        this.emit(record, { type: "step", step: { ...step } });
+      }
       const turn = await this.appendAnswer(
         record.run.threadId,
         text,
         usage,
         message,
         built?.context,
+        steps,
+        model,
       );
       this.finish(record, state, { turn, message });
     }
@@ -803,6 +932,7 @@ export class AssistantService {
     record: RunRecord,
     canPropose: boolean,
     onDelta: (delta: string) => void,
+    model: string,
   ): Promise<{ usage?: AssistantTurn["usage"]; call?: ToolCall }> {
     const tools = canPropose
       ? [{ type: "function", function: ACTION_TOOL }]
@@ -816,7 +946,7 @@ export class AssistantService {
           Accept: "text/event-stream",
         },
         body: JSON.stringify({
-          model: this.model(),
+          model,
           messages: [
             { role: "system", content: prompt.system },
             { role: "user", content: prompt.user },
@@ -924,6 +1054,8 @@ export class AssistantService {
     usage?: AssistantTurn["usage"],
     error?: string,
     context?: AssistantContext,
+    activity?: AssistantStep[],
+    model?: string,
   ): Promise<AssistantTurn> {
     return this.appendTurn({
       id: `atn_${randomUUID()}`,
@@ -932,10 +1064,11 @@ export class AssistantService {
       text: text.trim(),
       createdAt: this.now(),
       runId: this.currentRunId(threadId),
-      model: this.model(),
+      model: model ?? this.model(),
       ...(usage ? { usage } : {}),
       ...(error ? { error } : {}),
       ...(context ? { context } : {}),
+      ...(activity && activity.length > 0 ? { activity } : {}),
     });
   }
 
@@ -947,6 +1080,8 @@ export class AssistantService {
     targets: Map<string, string>,
     usage?: AssistantTurn["usage"],
     context?: AssistantContext,
+    activity?: AssistantStep[],
+    model?: string,
   ): Promise<AssistantTurn> {
     const action = await this.buildAction(call, scope, targets);
     const turn: AssistantTurn = {
@@ -956,10 +1091,11 @@ export class AssistantService {
       text: text.trim(),
       createdAt: this.now(),
       runId: this.currentRunId(threadId),
-      model: this.model(),
+      model: model ?? this.model(),
       action,
       ...(usage ? { usage } : {}),
       ...(context ? { context } : {}),
+      ...(activity && activity.length > 0 ? { activity } : {}),
     };
     await this.appendTurn(turn);
     // `proposed` is audited even when validation failed, so a bad model turn
@@ -1291,18 +1427,21 @@ export class AssistantService {
   private async buildContext(
     scope: AssistantScope,
     question: string,
+    steps: StepSink,
+    model: string,
   ): Promise<{
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
   }> {
     if (scope.kind === "project") {
-      return this.buildProjectContext(scope.project, question);
+      return this.buildProjectContext(scope.project, question, steps);
     }
-    if (scope.kind === "global") return this.buildGlobalContext(question);
+    if (scope.kind === "global") return this.buildGlobalContext(question, steps);
 
     const sessionRef = scope.sessionRef;
     const { sessions, attention, questions, settings } = this.options;
+    const readStarted = this.now();
     const [session, waiting, questionPrompt, page] = await Promise.all([
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
@@ -1312,12 +1451,38 @@ export class AssistantService {
         order: "desc",
       }),
     ]);
+    const messages = [...page.data].reverse();
+    steps.done(
+      "context",
+      "Read session",
+      `${messages.length} turns · ${waiting.data.length} attention`,
+      this.now() - readStarted,
+    );
+
+    const historyStarted = this.now();
     const history = await this.loadHistory(
       sessionRef,
       page.data[0]?.id,
     ).catch(() => undefined);
-    const messages = [...page.data].reverse();
+    steps.done(
+      "history",
+      "Provider compaction",
+      history?.summary ? stamp(history.summary.at) : "none",
+      this.now() - historyStarted,
+    );
+
+    const searchStarted = this.now();
     const hits = await this.searchAcrossSessions(question).catch(() => []);
+    const query = meaningfulQuery(question);
+    if (query) {
+      steps.done(
+        "search",
+        "Searched sessions",
+        `“${query}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
+        this.now() - searchStarted,
+      );
+    }
+
     const rendered = renderContext({
       session,
       attention: waiting.data,
@@ -1328,7 +1493,7 @@ export class AssistantService {
       historyDigest: history?.digest,
       now: this.now(),
       canWrite: this.writesEnabled(),
-      assistantModel: this.model(),
+      assistantModel: model,
     });
     return {
       ...rendered,
@@ -1339,28 +1504,55 @@ export class AssistantService {
   private async buildProjectContext(
     project: string,
     question: string,
+    steps: StepSink,
   ): Promise<{
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
   }> {
+    const readStarted = this.now();
     const [page, waiting] = await Promise.all([
       this.options.sessions.list({ project, limit: 200 }),
       this.options.attention.list({}).catch(() => ({ data: [] })),
     ]);
+    steps.done(
+      "context",
+      "Read project",
+      `${page.data.length} sessions · ${waiting.data.length} attention`,
+      this.now() - readStarted,
+    );
     const refs = new Set(page.data.map((session) => session.ref));
     const attention = waiting.data.filter((item) => refs.has(item.sessionRef));
     const targets = new Map(
       page.data.map((session) => [session.ref, session.title]),
     );
+    const searchStarted = this.now();
     const hits = await this.searchSessions(
       question,
       (row) => page.data.some((session) => session.ref === row.ref),
       page.data,
     );
+    const query = meaningfulQuery(question);
+    if (query) {
+      steps.done(
+        "search",
+        "Searched sessions",
+        `“${query}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
+        this.now() - searchStarted,
+      );
+    }
     for (const hit of hits) targets.set(hit.ref, hit.title);
     const resolved = await this.resolveRequestedSessions(question, page.data);
+    const targetStarted = this.now();
     const transcripts = await this.loadTranscripts(resolved);
+    if (resolved.length > 0) {
+      steps.done(
+        "context",
+        "Read target",
+        resolved.map((session) => session.title).join(", "),
+        this.now() - targetStarted,
+      );
+    }
     for (const session of resolved) targets.set(session.ref, session.title);
     const requested = sessionRefsIn(question);
     const outside = requested.filter(
@@ -1393,15 +1585,25 @@ export class AssistantService {
     };
   }
 
-  private async buildGlobalContext(question: string): Promise<{
+  private async buildGlobalContext(
+    question: string,
+    steps: StepSink,
+  ): Promise<{
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
   }> {
+    const readStarted = this.now();
     const [page, waiting] = await Promise.all([
       this.options.sessions.list({ limit: 200 }),
       this.options.attention.list({}).catch(() => ({ data: [] })),
     ]);
+    steps.done(
+      "context",
+      "Read inbox",
+      `${waiting.data.length} items · ${page.data.length} sessions`,
+      this.now() - readStarted,
+    );
     const now = this.now();
     const running = page.data.filter((session) => session.status === "running");
     const errors = page.data.filter(
@@ -1418,10 +1620,29 @@ export class AssistantService {
     const targets = new Map(
       index.map((session) => [session.ref, session.title]),
     );
+    const searchStarted = this.now();
     const hits = await this.searchSessions(question, () => true, page.data);
+    const query = meaningfulQuery(question);
+    if (query) {
+      steps.done(
+        "search",
+        "Searched sessions",
+        `“${query}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
+        this.now() - searchStarted,
+      );
+    }
     for (const hit of hits) targets.set(hit.ref, hit.title);
     const resolved = await this.resolveRequestedSessions(question, page.data);
+    const targetStarted = this.now();
     const transcripts = await this.loadTranscripts(resolved);
+    if (resolved.length > 0) {
+      steps.done(
+        "context",
+        "Read target",
+        resolved.map((session) => session.title).join(", "),
+        this.now() - targetStarted,
+      );
+    }
     for (const session of resolved) targets.set(session.ref, session.title);
     const rendered = renderGlobalContext({
       attention: waiting.data,
@@ -1786,6 +2007,7 @@ function toThread(thread: {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  model?: string;
 }): AssistantThread {
   return {
     id: thread.id,
@@ -1794,6 +2016,7 @@ function toThread(thread: {
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     messageCount: thread.messageCount,
+    ...(thread.model ? { model: thread.model } : {}),
   };
 }
 

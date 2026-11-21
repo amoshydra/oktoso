@@ -460,7 +460,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   search hits. Answers name the session that holds a detail, or say the detail
   is outside the scope.
 - **Global scope.** The Overview topbar carries **Ask**, which opens an
-  `All sessions` thread. Its context is the inbox (the authoritative "needs
+  `All sessions` thread as a modal dialog with a backdrop (bottom sheet at
+  760px and below). Session and project threads stay in the dock. Its context is the inbox (the authoritative "needs
   me" list), running sessions, 24-hour errors, a project rollup, a 12-session
   index, and transcript search hits.
 - **Finding across sessions.** Every scope can search all sessions by title,

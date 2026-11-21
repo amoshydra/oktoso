@@ -29,6 +29,8 @@ export const zAssistantThread = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   messageCount: z.number().int().nonnegative(),
+  /** Per-thread model override; absent means the hub default. */
+  model: z.string().optional(),
 });
 
 export const zAssistantRole = z.enum(["user", "assistant"]);
@@ -117,6 +119,24 @@ export const zAssistantContext = z.object({
   search: z.number().int().nonnegative().optional(),
 });
 
+export const zAssistantStepKind = z.enum([
+  "context",
+  "search",
+  "history",
+  "model",
+  "tool",
+]);
+
+export const zAssistantStep = z.object({
+  id: z.string().min(1),
+  kind: zAssistantStepKind,
+  label: z.string(),
+  detail: z.string().optional(),
+  status: z.enum(["running", "ok", "error"]),
+  at: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative().optional(),
+});
+
 export const zAssistantTurn = z.object({
   id: z.string().min(1),
   threadId: z.string().min(1),
@@ -129,6 +149,8 @@ export const zAssistantTurn = z.object({
   error: z.string().optional(),
   action: zAssistantAction.optional(),
   context: zAssistantContext.optional(),
+  /** Hub facts: what the run read, which model answered, and any tool it fired. */
+  activity: z.array(zAssistantStep).max(40).optional(),
   usage: z
     .object({
       promptTokens: z.number().int().nonnegative(),
@@ -166,6 +188,7 @@ export const zAssistantRun = z.object({
  */
 export const zAssistantEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("delta"), text: z.string() }),
+  z.object({ type: z.literal("step"), step: zAssistantStep }),
   z.object({ type: z.literal("done"), run: zAssistantRun, turn: zAssistantTurn }),
   z.object({
     type: z.literal("action"),
@@ -192,6 +215,16 @@ export const zAssistantActionDecision = z.object({
   decision: z.enum(["confirm", "cancel"]),
   /** `send` only: a human edit of the proposed text. */
   text: z.string().trim().min(1).max(4_000).optional(),
+});
+
+export const zAssistantThreadUpdate = z.object({
+  model: z.string().trim().min(1).max(200).nullable(),
+});
+
+export const zAssistantModels = z.object({
+  data: z.array(z.string()),
+  current: z.string(),
+  baseUrl: z.string(),
 });
 
 export const zAssistantThreadInput = z.object({
@@ -223,6 +256,9 @@ export type AssistantThreadDetail = z.infer<typeof zAssistantThreadDetail>;
 export type AssistantRunState = z.infer<typeof zAssistantRunState>;
 export type AssistantActionKind = z.infer<typeof zAssistantActionKind>;
 export type AssistantAnswer = z.infer<typeof zAssistantAnswer>;
+export type AssistantStep = z.infer<typeof zAssistantStep>;
+export type AssistantStepKind = z.infer<typeof zAssistantStepKind>;
+export type AssistantModels = z.infer<typeof zAssistantModels>;
 export type AssistantQuestion = z.infer<typeof zAssistantQuestion>;
 export type AssistantContext = z.infer<typeof zAssistantContext>;
 export type AssistantActionStatus = z.infer<typeof zAssistantActionStatus>;

@@ -9,6 +9,7 @@ import type {
   AssistantThread,
   AssistantThreadDetail,
   AssistantThreadInput,
+  AssistantModels,
   AssistantThreadPage,
   AssistantTurn,
   AssistantView,
@@ -672,6 +673,24 @@ export class HubClient {
     return response.data;
   }
 
+  async assistantAgentModels(): Promise<AssistantModels> {
+    const response = await this.request<{ data: AssistantModels }>(
+      "/api/v1/assistant/models",
+    );
+    return response.data;
+  }
+
+  async setAssistantThreadModel(
+    threadId: string,
+    model: string | null,
+  ): Promise<AssistantThread> {
+    const response = await this.request<{ data: AssistantThread }>(
+      `/api/v1/assistant/threads/${encodeURIComponent(threadId)}`,
+      { method: "PATCH", body: { model } },
+    );
+    return response.data;
+  }
+
   async stopAssistantRun(runId: string): Promise<AssistantRun> {
     const response = await this.request<{ data: AssistantRun }>(
       `/api/v1/assistant/runs/${encodeURIComponent(runId)}/stop`,
@@ -721,7 +740,13 @@ export class HubClient {
         if (!event.data) continue;
         try {
           const parsed = JSON.parse(event.data) as AssistantEvent;
-          if (parsed.type !== "delta") terminal = true;
+          if (
+            parsed.type === "done" ||
+            parsed.type === "error" ||
+            parsed.type === "action"
+          ) {
+            terminal = true;
+          }
           options.onEvent(parsed);
         } catch {
           // Ignore a malformed frame; the next one still applies.
@@ -732,7 +757,13 @@ export class HubClient {
       if (!event.data) continue;
       try {
         const parsed = JSON.parse(event.data) as AssistantEvent;
-        if (parsed.type !== "delta") terminal = true;
+        if (
+          parsed.type === "done" ||
+          parsed.type === "error" ||
+          parsed.type === "action"
+        ) {
+          terminal = true;
+        }
         options.onEvent(parsed);
       } catch {
         // Ignore.

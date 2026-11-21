@@ -1284,6 +1284,9 @@ export function App() {
             initialScope={assistant.scope}
             title={assistant.title}
             project={assistant.project}
+            presentation={
+              assistant.scope.kind === "global" ? "dialog" : "dock"
+            }
             onClose={() => setAssistant(null)}
           />
         ) : null}

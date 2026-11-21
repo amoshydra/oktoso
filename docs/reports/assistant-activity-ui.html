@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask assistant — model and activity UI</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #fff; --ink: #14171c; --muted: #5b6472; --line: #d9dee7;
+    --accent: #3550c8; --danger: #b42318;
+    --dock: #111419; --surface: #16191f; --surface2: #1d2129;
+    --dock-line: #3f4652; --dock-subtle: #2a2f38; --dock-ink: #e7eaf0; --dock-muted: #b5bcc8;
+    --dock-accent: #a9bdff; --ok: #63e39a; --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 940px; margin: 0 auto; padding: 54px 24px 96px; }
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+  h1 { font-size: 33px; line-height: 1.2; margin: 0 0 12px; letter-spacing: -.01em; }
+  .dek { font-size: 18px; line-height: 1.5; color: var(--muted); margin: 0; max-width: 64ch; }
+  .meta { margin-top: 16px; font-size: 13px; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; }
+  section { margin-top: 44px; }
+  h2 { font-size: 22px; margin: 0 0 12px; }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 16px; padding-left: 22px; }
+  li { margin: 6px 0; }
+  code { font-family: var(--mono); font-size: .9em; background: #eef1f6; padding: 1px 5px; border-radius: 4px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 18px 0; }
+  .callout p:last-child { margin: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
+  .grid > * { min-width: 0; }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
+  .label { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+
+  /* dock mock */
+  .dock { background: var(--dock); color: var(--dock-ink); border: 1px solid var(--dock-line); border-radius: 12px; overflow: hidden; font-size: 14px; min-width: 0; max-width: 100%; }
+  .dock-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--dock-subtle); }
+  .dock-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dock-mark { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--dock-line); border-radius: 8px; color: var(--dock-muted); font-size: 12px; }
+  .dock-title strong { display: block; font-size: 15px; line-height: 1.25; }
+  .dock-title span { display: block; font-size: 11px; color: var(--dock-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock-actions { display: flex; align-items: center; gap: 6px; }
+  .chip { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--dock-muted); border: 1px solid var(--dock-subtle); border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+  .model-chip { color: var(--dock-ink); border-color: var(--dock-line); text-transform: none; letter-spacing: 0; font-family: inherit; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
+  .model-chip::after { content: "▾"; font-size: 9px; color: var(--dock-muted); }
+  .dock-body { padding: 14px; }
+  .role { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dock-muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .answer { margin: 0 0 10px; line-height: 1.55; }
+  .evidence { font-size: 10px; color: var(--dock-muted); font-variant-numeric: tabular-nums; }
+
+  /* activity: mirrors the chat's toggle + dot texture + tile grid */
+  .activity { margin-top: 10px; border-top: 1px solid var(--dock-subtle); padding-top: 8px; }
+  .activity-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; width: 100%; background: none; border: 0; color: inherit; font: inherit; padding: 2px 0 5px; text-align: left; }
+  .activity-head .label { color: var(--dock-muted); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0; }
+  .activity-head .count { color: var(--dock-muted); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .activity-head .time { margin-left: auto; color: var(--dock-muted); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .activity-head .chev { color: var(--dock-muted); font-size: 9px; transition: transform 120ms ease; }
+  .activity-head[data-open="true"] .chev { transform: rotate(90deg); }
+  .activity-dots { display: flex; flex-wrap: wrap; gap: 1px; padding: 1px 0 3px; }
+  .activity-dot { width: 4px; height: 4px; background: var(--kind, #a6b0bf); opacity: .55; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px; }
+  .tile { --kind: #a6b0bf; position: relative; width: 49px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px 0; border-radius: 8px; background: color-mix(in srgb, var(--kind) 7%, transparent); color: var(--dock-muted); }
+  .tile[data-open="true"] { background: color-mix(in srgb, var(--kind) 14%, var(--surface2)); box-shadow: inset 0 0 0 2px var(--dock-accent); }
+  .tile svg { width: 17px; height: 17px; color: var(--kind); }
+  .tile-meta { max-width: 100%; overflow: hidden; color: var(--dock-muted); font-size: 10px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .tile-detail { margin: 6px 0 0; padding: 8px 10px; overflow-wrap: anywhere; border: 1px solid var(--dock-subtle); border-left: 2px solid var(--dock-accent); border-radius: 6px; background: var(--surface); font-size: 12px; }
+  .tile-detail .tool-name { display: block; margin-bottom: 4px; color: var(--dock-muted); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
+  .kind-read { --kind: #8dbccc; } .kind-search { --kind: #86c9bd; } .kind-think { --kind: #b3a8dd; }
+  .kind-model { --kind: #a9bdff; } .kind-tool { --kind: #cdb18c; }
+
+  /* model menu */
+  .menu { margin-top: 8px; background: var(--surface); border: 1px solid var(--dock-line); border-radius: 10px; padding: 6px; width: 260px; }
+  .menu-label { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dock-muted); padding: 6px 8px 4px; }
+  .menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12px; }
+  .menu-item.on { background: var(--surface2); }
+  .radio { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--dock-line); }
+  .menu-item.on .radio { border-color: var(--dock-accent); background: var(--dock-accent); }
+  .menu-note { padding: 6px 8px 8px; font-size: 10px; line-height: 1.45; color: var(--dock-muted); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: top; overflow-wrap: anywhere; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: #f8f9fb; }
+  tr:last-child td { border-bottom: 0; }
+  pre { margin: 14px 0; padding: 15px; overflow-x: auto; background: #14171c; color: #e7eaf0; border-radius: 10px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+  pre .c { color: #8b94a7; } pre .k { color: #a9bdff; } pre .s { color: #97d4a8; }
+  footer { margin-top: 52px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="kicker">Oktoso · Ask assistant · UI draft</p>
+    <h1>Show the model, show the steps</h1>
+    <p class="dek">Today the dock tells you what was read and how many tokens it cost, but not which model answered or what the assistant actually did. This draft adds a model chip with a picker and an activity block in the grammar the chat already uses.</p>
+    <div class="meta"><span>2026-11-21</span><span>Dock only · no new screen</span><span>Status: implemented</span></div>
+    <p class="dek" style="margin-top:12px;font-size:14px"><strong>Implementation note:</strong> the model picker shipped in the composer row (matching the chat), not the header shown below, and the menu names its endpoint.</p>
+  </header>
+
+  <section>
+    <h2>What is invisible today</h2>
+    <div class="grid">
+      <div>
+        <p class="label">Current dock</p>
+        <div class="dock">
+          <div class="dock-head">
+            <div class="dock-title">
+              <div class="dock-mark">▣</div>
+              <div><strong>Assistant</strong><span>Agent Hub - misc fix</span></div>
+            </div>
+            <div class="dock-actions"><span class="chip">This session</span><span class="chip">×</span></div>
+          </div>
+          <div class="dock-body">
+            <div class="role"><span>ASSISTANT</span><span>10:52 AM</span></div>
+            <p class="answer">The Korea trip work lives in session <code>plan korea trip</code>, per the SEARCH hits. That session is not in this thread, so I cannot see its transcript here.</p>
+            <div class="evidence">Read 2 turns · 5 search hits · session as of 10:52 AM · 3583 in · 118 out</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="label">What the line does not say</p>
+        <ul>
+          <li><strong>Which model</strong> answered. It is only in the hub config and the prompt.</li>
+          <li><strong>What ran.</strong> “5 search hits” is a count, not the query or the sessions.</li>
+          <li><strong>Whether a tool fired.</strong> A proposed action appears as a card with no “tool call” step.</li>
+          <li><strong>How long each step took</strong>, which is the difference between slow and stuck.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The proposed dock</h2>
+    <p>The header gains one control, the model chip. Under the answer, the evidence line becomes a collapsible activity block in the same grammar as the chat’s <code>AGENT ACTIVITY</code>: a quiet uppercase header, a step count, and a chevron.</p>
+
+    <div class="grid">
+      <div>
+        <p class="label">Collapsed (after an answer)</p>
+        <div class="dock">
+          <div class="dock-head">
+            <div class="dock-title">
+              <div class="dock-mark">▣</div>
+              <div><strong>Assistant</strong><span>Agent Hub - misc fix</span></div>
+            </div>
+            <div class="dock-actions"><span class="chip model-chip">Qwen 3.8 27B</span><span class="chip">This session</span><span class="chip">×</span></div>
+          </div>
+          <div class="dock-body">
+            <div class="role"><span>ASSISTANT</span><span>10:52 AM</span></div>
+            <p class="answer">The Korea trip work lives in session <strong>plan korea trip</strong>, per the search hits. That session is outside this thread.</p>
+            <div class="activity">
+              <div class="activity-head">
+                <span class="label">Agent activity</span><span class="count">3 steps</span>
+                <span class="time">10:52 AM</span><span class="chev">›</span>
+              </div>
+              <div class="activity-dots" aria-hidden="true">
+                <span class="activity-dot" style="--kind:#8dbccc"></span>
+                <span class="activity-dot" style="--kind:#86c9bd"></span>
+                <span class="activity-dot" style="--kind:#a9bdff"></span>
+              </div>
+            </div>
+            <div class="evidence" style="margin-top:6px">Read 2 turns · session as of 10:52 AM</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="label">Expanded</p>
+        <div class="dock">
+          <div class="dock-head">
+            <div class="dock-title">
+              <div class="dock-mark">▣</div>
+              <div><strong>Assistant</strong><span>Agent Hub - misc fix</span></div>
+            </div>
+            <div class="dock-actions"><span class="chip model-chip">Qwen 3.8 27B</span><span class="chip">This session</span><span class="chip">×</span></div>
+          </div>
+          <div class="dock-body">
+            <div class="role"><span>ASSISTANT</span><span>10:52 AM</span></div>
+            <p class="answer">The Korea trip work lives in session <strong>plan korea trip</strong>, per the search hits. That session is outside this thread.</p>
+            <div class="activity">
+              <div class="activity-head" data-open="true">
+                <span class="label">Agent activity</span><span class="count">3 steps</span>
+                <span class="time">10:52 AM</span><span class="chev">›</span>
+              </div>
+              <div class="tiles">
+                <div class="tile kind-read"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/></svg><span class="tile-meta">2 turns</span><span class="tile-dot"></span></div>
+                <div class="tile kind-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><span class="tile-meta">5 hits</span><span class="tile-dot"></span></div>
+                <div class="tile kind-model" data-open="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M12 4v4"/><circle cx="10" cy="13" r=".8" fill="currentColor"/><circle cx="14" cy="13" r=".8" fill="currentColor"/></svg><span class="tile-meta">27B</span><span class="tile-dot"></span></div>
+              </div>
+              <div class="tile-detail"><span class="tool-name">Model</span>Qwen 3.8 27B · 3,583 in / 118 out · 1.4 s</div>
+            </div>
+            <div class="evidence" style="margin-top:10px">Read 2 turns · session as of 10:52 AM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>When the model proposes an action</h3>
+    <p>The card stays the consent surface. The activity block adds the tool call that produced it, so “a card appeared” has a visible cause.</p>
+    <div class="dock" style="max-width:420px">
+      <div class="dock-body">
+        <div class="role"><span>ASSISTANT</span><span>10:53 AM</span></div>
+        <p class="answer">I can ask the session to add global search.</p>
+        <div class="activity">
+          <div class="activity-head" data-open="true">
+            <span class="label">Agent activity</span><span class="count">4 steps</span>
+            <span class="time">10:53 AM</span><span class="chev">›</span>
+          </div>
+          <div class="tiles">
+            <div class="tile kind-read"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/></svg><span class="tile-meta">6 turns</span><span class="tile-dot"></span></div>
+            <div class="tile kind-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><span class="tile-meta">2 hits</span><span class="tile-dot"></span></div>
+            <div class="tile kind-model"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="3"/><path d="M12 4v4"/><circle cx="10" cy="13" r=".8" fill="currentColor"/><circle cx="14" cy="13" r=".8" fill="currentColor"/></svg><span class="tile-meta">27B</span><span class="tile-dot"></span></div>
+            <div class="tile kind-tool" data-open="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l5 5-5 5"/><path d="M12 17h7"/></svg><span class="tile-meta">send</span><span class="tile-dot"></span></div>
+          </div>
+          <div class="tile-detail"><span class="tool-name">Tool call · propose_session_action</span>to “Agent Hub - misc fix”: “Please add global search…”</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Model selection</h2>
+    <p>The chip shows the model that will answer the <em>next</em> question in this thread. Clicking opens a short list of the models the configured endpoint reports. Selecting one changes this thread only; past answers keep the model that wrote them.</p>
+    <div class="grid">
+      <div>
+        <p class="label">Menu</p>
+        <div class="dock" style="padding:0 0 0">
+          <div class="dock-head">
+            <div class="dock-title">
+              <div class="dock-mark">▣</div>
+              <div><strong>Assistant</strong><span>Agent Hub - misc fix</span></div>
+            </div>
+            <div class="dock-actions"><span class="chip model-chip" style="border-color:var(--dock-accent)">Qwen 3.8 27B</span></div>
+          </div>
+          <div class="dock-body" style="padding-top:0">
+            <div class="menu" style="margin-left:auto">
+              <div class="menu-label">Model for this thread</div>
+              <div class="menu-item on"><span class="radio"></span>Qwen 3.8 27B <span class="chip" style="margin-left:auto">current</span></div>
+              <div class="menu-item"><span class="radio"></span>Gemma 4 12B</div>
+              <div class="menu-item"><span class="radio"></span>Ternary Bonsai 2 27B</div>
+              <div class="menu-note">Applies to the next question. Past answers keep the model that wrote them.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="label">Rules</p>
+        <ul>
+          <li><strong>Per thread, not global.</strong> A quick question can use the small model; a diagnosis can switch to the 27B.</li>
+          <li><strong>Frozen while running.</strong> The chip is disabled until the run ends; the answer used the model it started with.</li>
+          <li><strong>Stored on the thread.</strong> Reopening the dock or reloading keeps the choice. New threads inherit the hub default.</li>
+          <li><strong>Only configured models.</strong> The list comes from the assistant endpoint; no arbitrary ids or URLs.</li>
+          <li><strong>Visible failure.</strong> If the chosen model is unloaded or missing, the turn says so and offers Retry; it does not silently fall back.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What the steps mean</h2>
+    <table>
+      <thead><tr><th>Kind</th><th>Tile</th><th>Example</th><th>Who did it</th></tr></thead>
+      <tbody>
+        <tr><td>Context</td><td><code>read</code></td><td>Read session · metadata, 20 turns</td><td>Hub, before the model call</td></tr>
+        <tr><td>Search</td><td><code>search</code></td><td>Searched “korea trip” · 5 hits</td><td>Hub, before the model call</td></tr>
+        <tr><td>History</td><td><code>think</code></td><td>Compaction · 19 Nov</td><td>Hub, cached</td></tr>
+        <tr><td>Model</td><td><code>model</code></td><td>Qwen 3.8 27B · 3,583 in / 118 out</td><td>The configured endpoint</td></tr>
+        <tr><td>Tool</td><td><code>tool</code></td><td>propose_session_action · send</td><td>The model, surfaced by the hub</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <p><strong>Be precise about “tool calls”.</strong> Today the assistant has exactly one model tool, <code>propose_session_action</code>. Reading the session, searching, and loading history are hub-side context steps, not model tool calls. The block labels them differently so “the assistant searched” never implies the model chose to.</p>
+    </div>
+
+    <h3>Contracts and events</h3>
+    <pre><span class="c">// thread-level default for the next run</span>
+AssistantThread { …, model?: string }
+
+<span class="c">// change it without starting a run</span>
+PATCH /api/v1/assistant/threads/:id   { model: string | null }
+
+<span class="c">// live steps (SSE), persisted on the turn for reload</span>
+AssistantEvent += { <span class="k">type</span>: <span class="s">"step"</span>, step: {
+  id, kind: <span class="s">"context" | "search" | "history" | "model" | "tool"</span>,
+  label, detail?, status: <span class="s">"running" | "ok" | "error"</span>, at, durationMs?
+} }
+AssistantTurn { …, activity?: AssistantStep[] }</pre>
+    <p>Steps are emitted as the hub assembles context, so the dock can show “Searching…” before the first token. The model and tool steps follow when they happen. On reload, the persisted list renders the same block.</p>
+  </section>
+
+  <section>
+    <h2>States</h2>
+    <ul>
+      <li><strong>Running:</strong> the header shows the current step in the activity line (“Searching…”), the count grows, the block is collapsed unless the reader opened it. Collapsed shows a 4px dot per step; expanded is the same 49px tile grid as the chat, and selecting a tile opens its detail inline. The model chip is disabled.</li>
+      <li><strong>Read-only scopes:</strong> the activity still lists context/search/model. No tool step, no action card. The footer says <code>Read-only · no writes</code>.</li>
+      <li><strong>Error:</strong> the failing step is marked with the danger color and its message; the block auto-expands once. The model chip re-enables.</li>
+      <li><strong>Empty:</strong> no activity block before the first answer.</li>
+      <li><strong>Mobile:</strong> the chip moves under the title if the header gets tight; the step rows wrap at the detail, never truncate the model name. 44 px targets for the chip and menu rows.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Decisions</h2>
+    <ol>
+      <li><strong>Per-thread model vs hub default only.</strong> The draft is per-thread with a config default. If you want one knob, the chip becomes a read-only label and the model moves to Settings.</li>
+      <li><strong>Collapsed by default?</strong> Yes, matching the chat: a dot texture, then the tile grid. Auto-expand only on failure or when a tool call fires, because that is the case where the reader needs the cause.</li>
+      <li><strong>Keep the evidence line?</strong> Keep the trust clause (turns, failures, session as-of) and move token counts into the activity. One line, no duplication.</li>
+      <li><strong>Real tool loop?</strong> This draft shows the current architecture honestly. If the assistant later gets search/read tools, they appear as tool steps with no UI change.</li>
+    </ol>
+  </section>
+
+  <footer>
+    Draft only. No implementation is implied by this file; it describes the dock header, activity block, and model picker, plus the contracts they would need.
+  </footer>
+</main>
+</body>
+</html>
