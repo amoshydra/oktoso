@@ -28,7 +28,7 @@ export const zAssistantAgentConfig = z.object({
   model: z.string().default(""),
   apiKey: z.string().optional(),
   timeoutMs: z.number().int().min(5_000).max(600_000).default(90_000),
-  maxContextMessages: z.number().int().min(4).max(60).default(20),
+  maxContextMessages: z.number().int().min(4).max(200).default(40),
   allowWrite: z.boolean().default(false),
 });
 
@@ -38,7 +38,7 @@ export const zAssistantConfig = z.object({
     baseUrl: "",
     model: "",
     timeoutMs: 90_000,
-    maxContextMessages: 20,
+    maxContextMessages: 40,
     allowWrite: false,
   }),
   reply: zAssistantReplyConfig,
@@ -97,7 +97,7 @@ export const zAssistantAgentInput = z.object({
   model: z.string().optional(),
   apiKey: z.string().nullable().optional(),
   timeoutMs: z.number().int().min(5_000).max(600_000).optional(),
-  maxContextMessages: z.number().int().min(4).max(60).optional(),
+  maxContextMessages: z.number().int().min(4).max(200).optional(),
   allowWrite: z.boolean().optional(),
 });
 
@@ -223,7 +223,7 @@ export const DEFAULT_ASSISTANT_CONFIG = {
     baseUrl: "",
     model: "",
     timeoutMs: 90_000,
-    maxContextMessages: 20,
+    maxContextMessages: 40,
     allowWrite: false,
   },
   reply: {

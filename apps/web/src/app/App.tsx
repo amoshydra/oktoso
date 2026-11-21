@@ -1526,7 +1526,7 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
     baseUrl: "",
     model: "",
     timeoutMs: 90_000,
-    maxContextMessages: 20,
+    maxContextMessages: 40,
     allowWrite: false,
     apiKey: "",
   });
@@ -1778,7 +1778,7 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <input
               type="number"
               min={4}
-              max={60}
+              max={200}
               value={agent.maxContextMessages}
               onChange={(event) => {
                 const maxContextMessages = Number(

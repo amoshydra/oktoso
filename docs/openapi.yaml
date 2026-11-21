@@ -2770,7 +2770,7 @@ components:
             maxContextMessages:
               type: integer
               minimum: 4
-              maximum: 60
+              maximum: 200
             allowWrite:
               type: boolean
         reply:
