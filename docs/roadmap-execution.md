@@ -766,6 +766,15 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   global answer matches the inbox, both are read-only, and the project prompt
   is ~1.3k tokens versus ~3.4k for a session prompt.
 
+- [x] G15. Assistant discovery and targeted sends. Project/global contexts
+  gain transcript search (top 5 hits), a 12-session global index, and
+  ref/URL resolution (`TARGET SESSION` with metadata and last turns). The model
+  may propose one `send` to a session present in context; project/global still
+  cannot answer or interrupt. The card names the target and the action reads
+  `Send to "<session>"`. Model 5xx errors get actionable copy. Live: global
+  search found this session from a ComfyUI OOM hit; a URL-named session
+  produced a pending targeted send (cancelled).
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

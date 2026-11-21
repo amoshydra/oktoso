@@ -1025,8 +1025,9 @@ components:
           type: string
         sessionRef:
           type: string
-          minLength: 1
         text:
+          type: string
+        sessionTitle:
           type: string
         answers:
           type: array
@@ -1354,8 +1355,9 @@ components:
                     type: string
                   sessionRef:
                     type: string
-                    minLength: 1
                   text:
+                    type: string
+                  sessionTitle:
                     type: string
                   answers:
                     type: array
@@ -1721,8 +1723,9 @@ components:
                   type: string
                 sessionRef:
                   type: string
-                  minLength: 1
                 text:
+                  type: string
+                sessionTitle:
                   type: string
                 answers:
                   type: array
@@ -1959,8 +1962,9 @@ components:
                       type: string
                     sessionRef:
                       type: string
-                      minLength: 1
                     text:
+                      type: string
+                    sessionTitle:
                       type: string
                     answers:
                       type: array
@@ -2184,8 +2188,9 @@ components:
                       type: string
                     sessionRef:
                       type: string
-                      minLength: 1
                     text:
+                      type: string
+                    sessionTitle:
                       type: string
                     answers:
                       type: array
@@ -8584,8 +8589,9 @@ paths:
                         type: string
                       sessionRef:
                         type: string
-                        minLength: 1
                       text:
+                        type: string
+                      sessionTitle:
                         type: string
                       answers:
                         type: array

@@ -77,9 +77,12 @@ export const zAssistantAction = z.object({
   status: zAssistantActionStatus,
   /** One sentence describing exactly what would happen. */
   summary: z.string(),
-  sessionRef: z.string().min(1),
+  /** Empty when a proposal failed before a target was resolved. */
+  sessionRef: z.string(),
   /** `send`: the proposed message, editable in the confirmation card. */
   text: z.string().optional(),
+  /** `send` outside session scope: the session the message is addressed to. */
+  sessionTitle: z.string().optional(),
   /** `answer`: the resolved choices, pinned to the question revision. */
   answers: z.array(zAssistantAnswer).optional(),
   /** `answer`: the live questions, so the card shows the payload, not a summary. */

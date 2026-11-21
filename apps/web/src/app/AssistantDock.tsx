@@ -61,7 +61,7 @@ export function AssistantDock({
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(true);
   const [canWrite, setCanWrite] = useState(false);
-  const canWriteHere = scope.kind === "session" && canWrite;
+  const canWriteHere = canWrite;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -466,6 +466,11 @@ function ActionCard({
         )}
       </div>
       <p className="assistant-action-summary">{action.summary}</p>
+      {action.kind === "send" && action.sessionTitle ? (
+        <p className="assistant-action-target">
+          To: <strong>{action.sessionTitle}</strong>
+        </p>
+      ) : null}
 
       {action.kind === "send" ? (
         pending ? (
@@ -550,7 +555,9 @@ function ActionCard({
                 ? "Working…"
                 : action.kind === "answer" && action.text
                   ? `Answer “${action.text.length > 40 ? `${action.text.slice(0, 40)}…` : action.text}”`
-                  : ACTION_LABEL[action.kind]}
+                  : action.kind === "send" && action.sessionTitle
+                    ? `Send to “${action.sessionTitle.length > 24 ? `${action.sessionTitle.slice(0, 24)}…` : action.sessionTitle}”`
+                    : ACTION_LABEL[action.kind]}
             </button>
           ) : (
             <span className="assistant-action-error">

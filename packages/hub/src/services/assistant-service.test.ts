@@ -260,7 +260,11 @@ describe("AssistantService", () => {
     ],
   };
 
-  function buildScoped(fetchImpl: typeof fetch, allowWrite = true) {
+  function buildScoped(
+    fetchImpl: typeof fetch,
+    allowWrite = true,
+    search?: unknown,
+  ) {
     return new AssistantService({
       store: new MemoryStateStore(),
       sessions: fakeSessions({
@@ -274,6 +278,7 @@ describe("AssistantService", () => {
       actions: { send: async () => ({}) } as unknown as SessionActions,
       attention: { list: async () => projectAttention } as unknown as AttentionService,
       questions: { get: async () => null } as unknown as QuestionService,
+      ...(search ? { search: search as never } : {}),
       logger: logger(),
       settings: {
         enabled: true,
@@ -317,7 +322,7 @@ describe("AssistantService", () => {
     expect(prompt).toContain("Plan the release");
     expect(prompt).toContain("New activity in hub");
     expect(prompt).not.toContain("New activity in atlas");
-    expect(body.tools).toBeUndefined();
+    expect(body.tools).toBeDefined();
 
     const done = events.find((event) => event.type === "done");
     if (done?.type !== "done") throw new Error("no done event");
@@ -357,17 +362,119 @@ describe("AssistantService", () => {
     expect(done.turn.context?.sessions).toBeUndefined();
   });
 
-  it("ignores a write proposal outside the session scope", async () => {
-    const service = buildScoped((async () =>
-      toolStream({ kind: "send", text: "hello", summary: "Send it?" })) as unknown as typeof fetch);
-    const thread = await service.createThread({
-      scope: { kind: "project", project: "hub" },
+  it("finds a session by search and ref, then sends to it after confirmation", async () => {
+    const searchPage = {
+      data: [
+        {
+          ref: "desktop-opencode:ses_a",
+          title: "Fix the build",
+          providerID: "desktop-opencode",
+          updatedAt: Date.now(),
+          snippet: "the gpu orchestrator proxy lives here",
+          match: "message",
+          score: 1,
+        },
+      ],
+      cursor: { next: null, previous: null },
+      ready: true,
+    };
+    const sent: Array<{ ref: string; input: Record<string, unknown> }> = [];
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return toolStream({
+        kind: "send",
+        sessionRef: "desktop-opencode:ses_a",
+        text: "Please add search to the global assistant.",
+        summary: "Send the improvement request?",
+      });
+    }) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async (query: { project?: string }) => ({
+          data: projectSessions.filter(
+            (entry) => !query.project || entry.project === query.project,
+          ),
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: {
+        send: async (ref: string, input: Record<string, unknown>) => {
+          sent.push({ ref, input });
+          return { accepted: true, messageId: "m" };
+        },
+      } as unknown as SessionActions,
+      attention: { list: async () => projectAttention } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      search: { search: async () => searchPage } as never,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl,
     });
-    const accepted = await service.postMessage(thread.id, { text: "reply please" });
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "which agent works on gpu orchestrator? prompt this session http://192.168.0.29:8787/sessions/desktop-opencode%3Ases_a",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("SEARCH (transcript hits");
+    expect(prompt).toContain("gpu orchestrator proxy");
+    expect(prompt).toContain("TARGET SESSION [desktop-opencode:ses_a]");
+
+    const action = events.find((event) => event.type === "action");
+    if (action?.type !== "action") throw new Error("no action event");
+    expect(action.turn.action).toMatchObject({
+      kind: "send",
+      status: "pending",
+      sessionRef: "desktop-opencode:ses_a",
+      sessionTitle: "Fix the build",
+    });
+
+    await service.decide(thread.id, action.turn.id, { decision: "confirm" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.ref).toBe("desktop-opencode:ses_a");
+  });
+
+  it("refuses a global send to a session that is not in context", async () => {
+    const service = buildScoped((async () =>
+      toolStream({
+        kind: "send",
+        sessionRef: "desktop-opencode:ses_unknown",
+        text: "hi",
+        summary: "Send?",
+      })) as unknown as typeof fetch);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, { text: "send it" });
     const events: AssistantEvent[] = [];
     service.subscribe(accepted.run.id, 0, (event) => events.push(event));
     await waitFor(() => events.some((event) => event.type === "done"));
-    expect(service.getThread(thread.id).turns[1]?.action).toBeUndefined();
+
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.action?.status).toBe("failed");
+    expect(turn?.action?.error).toContain("sessions in this context");
+  });
+
+  it("turns a model 5xx into an actionable message", async () => {
+    const service = buildScoped((async () =>
+      new Response("{}", { status: 500 })) as unknown as typeof fetch);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, { text: "hello" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "error"));
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.error).toContain("unavailable");
   });
 
   it("reuses one thread per session scope and titles it from the session", async () => {
@@ -458,10 +565,10 @@ describe("AssistantService", () => {
     expect(error?.type).toBe("error");
     if (error?.type !== "error") return;
     expect(error.run.state).toBe("error");
-    expect(error.message).toContain("HTTP 500");
+    expect(error.message).toContain("unavailable");
 
     const detail = service.getThread(thread.id);
-    expect(detail.turns[1]?.error).toContain("HTTP 500");
+    expect(detail.turns[1]?.error).toContain("unavailable");
   });
 
   it("stops a running answer and keeps the partial text", async () => {

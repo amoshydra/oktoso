@@ -20,6 +20,7 @@ import type {
   Message,
   MessagePage,
   QuestionPrompt,
+  SearchResult,
   Session,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -29,6 +30,7 @@ import type { AttentionService } from "./attention-service";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
 import type { SessionService } from "./session-service";
+import type { SearchService } from "./search-service";
 
 const MAX_TURNS = 200;
 const MAX_THREADS = 40;
@@ -89,6 +91,8 @@ export interface AssistantServiceOptions {
   actions: SessionActions;
   attention: AttentionService;
   questions: QuestionService;
+  /** Optional: transcript search over the cache, used by project/global. */
+  search?: SearchService;
   logger: Logger;
   settings: AssistantAgentSettings;
   now?: () => number;
@@ -725,10 +729,12 @@ export class AssistantService {
     const { logger } = this.options;
     let text = "";
     let usage: AssistantTurn["usage"];
-    let built: { text: string; context: AssistantContext } | undefined;
+    let built:
+      | { text: string; context: AssistantContext; targets: Map<string, string> }
+      | undefined;
     try {
-      built = await this.buildContext(scope);
-      const canPropose = scope.kind === "session" && this.writesEnabled();
+      built = await this.buildContext(scope, question);
+      const canPropose = this.writesEnabled();
       const history = this.findThread(record.run.threadId)
         .turns.slice(0, -1)
         .slice(-6)
@@ -746,12 +752,13 @@ export class AssistantService {
       }
 
       const threadId = record.run.threadId;
-      if (result.call && canPropose && scope.kind === "session") {
+      if (result.call && canPropose) {
         const turn = await this.appendActionTurn(
           threadId,
           text,
           result.call,
-          scope.sessionRef,
+          scope,
+          built.targets,
           usage,
           built.context,
         );
@@ -829,6 +836,11 @@ export class AssistantService {
     );
 
     if (!response.ok) {
+      if (response.status >= 500) {
+        throw new Error(
+          "The assistant model is unavailable right now — it may still be loading or the GPU is busy. Try again.",
+        );
+      }
       throw new Error(`The model returned HTTP ${response.status}`);
     }
     if (!response.body) throw new Error("The model returned no response body");
@@ -931,11 +943,12 @@ export class AssistantService {
     threadId: string,
     text: string,
     call: ToolCall,
-    sessionRef: string,
+    scope: AssistantScope,
+    targets: Map<string, string>,
     usage?: AssistantTurn["usage"],
     context?: AssistantContext,
   ): Promise<AssistantTurn> {
-    const action = await this.buildAction(call, sessionRef);
+    const action = await this.buildAction(call, scope, targets);
     const turn: AssistantTurn = {
       id: `atn_${randomUUID()}`,
       threadId,
@@ -971,11 +984,12 @@ export class AssistantService {
 
   private async buildAction(
     call: ToolCall,
-    sessionRef: string,
+    scope: AssistantScope,
+    targets: Map<string, string>,
   ): Promise<AssistantAction> {
     const base = {
       id: `act_${randomUUID()}`,
-      sessionRef,
+      sessionRef: scope.kind === "session" ? scope.sessionRef : "",
       createdAt: this.now(),
     };
     if (call.name !== ACTION_TOOL.name) {
@@ -993,6 +1007,7 @@ export class AssistantService {
       text?: unknown;
       summary?: unknown;
       answers?: unknown;
+      sessionRef?: unknown;
     };
     try {
       args = JSON.parse(call.arguments) as typeof args;
@@ -1033,12 +1048,46 @@ export class AssistantService {
           error: "The proposed message is empty",
         };
       }
+      let target = scope.kind === "session" ? scope.sessionRef : "";
+      let targetTitle: string | undefined;
+      if (scope.kind !== "session") {
+        const wanted =
+          typeof args.sessionRef === "string" ? args.sessionRef.trim() : "";
+        const match = wanted
+          ? [...targets.entries()].find(
+              ([ref]) => ref === wanted || ref.endsWith(`:${wanted}`),
+            )
+          : undefined;
+        if (!match) {
+          return {
+            ...base,
+            kind,
+            status: "failed",
+            summary,
+            error: "Name one of the sessions in this context as the target.",
+          };
+        }
+        target = match[0];
+        targetTitle = match[1];
+      }
       return {
         ...base,
         kind,
         status: "pending",
         summary,
         text: text.slice(0, 4_000),
+        sessionRef: target,
+        ...(targetTitle ? { sessionTitle: targetTitle } : {}),
+      };
+    }
+
+    if (scope.kind !== "session") {
+      return {
+        ...base,
+        kind,
+        status: "failed",
+        summary,
+        error: "Only a message can be sent from this scope.",
       };
     }
 
@@ -1048,7 +1097,7 @@ export class AssistantService {
 
     const proposed = Array.isArray(args.answers) ? args.answers : [];
     const prompt = await this.options.questions
-      .get(sessionRef)
+      .get(scope.sessionRef)
       .catch(() => null);
     if (!prompt) {
       return {
@@ -1241,12 +1290,20 @@ export class AssistantService {
 
   private async buildContext(
     scope: AssistantScope,
-  ): Promise<{ text: string; context: AssistantContext }> {
-    if (scope.kind === "project") return this.buildProjectContext(scope.project);
-    if (scope.kind === "global") return this.buildGlobalContext();
+    question: string,
+  ): Promise<{
+    text: string;
+    context: AssistantContext;
+    targets: Map<string, string>;
+  }> {
+    if (scope.kind === "project") {
+      return this.buildProjectContext(scope.project, question);
+    }
+    if (scope.kind === "global") return this.buildGlobalContext(question);
+
     const sessionRef = scope.sessionRef;
     const { sessions, attention, questions, settings } = this.options;
-    const [session, waiting, question, page] = await Promise.all([
+    const [session, waiting, questionPrompt, page] = await Promise.all([
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
       questions.get(sessionRef).catch(() => null),
@@ -1260,10 +1317,10 @@ export class AssistantService {
       page.data[0]?.id,
     ).catch(() => undefined);
     const messages = [...page.data].reverse();
-    return renderContext({
+    const rendered = renderContext({
       session,
       attention: waiting.data,
-      question,
+      question: questionPrompt,
       messages,
       history: history?.summary,
       historyDigest: history?.digest,
@@ -1271,22 +1328,48 @@ export class AssistantService {
       canWrite: this.writesEnabled(),
       assistantModel: this.model(),
     });
+    return {
+      ...rendered,
+      targets: new Map([[session.ref, session.title]]),
+    };
   }
-
 
   private async buildProjectContext(
     project: string,
-  ): Promise<{ text: string; context: AssistantContext }> {
+    question: string,
+  ): Promise<{
+    text: string;
+    context: AssistantContext;
+    targets: Map<string, string>;
+  }> {
     const [page, waiting] = await Promise.all([
       this.options.sessions.list({ project, limit: 200 }),
       this.options.attention.list({}).catch(() => ({ data: [] })),
     ]);
     const refs = new Set(page.data.map((session) => session.ref));
     const attention = waiting.data.filter((item) => refs.has(item.sessionRef));
+    const targets = new Map(
+      page.data.map((session) => [session.ref, session.title]),
+    );
+    const hits = await this.searchSessions(question, (row) =>
+      page.data.some((session) => session.ref === row.ref),
+    );
+    for (const hit of hits) targets.set(hit.ref, hit.title);
+    const resolved = await this.resolveRequestedSessions(question, page.data);
+    const transcripts = await this.loadTranscripts(resolved);
+    for (const session of resolved) targets.set(session.ref, session.title);
+    const requested = sessionRefsIn(question);
+    const outside = requested.filter(
+      (ref) => !page.data.some((session) => matchesRef(session, ref)),
+    );
     const rendered = renderProjectContext({
       project,
       sessions: page.data,
       attention,
+      hits,
+      resolved,
+      transcripts,
+      outside,
       now: this.now(),
     });
     return {
@@ -1301,12 +1384,14 @@ export class AssistantService {
           page.data.reduce((max, session) => Math.max(max, session.updatedAt), 0) ||
           this.now(),
       },
+      targets,
     };
   }
 
-  private async buildGlobalContext(): Promise<{
+  private async buildGlobalContext(question: string): Promise<{
     text: string;
     context: AssistantContext;
+    targets: Map<string, string>;
   }> {
     const [page, waiting] = await Promise.all([
       this.options.sessions.list({ limit: 200 }),
@@ -1316,19 +1401,33 @@ export class AssistantService {
     const running = page.data.filter((session) => session.status === "running");
     const errors = page.data.filter(
       (session) =>
-        session.status === "error" && now - session.updatedAt <= 24 * 60 * 60 * 1_000,
+        session.status === "error" &&
+        now - session.updatedAt <= 24 * 60 * 60 * 1_000,
     );
     const projects = new Map<string, number>();
     for (const session of page.data) {
       if (!session.project) continue;
       projects.set(session.project, (projects.get(session.project) ?? 0) + 1);
     }
+    const index = page.data.slice(0, 12);
+    const targets = new Map(
+      index.map((session) => [session.ref, session.title]),
+    );
+    const hits = await this.searchSessions(question, () => true);
+    for (const hit of hits) targets.set(hit.ref, hit.title);
+    const resolved = await this.resolveRequestedSessions(question, page.data);
+    const transcripts = await this.loadTranscripts(resolved);
+    for (const session of resolved) targets.set(session.ref, session.title);
     const rendered = renderGlobalContext({
       attention: waiting.data,
       running,
       errors,
       projects,
       total: page.data.length,
+      index,
+      hits,
+      resolved,
+      transcripts,
       now,
     });
     return {
@@ -1343,7 +1442,70 @@ export class AssistantService {
           page.data.reduce((max, session) => Math.max(max, session.updatedAt), 0) ||
           this.now(),
       },
+      targets,
     };
+  }
+
+  /** Transcript search over the cached sessions, filtered to a scope. */
+  private async searchSessions(
+    question: string,
+    keep: (row: { ref: string }) => boolean,
+  ): Promise<SearchResult[]> {
+    const query = meaningfulQuery(question);
+    if (!query || !this.options.search) return [];
+    try {
+      const page = await this.options.search.search({
+        q: query,
+        limit: 10,
+        scope: "all",
+      });
+      return page.data.filter(keep).slice(0, 5);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Sessions named by a ref or a /sessions/<ref> URL in the question. */
+  private async resolveRequestedSessions(
+    question: string,
+    known: Session[],
+  ): Promise<Session[]> {
+    const found: Session[] = [];
+    for (const ref of sessionRefsIn(question).slice(0, 2)) {
+      const match = known.find((session) => matchesRef(session, ref));
+      if (match) {
+        found.push(match);
+        continue;
+      }
+      if (!ref.includes(":")) continue;
+      try {
+        found.push(await this.options.sessions.get(ref));
+      } catch {
+        // Unknown ref: the prompt names it as unresolved.
+      }
+    }
+    return dedupeSessions(found);
+  }
+
+  /** Last few text turns for a requested session, so a send can be grounded. */
+  private async loadTranscripts(
+    sessions: Session[],
+  ): Promise<Map<string, Message[]>> {
+    const result = new Map<string, Message[]>();
+    await Promise.all(
+      sessions.slice(0, 2).map(async (session) => {
+        try {
+          const page = await this.options.sessions.messages(session.ref, {
+            limit: 6,
+            order: "desc",
+          });
+          result.set(session.ref, [...page.data].reverse());
+        } catch {
+          // Leave it out; the target metadata still renders.
+        }
+      }),
+    );
+    return result;
   }
 
   /**
@@ -1613,6 +1775,13 @@ Trust:
 - HISTORY is a provider compaction and may be out of date; give its timestamp when you rely on it.
 - For "is it stuck?", compare SITUATION's now with last activity and name the in-flight command or the last FAILURES entry.`;
 
+const TARGET_ACTION_RULES = `
+ACTIONS
+- This thread can propose one message to a session listed in SESSIONS, SEARCH, or TARGET SESSION. Put the exact message in text and the session's ref in sessionRef.
+- Before proposing, write one short line naming the target session.
+- Never claim it was sent; the user confirms it.
+- Do not propose answers or interrupts from this scope.`;
+
 const ACTION_RULES = `
 ACTIONS
 - Before proposing anything, write one short line saying what you propose.
@@ -1631,12 +1800,15 @@ function renderPrompt(
   const exchange = history.length
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
     : "";
-  let system = canWrite ? `${SYSTEM_PROMPT}\n${ACTION_RULES}` : SYSTEM_PROMPT;
+  let system = SYSTEM_PROMPT;
+  if (canWrite) {
+    system += `\n${scope.kind === "session" ? ACTION_RULES : TARGET_ACTION_RULES}`;
+  }
   if (scope.kind === "project") {
-    system += `\n\nSCOPE\nThis thread is read-only and covers the "${scope.project}" project. You see session metadata, not transcripts. If a detail lives in a transcript, say it is outside this scope and name the session where it can be read.`;
+    system += `\n\nSCOPE\nThis thread covers the "${scope.project}" project. It can read session metadata, inbox items, and transcript search hits, and may propose one confirmed message to a session in this project. If a detail is outside those blocks, say so instead of guessing.`;
   }
   if (scope.kind === "global") {
-    system += `\n\nSCOPE\nThis thread is read-only and global. The ATTENTION block is the inbox: when asked what needs the user, list exactly those items and nothing else. You see session metadata, not transcripts; name the session when a detail needs one.`;
+    system += `\n\nSCOPE\nThis thread is global. The ATTENTION block is the inbox: when asked what needs the user, list exactly those items and nothing else. It can read metadata, search hits, and a named session's last turns, and may propose one confirmed message to a session in context. If a detail is outside those blocks, name the session and say what is missing.`;
   }
   return {
     system,
@@ -1645,10 +1817,74 @@ function renderPrompt(
 }
 
 
+
+const SEARCH_STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "if", "then", "than", "so",
+  "is", "are", "was", "were", "be", "been", "being", "am",
+  "do", "does", "did", "doing", "done",
+  "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+  "this", "that", "these", "those", "it", "its",
+  "i", "me", "my", "we", "our", "you", "your", "they", "their",
+  "to", "of", "in", "on", "at", "for", "with", "about", "from", "by",
+  "can", "could", "should", "would", "will", "please", "tell", "show",
+  "find", "out", "working", "work", "right", "now", "need", "needs",
+  "anything", "something", "session", "sessions", "agent", "agents",
+]);
+
+/** Search only the words that carry meaning; a question full of stop words
+ * must not turn into a transcript query. */
+function meaningfulQuery(question: string): string | undefined {
+  const words = question
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !SEARCH_STOP_WORDS.has(word));
+  if (words.length === 0) return undefined;
+  return words.slice(0, 6).join(" ");
+}
+
+/** `ses_…`, `provider:ses_…`, and `/sessions/<ref>` in the question. */
+function sessionRefsIn(question: string): string[] {
+  const refs = new Set<string>();
+  for (const match of question.matchAll(/\/sessions\/([^\s/?#]+)/g)) {
+    try {
+      refs.add(decodeURIComponent(match[1]!));
+    } catch {
+      refs.add(match[1]!);
+    }
+  }
+  for (const match of question.matchAll(/\b((?:[a-z0-9._-]+:)?ses_[A-Za-z0-9]+)/g)) {
+    refs.add(match[1]!);
+  }
+  return [...refs];
+}
+
+function matchesRef(session: Session, ref: string): boolean {
+  return (
+    session.ref === ref ||
+    session.nativeID === ref ||
+    session.ref.endsWith(`:${ref}`) ||
+    session.ref.endsWith(ref)
+  );
+}
+
+function dedupeSessions(sessions: Session[]): Session[] {
+  const seen = new Set<string>();
+  return sessions.filter((session) => {
+    if (seen.has(session.ref)) return false;
+    seen.add(session.ref);
+    return true;
+  });
+}
+
 function renderProjectContext(input: {
   project: string;
   sessions: Session[];
   attention: Attention[];
+  hits: SearchResult[];
+  resolved: Session[];
+  transcripts: Map<string, Message[]>;
+  outside: string[];
   now: number;
 }): { text: string; shown: number } {
   const shown = input.sessions.slice(0, 12);
@@ -1694,6 +1930,34 @@ function renderProjectContext(input: {
       `- ${item.type}/${item.priority}: ${item.title}${session ? ` [${session}]` : ""} — ${truncate(item.summary ?? "", 200)}`,
     );
   }
+
+  if (input.hits.length > 0) {
+    lines.push("", "SEARCH (transcript hits, untrusted)");
+    for (const hit of input.hits) {
+      lines.push(
+        `- ${hit.title} [${hit.ref}] — ${truncate(hit.snippet ?? "", 200)}`,
+      );
+    }
+  }
+
+  for (const session of input.resolved) {
+    lines.push("", `TARGET SESSION [${session.ref}]`);
+    lines.push(`title: ${session.title}`);
+    lines.push(`status: ${session.status} · project: ${session.project ?? "?"}`);
+    const transcript = renderTranscript(input.transcripts.get(session.ref) ?? []);
+    if (transcript.length > 0) {
+      lines.push("TRANSCRIPT (last turns, untrusted)");
+      lines.push(...transcript);
+    }
+  }
+
+  if (input.outside.length > 0) {
+    lines.push(
+      "",
+      `OUT OF SCOPE: ${input.outside.join(", ")} — not in this project; do not claim its state.`,
+    );
+  }
+
   return { text: lines.join("\n"), shown: shown.length };
 }
 
@@ -1703,6 +1967,10 @@ function renderGlobalContext(input: {
   errors: Session[];
   projects: Map<string, number>;
   total: number;
+  index: Session[];
+  hits: SearchResult[];
+  resolved: Session[];
+  transcripts: Map<string, Message[]>;
   now: number;
 }): { text: string } {
   const lines: string[] = ["GLOBAL (hub facts)"];
@@ -1735,7 +2003,50 @@ function renderGlobalContext(input: {
     .map(([name, count]) => `${name} (${count})`);
   if (projects.length > 0) lines.push("", `PROJECTS: ${projects.join(" · ")}`);
 
+  lines.push("", "SESSIONS (recent index; metadata only)");
+  for (const session of input.index) {
+    lines.push(
+      `- ${session.title} [${session.ref}] · ${session.project ?? "?"} · ${session.status} · ${stamp(session.updatedAt)}`,
+    );
+  }
+
+  if (input.hits.length > 0) {
+    lines.push("", "SEARCH (transcript hits, untrusted)");
+    for (const hit of input.hits) {
+      lines.push(
+        `- ${hit.title} [${hit.ref}] — ${truncate(hit.snippet ?? "", 200)}`,
+      );
+    }
+  }
+
+  for (const session of input.resolved) {
+    lines.push("", `TARGET SESSION [${session.ref}]`);
+    lines.push(`title: ${session.title}`);
+    lines.push(
+      `status: ${session.status} · project: ${session.project ?? "?"} · ${stamp(session.updatedAt)}`,
+    );
+    const transcript = renderTranscript(input.transcripts.get(session.ref) ?? []);
+    if (transcript.length > 0) {
+      lines.push("TRANSCRIPT (last turns, untrusted)");
+      lines.push(...transcript);
+    }
+  }
+
   return { text: lines.join("\n") };
+}
+
+function renderTranscript(messages: Message[]): string[] {
+  const lines: string[] = [];
+  for (const message of messages) {
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(" ")
+      .trim();
+    if (!text) continue;
+    lines.push(`${message.role.toUpperCase()}: ${truncate(text, 400)}`);
+  }
+  return lines;
 }
 
 interface HistorySummary {
@@ -2193,6 +2504,11 @@ const ACTION_TOOL = {
       summary: {
         type: "string",
         description: "One sentence describing what would happen",
+      },
+      sessionRef: {
+        type: "string",
+        description:
+          "send outside session scope: the exact ref of one session from SESSIONS, SEARCH, or TARGET SESSION",
       },
     },
     required: ["kind", "summary"],
