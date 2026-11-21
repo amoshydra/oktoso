@@ -144,13 +144,13 @@ Inbox
 
 Chat
 ├─ Answer           choices / Type your own answer / Speak answer /
-│                   Suggested answers / Failure / Read chat / Stop agent
-├─ Batch            Answer on phone / Failure / Read chat / Stop agent
+│                   Suggested answers / Failure
+├─ Batch            Answer N questions on phone / Failure
 ├─ Suggested        model answers for the open question, tap to send
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
 ├─ Voice            listen / transcribe / Send or Edit on phone, hidden without hub STT
-├─ Stop agent       confirmation, from chat or the answer screen
+├─ Stop agent       confirmation, from the chat menu
 ├─ Turn failed      provider error + Retry / Back
 └─ Phone keyboard   longer text fallback
 

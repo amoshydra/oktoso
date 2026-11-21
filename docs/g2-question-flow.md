@@ -23,8 +23,8 @@ advertises `? Answer`. Tapping opens a single-purpose screen containing:
 
 - the question in a two-line summary,
 - **one event-capturing list** containing the agent's choices followed by the
-  action rows (`› Type answer`, `› Speak answer`, `› Suggested answers`, `› Read chat`,
-  `Stop agent`),
+  action rows (`› Type answer`, `› Speak answer`, `› Suggested answers`, and
+  `› Failure` when the chat has one),
 - a non-interactive footer hint.
 
 The list, not the footer, owns input. This is a measured SDK constraint: only one

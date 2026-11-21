@@ -80,17 +80,18 @@ export function buildAnswerRows(
     return [
       actionRow("attention", "Answer in Inbox"),
       ...failureRows(options),
-      actionRow("read", "Read chat"),
-      actionRow("stop", "Stop agent"),
     ];
   }
 
   if (prompt.questions.length > 1) {
+    // A batch needs every answer in one request, and only the phone form can
+    // collect them. Name the work instead of saying "Answer on phone".
     return [
-      actionRow("phone", "Answer on phone"),
+      actionRow(
+        "phone",
+        `Answer ${prompt.questions.length} questions on phone`,
+      ),
       ...failureRows(options),
-      actionRow("read", "Read chat"),
-      actionRow("stop", "Stop agent"),
     ];
   }
 
@@ -132,8 +133,6 @@ export function buildAnswerRows(
   }
   if (suggestedRow) rows.push(suggestedRow);
   rows.push(...failureRows(options));
-  rows.push(actionRow("read", "Read chat"));
-  rows.push(actionRow("stop", "Stop agent"));
   return rows;
 }
 
