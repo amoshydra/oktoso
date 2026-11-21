@@ -1,0 +1,19 @@
+{
+  "questions": [
+    {
+      "question": "In the OpenCode sqlite schema inspected in this session, which table stores message parts, and what columns does it have?",
+      "expect": "message_id|session_id"
+    },
+    {
+      "question": "Which edit tool call failed in this session, in which file, and what was the reason?",
+      "expect": "identical|no changes"
+    },
+    {
+      "question": "What version is the oktoso package.json at?",
+      "expect": "0\\.1\\.28"
+    },
+    {
+      "question": "What was the most recent change to the agent activity block, and why was it made?"
+    }
+  ]
+}

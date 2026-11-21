@@ -9,7 +9,7 @@
  *
  * Usage:
  *   node scripts/ask.mjs <sessionRef> "why is this stuck?"
- *   node scripts/ask.mjs ses_e1f5... "what changed?" --limit 40
+ *   node scripts/ask.mjs <sessionRef> "what changed?" --limit 40
  *   node scripts/ask.mjs <sessionRef> "..." --dry-run
  *   node scripts/ask.mjs --list
  *
