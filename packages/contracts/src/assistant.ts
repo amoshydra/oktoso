@@ -100,6 +100,8 @@ export const zAssistantContext = z.object({
   messages: z.number().int().nonnegative().optional(),
   /** Turns the budget left out. */
   omitted: z.number().int().nonnegative().optional(),
+  /** Read-only transcript tool calls the answer made. */
+  toolCalls: z.number().int().nonnegative().optional(),
   chars: z.number().int().nonnegative().optional(),
   /** Attention items in the context. */
   attention: z.number().int().nonnegative().optional(),

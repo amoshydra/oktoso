@@ -9,7 +9,7 @@ import type {
   Session,
 } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
-import { AssistantService } from "./assistant-service";
+import { AssistantService, renderContext } from "./assistant-service";
 import type { AttentionService } from "./attention-service";
 import type { SessionActions } from "./session-actions";
 import type { QuestionService } from "./question-service";
@@ -126,8 +126,10 @@ function logger(): Logger {
 function fakeSessions(overrides: Partial<SessionService> = {}): SessionService {
   return {
     get: async () => session,
+    // The provider contract is newest first; the builder restores reading
+    // order, so the fake must reverse too.
     messages: async (): Promise<MessagePage> => ({
-      data: messages,
+      data: [...messages].reverse(),
       cursor: { next: null, previous: null },
     }),
     ...overrides,
@@ -323,6 +325,8 @@ describe("AssistantService", () => {
     expect(prompt).toContain("New activity in hub");
     expect(prompt).not.toContain("New activity in atlas");
     expect(body.tools).toBeDefined();
+    // Retrieval is a transcript tool; a project thread has no single one.
+    expect(JSON.stringify(body.tools)).not.toContain("search_transcript");
 
     const done = events.find((event) => event.type === "done");
     if (done?.type !== "done") throw new Error("no done event");
@@ -641,7 +645,7 @@ describe("AssistantService", () => {
     expect(prompt).toContain("unread/normal: Fix the build");
     expect(prompt).toContain("Allow running pnpm test?");
     expect(prompt).toContain("[write · completed: /repo/src/app.ts]");
-    expect(prompt).toContain("the build is red");
+    expect(prompt).toContain("TRANSCRIPT (not pasted");
     expect(prompt).toContain("QUESTION\nwhy is the build red?");
 
     const done = events.find((event) => event.type === "done");
@@ -650,8 +654,8 @@ describe("AssistantService", () => {
     expect(done.turn.text).toBe("The build is red because the test file changed.");
     expect(done.turn.usage).toEqual({ promptTokens: 120, completionTokens: 9 });
     expect(done.turn.context).toMatchObject({
-      messages: 2,
-      omitted: 0,
+      messages: 0,
+      toolCalls: 0,
       attention: 1,
       asOf: session.updatedAt,
     });
@@ -752,63 +756,32 @@ describe("AssistantService", () => {
     ]);
   }
 
-  it("keeps the end of a long message, where the conclusion lives", async () => {
-    const long = `${"x".repeat(2_600)}\nM3: project and global read-only scopes.`;
-    const longMessages: Message[] = [
-      {
-        id: "m1",
-        sessionRef: session.ref,
-        role: "user",
-        createdAt: 1,
-        parts: [{ type: "text", text: "plan the next milestone" }],
-      },
-      {
-        id: "m2",
-        sessionRef: session.ref,
-        role: "assistant",
-        createdAt: 2,
-        parts: [{ type: "text", text: long }],
-      },
-    ];
-    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
-    const fetchImpl = (async (_url: string, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
-      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
-    }) as unknown as typeof fetch;
-
-    const store = new MemoryStateStore();
-    const service = new AssistantService({
-      store,
-      sessions: fakeSessions({
-        messages: async (): Promise<MessagePage> => ({
-          data: longMessages,
-          cursor: { next: null, previous: null },
-        }),
-      }),
-      actions: { send: async () => ({}) } as unknown as SessionActions,
-      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
-      questions: { get: async () => null } as unknown as QuestionService,
-      logger: logger(),
-      settings: {
-        enabled: true,
-        baseUrl: "http://model.test/v1",
-        model: "test-model",
-        timeoutMs: 5_000,
-        maxContextMessages: 20,
-      },
-      fetchImpl,
+  it("keeps the end of a long message, where the conclusion lives", () => {
+    const long = `${"x".repeat(6_000)}\nM3: project and global read-only scopes.`;
+    const { text } = renderContext({
+      session,
+      attention: [],
+      question: null,
+      messages: [
+        {
+          id: "m1",
+          sessionRef: session.ref,
+          role: "assistant",
+          createdAt: 1,
+          parts: [{ type: "text", text: long }],
+        },
+      ],
+      hits: [],
+      now: session.updatedAt,
+      canWrite: false,
+      assistantModel: "test-model",
+      transcript: true,
     });
-    const thread = await service.createThread({
-      scope: { kind: "session", sessionRef: session.ref },
-    });
-    await service.postMessage(thread.id, { text: "what is m3?" });
-    await waitFor(() => body.messages.length > 0);
-
-    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
-    expect(prompt).toContain("M3: project and global read-only scopes.");
+    // A 6,000-char turn is clipped head and tail, never head only.
+    expect(text).toContain("M3: project and global read-only scopes.");
   });
 
-  it("drops the oldest turns first when the transcript exceeds its budget", async () => {
+  it("drops the oldest turns first when the transcript exceeds its budget", () => {
     const bulk: Message[] = Array.from({ length: 20 }, (_, index) => ({
       id: `m${index}`,
       sessionRef: session.ref,
@@ -821,111 +794,192 @@ describe("AssistantService", () => {
         },
       ],
     }));
-    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
-    const fetchImpl = (async (_url: string, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
-      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
-    }) as unknown as typeof fetch;
-
-    const store = new MemoryStateStore();
-    const service = new AssistantService({
-      store,
-      sessions: fakeSessions({
-        // The provider returns newest first; the builder restores reading order.
-        messages: async (): Promise<MessagePage> => ({
-          data: [...bulk].reverse(),
-          cursor: { next: null, previous: null },
-        }),
-      }),
-      actions: { send: async () => ({}) } as unknown as SessionActions,
-      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
-      questions: { get: async () => null } as unknown as QuestionService,
-      logger: logger(),
-      settings: {
-        enabled: true,
-        baseUrl: "http://model.test/v1",
-        model: "test-model",
-        timeoutMs: 5_000,
-        maxContextMessages: 20,
-      },
-      fetchImpl,
+    const { text, context } = renderContext({
+      session,
+      attention: [],
+      question: null,
+      messages: bulk,
+      hits: [],
+      now: session.updatedAt,
+      canWrite: false,
+      assistantModel: "test-model",
+      transcript: true,
     });
-    const thread = await service.createThread({
-      scope: { kind: "session", sessionRef: session.ref },
-    });
-    await service.postMessage(thread.id, { text: "status?" });
-    await waitFor(() => body.messages.length > 0);
-
-    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
-    expect(prompt).toContain("NEWEST-TURN");
-    expect(prompt).toMatch(/older turns omitted/);
-    expect(prompt.length).toBeLessThanOrEqual(49_500);
+    expect(text).toContain("NEWEST-TURN");
+    expect(text).toMatch(/older turns omitted/);
+    expect(text.length).toBeLessThanOrEqual(49_500);
+    expect(context.omitted).toBeGreaterThan(0);
   });
 
-  it("renders tool output and reasoning, not just prose", async () => {
-    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
-    const fetchImpl = (async (_url: string, init: RequestInit) => {
-      body = JSON.parse(String(init.body));
-      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
-    }) as unknown as typeof fetch;
-    const turns: Message[] = [
-      {
-        id: "m1",
-        sessionRef: session.ref,
-        role: "assistant",
-        createdAt: 1,
-        parts: [
-          {
-            type: "reasoning",
-            text: "The 401 means the auth header never reached the handler.",
-          },
-          {
-            type: "tool",
-            id: "t1",
-            name: "shell",
-            status: "completed",
-            input: { command: "pnpm test auth" },
-            output: "FAIL src/auth.test.ts\nexpected 401, received 500",
-          },
-          { type: "text", text: "The test failed in the handler." },
-        ],
-      },
-    ];
-    const service = new AssistantService({
-      store: new MemoryStateStore(),
-      sessions: fakeSessions({
-        messages: async (): Promise<MessagePage> => ({
-          data: turns,
-          cursor: { next: null, previous: null },
-        }),
-      }),
-      actions: { send: async () => ({}) } as unknown as SessionActions,
-      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
-      questions: { get: async () => null } as unknown as QuestionService,
-      logger: logger(),
-      settings: {
-        enabled: true,
-        baseUrl: "http://model.test/v1",
-        model: "test-model",
-        timeoutMs: 5_000,
-        maxContextMessages: 20,
-      },
-      fetchImpl,
+  it("renders tool output and reasoning, not just prose", () => {
+    const { text } = renderContext({
+      session,
+      attention: [],
+      question: null,
+      messages: [
+        {
+          id: "m1",
+          sessionRef: session.ref,
+          role: "assistant",
+          createdAt: 1,
+          parts: [
+            {
+              type: "reasoning",
+              text: "The 401 means the auth header never reached the handler.",
+            },
+            {
+              type: "tool",
+              id: "t1",
+              name: "shell",
+              status: "completed",
+              input: { command: "pnpm test auth" },
+              // Provider-style content array: the reader should see the text,
+              // not JSON escaping.
+              output: [
+                { type: "text", text: "FAIL src/auth.test.ts" },
+                { type: "text", text: "expected 401, received 500" },
+              ],
+            },
+            { type: "text", text: "The test failed in the handler." },
+          ],
+        },
+      ],
+      hits: [],
+      now: session.updatedAt,
+      canWrite: false,
+      assistantModel: "test-model",
+      transcript: true,
     });
+    expect(text).toContain("[reasoning] The 401 means");
+    expect(text).toContain("[tool shell · completed]");
+    expect(text).toContain("pnpm test auth");
+    expect(text).toContain("→ FAIL src/auth.test.ts");
+    expect(text).toContain("expected 401, received 500");
+    expect(text).not.toContain('{\"type\":\"text\"');
+  });
+
+  it("reads the transcript through tools before answering", async () => {
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+      tools?: Array<{ function: { name: string } }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      bodies.push(body);
+      round += 1;
+      if (round === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      function: {
+                        name: "read_turns",
+                        arguments: JSON.stringify({ from: 1, to: 1 }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([delta("The build broke in turn 1."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const { service } = build(fetchImpl);
     const thread = await service.createThread({
       scope: { kind: "session", sessionRef: session.ref },
     });
-    const accepted = await service.postMessage(thread.id, { text: "why did it fail?" });
+    const accepted = await service.postMessage(thread.id, {
+      text: "why is the build red?",
+    });
     const events: AssistantEvent[] = [];
     service.subscribe(accepted.run.id, 0, (event) => events.push(event));
     await waitFor(() => events.some((event) => event.type === "done"));
 
-    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
-    expect(prompt).toContain("[reasoning] The 401 means");
-    expect(prompt).toContain("[tool shell · completed]");
-    expect(prompt).toContain("pnpm test auth");
-    expect(prompt).toContain("→ FAIL src/auth.test.ts");
-    expect(prompt).toContain("expected 401, received 500");
+    expect(
+      bodies[0]?.tools?.map((tool) => tool.function.name),
+    ).toEqual(
+      expect.arrayContaining([
+        "search_transcript",
+        "read_turns",
+        "list_tool_calls",
+        "read_tool_output",
+      ]),
+    );
+    const toolMessage = bodies[1]?.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(toolMessage?.content).toContain("TURN 1");
+    expect(toolMessage?.content).toContain("the build is red");
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.text).toBe("The build broke in turn 1.");
+    expect(done.turn.context?.toolCalls).toBe(1);
+    expect(done.turn.context?.messages).toBe(1);
+    expect(
+      done.turn.activity?.some(
+        (step) => step.kind === "tool" && step.label === "Read turn 1",
+      ),
+    ).toBe(true);
+  });
+
+  it("forces an answer when the tool rounds run out", async () => {
+    const bodies: Array<{ tools?: unknown[]; messages: Array<{ role: string; content: string | null }> }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      bodies.push(body);
+      if (body.tools && body.tools.length > 0) {
+        return sseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: `call_${bodies.length}`,
+                      function: {
+                        name: "search_transcript",
+                        arguments: JSON.stringify({ query: "build" }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([delta("Answer from what I have."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const { service } = build(fetchImpl);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "keep reading" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    // 4 rounds: three with tools, the last without so prose must come out.
+    expect(bodies).toHaveLength(4);
+    expect(bodies[3]?.tools).toBeUndefined();
+    expect(bodies[3]?.messages.at(-1)?.content).toContain("Stop reading");
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.text).toBe("Answer from what I have.");
   });
 
   it("labels trusted blocks and surfaces failures", async () => {
@@ -1060,7 +1114,8 @@ describe("AssistantService", () => {
           _ref: string,
           query: { limit?: number },
         ): Promise<MessagePage> => {
-          if (query.limit !== 200) {
+          // 100 is the history scan; the session page is the 200-message read.
+          if (query.limit !== 100) {
             return { data: tail, cursor: { next: null, previous: null } };
           }
           wideCalls += 1;
@@ -1243,7 +1298,7 @@ describe("AssistantService", () => {
             _ref: string,
             query: { limit?: number; cursor?: string },
           ): Promise<MessagePage> => {
-            if (query.limit === 200) {
+            if (query.limit === 100) {
               wideCalls += 1;
               if (!query.cursor) {
                 return {

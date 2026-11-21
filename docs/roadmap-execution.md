@@ -931,8 +931,16 @@ Sprint exit criteria:
   text; `maxContextMessages` defaults to 40 and allows 200. Measurements and
   the next step are in `docs/reports/assistant-context-spikes.md`; the runner
   is `scripts/spike-context.mjs`.
-- [ ] G21. Session ask: read-only retrieval tools. Add `search_transcript`,
+- [x] G21. Session ask: read-only retrieval tools. Add `search_transcript`,
   `read_turns`, `list_tool_calls`, and `read_tool_output` to the hub agent with
   a 5-round governor and a forced final answer, each call recorded as an
   activity step. The spikes show 3/3 evidence questions answered at 3–22k
   prompt tokens, where the fixed window answered 1/3 and confabulated one.
+  Shipped: session scope sends facts + digest and reads the transcript through
+  `search_transcript`, `read_turns`, `list_tool_calls`, and `read_tool_output`,
+  with a four-round governor, per-call and per-run caps, a forced final answer,
+  and one activity step per call. Scope: `packages/contracts/src/assistant.ts`,
+  `packages/hub/src/services/assistant-service.ts`.
+- [ ] G22. Session ask: page older than the newest 200 messages. The tools
+  report the window honestly today; a cursor-backed read would let an answer
+  reach a failure from the start of a long session.

@@ -63,6 +63,13 @@ const MAX_FAILURES = 3;
 const MAX_FILES = 8;
 const MAX_COMMANDS = 6;
 const FAILURE_DETAIL_CHARS = 220;
+/** Read-only retrieval: rounds, calls, and result budgets. */
+const MAX_TOOL_ROUNDS = 4;
+const MAX_CALLS_PER_ROUND = 3;
+const MAX_TOOL_RESULT_CHARS = 6_000;
+const MAX_TOOL_RESULTS_TOTAL = 24_000;
+const TOOL_TRANSCRIPT_LIMIT = 200;
+const HISTORY_SCAN_LIMIT = 100;
 const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 /**
@@ -118,6 +125,43 @@ interface ToolCall {
   id?: string;
   name: string;
   arguments: string;
+}
+
+interface ChatToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+interface ChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: ChatToolCall[];
+  tool_call_id?: string;
+}
+
+interface ChatToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+interface ToolRun {
+  output: string;
+  label: string;
+  detail?: string;
+  metrics?: Record<string, string | number>;
+  /** Turns the model actually saw, for the evidence line. */
+  turns: number[];
+}
+
+interface AssistantTools {
+  definitions: ChatToolDefinition[];
+  run(name: string, argumentsJson: string): ToolRun;
+  byName(name: string): boolean;
 }
 
 interface RunRecord {
@@ -800,7 +844,13 @@ export class AssistantService {
     let text = "";
     let usage: AssistantTurn["usage"];
     let built:
-      | { text: string; context: AssistantContext; targets: Map<string, string> }
+      | {
+          text: string;
+          context: AssistantContext;
+          targets: Map<string, string>;
+          tools?: AssistantTools;
+          transcriptTurns?: number;
+        }
       | undefined;
     try {
       built = await this.buildContext(scope, question, sink, model);
@@ -809,20 +859,119 @@ export class AssistantService {
         .slice(0, -1)
         .slice(-6)
         .map((turn) => `${turn.role.toUpperCase()}: ${turn.text.slice(0, 400)}`);
-      const prompt = renderPrompt(built.text, question, history, canPropose, scope);
-
-      const modelStep = sink.begin("model", "Model", model);
-      const result = await this.stream(
-        prompt,
-        record,
+      const tools = built.tools;
+      const prompt = renderPrompt(
+        built.text,
+        question,
+        history,
         canPropose,
-        (delta) => {
-          text += delta;
-          this.emit(record, { type: "delta", text: delta });
-        },
-        model,
+        scope,
+        Boolean(tools),
       );
-      usage = result.usage;
+      const actionTools: ChatToolDefinition[] = canPropose
+        ? [{ type: "function", function: ACTION_TOOL }]
+        : [];
+      const conversation: ChatMessage[] = [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ];
+      const modelStep = sink.begin("model", "Model", model);
+      const readTurns = new Set<number>();
+      let toolCalls = 0;
+      let toolChars = 0;
+      let exhausted = false;
+      let call: ToolCall | undefined;
+      let rounds = 0;
+
+      while (rounds < MAX_TOOL_ROUNDS) {
+        // The last round (or a spent result budget) closes the tools and asks
+        // for the answer, so a loop can never end without prose.
+        const finalRound =
+          !tools || exhausted || rounds === MAX_TOOL_ROUNDS - 1;
+        if (tools && finalRound) {
+          conversation.push({
+            role: "user",
+            content:
+              "Stop reading. Answer now from the evidence you have, and name anything still missing.",
+          });
+        }
+        const available = !tools || finalRound
+          ? actionTools
+          : [...tools.definitions, ...actionTools];
+        const result = await this.chatRound(
+          conversation,
+          record,
+          available,
+          (delta) => {
+            text += delta;
+            this.emit(record, { type: "delta", text: delta });
+          },
+          model,
+        );
+        usage = addUsage(usage, result.usage);
+        rounds += 1;
+        if (result.calls.length === 0) break;
+
+        const actionCall = result.calls.find(
+          (entry) => entry.name === ACTION_TOOL.name,
+        );
+        if (actionCall && canPropose) {
+          call = actionCall;
+          break;
+        }
+        if (!tools) break;
+
+        conversation.push({
+          role: "assistant",
+          content: result.text || null,
+          tool_calls: result.calls.map((entry, index) => ({
+            id: entry.id ?? `call_${rounds}_${index}`,
+            type: "function",
+            function: { name: entry.name, arguments: entry.arguments },
+          })),
+        });
+
+        let executed = 0;
+        for (const entry of result.calls) {
+          const id = entry.id ?? `call_${rounds}_${executed}`;
+          if (executed >= MAX_CALLS_PER_ROUND) {
+            conversation.push({
+              role: "tool",
+              tool_call_id: id,
+              content: "skipped: the per-round tool limit is reached",
+            });
+            continue;
+          }
+          if (!tools.byName(entry.name)) {
+            conversation.push({
+              role: "tool",
+              tool_call_id: id,
+              content: `unknown tool ${entry.name}`,
+            });
+            continue;
+          }
+          const started = this.now();
+          const outcome = tools.run(entry.name, entry.arguments);
+          executed += 1;
+          toolCalls += 1;
+          toolChars += outcome.output.length;
+          for (const turn of outcome.turns) readTurns.add(turn);
+          sink.done(
+            "tool",
+            outcome.label,
+            outcome.detail,
+            this.now() - started,
+            outcome.metrics,
+          );
+          conversation.push({
+            role: "tool",
+            tool_call_id: id,
+            content: truncate(outcome.output, MAX_TOOL_RESULT_CHARS),
+          });
+        }
+        if (toolChars >= MAX_TOOL_RESULTS_TOTAL) exhausted = true;
+      }
+
       sink.finish(
         modelStep,
         usage
@@ -841,20 +990,27 @@ export class AssistantService {
       }
 
       const threadId = record.run.threadId;
-      if (result.call) {
+      if (tools) {
+        built.context.messages = readTurns.size;
+        built.context.toolCalls = toolCalls;
+      }
+      if (call) {
         sink.done(
           "tool",
-          result.call.name,
-          canPropose ? truncate(result.call.arguments, 140) : "ignored · writes off",
+          call.name,
+          canPropose ? truncate(call.arguments, 140) : "ignored · writes off",
           undefined,
-          { action: result.call.name, bytes: result.call.arguments.length },
+          { action: call.name, bytes: call.arguments.length },
         );
       }
-      if (result.call && canPropose) {
+      if (!text.trim() && !call) {
+        text = "I could not finish reading the session. Ask again, or name the turn you mean.";
+      }
+      if (call && canPropose) {
         const turn = await this.appendActionTurn(
           threadId,
           text,
-          result.call,
+          call,
           scope,
           built.targets,
           usage,
@@ -903,16 +1059,23 @@ export class AssistantService {
     }
   }
 
-  private async stream(
-    prompt: { system: string; user: string },
+  /**
+   * One streamed model round.
+   *
+   * It returns every tool call, not just the first: a round may ask for
+   * several reads at once, and the loop decides which it will run.
+   */
+  private async chatRound(
+    messages: ChatMessage[],
     record: RunRecord,
-    canPropose: boolean,
+    tools: ChatToolDefinition[] | undefined,
     onDelta: (delta: string) => void,
     model: string,
-  ): Promise<{ usage?: AssistantTurn["usage"]; call?: ToolCall }> {
-    const tools = canPropose
-      ? [{ type: "function", function: ACTION_TOOL }]
-      : undefined;
+  ): Promise<{
+    usage?: AssistantTurn["usage"];
+    calls: ToolCall[];
+    text: string;
+  }> {
     const response = await this.fetchImpl(
       `${trimSlash(this.baseUrl())}/chat/completions`,
       {
@@ -923,16 +1086,15 @@ export class AssistantService {
         },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: "system", content: prompt.system },
-            { role: "user", content: prompt.user },
-          ],
+          messages,
           temperature: 0.2,
           max_tokens: 800,
           stream: true,
           stream_options: { include_usage: true },
           chat_template_kwargs: { enable_thinking: false },
-          ...(tools ? { tools, tool_choice: "auto" } : {}),
+          ...(tools && tools.length
+            ? { tools, tool_choice: "auto" }
+            : {}),
         }),
         signal: AbortSignal.any([
           record.controller.signal,
@@ -955,7 +1117,8 @@ export class AssistantService {
     const decoder = new TextDecoder();
     let buffer = "";
     let usage: AssistantTurn["usage"] | undefined;
-    const calls = new Map<number, ToolCall>();
+    const pending = new Map<number, ToolCall>();
+    let text = "";
 
     for (;;) {
       const { value, done } = await reader.read();
@@ -993,17 +1156,18 @@ export class AssistantService {
         }).choices?.[0];
         const delta = choice?.delta;
         if (typeof delta?.content === "string" && delta.content.length > 0) {
+          text += delta.content;
           onDelta(delta.content);
         }
         for (const chunkCall of delta?.tool_calls ?? []) {
           const index = chunkCall.index ?? 0;
-          const current = calls.get(index) ?? { name: "", arguments: "" };
+          const current = pending.get(index) ?? { name: "", arguments: "" };
           if (chunkCall.id) current.id = chunkCall.id;
           if (chunkCall.function?.name) current.name += chunkCall.function.name;
           if (chunkCall.function?.arguments) {
             current.arguments += chunkCall.function.arguments;
           }
-          calls.set(index, current);
+          pending.set(index, current);
         }
 
         const reported = (parsed as {
@@ -1020,8 +1184,10 @@ export class AssistantService {
         }
       }
     }
-    const call = [...calls.values()].find((entry) => entry.name.length > 0);
-    return { usage, ...(call ? { call } : {}) };
+    const calls = [...pending.values()].filter(
+      (entry) => entry.name.length > 0,
+    );
+    return { usage, calls, text };
   }
 
   private async appendAnswer(
@@ -1405,6 +1571,213 @@ export class AssistantService {
 
   // --- context -------------------------------------------------------------
 
+  /**
+   * Read-only retrieval over one session's transcript.
+   *
+   * Turn numbers are the contract: every tool uses the same 1-based numbering
+   * the opening message promises, so a search hit can be read, and a tool call
+   * can be opened by (turn, index). Nothing here writes, and every result is
+   * redacted, capped, and reported as untrusted data.
+   */
+  private sessionTools(messages: Message[]): AssistantTools {
+    const rows = messages.map((message, index) => ({
+      turn: index + 1,
+      role: message.role,
+      message,
+      text: renderMessageParts(message).join("\n"),
+    }));
+
+    const definitions: ChatToolDefinition[] = [
+      {
+        type: "function",
+        function: {
+          name: "search_transcript",
+          description:
+            "Search this session's transcript (prose, reasoning, tool input, and tool output) for a literal string. Returns matching turn numbers with a snippet.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              limit: { type: "integer", minimum: 1, maximum: 20 },
+            },
+            required: ["query"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "read_turns",
+          description:
+            "Read numbered turns in full: prose, reasoning, tool calls, and tool output.",
+          parameters: {
+            type: "object",
+            properties: {
+              from: { type: "integer", minimum: 1 },
+              to: { type: "integer", minimum: 1 },
+            },
+            required: ["from", "to"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_tool_calls",
+          description:
+            "Index the session's tool calls: turn, call index, name, status, and a short input. Use it to find the call whose output you need.",
+          parameters: {
+            type: "object",
+            properties: { status: { type: "string" } },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "read_tool_output",
+          description:
+            "Read one tool call's recorded output. Use the turn and the call index from list_tool_calls.",
+          parameters: {
+            type: "object",
+            properties: {
+              turn: { type: "integer", minimum: 1 },
+              index: { type: "integer", minimum: 0 },
+            },
+            required: ["turn", "index"],
+          },
+        },
+      },
+    ];
+
+    const run = (name: string, argumentsJson: string): ToolRun => {
+      const args = parseToolArguments(argumentsJson);
+      switch (name) {
+        case "search_transcript": {
+          const query = typeof args.query === "string" ? args.query.trim() : "";
+          if (!query) {
+            return { output: "query is required", label: "Searched transcript", turns: [] };
+          }
+          const limit = clamp(numberArg(args.limit, 8), 1, 20);
+          const matches: string[] = [];
+          for (const row of rows) {
+            const at = row.text.toLowerCase().indexOf(query.toLowerCase());
+            if (at < 0) continue;
+            const snippet = row.text
+              .slice(Math.max(0, at - 160), at + query.length + 240)
+              .replace(/\s+/g, " ");
+            matches.push(`turn ${row.turn} · ${row.role}: …${snippet}…`);
+            if (matches.length >= limit) break;
+          }
+          return {
+            output: matches.length ? matches.join("\n") : "no matches",
+            label: "Searched transcript",
+            detail: `“${truncate(query, 80)}” · ${matches.length} ${matches.length === 1 ? "hit" : "hits"}`,
+            metrics: { query, hits: matches.length },
+            turns: [],
+          };
+        }
+        case "read_turns": {
+          const from = clamp(numberArg(args.from, 1), 1, Math.max(1, rows.length));
+          const to = clamp(numberArg(args.to, from), from, Math.max(1, rows.length));
+          const selected = rows.filter((row) => row.turn >= from && row.turn <= to);
+          const output = clipHeadTail(
+            selected
+              .map(
+                (row) =>
+                  `TURN ${row.turn} · ${row.role.toUpperCase()}\n${row.text}`,
+              )
+              .join("\n\n"),
+            MAX_TOOL_RESULT_CHARS,
+          );
+          return {
+            output: output || "no turns in that range",
+            label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
+            detail: `${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
+            metrics: { turns: selected.length },
+            turns: selected.map((row) => row.turn),
+          };
+        }
+        case "list_tool_calls": {
+          // Models say "failed", "failure", or "ok"; the provider says "error"
+          // and "completed". Normalize instead of returning a false zero.
+          const raw =
+            typeof args.status === "string"
+              ? args.status.trim().toLowerCase()
+              : "";
+          const wanted =
+            raw === "failed" || raw === "failure"
+              ? "error"
+              : raw === "ok" || raw === "success" || raw === "done"
+                ? "completed"
+                : raw || undefined;
+          const lines: string[] = [];
+          let failed = 0;
+          for (const row of rows) {
+            let call = 0;
+            for (const part of row.message.parts) {
+              if (part.type !== "tool") continue;
+              const index = call;
+              call += 1;
+              if (part.status === "error" || part.status === "failed") failed += 1;
+              if (wanted && part.status !== wanted) continue;
+              lines.push(
+                `turn ${row.turn} · #${index} · ${part.name} · ${part.status} · ${clipText(redact(describeInput(part.input)), 100)}`,
+              );
+            }
+          }
+          // Newest 40 by default, but never silently: the header says what the
+          // page is, so an older call is a known gap, not a false absence.
+          const kept = lines.slice(-40);
+          const header =
+            kept.length === 0
+              ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in turns 1..${rows.length} (${failed} failed overall)`
+              : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in turns 1..${rows.length}; ${failed} failed overall`;
+          return {
+            output: [header, ...kept].join("\n"),
+            label: "Listed tool calls",
+            detail: `${kept.length} ${kept.length === 1 ? "call" : "calls"}`,
+            metrics: { calls: kept.length },
+            turns: [],
+          };
+        }
+        case "read_tool_output": {
+          const turn = clamp(numberArg(args.turn, 1), 1, Math.max(1, rows.length));
+          const message = messages[turn - 1];
+          const toolParts = message?.parts.filter((part) => part.type === "tool") ?? [];
+          const index = clamp(
+            numberArg(args.index, 0),
+            0,
+            Math.max(0, toolParts.length - 1),
+          );
+          const part = toolParts[index];
+          if (!part) {
+            return { output: "no such turn or tool call", label: "Read tool output", turns: [turn] };
+          }
+          const output = clipHeadTail(
+            redact(toolOutputText(part.output)),
+            MAX_TOOL_RESULT_CHARS,
+          );
+          return {
+            output: output || "(no output recorded)",
+            label: `Read output · ${part.name}`,
+            detail: `turn ${turn} · #${index}`,
+            metrics: { turns: 1, chars: output.length },
+            turns: [turn],
+          };
+        }
+        default:
+          return { output: `unknown tool ${name}`, label: "Tool", turns: [] };
+      }
+    };
+
+    return {
+      definitions,
+      run,
+      byName: (name) => definitions.some((entry) => entry.function.name === name),
+    };
+  }
+
   private async buildContext(
     scope: AssistantScope,
     question: string,
@@ -1414,6 +1787,9 @@ export class AssistantService {
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
+    /** Present when the scope has one transcript the model can query. */
+    tools?: AssistantTools;
+    transcriptTurns?: number;
   }> {
     if (scope.kind === "project") {
       return this.buildProjectContext(scope.project, question, steps);
@@ -1427,8 +1803,9 @@ export class AssistantService {
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
       questions.get(sessionRef).catch(() => null),
+      // Tools need the widest page; the opening message only gets the digest.
       sessions.messages(sessionRef, {
-        limit: this.agent().maxContextMessages,
+        limit: TOOL_TRANSCRIPT_LIMIT,
         order: "desc",
       }),
     ]);
@@ -1478,10 +1855,13 @@ export class AssistantService {
       now: this.now(),
       canWrite: this.writesEnabled(),
       assistantModel: model,
+      transcript: false,
     });
     return {
       ...rendered,
       targets: new Map([[session.ref, session.title]]),
+      tools: this.sessionTools(messages),
+      transcriptTurns: messages.length,
     };
   }
 
@@ -1834,7 +2214,7 @@ export class AssistantService {
     watermark: string,
   ): PendingHistoryScan {
     const request = this.options.sessions.messages(sessionRef, {
-      limit: 200,
+      limit: HISTORY_SCAN_LIMIT,
       order: "desc",
     });
     let finished: Promise<HistorySnapshot> | undefined;
@@ -1875,7 +2255,7 @@ export class AssistantService {
       ) {
         const next = await within(
           this.options.sessions.messages(sessionRef, {
-            limit: 200,
+            limit: HISTORY_SCAN_LIMIT,
             order: "desc",
             cursor,
           }),
@@ -2044,6 +2424,15 @@ Trust:
 - HISTORY is a provider compaction and may be out of date; give its timestamp when you rely on it.
 - For "is it stuck?", compare SITUATION's now with last activity and name the in-flight command or the last FAILURES entry.`;
 
+const TOOL_RULES = `
+TOOLS
+- The transcript is not pasted into this prompt. Read it with the tools: search_transcript finds a term, read_turns reads numbered turns in full (prose, reasoning, tool input and output), list_tool_calls indexes the calls, and read_tool_output opens one call's output.
+- Turn numbers are 1-based and shared by every tool. Cite them ("turn 12").
+- Search one term at a time; a whole question rarely matches as a literal string.
+- The RECENT ACTIONS block is only the newest calls and contains no output. list_tool_calls shows the index and how many calls failed; pass status: "error" to list failures.
+- Search or read before saying something is missing.
+- You have a few rounds. Answer as soon as the evidence supports it; do not keep reading after that.`;
+
 const TARGET_ACTION_RULES = `
 ACTIONS
 - This thread can propose one message to a session listed in SESSIONS, SEARCH, or TARGET SESSION. Put the exact message in text and the session's ref in sessionRef.
@@ -2065,11 +2454,13 @@ function renderPrompt(
   history: string[],
   canWrite: boolean,
   scope: AssistantScope,
+  tools = false,
 ): AssistantPrompt {
   const exchange = history.length
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
     : "";
   let system = SYSTEM_PROMPT;
+  if (tools) system += `\n${TOOL_RULES}`;
   if (canWrite) {
     system += `\n${scope.kind === "session" ? ACTION_RULES : TARGET_ACTION_RULES}`;
   }
@@ -2497,7 +2888,7 @@ function clipHeadTail(value: string, max: number): string {
   return `${value.slice(0, head)}\n…\n${value.slice(-tail)}`;
 }
 
-function renderContext(input: {
+export function renderContext(input: {
   session: {
     ref: string;
     title: string;
@@ -2523,6 +2914,8 @@ function renderContext(input: {
   now: number;
   canWrite: boolean;
   assistantModel: string;
+  /** When false, the turns stay behind the read-only tools. */
+  transcript?: boolean;
 }): { text: string; context: AssistantContext } {
   const { session } = input;
   const digest = mergeDigests(digestMessages(input.messages), input.historyDigest);
@@ -2615,7 +3008,6 @@ function renderContext(input: {
     }
   }
 
-  lines.push("", "RECENT ACTIONS (index of untrusted tool calls, oldest first, deduped)");
   const actions: string[] = [];
   for (const message of input.messages) {
     for (const part of message.parts) {
@@ -2624,8 +3016,35 @@ function renderContext(input: {
       if (actions[actions.length - 1] !== line) actions.push(line);
     }
   }
+  lines.push(
+    "",
+    `RECENT ACTIONS (newest ${MAX_TOOL_DIGEST} of ${actions.length} tool calls, untrusted; use list_tool_calls for the full index)`,
+  );
   if (actions.length === 0) lines.push("(no tool calls)");
   for (const action of actions.slice(-MAX_TOOL_DIGEST)) lines.push(`- ${action}`);
+
+  if (input.transcript === false) {
+    // The turns are behind the tools, not in the prompt. The index above is
+    // enough to know what to search for; the model reads turns on demand.
+    const text = [
+      lines.join("\n"),
+      "",
+      `TRANSCRIPT (not pasted: ${input.messages.length} turns, numbered 1..${input.messages.length}; read them with the tools)`,
+    ].join("\n");
+    return {
+      text,
+      context: {
+        scope: "session",
+        messages: 0,
+        chars: text.length,
+        attention: input.attention.length,
+        failures: digest.failures.length,
+        search: input.hits.length,
+        asOf: input.session.updatedAt,
+        ...(input.history ? { historyAt: input.history.at } : {}),
+      },
+    };
+  }
 
   // The transcript is budgeted from the newest turn backwards: a long session
   // must drop its oldest turns, never the turn that just happened.
@@ -2911,6 +3330,37 @@ function clipMessage(value: string): string {
   if (value.length <= MAX_MESSAGE_CHARS) return value;
   const head = MAX_MESSAGE_CHARS - MESSAGE_TAIL_CHARS;
   return `${value.slice(0, head)}\n…\n${value.slice(-MESSAGE_TAIL_CHARS)}`;
+}
+
+function parseToolArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function numberArg(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function addUsage(
+  a: AssistantTurn["usage"] | undefined,
+  b: AssistantTurn["usage"] | undefined,
+): AssistantTurn["usage"] | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    promptTokens: a.promptTokens + b.promptTokens,
+    completionTokens: a.completionTokens + b.completionTokens,
+  };
 }
 
 function truncate(value: string, max: number): string {

@@ -458,6 +458,12 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   one opens the chat's step panel after that tile's row, with the recorded
   metrics as rows. A stopped run's in-flight step reads `cancelled`, not
   `error`. Arrow keys move between tiles; Escape closes the panel.
+- The session scope does not paste the transcript. It reads turns on demand
+  through four read-only tools — search, read turns, list tool calls, read one
+  output — and each call is a `tool` tile with its result count (`5 hits`,
+  `3 turns`, `40 calls`). The evidence line names both: `Read 3 turns · 5 tool
+  calls`. The tools cover the newest 200 messages; older turns are reported as
+  outside the indexed window, not guessed.
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.
