@@ -924,3 +924,15 @@ Sprint exit criteria:
   metrics are structured; the persisted turn is capped in one place. The web
   has one `ActivityTiles` renderer and two adapters (chat parts, hub facts)
   over the same `ActivityItem`. Scope: `docs/design.md` §10 Agent activity.
+
+- [x] G20. Session ask: give the model the evidence. The session context
+  builder now renders tool input/output and reasoning, normalizes provider
+  output shapes, and budgets by characters (48 KB) instead of prose-only
+  text; `maxContextMessages` defaults to 40 and allows 200. Measurements and
+  the next step are in `docs/reports/assistant-context-spikes.md`; the runner
+  is `scripts/spike-context.mjs`.
+- [ ] G21. Session ask: read-only retrieval tools. Add `search_transcript`,
+  `read_turns`, `list_tool_calls`, and `read_tool_output` to the hub agent with
+  a 5-round governor and a forced final answer, each call recorded as an
+  activity step. The spikes show 3/3 evidence questions answered at 3–22k
+  prompt tokens, where the fixed window answered 1/3 and confabulated one.
