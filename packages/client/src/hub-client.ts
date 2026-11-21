@@ -895,8 +895,11 @@ export class HubClient {
     ref: string,
     mode: ReplyMode = "reply",
     surface?: "g2",
+    questionId?: string,
   ): Promise<ReplyOptions> {
-    const query = `?mode=${mode}${surface ? `&surface=${surface}` : ""}`;
+    const query = `?mode=${mode}${surface ? `&surface=${surface}` : ""}${
+      questionId ? `&questionId=${encodeURIComponent(questionId)}` : ""
+    }`;
     return this.request<ReplyOptions>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/reply-options${query}`,
     );

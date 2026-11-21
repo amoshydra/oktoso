@@ -7924,6 +7924,12 @@ paths:
           required: false
           name: surface
           in: query
+        - schema:
+            type: string
+            minLength: 1
+          required: false
+          name: questionId
+          in: query
       responses:
         "200":
           description: Reply options
@@ -7931,6 +7937,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReplyOptions"
+        "400":
+          description: Invalid or unknown question id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: Session not found
           content:

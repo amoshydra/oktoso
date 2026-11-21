@@ -151,7 +151,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   const actions =
     deps.actions ??
     new SessionActions(deps.sessions, deps.questions, idempotency);
-  registerSessionRoutes(app, deps.sessions, deps.replies, actions);
+  registerSessionRoutes(app, deps.sessions, deps.replies, actions, deps.questions);
   registerReplyAuditRoutes(app, deps.replies, deps.replyFeedback);
   registerQuestionRoutes(app, deps.questions, deps.attention);
   registerDraftRoutes(app, deps.drafts);

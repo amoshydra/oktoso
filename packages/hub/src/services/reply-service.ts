@@ -3,6 +3,7 @@ import type {
   AssistantConfig,
   Message,
   MessagePage,
+  PendingQuestion,
   QuestionPrompt,
   ReplyAudit,
   ReplyAuditQuestion,
@@ -390,14 +391,20 @@ export class ReplyService {
     ref: string,
     mode: ReplyMode,
     surface: ReplySurface = "web",
+    questionOverride?: ReplyAuditQuestion,
   ): Promise<ReplyOptions> {
     const { latest, messages, originalRequest, latestRequest } =
       await this.loadContext(ref);
     const config = this.settings.config();
     const session = this.sessions.cachedSession?.(ref);
-    const question =
+    const derived =
       extractToolQuestion(latest.data) ??
       questionFromPrompt(parseQuestion(latest.data, { sessionRef: ref }));
+    // The glass answers one question of a batch at a time. Its reply-options
+    // call names that question, and only answer candidates may target it;
+    // reply/choices stay anchored to the first pending question.
+    const question =
+      mode === "answer" && questionOverride ? questionOverride : derived;
     const momentContext = buildMomentContext({
       messages,
       session,
@@ -1364,7 +1371,14 @@ function buildAnswerPrompt(
     "question:",
     `  text: ${question.text}`,
     ...(question.choices.length > 0
-      ? ["  choices:", ...question.choices.map((choice) => `    - ${choice.label}`)]
+      ? [
+          "  choices:",
+          ...question.choices.map((choice) =>
+            choice.description
+              ? `    - ${choice.label} (${choice.description})`
+              : `    - ${choice.label}`,
+          ),
+        ]
       : []),
     "recent messages:",
     ...recent.map((line) => `  ${line}`),
@@ -2088,10 +2102,16 @@ function questionFromPrompt(
   prompt: QuestionPrompt | null,
 ): ReplyAuditQuestion | undefined {
   const first = prompt?.questions[0];
-  if (!first) return undefined;
+  return first ? replyAuditQuestion(first) : undefined;
+}
+
+/** The reply-audit shape of one pending question, choices included. */
+export function replyAuditQuestion(
+  question: PendingQuestion,
+): ReplyAuditQuestion {
   return {
-    text: first.text,
-    choices: first.choices.map((choice) => ({
+    text: question.text,
+    choices: question.choices.map((choice) => ({
       label: choice.label,
       ...(choice.text && choice.text !== choice.label
         ? { description: choice.text }

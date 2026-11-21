@@ -1740,6 +1740,44 @@ describe("hub app", () => {
     expect(payload.data.some((item) => item.source === "model")).toBe(false);
   });
 
+  it("scopes answer options to a named batch question", async () => {
+    const { app } = await createTestApp();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const pending = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/question",
+      { headers },
+    );
+    const body = (await pending.json()) as {
+      data: { questions: Array<{ id: string }> };
+    };
+    const questionId = body.data.questions[0]!.id;
+
+    const scoped = await app.request(
+      `/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=answer&questionId=${encodeURIComponent(questionId)}`,
+      { headers },
+    );
+    expect(scoped.status).toBe(200);
+
+    const unknown = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=answer&questionId=missing",
+      { headers },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({
+      error: {
+        code: "invalid_request",
+        message: "Unknown question id for the pending prompt",
+      },
+    });
+
+    const blank = await app.request(
+      "/api/v1/sessions/desktop-opencode%3Ases_auth/reply-options?mode=answer&questionId=",
+      { headers },
+    );
+    expect(blank.status).toBe(400);
+  });
+
   it("transcribes audio through the configured endpoint", async () => {
     let captured: { url: string; init: RequestInit | undefined } | undefined;
     const transcriptionFetch = (async (

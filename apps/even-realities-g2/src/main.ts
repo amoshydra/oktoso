@@ -57,8 +57,10 @@ import {
   composeBatchAnswer,
   firstMissingBatchAnswer,
   replyModelConfigured,
+  suggestionQuestionId,
   type AnswerRow,
   type BatchAnswerDraft,
+  type SuggestionTarget,
 } from "./answer-model";
 import { glassInput, type GlassInput } from "./input";
 import { LiveBatcher } from "./live-batch";
@@ -185,6 +187,8 @@ interface AppState {
   suggestions: ReplyOption[];
   suggestionLoading: boolean;
   suggestionError?: string;
+  /** What a tapped candidate does: send it, or store a batch question's answer. */
+  suggestionTarget?: SuggestionTarget;
   question?: QuestionPrompt;
   questionSummaries: Record<string, PendingQuestionSummary>;
   batchAnswers: Record<string, BatchAnswerState>;
@@ -255,6 +259,7 @@ const state: AppState = {
   choicePage: 0,
   suggestions: [],
   suggestionLoading: false,
+  suggestionTarget: undefined,
   question: undefined,
   questionSummaries: {},
   batchAnswers: {},
@@ -1006,7 +1011,10 @@ function batchEntryList(): BatchAnswerState[] {
 function batchQuestionRows(): AnswerRow[] {
   const question = batchQuestion();
   return question
-    ? buildBatchQuestionRows(question, { voice: voiceAvailable })
+    ? buildBatchQuestionRows(question, {
+        voice: voiceAvailable,
+        suggested: replyAvailable,
+      })
     : [];
 }
 
@@ -1083,6 +1091,8 @@ async function performBatchRow(index: number): Promise<void> {
     void startVoice();
   } else if (row.action === "phone") {
     focusPhoneBatch();
+  } else if (row.action === "suggested") {
+    await openAnswerSuggestions({ kind: "batch", questionId: question.id });
   } else if (row.action === "back") {
     back();
   } else if (row.action === "failure") {
@@ -1143,6 +1153,29 @@ function answerMetadata(choice?: AnswerChoice): SendAnswer | undefined {
   return state.question
     ? buildAnswerMetadata(state.question, choice)
     : undefined;
+}
+
+/** The glass titles a batch's suggestion list by the question it fills. */
+function suggestionHeader(): string {
+  const target = state.suggestionTarget;
+  if (target?.kind === "batch") {
+    const questions = state.question?.questions ?? [];
+    const index = questions.findIndex((item) => item.id === target.questionId);
+    const label = index >= 0 ? `Q${index + 1}/${questions.length}` : "Q";
+    return clampLine(`SUGGESTED · ${label}`, 40);
+  }
+  return answerHeader("SUGGESTED");
+}
+
+function suggestionSummary(): string {
+  const target = state.suggestionTarget;
+  if (target?.kind === "batch") {
+    const question = state.question?.questions.find(
+      (item) => item.id === target.questionId,
+    );
+    return question ? batchQuestionBody(question) : "";
+  }
+  return answerSummary();
 }
 
 function answerKeyFor(text: string): string {
@@ -2262,6 +2295,7 @@ async function openChat(
   state.suggestions = [];
   state.suggestionLoading = false;
   state.suggestionError = undefined;
+  state.suggestionTarget = undefined;
   state.voiceReturnScreen = "chat";
   state.voicePurpose = "reply";
   state.voiceQuestionId = undefined;
@@ -2636,18 +2670,27 @@ async function performAnswerRow(index: number): Promise<void> {
   }
 }
 
-/** Candidate answers are model text: they send as ordinary free text. */
-async function openAnswerSuggestions(): Promise<void> {
+/** Candidate answers are model text: they send as ordinary free text, or fill
+ * the open batch question when the suggestions screen was opened from one. */
+async function openAnswerSuggestions(
+  target: SuggestionTarget = { kind: "answer" },
+): Promise<void> {
   if (!client || !state.sessionRef) return;
   const ref = state.sessionRef;
   const request = ++suggestionRequest;
+  state.suggestionTarget = target;
   state.suggestions = [];
   state.suggestionLoading = true;
   state.suggestionError = undefined;
   state.screen = "answer-suggestions";
   render();
   try {
-    const options = await client.replyOptions(ref, "answer", "g2");
+    const options = await client.replyOptions(
+      ref,
+      "answer",
+      "g2",
+      suggestionQuestionId(target),
+    );
     if (request !== suggestionRequest || state.sessionRef !== ref) return;
     state.suggestions = options.data.slice(0, 3);
     state.suggestionLoading = false;
@@ -2667,6 +2710,21 @@ async function performSuggestion(index: number): Promise<void> {
   const ref = state.sessionRef;
   const text = option?.text.trim() ?? "";
   if (!client || !ref || !text || state.messageBusy) return;
+  const target = state.suggestionTarget;
+  if (target?.kind === "batch") {
+    const question = state.question?.questions.find(
+      (item) => item.id === target.questionId,
+    );
+    if (!question) return;
+    // A batch candidate is that question's answer, not a chat reply: store it
+    // and move to the next question exactly like a choice or typed text.
+    state.batchAnswers[target.questionId] = { text };
+    state.suggestionTarget = undefined;
+    state.suggestions = [];
+    state.suggestionError = undefined;
+    advanceBatch();
+    return;
+  }
   state.messageBusy = true;
   state.suggestionError = undefined;
   render();
@@ -2684,6 +2742,7 @@ async function performSuggestion(index: number): Promise<void> {
     state.messageBusy = false;
     state.messageKey = undefined;
     state.messageKeyText = undefined;
+    state.suggestionTarget = undefined;
     scheduleQuestionRefresh(ref, { force: true });
     state.screen = "chat";
     state.notice = "Suggestion sent.";
@@ -4041,7 +4100,20 @@ function back(): void {
   if (state.screen === "answer-suggestions") {
     suggestionRequest += 1;
     state.suggestionLoading = false;
-    state.screen = "answer";
+    const target = state.suggestionTarget;
+    state.suggestionTarget = undefined;
+    if (target?.kind === "batch") {
+      // The batch index never moved while the list was open, so the same
+      // question is still on screen.
+      state.screen = "batch";
+      state.batchType = false;
+      state.batchQuestionId = undefined;
+      state.answerMode = false;
+      phoneQuestionKey = "";
+      updatePhoneQuestion();
+    } else {
+      state.screen = "answer";
+    }
     render();
     return;
   }
@@ -4769,8 +4841,8 @@ function render(): void {
     return;
   }
   if (state.screen === "answer-suggestions") {
-    const header = answerHeader("SUGGESTED");
-    const body = answerSummary();
+    const header = suggestionHeader();
+    const body = suggestionSummary();
     const items = state.suggestionLoading
       ? ["Reading suggestions…"]
       : state.suggestions.length > 0
@@ -4780,7 +4852,9 @@ function render(): void {
       ? "Sending…"
       : state.suggestionError
         ? clampLine(state.suggestionError, 60)
-        : "Tap send · Back ×2";
+        : state.suggestionTarget?.kind === "batch"
+          ? "Tap choose · Back ×2"
+          : "Tap send · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));
     }

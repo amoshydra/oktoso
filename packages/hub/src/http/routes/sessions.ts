@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { z } from "zod";
 import {
   zBranchSwitchInput,
   zCreateSessionInput,
@@ -12,9 +13,14 @@ import {
   zSessionRenameInput,
   zSessionSelectionInput,
   type Message,
+  type ReplyAuditQuestion,
 } from "@amoshydra/oktoso-contracts";
 import type { SessionService } from "../../services/session-service";
-import type { ReplyService } from "../../services/reply-service";
+import type { QuestionService } from "../../services/question-service";
+import {
+  replyAuditQuestion,
+  type ReplyService,
+} from "../../services/reply-service";
 import type { SessionActions } from "../../services/session-actions";
 import {
   exportFilename,
@@ -29,6 +35,7 @@ export function registerSessionRoutes(
   sessions: SessionService,
   replies: ReplyService,
   actions: SessionActions,
+  questions: QuestionService,
 ): void {
   app.get("/api/v1/sessions", async (c) => {
     const parsed = zSessionListQuery.safeParse(c.req.query());
@@ -104,8 +111,29 @@ export function registerSessionRoutes(
     const ref = c.req.param("ref");
     const mode = zReplyMode.safeParse(c.req.query("mode") ?? "reply");
     if (!mode.success) throw badRequest("Invalid reply-option mode");
+    const questionId = z
+      .string()
+      .min(1)
+      .optional()
+      .safeParse(c.req.query("questionId"));
+    if (!questionId.success) {
+      throw badRequest("Invalid reply-option question id");
+    }
     const surface = c.req.query("surface") === "g2" ? "g2" : "web";
-    return c.json(await replies.list(ref, mode.data, surface));
+    let questionOverride: ReplyAuditQuestion | undefined;
+    if (questionId.data !== undefined) {
+      const prompt = await questions.get(ref);
+      const pending = prompt?.questions.find(
+        (question) => question.id === questionId.data,
+      );
+      if (!pending) {
+        throw badRequest("Unknown question id for the pending prompt");
+      }
+      questionOverride = replyAuditQuestion(pending);
+    }
+    return c.json(
+      await replies.list(ref, mode.data, surface, questionOverride),
+    );
   });
 
   app.get("/api/v1/sessions/:ref/lineage", async (c) =>

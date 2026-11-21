@@ -289,7 +289,7 @@ was.
 |---|---|---|
 | `chat` | Read transcript. Footer advertises a pending question. | Existing six-line chat, text containers. |
 | `answer` | Choose or start a free-form answer. | Header, summary, one list (choices + action rows), footer hint. List is the only capture. |
-| `batch` | Answer one question of a multi-question prompt. | Same layout as `answer`; header `ANSWER · Q1/N`, question summary, numbered choices + `Type answer` / `Speak answer` / `Answer on phone` / `Back`. |
+| `batch` | Answer one question of a multi-question prompt. | Same layout as `answer`; header `ANSWER · Q1/N`, question summary, numbered choices + `Type answer` / `Speak answer` / `Suggested answers` / `Answer on phone` / `Back`. |
 | `batch-review` | Review every batch answer and send them together. | Header `REVIEW · N answers`, one numbered answer row per question, `Send all` / `Back`. |
 | `suggested` | Pick a model-written candidate answer. | Header, question summary, one list of 2–3 suggestions, footer hint. Back → `ANSWER`. |
 | `confirm` | Review a destructive answer. | Header, summary, list `Send`/`Cancel`, footer hint. |
@@ -376,7 +376,7 @@ hard-coded footer index.
 |---|---|
 | Provider-native question (`attentionID`) | `Answer in Inbox`, then optional `Failure ›`, then `Read chat`, `Stop agent` |
 | Multiple questions (`answer`) | `Answer N questions`; `Answer N questions on phone`; optional `Failure ›` |
-| Each batch question (`batch`) | choices numbered from 1; `Type answer` when free text or a sentinel; `Speak answer` when configured; `Answer on phone`; `Back` |
+| Each batch question (`batch`) | choices numbered from 1; `Type answer` when free text or a sentinel; `Speak answer` when configured; `Suggested answers` when configured; `Answer on phone`; `Back` |
 | Batch review (`batch-review`) | one numbered answer row per question; `Send all`; `Back` |
 | Free-form, no choices | optional `Speak answer` first, then `Type answer` (or `Type your own answer` for a sentinel), optional `Suggested answers`, optional `Failure ›`, `Read chat`, `Stop agent` |
 | Choices, free text allowed | choices; `Type answer` (or `Type your own answer`); `Speak answer`; `Suggested answers`; `Failure ›`; `Read chat`; `Stop agent` |
@@ -789,8 +789,10 @@ returns to `ANSWER` and keeps the composer text.
 `Answer on phone` and `Back` follow below the fold. Tapping a choice stores it
 and opens `ANSWER · Q2/2`; `Back` steps to the previous question, or to `ANSWER`
 at Q1. `Answer on phone` opens the whole-batch phone form without losing the
-entries already chosen. Type and voice save into the current question and
-advance; neither sends until `Send all`.
+entries already chosen. `Suggested answers` asks the hub for candidates for this
+question (`questionId`), and its header names the step (`SUGGESTED · Q2/2`).
+Type, voice, and a suggested candidate save into the current question and
+advance; none of them sends until `Send all`.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -1058,8 +1060,9 @@ detected in the latest message:
   chat has a recoverable failure.
 - Glass batch: `ANSWER · Q1/N` shows one question with its numbered choices,
   `Type answer` (when free text or a sentinel applies), `Speak answer` (when
-  configured), `Answer on phone`, and `Back`. Choosing, typing, or speaking
-  stores that question's entry and advances. The last answer opens
+  configured), `Suggested answers` (when configured), `Answer on phone`, and
+  `Back`. Choosing, typing, speaking, or picking a suggested candidate stores
+  that question's entry and advances. The last answer opens
   `REVIEW · N answers`.
 - Review: one numbered row per answer (tap to edit), `Send all`, and `Back`. A
   missing entry blocks the send with `Answer question N first.`; the hub rejects
@@ -1495,9 +1498,13 @@ instead of sending a reply.
 **Suggestions.** `Suggested answers` calls `reply-options` with `mode=answer`.
 The hub passes the pending question (text + choices) and the last messages to
 the configured reply model and returns 2–3 candidates of at most 46 characters.
-Tapping one sends ordinary free text and returns to chat; Back returns to
-`ANSWER`. The row is hidden when the reply model is disabled or missing a base
-URL/model. The model never replaces the agent's choices.
+On a batch question the call adds `questionId=<id>` so the model sees that
+question, not Q1; the header names the step (`SUGGESTED · Q2/2`) and a tap
+stores the candidate as that question's answer and advances without sending.
+On a single question, tapping one sends ordinary free text and returns to
+chat; Back returns to `ANSWER` (or to the batch question it came from). The row
+is hidden when the reply model is disabled or missing a base URL/model. The
+model never replaces the agent's choices.
 
 **Autocomplete.** On the phone, debounce typing and show up to three suggestion
 chips above the composer. Tap inserts, never sends. This remains a phone-only
@@ -2032,7 +2039,7 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | List rows, free-form | `Speak answer`, `Type answer`, `Suggested answers`, `Failure ›`, `Read chat`, `Stop agent` |
 | List rows, sentinel | choices without the sentinel, `Type your own answer`, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
 | List rows, multiple | `Answer 2 questions`, `Answer 2 questions on phone`, `Failure ›` |
-| List rows, batch question | choices, `Type answer`, `Speak answer`, `Answer on phone`, `Back` |
+| List rows, batch question | choices, `Type answer`, `Speak answer`, `Suggested answers`, `Answer on phone`, `Back` |
 | List rows, batch review | `1 <answer>`, `2 <answer>`, `Send all`, `Back` |
 | List rows, no free text | choices, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
 | List rows, >6 choices | first six, then the normal action rows |

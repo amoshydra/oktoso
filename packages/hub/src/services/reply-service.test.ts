@@ -225,6 +225,111 @@ describe("ReplyService gate", () => {
     ]);
   });
 
+  it("answers the named question of a batch instead of the first one", async () => {
+    const data = [
+      textMessage("m1", "user", "Ship the release"),
+      message("m2", "assistant", [
+        {
+          type: "tool",
+          id: "q",
+          name: "question",
+          status: "running",
+          input: {
+            questions: [
+              {
+                header: "Branch",
+                question: "Which branch should I target?",
+                options: [{ label: "release/2.4" }, { label: "main" }],
+              },
+              {
+                header: "Push",
+                question: "Should I force push?",
+                options: [{ label: "No" }, { label: "Yes" }],
+              },
+            ],
+          },
+        },
+      ]),
+    ];
+    const fetchMock = vi.fn(async () =>
+      completion(
+        JSON.stringify({
+          answers: ["No, keep the history.", "Yes, force push it."],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    const result = await service.list(
+      "desktop-opencode:ses_1",
+      "answer",
+      "g2",
+      {
+        text: "Should I force push?",
+        choices: [
+          { label: "No" },
+          { label: "Yes", description: "Force push the branch" },
+        ],
+      },
+    );
+
+    expect(result.data.map((option) => option.text)).toEqual([
+      "No, keep the history.",
+      "Yes, force push it.",
+    ]);
+    const prompt = requestBody(fetchMock).messages[1]?.content ?? "";
+    expect(prompt).toContain("Should I force push?");
+    expect(prompt).toContain("Force push the branch");
+    expect(prompt).not.toContain("Which branch should I target?");
+  });
+
+  it("keeps batch answers cached per question", async () => {
+    const data = [
+      textMessage("m1", "user", "Ship the release"),
+      message("m2", "assistant", [
+        {
+          type: "tool",
+          id: "q",
+          name: "question",
+          status: "running",
+          input: {
+            questions: [
+              {
+                question: "Which branch should I target?",
+                options: [{ label: "main" }],
+              },
+              {
+                question: "Should I force push?",
+                options: [{ label: "No" }],
+              },
+            ],
+          },
+        },
+      ]),
+    ];
+    const fetchMock = vi.fn(async () =>
+      completion(JSON.stringify({ answers: ["Do the simple thing."] })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new ReplyService(settings(), sessions(data), logger);
+    await service.list("desktop-opencode:ses_1", "answer", "g2", {
+      text: "Should I force push?",
+      choices: [{ label: "No" }],
+    });
+    await service.list("desktop-opencode:ses_1", "answer", "g2", {
+      text: "Which branch should I target?",
+      choices: [{ label: "main" }],
+    });
+    await service.list("desktop-opencode:ses_1", "answer", "g2", {
+      text: "Which branch should I target?",
+      choices: [{ label: "main" }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("still suggests while the agent is running", async () => {
     const data = [
       textMessage("m1", "user", "Fix the build"),

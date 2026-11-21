@@ -297,6 +297,7 @@ downloads the full file.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/sessions/:ref/reply-options?mode=reply\|choices&surface=web\|g2` | Cached reply options; `g2` uses the compact prompt and lint. |
+| `GET` | `/api/v1/sessions/:ref/reply-options?mode=answer&surface=g2&questionId=<id>` | Answer candidates for one named question of the pending prompt; an unknown id is a 400. |
 | `GET` | `/api/v1/sessions/:ref/reply-audit?mode=reply\|choices&surface=web\|g2` | Fresh generation plus prompt, context, and raw output. |
 | `GET` | `/api/v1/reply-feedback?limit=100` | Recent feedback, newest first. |
 | `POST` | `/api/v1/reply-feedback` | Save one feedback entry. |
