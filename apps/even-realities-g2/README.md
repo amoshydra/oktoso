@@ -50,9 +50,13 @@ Screenshot capture and framing are documented in
   keeps data fresh); painting never does, so a reload or a wake is never
   swallowed by a wear-sensor reading. Battery and charging show in Settings.
 - **Answer row grammar** — numbered rows (`1 Yes`) are answers; `›` rows
-  open a page or an action (`› Type answer`, `› Read chat`, `› Stop agent`).
-  The host renders every row with the same chrome, so the prefix is the whole
+  open a page or an action (`› Type answer`, `› Speak answer`). The host
+  renders every row with the same chrome, so the prefix is the whole
   distinction. Options are numbers; actions are chevrons.
+- **Single choice review** — choosing a numbered answer opens `REVIEW`, never
+  sends it. `› Send` is the only send gesture; `› Read full text…` opens the
+  full answer read-only; `Back` returns. Every single answer therefore takes
+  two taps, like a batch.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming. The pending

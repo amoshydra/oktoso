@@ -52,6 +52,7 @@ import {
   buildAnswerRows,
   buildAnswerSummary,
   buildBatchAnswerMetadata,
+  actionRow,
   buildBatchQuestionRows,
   buildBatchReviewRows,
   composeBatchAnswer,
@@ -140,6 +141,8 @@ type Screen =
   | "answer-confirm"
   | "answer-stale"
   | "answer-suggestions"
+  | "answer-review"
+  | "answer-review-text"
   | "batch"
   | "batch-review"
   | "reply"
@@ -212,6 +215,10 @@ interface AppState {
   messageKeyText?: string;
   messageBusy: boolean;
   pendingAnswerChoice?: AnswerChoice;
+  reviewChoice?: AnswerChoice;
+  reviewText?: string;
+  reviewLabel?: string;
+  reviewFrom: "answer" | "suggestions";
   notice?: string;
   failure?: FailureInfo;
   failureReturnScreen: Screen;
@@ -281,6 +288,10 @@ const state: AppState = {
   messageKeyText: undefined,
   messageBusy: false,
   pendingAnswerChoice: undefined,
+  reviewChoice: undefined,
+  reviewText: undefined,
+  reviewLabel: undefined,
+  reviewFrom: "answer",
   failureReturnScreen: "home",
   voiceReturnScreen: "chat",
   interruptReturnScreen: "chat",
@@ -2604,7 +2615,50 @@ async function openAttentionByID(id: string | undefined): Promise<void> {
   }
 }
 
+function openAnswerReview(input: {
+  choice?: AnswerChoice;
+  text: string;
+  label: string;
+  from: "answer" | "suggestions";
+}): void {
+  state.reviewChoice = input.choice;
+  state.reviewText = input.text;
+  state.reviewLabel = input.label;
+  state.reviewFrom = input.from;
+  state.screen = "answer-review";
+  render();
+}
+
+function performAnswerReviewRow(index: number): void {
+  const text = state.reviewText ?? "";
+  const rows = reviewRows();
+  const row = rows[index];
+  if (!row) return;
+  if (row.kind === "action" && row.action === "send") {
+    void sendAnswer(text, "glass", state.reviewChoice);
+    return;
+  }
+  if (row.kind === "action" && row.action === "read") {
+    state.screen = "answer-review-text";
+    render();
+    return;
+  }
+  back();
+}
+
+function reviewRows(): AnswerRow[] {
+  const lines = wrapText(state.reviewText ?? "", 54, 1000);
+  const rows: AnswerRow[] = [actionRow("send", "Send")];
+  if (lines.length > 2) rows.push(actionRow("read", "Read full text…"));
+  rows.push(actionRow("back", "Back"));
+  return rows;
+}
+
 async function performAnswerRow(index: number): Promise<void> {
+  if (state.screen === "answer-review") {
+    performAnswerReviewRow(index);
+    return;
+  }
   if (state.screen === "batch") {
     await performBatchRow(index);
     return;
@@ -2661,7 +2715,12 @@ async function performAnswerRow(index: number): Promise<void> {
       state.screen = "answer-confirm";
       render();
     } else {
-      await sendAnswer(row.choice.text, "glass", row.choice);
+      openAnswerReview({
+        choice: row.choice,
+        text: row.choice.text,
+        label: row.choice.label,
+        from: "answer",
+      });
     }
     return;
   }
@@ -2750,40 +2809,15 @@ async function performSuggestion(index: number): Promise<void> {
     advanceBatch();
     return;
   }
-  state.messageBusy = true;
+  // A candidate is a value, like a choice: review it before sending.
+  state.suggestionTarget = undefined;
+  state.suggestions = [];
   state.suggestionError = undefined;
-  render();
-  try {
-    const idempotencyKey = messageKeyFor(text);
-    const payload: SendInput = { text };
-    trackPendingSend(payload, idempotencyKey);
-    await client.sendMessage(ref, payload, {
-      idempotencyKey,
-      signal: sendSignal(),
-    });
-    clearPendingSend(idempotencyKey);
-    if (state.sessionRef !== ref) return;
-    chatFollowText = text.replace(/\s+/g, " ").trim();
-    state.messageBusy = false;
-    state.messageKey = undefined;
-    state.messageKeyText = undefined;
-    state.suggestionTarget = undefined;
-    scheduleQuestionRefresh(ref, { force: true });
-    state.screen = "chat";
-    state.notice = "Suggestion sent.";
-    updatePhoneQuestion();
-    render();
-    await loadChat(false);
-  } catch (error) {
-    state.messageBusy = false;
-    showFailure(error, {
-      returnScreen: "answer-suggestions",
-      retry: () => performSuggestion(index),
-    });
-    log(`Suggestion send failed: ${failureMessage(error)}`);
-  } finally {
-    state.messageBusy = false;
-  }
+  openAnswerReview({
+    text,
+    label: "Suggested answer",
+    from: "suggestions",
+  });
 }
 
 /** Failures are an affordance on the answer screen, never the chat tap. */
@@ -4121,6 +4155,16 @@ function back(): void {
     render();
     return;
   }
+  if (state.screen === "answer-review") {
+    state.screen = state.reviewFrom === "suggestions" ? "answer-suggestions" : "answer";
+    render();
+    return;
+  }
+  if (state.screen === "answer-review-text") {
+    state.screen = "answer-review";
+    render();
+    return;
+  }
   if (state.screen === "answer") {
     state.screen = "chat";
     state.answerMode = false;
@@ -4414,6 +4458,7 @@ function handleListClick(index: number): void {
       void performAttention(index);
       break;
     case "answer":
+    case "answer-review":
     case "answer-confirm":
     case "answer-stale":
     case "answer-suggestions":
@@ -4477,6 +4522,10 @@ function handleTextClick(): void {
       return;
     }
     void openReply();
+    return;
+  }
+  if (state.screen === "answer-review-text") {
+    back();
     return;
   }
   if (state.screen === "answer-type") {
@@ -4837,6 +4886,30 @@ function render(): void {
     }
     return;
   }
+  if (state.screen === "answer-review") {
+    const text = state.reviewText ?? "";
+    const lines = wrapText(text, 54, 1000);
+    const body = lines.slice(0, 2);
+    if (lines.length > 2) {
+      const last = body[1] ?? "";
+      body[1] = last.length < 53 ? `${last}…` : `${last.slice(0, 52)}…`;
+    }
+    const header = clampLine(`REVIEW · ${state.reviewLabel ?? "answer"}`, 40);
+    const items = reviewRows().map((row) => row.label);
+    if (setPreview(header, body.join("\n"), "Tap send · Back ×2", items)) {
+      void showPage(
+        listPage(header, items, "Tap send · Back ×2", body.join("\n")),
+      );
+    }
+    return;
+  }
+  if (state.screen === "answer-review-text") {
+    const body = wrapText(state.reviewText ?? "", 54, 7).join("\n");
+    if (setPreview("REVIEW · full text", body, "Back ×2")) {
+      void showPage(textPage(body, "Back ×2", "REVIEW · full text"));
+    }
+    return;
+  }
   if (
     state.screen === "answer" ||
     state.screen === "answer-confirm"
@@ -4869,7 +4942,7 @@ function render(): void {
       : state.answerError
         ? clampLine(`Couldn't send: ${state.answerError}`, 60)
         : hasChoices
-          ? "Swipe choose · Tap send · Back ×2"
+          ? "Swipe choose · Tap to review · Back ×2"
           : "Tap choose · Back ×2";
     if (setPreview(header, body, footer, items)) {
       void showPage(listPage(header, items, footer, body));

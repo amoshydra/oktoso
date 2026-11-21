@@ -85,7 +85,7 @@ export function replyModelConfigured(view: AssistantView | undefined): boolean {
  */
 const ACTION_PREFIX = "›  ";
 
-function actionRow(action: AnswerAction, label: string): AnswerRow {
+export function actionRow(action: AnswerAction, label: string): AnswerRow {
   return { kind: "action", action, label: clampLine(`${ACTION_PREFIX}${label}`, 54) };
 }
 
