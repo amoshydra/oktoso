@@ -791,7 +791,10 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   model, tool) that are persisted as `turn.activity` and rendered with the
   chat's activity component (toggle, dot texture, tile grid, inline detail).
   The global assistant renders as a modal `<dialog>` (bottom sheet on mobile);
-  session/project stay docked; scope icons distinguish them.
+  session/project stay docked; scope icons distinguish them. Correction:
+  activity renders before the answer text (work precedes prose), uses the
+  chat's 49px tiles and icon map, marks only running/error with a dot, and
+  opens the selected step's detail after its row.
 
 - [x] G18. Assistant endpoint settings. The `agent` block moved into runtime
   settings with the config file seeding it on first boot; `AssistantService`

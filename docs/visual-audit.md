@@ -1548,3 +1548,16 @@ list of file-configured objects.
   does not implement `/models` still accepts a typed id.
 - The dock's `Change endpoint` link is a quiet text action inside the model
   menu, not a new header control.
+
+## Activity order (2026-11-21)
+
+- The activity block moved above the answer. The work precedes the prose; the
+  previous order asked the reader to learn what happened after reading the
+  conclusion. The live run now shows reads/search before the first token.
+- The dock had drifted from the chat: 52px tiles, a green dot on every
+  completed step, a separator line, different icons, and a detail strip under
+  the grid. Those are corrected to the chat's component values. A second visual
+  grammar for the same data was the problem, not the data.
+- The remaining differences are structural, not stylistic: the dock is 400px
+  wide (fewer tiles per row) and its step detail has no provider-specific
+  preview or prev/next navigation, because hub steps carry no message parts.

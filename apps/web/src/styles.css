@@ -6237,39 +6237,13 @@ button.assistant-scope:hover {
 
 /* --- Assistant activity (same grammar as the chat) ---------------------- */
 
-.assistant-dock .agent-activity {
-  margin-top: var(--space-2);
-  padding: var(--space-2) 0 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.assistant-dock .agent-activity-grid {
-  padding: 2px 0;
-}
-
-.assistant-dock .activity-tile {
-  width: 52px;
-  min-height: 52px;
-}
-
-.activity-tile-dot.ok {
-  background: var(--success);
-}
-
-.activity-tile-dot.running {
-  background: var(--warning);
-}
-
-.activity-tile-dot.error {
-  background: var(--danger);
-}
-
 .agent-activity [data-kind="model"] {
   --kind: #a9bdff;
 }
 
 .assistant-activity-detail {
-  margin: 6px 0 0;
+  grid-column: 1 / -1;
+  margin: 2px 0 4px;
   padding: 8px 10px;
   color: var(--text);
   font-size: var(--text-xs);
@@ -6281,8 +6255,25 @@ button.assistant-scope:hover {
   border-radius: var(--radius-xs);
 }
 
-.assistant-activity-detail span {
+.assistant-activity-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
   font-weight: 600;
+}
+
+.assistant-activity-detail-time {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.assistant-activity-detail p {
+  margin: 4px 0 0;
+  color: var(--muted);
 }
 
 /* --- Global assistant as a modal dialog --------------------------------- */
