@@ -793,6 +793,14 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   The global assistant renders as a modal `<dialog>` (bottom sheet on mobile);
   session/project stay docked; scope icons distinguish them.
 
+- [ ] G18. Assistant endpoint settings (planned). Move the assistant's
+  `enabled`/`baseUrl`/`model`/`apiKey`/`timeoutMs`/`maxContextMessages`/
+  `allowWrite` into runtime settings with the config file as a one-time
+  bootstrap; add a Settings → Assistant agent panel with load-models and test,
+  and a "Change endpoint" link from the dock. The assistant reads the effective
+  config per run, so no restart. Scope:
+  `docs/reports/assistant-endpoint-scope.md`.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.
