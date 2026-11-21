@@ -1521,6 +1521,9 @@ components:
                         - history
                         - model
                         - tool
+                        - fetch
+                        - subagent
+                        - other
                     label:
                       type: string
                     detail:
@@ -1531,12 +1534,23 @@ components:
                         - running
                         - ok
                         - error
+                        - cancelled
                     at:
                       type: integer
                       minimum: 0
                     durationMs:
                       type: integer
                       minimum: 0
+                    title:
+                      type: string
+                    metrics:
+                      type: object
+                      additionalProperties:
+                        anyOf:
+                          - type: string
+                          - type: number
+                    parentId:
+                      type: string
                   required:
                     - id
                     - kind
@@ -1933,6 +1947,9 @@ components:
                       - history
                       - model
                       - tool
+                      - fetch
+                      - subagent
+                      - other
                   label:
                     type: string
                   detail:
@@ -1943,12 +1960,23 @@ components:
                       - running
                       - ok
                       - error
+                      - cancelled
                   at:
                     type: integer
                     minimum: 0
                   durationMs:
                     type: integer
                     minimum: 0
+                  title:
+                    type: string
+                  metrics:
+                    type: object
+                    additionalProperties:
+                      anyOf:
+                        - type: string
+                        - type: number
+                  parentId:
+                    type: string
                 required:
                   - id
                   - kind
@@ -2011,6 +2039,9 @@ components:
                     - history
                     - model
                     - tool
+                    - fetch
+                    - subagent
+                    - other
                 label:
                   type: string
                 detail:
@@ -2021,12 +2052,23 @@ components:
                     - running
                     - ok
                     - error
+                    - cancelled
                 at:
                   type: integer
                   minimum: 0
                 durationMs:
                   type: integer
                   minimum: 0
+                title:
+                  type: string
+                metrics:
+                  type: object
+                  additionalProperties:
+                    anyOf:
+                      - type: string
+                      - type: number
+                parentId:
+                  type: string
               required:
                 - id
                 - kind
@@ -2259,6 +2301,9 @@ components:
                           - history
                           - model
                           - tool
+                          - fetch
+                          - subagent
+                          - other
                       label:
                         type: string
                       detail:
@@ -2269,12 +2314,23 @@ components:
                           - running
                           - ok
                           - error
+                          - cancelled
                       at:
                         type: integer
                         minimum: 0
                       durationMs:
                         type: integer
                         minimum: 0
+                      title:
+                        type: string
+                      metrics:
+                        type: object
+                        additionalProperties:
+                          anyOf:
+                            - type: string
+                            - type: number
+                      parentId:
+                        type: string
                     required:
                       - id
                       - kind
@@ -2527,6 +2583,9 @@ components:
                           - history
                           - model
                           - tool
+                          - fetch
+                          - subagent
+                          - other
                       label:
                         type: string
                       detail:
@@ -2537,12 +2596,23 @@ components:
                           - running
                           - ok
                           - error
+                          - cancelled
                       at:
                         type: integer
                         minimum: 0
                       durationMs:
                         type: integer
                         minimum: 0
+                      title:
+                        type: string
+                      metrics:
+                        type: object
+                        additionalProperties:
+                          anyOf:
+                            - type: string
+                            - type: number
+                      parentId:
+                        type: string
                     required:
                       - id
                       - kind
@@ -9005,6 +9075,9 @@ paths:
                             - history
                             - model
                             - tool
+                            - fetch
+                            - subagent
+                            - other
                         label:
                           type: string
                         detail:
@@ -9015,12 +9088,23 @@ paths:
                             - running
                             - ok
                             - error
+                            - cancelled
                         at:
                           type: integer
                           minimum: 0
                         durationMs:
                           type: integer
                           minimum: 0
+                        title:
+                          type: string
+                        metrics:
+                          type: object
+                          additionalProperties:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        parentId:
+                          type: string
                       required:
                         - id
                         - kind

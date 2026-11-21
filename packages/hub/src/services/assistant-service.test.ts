@@ -559,6 +559,13 @@ describe("AssistantService", () => {
     const modelStep = done.turn.activity?.find((step) => step.kind === "model");
     expect(modelStep?.status).toBe("ok");
     expect(modelStep?.detail).toContain("10 in / 2 out");
+    // Structured facts live beside the prose, so a renderer never parses it.
+    expect(modelStep?.metrics).toMatchObject({
+      promptTokens: 10,
+      completionTokens: 2,
+    });
+    const contextStep = done.turn.activity?.find((step) => step.kind === "context");
+    expect(contextStep?.metrics?.turns).toBeGreaterThan(0);
   });
 
   it("lists the endpoint models and falls back to the configured one", async () => {
@@ -713,6 +720,11 @@ describe("AssistantService", () => {
     expect(error.run.state).toBe("stopped");
     const detail = service.getThread(thread.id);
     expect(detail.turns[1]?.text).toBe("The first half");
+    // Stopping is not failing: the in-flight model step closes as cancelled.
+    const modelStep = detail.turns[1]?.activity?.find(
+      (step) => step.kind === "model",
+    );
+    expect(modelStep?.status).toBe("cancelled");
   });
 
   function toolStream(args: unknown): Response {

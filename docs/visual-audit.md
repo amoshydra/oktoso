@@ -1561,3 +1561,21 @@ list of file-configured objects.
 - The remaining differences are structural, not stylistic: the dock is 400px
   wide (fewer tiles per row) and its step detail has no provider-specific
   preview or prev/next navigation, because hub steps carry no message parts.
+
+## One activity renderer (2026-11-21)
+
+- The dock and the chat now share `ActivityTiles`. The previous fix aligned two
+  copies by hand; this removes the copy. A visual change to the grid is a
+  single-file change again.
+- Hub kinds inherit the tool families' muted hues instead of falling back to
+  neutral grey. A run reads as read → think → search → model without inventing
+  a second palette; saturation still belongs to state.
+- The dock's step detail reuses the chat's `activity-step` chrome (status pill,
+  title, short value, duration, close) with metric rows in the body. The old
+  bespoke detail panel and its `grid-column` rule are gone; the grid is a flex
+  wrap, so the panel spans with `flex: 0 0 100%` like the chat's.
+- Counts beat durations in the tile: `20 turns` says more than `7ms` at the
+  same width. A compacted history reads `compacted` or `none`, not a timestamp
+  squeezed into 49px.
+- `cancelled` has its own quiet treatment: neutral pill, faint dot. Marking a
+  user stop as an error was inaccurate and looked like a fault.

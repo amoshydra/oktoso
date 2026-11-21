@@ -918,3 +918,9 @@ Sprint exit criteria:
 - A revoked subscription receives nothing.
 - Quiet hours suppress a normal-priority item.
 - All gates pass.
+
+- [x] G19. One activity architecture. `RunTrace` owns a run's steps: builders
+  get a sink, not an array; status is `running`/`ok`/`error`/`cancelled`;
+  metrics are structured; the persisted turn is capped in one place. The web
+  has one `ActivityTiles` renderer and two adapters (chat parts, hub facts)
+  over the same `ActivityItem`. Scope: `docs/design.md` §10 Agent activity.

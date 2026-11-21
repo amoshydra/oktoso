@@ -423,8 +423,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The composer offers three suggested questions before the first turn. While a
   run streams, the primary action becomes **Stop**. The footer always reads
   `Read-only · no writes`.
-- Answers cite what they read in prose. There is no tool-call UI because the
-  hub injects the context; the only structured element is an action card.
+- The hub reports what it read and which model answered as **agent activity**,
+  directly above the answer; the action card is the only write surface.
 - **Writes (M2).** When `assistant.allowWrite` is on, the model may propose one
   action: send a message, answer a **normal** pending question, or stop the
   running turn. It may not answer a permission prompt (`destructive` or
@@ -451,6 +451,13 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   of …`), the provider compaction the answer read when one exists (`history
   Nov 19`, with a bare time only when it is from today), and token usage. It is
   how a partial or stale answer announces itself.
+- Every answer with work behind it carries the chat's **Agent activity** block
+  above the answer, and above the live text while it streams. Tiles are the
+  `context`, `history`, `search`, `model`, and `tool` families; a tile's label
+  prefers a recorded count (`20 turns`, `5 hits`) over its duration. Selecting
+  one opens the chat's step panel after that tile's row, with the recorded
+  metrics as rows. A stopped run's in-flight step reads `cancelled`, not
+  `error`. Arrow keys move between tiles; Escape closes the panel.
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.
