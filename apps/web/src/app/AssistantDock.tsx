@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
 import type {
   AssistantAction,
@@ -37,11 +44,11 @@ const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
 };
 
 const STEP_ICON: Record<AssistantStepKind, IconName> = {
-  context: "message",
+  context: "file",
   search: "search",
-  history: "layers",
+  history: "bulb",
   model: "bot",
-  tool: "terminal",
+  tool: "code",
 };
 
 /**
@@ -399,6 +406,9 @@ export function AssistantDock({
                     {timeLabel(turn.createdAt)}
                   </time>
                 </div>
+                {turn.activity && turn.activity.length > 0 ? (
+                  <ActivityBlock steps={turn.activity} at={turn.createdAt} />
+                ) : null}
                 {turn.text || turn.error ? (
                   <div className="assistant-turn-text">{turn.text}</div>
                 ) : turn.action ? null : (
@@ -407,9 +417,6 @@ export function AssistantDock({
                 <TurnMeta turn={turn} />
                 {turn.action ? (
                   <ActionCard turn={turn} canWrite={canWriteHere} onDecide={decide} />
-                ) : null}
-                {turn.activity && turn.activity.length > 0 ? (
-                  <ActivityBlock steps={turn.activity} at={turn.createdAt} />
                 ) : null}
               </article>
             </Fragment>
@@ -421,13 +428,13 @@ export function AssistantDock({
             <div className="assistant-turn-role">
               <span>Assistant</span>
             </div>
+            {liveSteps.length > 0 ? (
+              <ActivityBlock steps={liveSteps} at={Date.now()} />
+            ) : null}
             <div className="assistant-turn-text">
               {streamText || <span className="assistant-waiting">Reading…</span>}
               <span className="assistant-caret" aria-hidden="true" />
             </div>
-            {liveSteps.length > 0 ? (
-              <ActivityBlock steps={liveSteps} at={Date.now()} />
-            ) : null}
           </article>
         ) : null}
 
@@ -610,15 +617,64 @@ function ActivityBlock({
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string>();
+  const [perRow, setPerRow] = useState(Math.max(1, steps.length));
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     rootRef.current?.scrollIntoView({ block: "nearest" });
   }, [open, steps.length]);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const update = () => {
+      const tile = grid.querySelector<HTMLElement>(".activity-tile");
+      if (!tile) return;
+      const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
+      const width = tile.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const next = Math.max(
+        1,
+        Math.floor((grid.clientWidth + gap) / (width + gap)),
+      );
+      setPerRow((current) => (current === next ? current : next));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [steps.length, open]);
+
   if (steps.length === 0) return null;
   const errors = steps.filter((step) => step.status === "error").length;
   const running = steps.some((step) => step.status === "running");
-  const active = steps.find((step) => step.id === selected);
+  const openIndex = steps.findIndex((step) => step.id === selected);
+  const insertAt =
+    openIndex >= 0
+      ? Math.min((Math.floor(openIndex / perRow) + 1) * perRow, steps.length) - 1
+      : -1;
+  const active = openIndex >= 0 ? steps[openIndex] : undefined;
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const buttons = Array.from(
+      grid.querySelectorAll<HTMLButtonElement>(".activity-tile"),
+    );
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (current < 0) return;
+    let next = current;
+    if (event.key === "ArrowRight") next = Math.min(current + 1, buttons.length - 1);
+    else if (event.key === "ArrowLeft") next = Math.max(current - 1, 0);
+    else if (event.key === "ArrowDown") next = Math.min(current + perRow, buttons.length - 1);
+    else if (event.key === "ArrowUp") next = Math.max(current - perRow, 0);
+    else return;
+    event.preventDefault();
+    buttons[next]?.focus();
+  };
 
   return (
     <div className="agent-activity" ref={rootRef}>
@@ -653,45 +709,57 @@ function ActivityBlock({
       </button>
 
       {open ? (
-        <>
-          <div className="agent-activity-grid">
-            {steps.map((step) => (
-              <button
-                key={step.id}
-                className="activity-tile"
-                data-kind={step.kind}
-                data-open={selected === step.id ? "true" : undefined}
-                type="button"
-                onClick={() =>
-                  setSelected(selected === step.id ? undefined : step.id)
-                }
-                aria-label={`${step.label}${step.detail ? `: ${step.detail}` : ""}`}
-              >
-                <Icon name={STEP_ICON[step.kind]} size={17} />
-                <span className="activity-tile-meta">
-                  {step.durationMs !== undefined
-                    ? durationLabel(step.durationMs)
-                    : step.status === "running"
-                      ? "…"
-                      : ""}
-                </span>
-                <span
-                  className={`activity-tile-dot ${step.status}`}
-                  aria-hidden="true"
-                />
-              </button>
-            ))}
-          </div>
-          {active ? (
-            <p className="assistant-activity-detail">
-              <span>{active.label}</span>
-              {active.detail ? ` · ${active.detail}` : ""}
-              {active.durationMs !== undefined
-                ? ` · ${durationLabel(active.durationMs)}`
-                : ""}
-            </p>
-          ) : null}
-        </>
+        <div
+          className="agent-activity-grid"
+          role="group"
+          aria-label="Agent steps"
+          ref={gridRef}
+          onKeyDown={onKeyDown}
+        >
+          {steps.map((step, index) => {
+            const isOpen = step.id === selected;
+            return (
+              <Fragment key={step.id}>
+                <button
+                  className="activity-tile"
+                  type="button"
+                  data-kind={step.kind}
+                  data-status={step.status}
+                  data-open={isOpen ? "true" : "false"}
+                  aria-expanded={isOpen}
+                  aria-label={`${step.label}${step.detail ? `, ${step.detail}` : ""}`}
+                  title={step.detail ?? step.label}
+                  onClick={() => setSelected(isOpen ? undefined : step.id)}
+                >
+                  <Icon name={STEP_ICON[step.kind]} size={18} />
+                  <span className="activity-tile-meta">
+                    {step.durationMs !== undefined
+                      ? durationLabel(step.durationMs)
+                      : step.status === "running"
+                        ? "…"
+                        : ""}
+                  </span>
+                  {step.status !== "ok" ? (
+                    <span className="activity-tile-dot" aria-hidden="true" />
+                  ) : null}
+                </button>
+                {active && index === insertAt ? (
+                  <div className="assistant-activity-detail" role="group" aria-label="Step detail">
+                    <div className="assistant-activity-detail-head">
+                      <span>{active.label}</span>
+                      {active.durationMs !== undefined ? (
+                        <span className="assistant-activity-detail-time">
+                          {durationLabel(active.durationMs)}
+                        </span>
+                      ) : null}
+                    </div>
+                    {active.detail ? <p>{active.detail}</p> : null}
+                  </div>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </div>
       ) : (
         <div className="agent-activity-dots" aria-hidden="true">
           {steps.map((step) => (
