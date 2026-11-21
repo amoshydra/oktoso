@@ -134,6 +134,43 @@ export function renderMarkdown(
     }
   }
 
+  for (const media of template.content.querySelectorAll("video, audio")) {
+    const resolved = resolveSessionResource(
+      media.getAttribute("src") ?? undefined,
+      context ?? {},
+      "link",
+    );
+    if (!resolved.url) {
+      // A <source> child may carry the URL; the source pass fills it.
+      media.removeAttribute("src");
+    } else {
+      media.setAttribute(
+        "src",
+        resolved.attachment && context?.providerID
+          ? attachmentProxyPath(context.providerID, resolved.url)
+          : resolved.url,
+      );
+    }
+    media.setAttribute("controls", "");
+    media.setAttribute("preload", "metadata");
+    media.setAttribute("playsinline", "");
+  }
+
+  for (const source of template.content.querySelectorAll("source")) {
+    const resolved = resolveSessionResource(
+      source.getAttribute("src") ?? undefined,
+      context ?? {},
+      "link",
+    );
+    if (!resolved.url) continue;
+    source.setAttribute(
+      "src",
+      resolved.attachment && context?.providerID
+        ? attachmentProxyPath(context.providerID, resolved.url)
+        : resolved.url,
+    );
+  }
+
   for (const image of template.content.querySelectorAll("img")) {
     const resolved = resolveSessionResource(
       image.getAttribute("src") ?? undefined,

@@ -418,6 +418,52 @@ describe("hub app", () => {
     expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
   });
 
+  it("serves a byte range of a session file so media can seek", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const path = `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("plots/chart.png")}`;
+    const full = await app.request(path, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const total = (await full.arrayBuffer()).byteLength;
+
+    const ranged = await app.request(path, {
+      headers: { Authorization: `Bearer ${token}`, Range: "bytes=0-3" },
+    });
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers.get("accept-ranges")).toBe("bytes");
+    expect(ranged.headers.get("content-range")).toBe(`bytes 0-3/${total}`);
+    expect(ranged.headers.get("content-length")).toBe("4");
+    expect((await ranged.arrayBuffer()).byteLength).toBe(4);
+
+    const suffix = await app.request(path, {
+      headers: { Authorization: `Bearer ${token}`, Range: "bytes=-2" },
+    });
+    expect(suffix.status).toBe(206);
+    expect(suffix.headers.get("content-range")).toBe(
+      `bytes ${total - 2}-${total - 1}/${total}`,
+    );
+  });
+
+  it("rejects an unsatisfiable byte range", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const path = `/api/v1/sessions/${ref}/files?path=${encodeURIComponent("plots/chart.png")}`;
+    const full = await app.request(path, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const total = (await full.arrayBuffer()).byteLength;
+
+    const response = await app.request(path, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Range: `bytes=${total + 10}-`,
+      },
+    });
+    expect(response.status).toBe(416);
+    expect(response.headers.get("content-range")).toBe(`bytes */${total}`);
+  });
+
   it("accepts an absolute path inside the session directory", async () => {
     const { app } = await createTestApp();
     const ref = encodeURIComponent("desktop-opencode:ses_auth");

@@ -2,6 +2,8 @@ import { ProviderError } from "../errors";
 import type { ProviderResource } from "../types";
 
 export const MAX_RESOURCE_BYTES = 20 * 1024 * 1024;
+/** Media is streamed by the browser; an attachment cap does not apply. */
+export const MAX_MEDIA_RESOURCE_BYTES = 256 * 1024 * 1024;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export interface ReadProviderResourceOptions {

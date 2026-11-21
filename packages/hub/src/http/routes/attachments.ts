@@ -3,7 +3,11 @@ import type { ProviderRegistry } from "../../services/provider-registry";
 import type { AttachmentStore } from "../../services/attachment-store";
 import type { AppEnv } from "../types";
 import { badRequest, notFound, notImplemented } from "../../domain/errors";
-import { resourceHeaders } from "../resource-response";
+import {
+  mediaMaxBytes,
+  resourceHeaders,
+  sliceForRange,
+} from "../resource-response";
 
 const MAX_URL_LENGTH = 4096;
 
@@ -51,11 +55,19 @@ export function registerAttachmentRoutes(
       throw notImplemented("This provider does not expose attachments");
     }
 
+    const cap = mediaMaxBytes(url);
     const resource = await adapter.readResource(
       url,
       AbortSignal.timeout(20_000),
+      cap === undefined ? {} : { maxBytes: cap },
     );
-
-    return c.body(resource.body, 200, resourceHeaders(resource));
+    const ranged = sliceForRange(resource, c.req.header("range"));
+    if (ranged.status === 416) {
+      return c.body(null, 416, ranged.headers);
+    }
+    return c.body(ranged.body, ranged.status, {
+      ...resourceHeaders(resource),
+      ...ranged.headers,
+    });
   });
 }

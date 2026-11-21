@@ -4,7 +4,11 @@ import type { Hono } from "hono";
 import type { SessionService } from "../../services/session-service";
 import type { AppEnv } from "../types";
 import { badRequest, notFound } from "../../domain/errors";
-import { resourceHeaders, safeContentType } from "../resource-response";
+import {
+  resourceHeaders,
+  safeContentType,
+  sliceForRange,
+} from "../resource-response";
 
 const MAX_PATH_LENGTH = 1024;
 const TICKET_TTL_MS = 10 * 60 * 1_000;
@@ -103,11 +107,14 @@ export function registerFileRoutes(
     }
 
     const resource = await sessions.readFile(c.req.param("ref"), path);
-    return c.body(
-      resource.body,
-      200,
-      resourceHeaders(resource, { openInTab: true }),
-    );
+    const ranged = sliceForRange(resource, c.req.header("range"));
+    if (ranged.status === 416) {
+      return c.body(null, 416, ranged.headers);
+    }
+    return c.body(ranged.body, ranged.status, {
+      ...resourceHeaders(resource, { openInTab: true }),
+      ...ranged.headers,
+    });
   });
 
   /**

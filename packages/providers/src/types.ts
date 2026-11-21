@@ -61,6 +61,8 @@ export interface ProviderFileRequest {
   ref: string;
   directory?: string;
   path: string;
+  /** Override the resource cap, e.g. for a video the browser streams. */
+  maxBytes?: number;
 }
 
 export interface ProviderSendInput extends SendInput {
@@ -135,7 +137,11 @@ export interface ProviderAdapter {
   ): Promise<void>;
   markRead?(ref: string, signal: AbortSignal): Promise<void>;
   renameSession?(ref: string, title: string, signal: AbortSignal): Promise<Session>;
-  readResource?(url: string, signal: AbortSignal): Promise<ProviderResource>;
+  readResource?(
+    url: string,
+    signal: AbortSignal,
+    options?: { maxBytes?: number },
+  ): Promise<ProviderResource>;
   readFile?(
     input: ProviderFileRequest,
     signal: AbortSignal,
