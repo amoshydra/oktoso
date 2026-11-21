@@ -488,6 +488,9 @@ describe("G2 hosted app", () => {
     expect(await listLabels()).toEqual(["Ship it.", "Not yet."]);
 
     await listTap(0);
+    await previewMatches(/REVIEW/);
+    expect(await listLabels()).toEqual(["› Send", "› Back"]);
+    await tapRowMatching(/Send/);
     await previewMatches(/Refactor session index/);
     expect(sentText).toBe("Ship it.");
   });

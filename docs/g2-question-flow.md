@@ -34,7 +34,7 @@ identify which container was hit. The spike confirmed that a four-container page
 (header, summary, list, footer hint) rebuilds when only the list captures, and a
 six-item list scrolls and selects beyond the visible four rows.
 
-A choice sends in one tap. Destructive choices open a `CONFIRM` screen first;
+A choice opens `REVIEW`; only its `Send` row sends. Destructive choices open a `CONFIRM` screen first;
 sensitive questions add a text warning but still send normally. Free text hands
 off to the phone card, which puts the existing composer into answer mode. A
 multi-question prompt opens the same screen with `› Answer N questions` (one
@@ -154,7 +154,7 @@ The hard parts are not rendering a list:
 | Question metadata on `reply-options` | Reading chat would trigger reply generation or require a generation endpoint just to know a question exists. | Hub-owned `QuestionService` + `GET /sessions/:ref/question`. |
 | `ANSWER` shows 3 choices + Type + More replies + Read chat | Six rows cannot all be visible in 156 px; the draft did not specify what happens below the fold. | Choices + action rows in one scrolling list; four rows visible; footer is a hint. No `More` detour: free text is a first-class row. |
 | Tapping chat opens `ANSWER` | Fine, but chat still opens at the start of the latest message, so the question may be off-screen. | Chat opens at the question line when pending. |
-| Tap a choice sends | A walking tap or ring tap can send the wrong answer. | Send on tap, except `requiresConfirmation` choices. |
+| Tap a choice sends | A walking tap or ring tap can send the wrong answer. | A choice opens `REVIEW`; only `Send` sends. |
 | Extract numbered/bulleted choices | Agent plans and task lists become buttons. | Adjacency, plan, task, code, and quote filters; confidence floor. |
 | Phone card above keyboard | Duplicates the existing composer and two send paths. | One composer in answer mode; the card only adds question/choices. |
 | No stale handling | A send can answer a question that was replaced. | `revision` + `409 question_changed` + `Review`. |
@@ -233,7 +233,7 @@ was.
    then `Type answer` (when free text is allowed), `Speak answer`,
    `Suggested answers`, and `Read chat`. Four rows are visible; the rest are
    below the fold. Footer hint:
-   `Swipe choose · Tap send · Back ×2` when there are choice rows, otherwise
+   `Swipe choose · Tap to review · Back ×2` when there are choice rows, otherwise
    `Tap choose · Back ×2`.
 3. **Choose.** Swipe moves the selection border. Tap the selected row. Normal
    choice → `SENDING`. `requiresConfirmation` choice → `CONFIRM`.
