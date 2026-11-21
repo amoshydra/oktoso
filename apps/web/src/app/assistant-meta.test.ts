@@ -43,6 +43,13 @@ describe("assistant evidence line", () => {
     expect(parts).toContain("1 attention item");
   });
 
+  it("reports cross-session search hits", () => {
+    const parts = turnMetaParts(
+      turn({ messages: 2, search: 3, asOf: Date.now() }),
+    );
+    expect(parts).toContain("3 search hits");
+  });
+
   it("reports inbox and running counts for the global scope", () => {
     const parts = turnMetaParts(
       turn({ scope: "global", attention: 2, running: 1, asOf: Date.now() }),
