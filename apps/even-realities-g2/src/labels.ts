@@ -22,7 +22,7 @@ export const GLYPH_LEGEND: LegendEntry[] = [
   { glyph: "▼", label: "Offline" },
   { glyph: "◇", label: "Idle" },
   { glyph: "◆", label: "Attention" },
-  { glyph: SUBAGENT_GLYPH, label: "Subagent prefix" },
+  { glyph: SUBAGENT_GLYPH, label: "Opens / child" },
   { glyph: `${SUBAGENT_GLYPH}?`, label: "Child question" },
   { glyph: `${SUBAGENT_GLYPH}■`, label: "Child permission" },
 ];
