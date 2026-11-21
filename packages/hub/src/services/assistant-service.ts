@@ -29,6 +29,7 @@ import type {
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { Logger } from "../lib/logger";
 import { badRequest, conflict, notFound } from "../domain/errors";
+import { capActivity } from "./activity";
 import type { AttentionService } from "./attention-service";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
@@ -1111,17 +1112,22 @@ export class AssistantService {
   }
 
   private async appendTurn(turn: AssistantTurn): Promise<AssistantTurn> {
+    // Every persisted turn passes through here, so the cap cannot be skipped by
+    // a caller that forgot it.
+    const safe: AssistantTurn = turn.activity
+      ? { ...turn, activity: capActivity(turn.activity) }
+      : turn;
     await this.options.store.update((state) => {
       const target = state.assistantThreads.find(
-        (entry) => entry.id === turn.threadId,
+        (entry) => entry.id === safe.threadId,
       );
       if (!target) return;
-      target.turns.push(turn);
+      target.turns.push(safe);
       trimTurns(target);
       target.updatedAt = turn.createdAt;
       target.messageCount = target.turns.length;
     });
-    return turn;
+    return safe;
   }
 
   private async buildAction(

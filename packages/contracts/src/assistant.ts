@@ -119,6 +119,9 @@ export const zAssistantContext = z.object({
   search: z.number().int().nonnegative().optional(),
 });
 
+/** Upper bound for a persisted turn's activity. Live events are not capped. */
+export const MAX_ASSISTANT_ACTIVITY_STEPS = 40;
+
 export const zAssistantStepKind = z.enum([
   "context",
   "search",
@@ -150,7 +153,10 @@ export const zAssistantTurn = z.object({
   action: zAssistantAction.optional(),
   context: zAssistantContext.optional(),
   /** Hub facts: what the run read, which model answered, and any tool it fired. */
-  activity: z.array(zAssistantStep).max(40).optional(),
+  activity: z
+    .array(zAssistantStep)
+    .max(MAX_ASSISTANT_ACTIVITY_STEPS)
+    .optional(),
   usage: z
     .object({
       promptTokens: z.number().int().nonnegative(),
