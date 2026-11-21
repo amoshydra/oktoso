@@ -671,13 +671,20 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     );
   }
 
-  async readResource(url: string, signal: AbortSignal): Promise<ProviderResource> {
+  async readResource(
+    url: string,
+    signal: AbortSignal,
+    options: { maxBytes?: number } = {},
+  ): Promise<ProviderResource> {
     return readProviderResource({
       url,
       baseUrl: this.baseUrl,
       headers: { Authorization: `Bearer ${this.token}` },
       signal,
       providerLabel: "Open WebUI",
+      ...(options.maxBytes === undefined
+        ? {}
+        : { maxBytes: options.maxBytes }),
     });
   }
 

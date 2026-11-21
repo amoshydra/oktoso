@@ -25,6 +25,7 @@ import {
   type ProviderResource,
 } from "@amoshydra/oktoso-providers";
 import { AppError, badRequest, notFound, notImplemented } from "../domain/errors";
+import { mediaMaxBytes } from "../http/resource-response";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AttachmentStore } from "./attachment-store";
@@ -436,6 +437,9 @@ export class SessionService {
         ref,
         directory,
         path: relativeSessionPath(path, directory),
+        ...(mediaMaxBytes(path) === undefined
+          ? {}
+          : { maxBytes: mediaMaxBytes(path) }),
       },
       operationSignal(this.registry, adapter.id, 20_000),
     );

@@ -6408,3 +6408,22 @@ html[data-theme="light"] .agent-activity [data-kind="tool"] { --kind: #8a6a2f; }
 .assistant-model-link:hover {
   text-decoration: underline;
 }
+
+.message-attachment-video {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  max-height: 480px;
+  background: #000;
+  border-radius: var(--radius-sm);
+}
+
+.message-attachment-audio {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+}
+
+.message-attachment figcaption {
+  margin-top: var(--space-1);
+}

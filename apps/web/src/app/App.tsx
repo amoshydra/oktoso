@@ -120,6 +120,7 @@ import {
   updateOptimisticStatus,
 } from "./optimistic";
 import {
+  attachmentProxyPath,
   resolveSessionResource,
   type ResourceContext,
 } from "./urls";
@@ -1258,7 +1259,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.40 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.41 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -8856,6 +8857,57 @@ function MessagePartView(props: {
       Boolean(part.mimeType?.startsWith("image/")) ||
       (!part.mimeType &&
         /\.(?:png|jpe?g|gif|webp|avif)(?:[?#]|$)/i.test(part.url ?? ""));
+    const isVideo =
+      Boolean(part.mimeType?.startsWith("video/")) ||
+      /\.(?:mp4|m4v|webm|mov|ogv)(?:[?#]|$)/i.test(part.url ?? "");
+    const isAudio =
+      Boolean(part.mimeType?.startsWith("audio/")) ||
+      /\.(?:mp3|m4a|wav|ogg|flac)(?:[?#]|$)/i.test(part.url ?? "");
+
+    if ((isVideo || isAudio) && (dataUrl || link.url)) {
+      const src =
+        dataUrl ??
+        (link.attachment && props.resource.providerID
+          ? attachmentProxyPath(props.resource.providerID, link.url!)
+          : link.url!);
+      return (
+        <figure className="message-attachment">
+          {isVideo ? (
+            <video
+              className="message-attachment-video"
+              src={src}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <audio
+              className="message-attachment-audio"
+              src={src}
+              controls
+              preload="metadata"
+            />
+          )}
+          <figcaption>
+            <span className="message-file-name">{part.name}</span>
+            {part.mimeType ? (
+              <span className="message-file-meta">{part.mimeType}</span>
+            ) : null}
+            {dataUrl ? (
+              <DataAttachmentButton url={dataUrl} name={part.name} />
+            ) : (
+              <AttachmentButton
+                client={props.client}
+                providerID={props.resource.providerID}
+                url={link.url}
+                viaProxy={link.attachment}
+                name={part.name}
+              />
+            )}
+          </figcaption>
+        </figure>
+      );
+    }
 
     if (isImage && image.url) {
       return (

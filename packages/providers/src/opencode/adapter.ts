@@ -709,13 +709,20 @@ export class OpenCodeAdapter implements ProviderAdapter {
     throw new ProviderError("unsupported", `Unsupported attention kind: ${kind}`);
   }
 
-  async readResource(url: string, signal: AbortSignal): Promise<ProviderResource> {
+  async readResource(
+    url: string,
+    signal: AbortSignal,
+    options: { maxBytes?: number } = {},
+  ): Promise<ProviderResource> {
     return readProviderResource({
       url,
       baseUrl: this.baseUrl,
       headers: { Authorization: this.authorization },
       signal,
       providerLabel: "OpenCode",
+      ...(options.maxBytes === undefined
+        ? {}
+        : { maxBytes: options.maxBytes }),
     });
   }
 
@@ -749,7 +756,9 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
     let resource;
     try {
-      resource = await this.readResource(url.toString(), signal);
+      resource = await this.readResource(url.toString(), signal, {
+        ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+      });
     } catch (error) {
       // A missing project file is not a missing attachment; name the path and
       // the scope so the UI can say something useful.

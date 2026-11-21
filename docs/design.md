@@ -731,6 +731,23 @@ Use SQLite when Node's `node:sqlite` is available. Fall back to a JSON file for 
 - `devices`: optional client device records for sync.
 - `event_cursor`: optional per-client cursor.
 
+### Session files and media
+
+The provider owns the filesystem; the hub proxies its file API. Session files
+are jailed to the session directory and typed by a safelist, so a provider
+cannot make the hub serve an arbitrary MIME type.
+
+- Documents and images keep a **20 MB** proxy cap.
+- Audio and video get a **256 MB** cap, because a normal 1080p clip is larger
+  than an attachment. The provider read is whole-file; the hub then serves
+  byte ranges from the buffer (`206`, `Accept-Ranges`, `Content-Range`), which
+  is enough for seeking and for clients that require a partial response. True
+  upstream streaming is the next step if a hub ever runs on a small device.
+- A message `file` part with audio or video MIME renders a player inline, and
+  Markdown `<video>`/`<audio>`/`<source>` URLs are resolved through the same
+  session-resource pass as `<img>`; a relative path becomes a proxy URL the
+  browser can actually fetch.
+
 Provider history stays in the provider. The hub caches recent session pages and message pages in memory with a short TTL. The cache is not authoritative.
 
 ## 12. Auth and security

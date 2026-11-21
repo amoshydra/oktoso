@@ -1601,3 +1601,15 @@ list of file-configured objects.
   the honest size of what the model could see, not a decorative count.
 - No new visual grammar: retrieval inside one session and across many are the
   same tile with a different detail.
+
+## Media in messages (2026-11-22)
+
+- A video or audio `file` part uses the native player, capped at 720×480 on
+  desktop and full width on mobile. The black video box is the player's own
+  letterbox, not a design surface.
+- The player sits in the same `figure` as an image attachment, with the same
+  name and MIME caption, so the message grammar does not grow a second
+  attachment style.
+- Markdown `<video>` uses the same source resolution as `<img>`; a relative
+  path is a proxy URL, never a path on the hub's own origin. Without that, the
+  browser fetches the SPA's HTML and the element renders nothing.
