@@ -113,6 +113,8 @@ export const zAssistantContext = z.object({
   scope: z.enum(["session", "project", "global"]).optional(),
   /** Global scope: running sessions in the context. */
   running: z.number().int().nonnegative().optional(),
+  /** Cross-session search hits in the context. */
+  search: z.number().int().nonnegative().optional(),
 });
 
 export const zAssistantTurn = z.object({

@@ -775,6 +775,15 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   search found this session from a transcript hit; a URL-named session
   produced a pending targeted send (cancelled).
 
+- [x] G16. Cross-session search in every scope. The session builder now runs
+  the same search as project/global: transcript/title hits from the index plus
+  a metadata match over all sessions (project, directory, model, agent, ref).
+  `SEARCH` lists up to five hits; the evidence line counts them. Query-gated:
+  stop-word-only questions do not search. Live: from the misc-fix session,
+  "which session is working on the trip plan?" named `plan trip` and
+  said its transcript was outside the thread; "gpu orchestrator" named this
+  session from a transcript hit.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

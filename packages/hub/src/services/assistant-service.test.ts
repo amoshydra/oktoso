@@ -1133,6 +1133,68 @@ describe("AssistantService", () => {
     expect(wideCalls).toBe(2);
   });
 
+  it("searches other sessions from the session scope, including metadata", async () => {
+    let listCalls = 0;
+    const ops: Session = {
+      ...session,
+      ref: "desktop-opencode:ses_ops",
+      nativeID: "ses_ops",
+      title: "Runtime cleanup",
+      project: "ops",
+      directory: "/home/me/gpu-orchestrator",
+      model: "gpu-orchestrator-runner",
+      status: "idle",
+    };
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async () => {
+          listCalls += 1;
+          return { data: [session, ops], cursor: { next: null, previous: null } };
+        },
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "which session works on gpu orchestrator?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("SEARCH (other sessions");
+    expect(prompt).toContain("Runtime cleanup");
+    expect(prompt).toContain("gpu-orchestrator");
+    expect(listCalls).toBe(1);
+
+    // A question made only of stop words must not buy a session list.
+    const second = await service.postMessage(thread.id, { text: "what is this session doing?" });
+    const secondEvents: AssistantEvent[] = [];
+    service.subscribe(second.run.id, 0, (event) => secondEvents.push(event));
+    await waitFor(() => secondEvents.some((event) => event.type === "done"));
+    expect(listCalls).toBe(1);
+  });
+
   it("backfills as-of from the newest message before each answer", async () => {
     const store = new MemoryStateStore();
     await store.update((state) => {

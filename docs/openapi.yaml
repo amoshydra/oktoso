@@ -1471,6 +1471,9 @@ components:
                   running:
                     type: integer
                     minimum: 0
+                  search:
+                    type: integer
+                    minimum: 0
               usage:
                 type: object
                 properties:
@@ -1839,6 +1842,9 @@ components:
                 running:
                   type: integer
                   minimum: 0
+                search:
+                  type: integer
+                  minimum: 0
             usage:
               type: object
               properties:
@@ -2078,6 +2084,9 @@ components:
                     running:
                       type: integer
                       minimum: 0
+                    search:
+                      type: integer
+                      minimum: 0
                 usage:
                   type: object
                   properties:
@@ -2302,6 +2311,9 @@ components:
                         - project
                         - global
                     running:
+                      type: integer
+                      minimum: 0
+                    search:
                       type: integer
                       minimum: 0
                 usage:
@@ -8703,6 +8715,9 @@ paths:
                           - project
                           - global
                       running:
+                        type: integer
+                        minimum: 0
+                      search:
                         type: integer
                         minimum: 0
                   usage:

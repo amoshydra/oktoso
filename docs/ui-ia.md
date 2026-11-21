@@ -463,6 +463,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   `All sessions` thread. Its context is the inbox (the authoritative "needs
   me" list), running sessions, 24-hour errors, a project rollup, a 12-session
   index, and transcript search hits.
+- **Finding across sessions.** Every scope can search all sessions by title,
+  transcript, and metadata (project, directory, model, agent, ref). A hit is
+  named with its session title and ref; the session scope says it cannot read
+  another session's transcript from that thread.
 - **Finding and prompting.** A session ref or `/sessions/<ref>` URL in the
   question attaches that session's metadata and last turns. From project or
   global, the assistant may propose one message to a session present in that
