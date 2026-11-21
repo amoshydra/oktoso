@@ -1,11 +1,11 @@
-# Design Lock — v1.31
+# Design Lock — v1.33
 
 Status: **frozen**.
 
-- Version: `design-v1.31`
-- Parent: `design-v1.30`
-- Date: 2026-11-20
-- Git tag: `design-v1.31`
+- Version: `design-v1.33`
+- Parent: `design-v1.32`
+- Date: 2026-11-21
+- Git tag: `design-v1.33`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -39,6 +39,8 @@ Status: **frozen**.
   show the provider's question.
 - v1.30 scope: expired actions and runs interrupted by a restart.
 - v1.31 scope: project and global read-only scopes for the assistant.
+- v1.33 scope: transcript search, session refs, and targeted sends from project
+  and global scopes.
 - v1.19 scope: session rename across providers and search filter label alignment.
 
 ## What is frozen
@@ -801,6 +803,24 @@ radius, or color token.
   a project rollup. Neither includes transcripts.
 - The scope chip only appears when the scope exists: no project, no toggle.
 
+## Targeted sends from project and global (2026-11-21)
+
+- Project and global contexts gain `SEARCH` (transcript hits) and, when the
+  question names a session ref or `/sessions/<ref>` URL, `TARGET SESSION` with
+  its metadata and last few text turns. Global also lists a 12-session index.
+- The model may propose **one** `send`, only to a session present in that
+  context: the index, the search hits, the target, or (project) the project's
+  sessions. The ref is validated at proposal time; anything else fails.
+- The card shows the target above the message: `To: Fix auth race in gateway`, and
+  the primary action reads `Send to "Fix auth race in gateway"`. Confirm, cancel,
+  and the 24-hour expiry are unchanged.
+- These scopes still cannot `answer` a question or `interrupt` a turn. The
+  permission-prompt rule is unchanged.
+- The footer reads `Writes need your confirmation` whenever writes are enabled,
+  at every scope.
+- A model 5xx now reads `The assistant model is unavailable right now — it may
+  still be loading or the GPU is busy. Try again.` instead of a bare status.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -827,4 +847,4 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.31` project/global scopes were verified live: the session dock switched to `This project` (always-on-attention) and answered from 12 session summaries; the Overview Ask opened a global thread that reported an empty inbox and one running session; both read-only. The `design-v1.30` expired/interrupted states were verified by unit tests (24h expiry, LRU eviction with a locked thread, restart marking) and the build; the live hub has no expired action to exercise. The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local 27B model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.33` targeted send was verified live: global search found "Fix auth race in gateway" from a memory pressure transcript hit, and a URL-named session produced a pending `Send to "Fix auth race in gateway"` card (cancelled, not sent). The `design-v1.31` project/global scopes were verified live: the session dock switched to `This project` (a project) and answered from 12 session summaries; the Overview Ask opened a global thread that reported an empty inbox and one running session; both read-only. The `design-v1.30` expired/interrupted states were verified by unit tests (24h expiry, LRU eviction with a locked thread, restart marking) and the build; the live hub has no expired action to exercise. The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local 27B model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.

@@ -691,6 +691,7 @@ async function main(): Promise<void> {
       actions,
       attention,
       questions,
+      search,
       logger,
       audit: (entry) =>
         appendFile(assistantAudit, `${JSON.stringify(entry)}\n`, {

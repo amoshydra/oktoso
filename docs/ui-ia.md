@@ -456,13 +456,18 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   mode.
 - **Project scope.** When the session belongs to a project, the scope chip
   switches the thread to `This project`. Context is that project's sessions
-  (titles, status, last activity, cost, unread) and its inbox — no transcripts.
-  Answers name the session that holds a detail, or say the detail is outside
-  the scope.
+  (titles, status, last activity, cost, unread), its inbox, and transcript
+  search hits. Answers name the session that holds a detail, or say the detail
+  is outside the scope.
 - **Global scope.** The Overview topbar carries **Ask**, which opens an
   `All sessions` thread. Its context is the inbox (the authoritative "needs
-  me" list), running sessions, 24-hour errors, and a project rollup. It never
-  includes transcripts and never writes.
+  me" list), running sessions, 24-hour errors, a project rollup, a 12-session
+  index, and transcript search hits.
+- **Finding and prompting.** A session ref or `/sessions/<ref>` URL in the
+  question attaches that session's metadata and last turns. From project or
+  global, the assistant may propose one message to a session present in that
+  context; the card shows `To: <session>` and `Send to "<session>"`. It still
+  cannot answer questions or interrupt from these scopes.
 - The G2 and VR surfaces are unchanged. The glasses are a consumer of
   conclusions (M5), not a chat client.
 

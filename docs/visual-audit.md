@@ -1489,3 +1489,16 @@ list of file-configured objects.
   because no transcript is read.
 - 12 sessions is the project cap: enough to answer "what should I pick up",
   short enough to stay under ~1.5k tokens.
+
+## Targeted sends from project and global (2026-11-21)
+
+- A send from a broader scope must name its target twice: once in the card
+  (`To: <session>`, 11px muted with the name in text colour) and once in the
+  primary action (`Send to "<session>"`). A generic "Send" would hide that the
+  message leaves this thread.
+- Search hits are labelled as untrusted transcript and carry the session title
+  and ref. The target block repeats the title and status so the human can
+  confirm the right session.
+- The card keeps the same confirm/cancel grammar; nothing new to learn.
+- Error copy for a 5xx names the likely cause (loading or GPU busy) because
+  that is what actually happens on this host.

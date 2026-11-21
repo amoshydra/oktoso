@@ -6114,3 +6114,14 @@ button.assistant-scope:hover {
   color: var(--text);
   border-color: var(--border);
 }
+
+.assistant-action-target {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.assistant-action-target strong {
+  color: var(--text);
+  font-weight: 500;
+}
