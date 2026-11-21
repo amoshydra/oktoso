@@ -232,6 +232,14 @@ describe("session assistant", () => {
       "TODAY",
     );
 
+    const activity = page!.locator(".agent-activity").last();
+    await activity.waitFor({ timeout: 10_000 });
+    await activity.locator(".agent-activity-toggle").click();
+    expect(await activity.locator(".activity-tile").count()).toBeGreaterThan(0);
+    expect(
+      await page!.locator(".assistant-model-chip").innerText(),
+    ).not.toBe("");
+
     // The thread survives a reload: it is hub state, not a provider session.
     await page!.reload();
     await page!
@@ -286,16 +294,22 @@ describe("session assistant", () => {
     await page!.goto(BASE_URL);
     await page!.getByRole("button", { name: "Ask", exact: true }).click();
     await page!.locator("#assistant-input").waitFor({ timeout: 10_000 });
-    expect(await page!.locator(".assistant-head p").innerText()).toBe(
-      "All sessions",
-    );
-    expect(await page!.locator(".assistant-scope").innerText()).toBe(
-      "ALL SESSIONS",
-    );
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (await page!.locator("#assistant-input").isEnabled()) break;
       await page!.waitForTimeout(100);
     }
+    expect(await page!.locator(".assistant-head p").innerText()).toBe(
+      "All sessions",
+    );
+    expect(
+      await page!.locator("span.assistant-scope").innerText(),
+    ).toBe("ALL SESSIONS");
+    expect(
+      await page!.getByRole("dialog", { name: "Assistant" }).count(),
+    ).toBe(1);
+    expect(
+      await page!.locator(".assistant-model-chip").innerText(),
+    ).not.toBe("Default model");
     await page!.locator("#assistant-input").fill("what needs me?");
     await page!.locator("#assistant-input").press("Enter");
     await page!

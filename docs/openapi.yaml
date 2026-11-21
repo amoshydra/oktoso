@@ -1170,6 +1170,8 @@ components:
         messageCount:
           type: integer
           minimum: 0
+        model:
+          type: string
       required:
         - id
         - scope
@@ -1233,6 +1235,8 @@ components:
               messageCount:
                 type: integer
                 minimum: 0
+              model:
+                type: string
             required:
               - id
               - scope
@@ -1296,6 +1300,8 @@ components:
             messageCount:
               type: integer
               minimum: 0
+            model:
+              type: string
           required:
             - id
             - scope
@@ -1474,6 +1480,45 @@ components:
                   search:
                     type: integer
                     minimum: 0
+              activity:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      minLength: 1
+                    kind:
+                      type: string
+                      enum:
+                        - context
+                        - search
+                        - history
+                        - model
+                        - tool
+                    label:
+                      type: string
+                    detail:
+                      type: string
+                    status:
+                      type: string
+                      enum:
+                        - running
+                        - ok
+                        - error
+                    at:
+                      type: integer
+                      minimum: 0
+                    durationMs:
+                      type: integer
+                      minimum: 0
+                  required:
+                    - id
+                    - kind
+                    - label
+                    - status
+                    - at
+                maxItems: 40
               usage:
                 type: object
                 properties:
@@ -1669,6 +1714,8 @@ components:
             messageCount:
               type: integer
               minimum: 0
+            model:
+              type: string
           required:
             - id
             - scope
@@ -1845,6 +1892,45 @@ components:
                 search:
                   type: integer
                   minimum: 0
+            activity:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    enum:
+                      - context
+                      - search
+                      - history
+                      - model
+                      - tool
+                  label:
+                    type: string
+                  detail:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - running
+                      - ok
+                      - error
+                  at:
+                    type: integer
+                    minimum: 0
+                  durationMs:
+                    type: integer
+                    minimum: 0
+                required:
+                  - id
+                  - kind
+                  - label
+                  - status
+                  - at
+              maxItems: 40
             usage:
               type: object
               properties:
@@ -1880,6 +1966,51 @@ components:
           required:
             - type
             - text
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - step
+            step:
+              type: object
+              properties:
+                id:
+                  type: string
+                  minLength: 1
+                kind:
+                  type: string
+                  enum:
+                    - context
+                    - search
+                    - history
+                    - model
+                    - tool
+                label:
+                  type: string
+                detail:
+                  type: string
+                status:
+                  type: string
+                  enum:
+                    - running
+                    - ok
+                    - error
+                at:
+                  type: integer
+                  minimum: 0
+                durationMs:
+                  type: integer
+                  minimum: 0
+              required:
+                - id
+                - kind
+                - label
+                - status
+                - at
+          required:
+            - type
+            - step
         - type: object
           properties:
             type:
@@ -2087,6 +2218,45 @@ components:
                     search:
                       type: integer
                       minimum: 0
+                activity:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                      kind:
+                        type: string
+                        enum:
+                          - context
+                          - search
+                          - history
+                          - model
+                          - tool
+                      label:
+                        type: string
+                      detail:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - running
+                          - ok
+                          - error
+                      at:
+                        type: integer
+                        minimum: 0
+                      durationMs:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - id
+                      - kind
+                      - label
+                      - status
+                      - at
+                  maxItems: 40
                 usage:
                   type: object
                   properties:
@@ -2316,6 +2486,45 @@ components:
                     search:
                       type: integer
                       minimum: 0
+                activity:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                      kind:
+                        type: string
+                        enum:
+                          - context
+                          - search
+                          - history
+                          - model
+                          - tool
+                      label:
+                        type: string
+                      detail:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - running
+                          - ok
+                          - error
+                      at:
+                        type: integer
+                        minimum: 0
+                      durationMs:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - id
+                      - kind
+                      - label
+                      - status
+                      - at
+                  maxItems: 40
                 usage:
                   type: object
                   properties:
@@ -8720,6 +8929,45 @@ paths:
                       search:
                         type: integer
                         minimum: 0
+                  activity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          minLength: 1
+                        kind:
+                          type: string
+                          enum:
+                            - context
+                            - search
+                            - history
+                            - model
+                            - tool
+                        label:
+                          type: string
+                        detail:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                            - running
+                            - ok
+                            - error
+                        at:
+                          type: integer
+                          minimum: 0
+                        durationMs:
+                          type: integer
+                          minimum: 0
+                      required:
+                        - id
+                        - kind
+                        - label
+                        - status
+                        - at
+                    maxItems: 40
                   usage:
                     type: object
                     properties:

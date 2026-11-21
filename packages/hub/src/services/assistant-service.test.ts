@@ -477,6 +477,61 @@ describe("AssistantService", () => {
     expect(turn?.error).toContain("unavailable");
   });
 
+  it("uses the thread model and records the steps", async () => {
+    let body: { model?: string } = {};
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([
+        delta("answer"),
+        `data: ${JSON.stringify({
+          choices: [{ delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    }) as unknown as typeof fetch;
+    const { service } = build(fetchImpl);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    await service.setThreadModel(thread.id, "alt-model");
+    expect(service.getThread(thread.id).thread.model).toBe("alt-model");
+
+    const accepted = await service.postMessage(thread.id, { text: "why?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    expect(body.model).toBe("alt-model");
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.model).toBe("alt-model");
+    expect(done.turn.activity?.some((step) => step.kind === "context")).toBe(true);
+    const modelStep = done.turn.activity?.find((step) => step.kind === "model");
+    expect(modelStep?.status).toBe("ok");
+    expect(modelStep?.detail).toContain("10 in / 2 out");
+  });
+
+  it("lists the endpoint models and falls back to the configured one", async () => {
+    const catalog = (async (url: string) => {
+      if (!url.endsWith("/models")) throw new Error("not the models route");
+      return new Response(
+        JSON.stringify({ data: [{ id: "alpha" }, { id: "beta" }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const { service } = build(catalog);
+    const listed = await service.listModels();
+    expect(listed.data).toEqual(["alpha", "beta"]);
+    expect(listed.current).toBe("test-model");
+
+    const offline = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    const fallback = build(offline).service;
+    expect((await fallback.listModels()).data).toEqual(["test-model"]);
+  });
+
   it("reuses one thread per session scope and titles it from the session", async () => {
     const { service } = build(async () => sseResponse([]));
     const first = await service.createThread({

@@ -784,6 +784,15 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   said its transcript was outside the thread; "gpu orchestrator" named this
   session from a transcript hit.
 
+- [x] G17. Assistant model picker and activity. Threads carry an optional
+  model override (`PATCH /api/v1/assistant/threads/:id`); the dock header lists
+  the endpoint's models (`GET /api/v1/assistant/models`) and applies the choice
+  to the next question. Runs emit `step` events (context, search, history,
+  model, tool) that are persisted as `turn.activity` and rendered with the
+  chat's activity component (toggle, dot texture, tile grid, inline detail).
+  The global assistant renders as a modal `<dialog>` (bottom sheet on mobile);
+  session/project stay docked; scope icons distinguish them.
+
 ## Cross-cutting work
 
 - [ ] Keep `docs/openapi.yaml` generated; never hand-edit it.

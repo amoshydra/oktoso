@@ -4,10 +4,12 @@ import type {
   AssistantAction,
   AssistantEvent,
   AssistantScope,
+  AssistantStep,
+  AssistantStepKind,
   AssistantThreadDetail,
   AssistantTurn,
 } from "@amoshydra/oktoso-contracts";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
 
 export interface AssistantDockProps {
@@ -16,6 +18,8 @@ export interface AssistantDockProps {
   initialScope: AssistantScope;
   title: string;
   project?: string;
+  /** Global threads are a modal dialog; session/project threads dock. */
+  presentation?: "dock" | "dialog";
   onClose: () => void;
 }
 
@@ -31,17 +35,26 @@ const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
   interrupt: "Stop turn",
 };
 
+const STEP_ICON: Record<AssistantStepKind, IconName> = {
+  context: "message",
+  search: "search",
+  history: "layers",
+  model: "bot",
+  tool: "terminal",
+};
+
 /**
- * Session-scope hub assistant (M1 read-only, M2 confirmed writes).
+ * Hub assistant panel.
  *
- * The model can propose one action; the card below the answer is the only way
- * it happens. Nothing is sent until the user confirms here.
+ * M1 read-only answers, M2 confirmed actions, M3 project/global scopes, plus a
+ * per-thread model and the hub activity that produced each answer.
  */
 export function AssistantDock({
   client,
   initialScope,
   title,
   project,
+  presentation = "dock",
   onClose,
 }: AssistantDockProps) {
   const [scope, setScope] = useState<AssistantScope>(initialScope);
@@ -57,15 +70,23 @@ export function AssistantDock({
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [input, setInput] = useState("");
   const [streamText, setStreamText] = useState("");
+  const [liveSteps, setLiveSteps] = useState<AssistantStep[]>([]);
   const [runId, setRunId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(true);
   const [canWrite, setCanWrite] = useState(false);
-  const canWriteHere = canWrite;
+  const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsBase, setModelsBase] = useState("");
+  const [modelOpen, setModelOpen] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const modelWrap = useRef<HTMLDivElement>(null);
+
+  const canWriteHere = canWrite;
 
   useEffect(() => {
     returnFocus.current =
@@ -91,17 +112,27 @@ export function AssistantDock({
     setError(undefined);
     setRunId(undefined);
     setStreamText("");
+    setLiveSteps([]);
     setInput("");
     Promise.all([
       client.createAssistantThread({ scope }),
       client.assistantStatus().catch(() => undefined),
+      client.assistantAgentModels().catch(() => undefined),
     ])
-      .then(async ([created, status]) => {
+      .then(async ([created, status, catalog]) => {
         const detail = await client.assistantThread(created.id);
         if (cancelled) return;
         setThread(detail);
         setTurns(detail.turns);
         setCanWrite(Boolean(status?.canWrite));
+        setModels(catalog?.data ?? []);
+        setModelsBase(catalog?.baseUrl ?? "");
+        setModel(
+          detail.thread.model ??
+            catalog?.current ??
+            status?.model ??
+            "",
+        );
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -118,15 +149,30 @@ export function AssistantDock({
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [turns, streamText]);
+  }, [turns, streamText, liveSteps]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (modelOpen) {
+        setModelOpen(false);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [modelOpen, onClose]);
+
+  useEffect(() => {
+    if (!modelOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (modelWrap.current?.contains(event.target as Node)) return;
+      setModelOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [modelOpen]);
 
   const resync = useCallback(async () => {
     if (!thread) return;
@@ -150,6 +196,7 @@ export function AssistantDock({
       setError(undefined);
       setInput("");
       setStreamText("");
+      setLiveSteps([]);
       try {
         const accepted = await client.sendAssistantMessage(thread.thread.id, {
           text: question,
@@ -165,14 +212,20 @@ export function AssistantDock({
               setStreamText((current) => current + event.text);
               return;
             }
+            if (event.type === "step") {
+              setLiveSteps((current) => upsertStep(current, event.step));
+              return;
+            }
             if (event.type === "done" || event.type === "action") {
               setTurns((current) => addTurn(current, event.turn));
               setStreamText("");
+              setLiveSteps([]);
               setRunId(undefined);
               return;
             }
             setError(event.message);
             setStreamText("");
+            setLiveSteps([]);
             setRunId(undefined);
             void resync();
           },
@@ -199,6 +252,7 @@ export function AssistantDock({
     streamAbort.current?.abort();
     setRunId(undefined);
     setStreamText("");
+    setLiveSteps([]);
     void resync();
   }, [client, resync, runId]);
 
@@ -222,18 +276,40 @@ export function AssistantDock({
     [client, resync, thread],
   );
 
+  const chooseModel = useCallback(
+    async (next: string) => {
+      if (!thread || next === model || modelSaving) return;
+      setModelSaving(true);
+      try {
+        await client.setAssistantThreadModel(thread.thread.id, next);
+        setModel(next);
+        setModelOpen(false);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not change the model");
+      } finally {
+        setModelSaving(false);
+      }
+    },
+    [client, model, modelSaving, thread],
+  );
+
   const disabled = turns.length === 0 && !streamText && !runId;
 
-  return (
-    <aside
-      className="assistant-dock"
-      id="session-assistant"
-      aria-label={`Assistant for ${label}`}
-    >
+  const panel = (
+    <aside className="assistant-dock" id="session-assistant" aria-label={`Assistant for ${label}`}>
       <header className="assistant-head">
         <div className="assistant-head-title">
           <span className="assistant-mark" aria-hidden="true">
-            <Icon name="bot" size={16} />
+            <Icon
+              name={
+                scope.kind === "global"
+                  ? "globe"
+                  : scope.kind === "project"
+                    ? "layers"
+                    : "bot"
+              }
+              size={16}
+            />
           </span>
           <div>
             <h2>Assistant</h2>
@@ -330,6 +406,9 @@ export function AssistantDock({
                 {turn.action ? (
                   <ActionCard turn={turn} canWrite={canWriteHere} onDecide={decide} />
                 ) : null}
+                {turn.activity && turn.activity.length > 0 ? (
+                  <ActivityBlock steps={turn.activity} at={turn.createdAt} />
+                ) : null}
               </article>
             </Fragment>
           );
@@ -337,11 +416,16 @@ export function AssistantDock({
 
         {runId ? (
           <article className="assistant-turn assistant" aria-label="Assistant is answering">
-            <div className="assistant-turn-role">Assistant</div>
+            <div className="assistant-turn-role">
+              <span>Assistant</span>
+            </div>
             <div className="assistant-turn-text">
               {streamText || <span className="assistant-waiting">Reading…</span>}
               <span className="assistant-caret" aria-hidden="true" />
             </div>
+            {liveSteps.length > 0 ? (
+              <ActivityBlock steps={liveSteps} at={Date.now()} />
+            ) : null}
           </article>
         ) : null}
 
@@ -353,9 +437,6 @@ export function AssistantDock({
       </div>
 
       <footer className="assistant-foot">
-        <span className="assistant-readonly">
-          {canWriteHere ? "Writes need your confirmation" : "Read-only · no writes"}
-        </span>
         <form
           className="assistant-composer"
           onSubmit={(event) => {
@@ -404,22 +485,208 @@ export function AssistantDock({
             </button>
           )}
         </form>
+        <div className="assistant-composer-meta">
+          <div className="assistant-model-wrap" ref={modelWrap}>
+            <button
+              className="assistant-scope assistant-model-chip"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={modelOpen}
+              disabled={busy || Boolean(runId) || modelSaving}
+              onClick={() => setModelOpen((open) => !open)}
+              title={model || "Default model"}
+            >
+              {modelLabel(model)}
+              <span aria-hidden="true">▾</span>
+            </button>
+            {modelOpen ? (
+              <div
+                className="assistant-model-menu up"
+                role="listbox"
+                aria-label="Model for this thread"
+              >
+                <div className="assistant-model-head">Model for this thread</div>
+                <div className="assistant-model-source">
+                  {endpointLabel(modelsBase)}
+                </div>
+                {models.length === 0 ? (
+                  <div className="assistant-model-empty">No models reported</div>
+                ) : (
+                  models.map((entry) => (
+                    <button
+                      key={entry}
+                      className={`assistant-model-item ${entry === model ? "on" : ""}`}
+                      type="button"
+                      role="option"
+                      aria-selected={entry === model}
+                      onClick={() => void chooseModel(entry)}
+                    >
+                      <span className="assistant-model-radio" aria-hidden="true" />
+                      <span className="assistant-model-name">{entry}</span>
+                    </button>
+                  ))
+                )}
+                <div className="assistant-model-note">
+                  Applies to the next question. Past answers keep the model that
+                  wrote them.
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <span className="assistant-readonly">
+            {canWriteHere ? "Writes need your confirmation" : "Read-only · no writes"}
+          </span>
+        </div>
       </footer>
     </aside>
   );
+
+  if (presentation === "dialog") {
+    return <AssistantDialog onClose={onClose}>{panel}</AssistantDialog>;
+  }
+  return panel;
 }
 
-/** SSE replay can resend a turn; keep one row per id. */
-function addTurn(current: AssistantTurn[], turn: AssistantTurn): AssistantTurn[] {
-  return current.some((entry) => entry.id === turn.id)
-    ? current
-    : [...current, turn];
+/** Global assistant: a modal sheet, not another fixed dock. */
+function AssistantDialog({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement | null>(null);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const cancel = (event: Event) => {
+      event.preventDefault();
+      onClose();
+    };
+    dialog.addEventListener("cancel", cancel);
+    return () => {
+      dialog.removeEventListener("cancel", cancel);
+      if (dialog.open) dialog.close();
+    };
+  }, [onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className="assistant-dialog"
+      id="session-assistant"
+      aria-label="Assistant"
+      onClick={(event) => {
+        if (event.target === ref.current) onClose();
+      }}
+    >
+      {children}
+    </dialog>
+  );
 }
 
-function TurnMeta({ turn }: { turn: AssistantTurn }) {
-  const parts = turnMetaParts(turn);
-  if (parts.length === 0) return null;
-  return <div className="assistant-turn-meta">{parts.join(" · ")}</div>;
+function ActivityBlock({
+  steps,
+  at,
+}: {
+  steps: AssistantStep[];
+  at: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string>();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    rootRef.current?.scrollIntoView({ block: "nearest" });
+  }, [open, steps.length]);
+  if (steps.length === 0) return null;
+  const errors = steps.filter((step) => step.status === "error").length;
+  const running = steps.some((step) => step.status === "running");
+  const active = steps.find((step) => step.id === selected);
+
+  return (
+    <div className="agent-activity" ref={rootRef}>
+      <button
+        className="agent-activity-toggle"
+        type="button"
+        aria-expanded={open}
+        aria-label={`Agent activity: ${steps.length} ${steps.length === 1 ? "step" : "steps"}${errors ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`}
+        onClick={() => {
+          if (open) setSelected(undefined);
+          setOpen(!open);
+        }}
+      >
+        <span className="agent-activity-label">Agent activity</span>
+        <span className="agent-activity-count">
+          {steps.length} {steps.length === 1 ? "step" : "steps"}
+        </span>
+        {errors > 0 ? (
+          <span className="agent-activity-error">
+            {errors} {errors === 1 ? "error" : "errors"}
+          </span>
+        ) : null}
+        {running && errors === 0 ? (
+          <span className="agent-activity-running">running</span>
+        ) : null}
+        <time className="agent-activity-time" dateTime={new Date(at).toISOString()}>
+          {timeLabel(at)}
+        </time>
+        <span className="agent-activity-chevron" aria-hidden="true">
+          <Icon name="chevron-right" size={14} />
+        </span>
+      </button>
+
+      {open ? (
+        <>
+          <div className="agent-activity-grid">
+            {steps.map((step) => (
+              <button
+                key={step.id}
+                className="activity-tile"
+                data-kind={step.kind}
+                data-open={selected === step.id ? "true" : undefined}
+                type="button"
+                onClick={() =>
+                  setSelected(selected === step.id ? undefined : step.id)
+                }
+                aria-label={`${step.label}${step.detail ? `: ${step.detail}` : ""}`}
+              >
+                <Icon name={STEP_ICON[step.kind]} size={17} />
+                <span className="activity-tile-meta">
+                  {step.durationMs !== undefined
+                    ? durationLabel(step.durationMs)
+                    : step.status === "running"
+                      ? "…"
+                      : ""}
+                </span>
+                <span
+                  className={`activity-tile-dot ${step.status}`}
+                  aria-hidden="true"
+                />
+              </button>
+            ))}
+          </div>
+          {active ? (
+            <p className="assistant-activity-detail">
+              <span>{active.label}</span>
+              {active.detail ? ` · ${active.detail}` : ""}
+              {active.durationMs !== undefined
+                ? ` · ${durationLabel(active.durationMs)}`
+                : ""}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <div className="agent-activity-dots" aria-hidden="true">
+          {steps.map((step) => (
+            <span key={step.id} className="activity-dot" data-kind={step.kind} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ActionCard({
@@ -538,9 +805,7 @@ function ActionCard({
         </a>
       ) : null}
 
-      {working ? (
-        <p className="assistant-action-error">Working…</p>
-      ) : null}
+      {working ? <p className="assistant-action-error">Working…</p> : null}
 
       {pending ? (
         <div className="assistant-action-buttons">
@@ -576,6 +841,68 @@ function ActionCard({
       ) : null}
     </div>
   );
+}
+
+/** SSE replay can resend a turn; keep one row per id. */
+function addTurn(current: AssistantTurn[], turn: AssistantTurn): AssistantTurn[] {
+  return current.some((entry) => entry.id === turn.id)
+    ? current
+    : [...current, turn];
+}
+
+/** Steps are emitted running then finished under the same id. */
+function upsertStep(
+  current: AssistantStep[],
+  step: AssistantStep,
+): AssistantStep[] {
+  const index = current.findIndex((entry) => entry.id === step.id);
+  if (index === -1) return [...current, step];
+  const next = [...current];
+  next[index] = step;
+  return next;
+}
+
+function durationLabel(ms: number): string {
+  return ms < 1_000 ? `${ms}ms` : `${(ms / 1_000).toFixed(1)}s`;
+}
+
+function endpointLabel(baseUrl: string): string {
+  if (!baseUrl) return "Default endpoint";
+  try {
+    const url = new URL(baseUrl);
+    const path = url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
+    return `Models from ${url.host}${path}`;
+  } catch {
+    return `Models from ${baseUrl}`;
+  }
+}
+
+function modelLabel(id: string): string {
+  if (!id) return "Default model";
+  const clean = id
+    .replace(/-GGUF.*$/i, "")
+    .replace(/Uncensored.*$/i, "")
+    .replace(/[-_]+$/, "");
+  return clean.length > 26 ? `${clean.slice(0, 26)}…` : clean;
+}
+
+function startOfDay(ts: number): number {
+  const date = new Date(ts);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function asOfLabel(ts: number): string {
+  if (startOfDay(ts) === startOfDay(Date.now())) return timeLabel(ts);
+  return `${new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} ${timeLabel(ts)}`;
+}
+
+function TurnMeta({ turn }: { turn: AssistantTurn }) {
+  const parts = turnMetaParts(turn);
+  if (parts.length === 0) return null;
+  return <div className="assistant-turn-meta">{parts.join(" · ")}</div>;
 }
 
 function actionLabel(action: AssistantAction): string {

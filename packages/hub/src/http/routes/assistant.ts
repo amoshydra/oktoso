@@ -5,6 +5,7 @@ import {
   zAssistantActionDecision,
   zAssistantMessageInput,
   zAssistantThreadInput,
+  zAssistantThreadUpdate,
 } from "@amoshydra/oktoso-contracts";
 import type { AssistantService } from "../../services/assistant-service";
 import type { AppEnv } from "../types";
@@ -36,6 +37,21 @@ export function registerAssistantRoutes(
 
   app.get("/api/v1/assistant/threads/:id", (c) => {
     return c.json({ data: assistant.getThread(c.req.param("id")) });
+  });
+
+  app.patch("/api/v1/assistant/threads/:id", async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    const parsed = zAssistantThreadUpdate.safeParse(body);
+    if (!parsed.success) {
+      throw badRequest("Invalid thread update", { issues: parsed.error.issues });
+    }
+    return c.json({
+      data: await assistant.setThreadModel(c.req.param("id"), parsed.data.model),
+    });
+  });
+
+  app.get("/api/v1/assistant/models", async (c) => {
+    return c.json({ data: await assistant.listModels() });
   });
 
   app.delete("/api/v1/assistant/threads/:id", async (c) => {
@@ -103,7 +119,13 @@ export function registerAssistantRoutes(
               event: event.type,
               data: JSON.stringify(event),
             });
-            if (event.type !== "delta") break;
+            if (
+              event.type === "done" ||
+              event.type === "error" ||
+              event.type === "action"
+            ) {
+              break;
+            }
             continue;
           }
           const waited = new Promise<void>((resolve) => {

@@ -1514,3 +1514,24 @@ list of file-configured objects.
 - Metadata matching is deliberately broad (any term in project, path, model,
   agent); the five-hit cap and the cited snippet keep a false positive
   visible.
+
+## Assistant model and activity (2026-11-21)
+
+- The model chip answers "what is answering me?" without opening Settings. It
+  sits in the composer, not the header, because the chat already teaches that
+  model choice happens at the point of sending. Per-thread rather than global
+  because model choice is a property of the question, not the account; the
+  disabled state during a run prevents a misleading mid-flight change. The menu
+  names its endpoint so a local-only list is not mistaken for the product's
+  full model set.
+- The activity block is the chat's component, not a lookalike: same toggle,
+  same 4px dot texture, same 49px tiles, same inline detail. A second visual
+  grammar inside the dock would make the same information feel like a
+  different system.
+- `model` is a new tile kind because no existing kind means "the model call".
+  It uses the dock accent; tool status still uses success/warning/danger.
+- The global assistant is a modal dialog because it is not anchored to a
+  session: it is a workspace-wide detour, and the backdrop says so. Session and
+  project threads stay docked so the cited transcript remains on screen.
+- Scope icons (bot, layers, globe) carry the distinction without another
+  colour or a new control.
