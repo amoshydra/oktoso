@@ -49,6 +49,10 @@ Screenshot capture and framing are documented in
   glasses are in the case or off the face, polling pauses (the event stream
   keeps data fresh); painting never does, so a reload or a wake is never
   swallowed by a wear-sensor reading. Battery and charging show in Settings.
+- **Answer row grammar** — numbered rows (`1 Yes`) are answers; `›` rows
+  open a page or an action (`› Type answer`, `› Read chat`, `› Stop agent`).
+  The host renders every row with the same chrome, so the prefix is the whole
+  distinction. Options are numbers; actions are chevrons.
 - **Chat** — six-line viewport, compact prioritized footer with line/message
   position, agent activity, stream state, and `? Answer` / `Tap reply`; SSE
   updates, read markers, and incremental message streaming. The pending
@@ -140,8 +144,8 @@ Inbox
 
 Chat
 ├─ Answer           choices / Type your own answer / Speak answer /
-│                   Suggested answers / Failure › / Read chat / Stop agent
-├─ Batch            Answer on phone / Failure › / Read chat / Stop agent
+│                   Suggested answers / Failure / Read chat / Stop agent
+├─ Batch            Answer on phone / Failure / Read chat / Stop agent
 ├─ Suggested        model answers for the open question, tap to send
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned

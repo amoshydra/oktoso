@@ -103,7 +103,7 @@ describe("G2 labels", () => {
       "▼  Offline",
       "◇  Idle",
       "◆  Attention",
-      "›  Subagent prefix",
+      "›  Opens / child",
       "›?  Child question",
       "›■  Child permission",
     ]);

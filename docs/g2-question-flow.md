@@ -23,7 +23,7 @@ advertises `? Answer`. Tapping opens a single-purpose screen containing:
 
 - the question in a two-line summary,
 - **one event-capturing list** containing the agent's choices followed by the
-  action rows (`Type answer`, `Speak answer`, `Suggested answers`, `Read chat`,
+  action rows (`› Type answer`, `› Speak answer`, `› Suggested answers`, `› Read chat`,
   `Stop agent`),
 - a non-interactive footer hint.
 

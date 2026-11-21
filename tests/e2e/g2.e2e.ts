@@ -388,14 +388,14 @@ describe("G2 hosted app", () => {
     await textTap();
     const answer = await previewMatches(/ANSWER/);
     expect(answer).not.toContain("TURN FAILED");
-    expect(await listLabels()).toContain("Failure ›");
+    expect(await listLabels()).toContain("› Failure");
 
     await tapRowMatching(/Failure/);
     await previewMatches(/TURN FAILED/);
 
     await doubleTap();
     await previewMatches(/ANSWER/);
-    expect(await listLabels()).toContain("Type answer");
+    expect(await listLabels()).toContain("› Type answer");
   });
 
   it("sends a suggested answer as free text", async () => {
@@ -551,8 +551,8 @@ describe("G2 hosted app", () => {
     await previewMatches(/ANSWER/);
 
     const labels = await listLabels();
-    expect(labels).toContain("main");
-    expect(labels).toContain("Type your own answer");
+    expect(labels).toContain("1 main");
+    expect(labels).toContain("› Type your own answer");
     expect(labels).not.toContain("Other");
 
     await tapRowMatching(/Type your own answer/);

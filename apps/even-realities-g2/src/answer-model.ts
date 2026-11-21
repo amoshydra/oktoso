@@ -60,6 +60,17 @@ export function replyModelConfigured(view: AssistantView | undefined): boolean {
   );
 }
 
+/**
+ * Text-only row grammar: numbered values are answers, chevrons open a page or
+ * an action. The host gives every row the same chrome, so this is the only
+ * distinction available in monochrome.
+ */
+const ACTION_PREFIX = "›  ";
+
+function actionRow(action: AnswerAction, label: string): AnswerRow {
+  return { kind: "action", action, label: clampLine(`${ACTION_PREFIX}${label}`, 54) };
+}
+
 export function buildAnswerRows(
   question: PendingQuestion,
   prompt: QuestionPrompt,
@@ -67,28 +78,28 @@ export function buildAnswerRows(
 ): AnswerRow[] {
   if (prompt.attentionID) {
     return [
-      { kind: "action", action: "attention", label: "Answer in Inbox" },
+      actionRow("attention", "Answer in Inbox"),
       ...failureRows(options),
-      { kind: "action", action: "read", label: "Read chat" },
-      { kind: "action", action: "stop", label: "Stop agent" },
+      actionRow("read", "Read chat"),
+      actionRow("stop", "Stop agent"),
     ];
   }
 
   if (prompt.questions.length > 1) {
     return [
-      { kind: "action", action: "phone", label: "Answer on phone" },
+      actionRow("phone", "Answer on phone"),
       ...failureRows(options),
-      { kind: "action", action: "read", label: "Read chat" },
-      { kind: "action", action: "stop", label: "Stop agent" },
+      actionRow("read", "Read chat"),
+      actionRow("stop", "Stop agent"),
     ];
   }
 
   const choices: AnswerRow[] = question.choices
     .filter((choice) => !isFreeAnswerSentinel(choice))
     .slice(0, 6)
-    .map((choice) => ({
+    .map((choice, index) => ({
       kind: "choice" as const,
-      label: clampLine(choice.label, 54),
+      label: clampLine(`${index + 1}  ${choice.label}`, 54),
       choice,
     }));
 
@@ -97,15 +108,15 @@ export function buildAnswerRows(
   const freeRow: AnswerRow | undefined = question.choices.some(
     isFreeAnswerSentinel,
   )
-    ? { kind: "action", action: "type", label: "Type your own answer" }
+    ? actionRow("type", "Type your own answer")
     : question.allowsFreeText
-      ? { kind: "action", action: "type", label: "Type answer" }
+      ? actionRow("type", "Type answer")
       : undefined;
   const voiceRow: AnswerRow | undefined = options.voice
-    ? { kind: "action", action: "voice", label: "Speak answer" }
+    ? actionRow("voice", "Speak answer")
     : undefined;
   const suggestedRow: AnswerRow | undefined = options.suggested
-    ? { kind: "action", action: "suggested", label: "Suggested answers" }
+    ? actionRow("suggested", "Suggested answers")
     : undefined;
 
   const rows: AnswerRow[] = [...choices];
@@ -121,15 +132,13 @@ export function buildAnswerRows(
   }
   if (suggestedRow) rows.push(suggestedRow);
   rows.push(...failureRows(options));
-  rows.push({ kind: "action", action: "read", label: "Read chat" });
-  rows.push({ kind: "action", action: "stop", label: "Stop agent" });
+  rows.push(actionRow("read", "Read chat"));
+  rows.push(actionRow("stop", "Stop agent"));
   return rows;
 }
 
 function failureRows(options: AnswerRowOptions): AnswerRow[] {
-  return options.failure
-    ? [{ kind: "action", action: "failure", label: "Failure ›" }]
-    : [];
+  return options.failure ? [actionRow("failure", "Failure")] : [];
 }
 
 export function buildAnswerSummary(

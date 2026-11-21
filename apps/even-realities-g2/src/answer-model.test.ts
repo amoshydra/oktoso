@@ -62,11 +62,11 @@ function labels(rows: ReturnType<typeof buildAnswerRows>): string[] {
 describe("G2 answer model", () => {
   it("puts choices before the action rows", () => {
     expect(labels(buildAnswerRows(question(), prompt()))).toEqual([
-      "Yes",
-      "No",
-      "Type answer",
-      "Read chat",
-      "Stop agent",
+      "1 Yes",
+      "2 No",
+      "› Type answer",
+      "› Read chat",
+      "› Stop agent",
     ]);
   });
 
@@ -75,13 +75,13 @@ describe("G2 answer model", () => {
       question({ allowsFreeText: false }),
       prompt(),
     );
-    expect(labels(rows)).toEqual(["Yes", "No", "Read chat", "Stop agent"]);
+    expect(labels(rows)).toEqual(["1 Yes", "2 No", "› Read chat", "› Stop agent"]);
   });
 
   it("routes provider-native questions to the inbox form", () => {
     expect(
       labels(buildAnswerRows(question(), prompt({ attentionID: "attention-1" }))),
-    ).toEqual(["Answer in Inbox", "Read chat", "Stop agent"]);
+    ).toEqual(["› Answer in Inbox", "› Read chat", "› Stop agent"]);
   });
 
   it("routes multiple questions to the phone", () => {
@@ -92,7 +92,7 @@ describe("G2 answer model", () => {
       labels(
         buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo),
       ),
-    ).toEqual(["Answer on phone", "Read chat", "Stop agent"]);
+    ).toEqual(["› Answer on phone", "› Read chat", "› Stop agent"]);
     expect(buildAnswerSummary(promptWithTwo.questions[0]!, promptWithTwo)).toContain(
       "+1 more on phone",
     );
@@ -129,10 +129,10 @@ describe("G2 answer model", () => {
       prompt(),
     );
     expect(labels(rows)).toEqual([
-      "Use the mirror",
-      "Type your own answer",
-      "Read chat",
-      "Stop agent",
+      "1 Use the mirror",
+      "› Type your own answer",
+      "› Read chat",
+      "› Stop agent",
     ]);
     expect(
       rows.some((row) => row.kind === "choice" && row.choice.id === "c1"),
@@ -153,11 +153,11 @@ describe("G2 answer model", () => {
     );
     // No real choice sits under the first tap, so voice may lead.
     expect(labels(rows)).toEqual([
-      "Speak answer",
-      "Type your own answer",
-      "Suggested answers",
-      "Read chat",
-      "Stop agent",
+      "› Speak answer",
+      "› Type your own answer",
+      "› Suggested answers",
+      "› Read chat",
+      "› Stop agent",
     ]);
   });
 
@@ -168,14 +168,14 @@ describe("G2 answer model", () => {
       failure: true,
     });
     expect(labels(rows)).toEqual([
-      "Yes",
-      "No",
-      "Type answer",
-      "Speak answer",
-      "Suggested answers",
-      "Failure ›",
-      "Read chat",
-      "Stop agent",
+      "1 Yes",
+      "2 No",
+      "› Type answer",
+      "› Speak answer",
+      "› Suggested answers",
+      "› Failure",
+      "› Read chat",
+      "› Stop agent",
     ]);
     expect(rows[0]?.kind).toBe("choice");
   });
@@ -187,11 +187,11 @@ describe("G2 answer model", () => {
       { voice: true, suggested: true },
     );
     expect(labels(rows)).toEqual([
-      "Speak answer",
-      "Type answer",
-      "Suggested answers",
-      "Read chat",
-      "Stop agent",
+      "› Speak answer",
+      "› Type answer",
+      "› Suggested answers",
+      "› Read chat",
+      "› Stop agent",
     ]);
   });
 
@@ -206,10 +206,10 @@ describe("G2 answer model", () => {
         }),
       ),
     ).toEqual([
-      "Answer on phone",
-      "Failure ›",
-      "Read chat",
-      "Stop agent",
+      "› Answer on phone",
+      "› Failure",
+      "› Read chat",
+      "› Stop agent",
     ]);
   });
 
