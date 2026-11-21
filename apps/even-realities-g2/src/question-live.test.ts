@@ -56,6 +56,8 @@ describe("live question refresh", () => {
       "answer-confirm",
       "answer-suggestions",
       "answer-stale",
+      "batch",
+      "batch-review",
     ]) {
       expect(holdsQuestionDraft(screen)).toBe(true);
     }

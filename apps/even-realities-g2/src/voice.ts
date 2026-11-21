@@ -74,6 +74,8 @@ export function voiceScreen(input: {
   detail?: string;
   caption?: string;
   heard?: string;
+  /** A batch question saves the transcript as one answer instead of replying. */
+  batch?: boolean;
 }): VoiceScreen {
   const header = "VOICE";
   if (input.phase === "listening") {
@@ -95,7 +97,7 @@ export function voiceScreen(input: {
       header,
       body: wrapText(input.heard ?? "", 54, 2).join("\n"),
       footer: "Tap choose   Back ×2",
-      items: ["Send", "Edit on phone"],
+      items: input.batch ? ["Send", "Back"] : ["Send", "Edit on phone"],
     };
   }
   const detail = input.detail

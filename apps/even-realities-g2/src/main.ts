@@ -47,11 +47,15 @@ import {
   type ChatBuild,
 } from "./chat-model";
 import {
+  batchStepAfter,
   buildAnswerMetadata,
   buildAnswerRows,
   buildAnswerSummary,
   buildBatchAnswerMetadata,
+  buildBatchQuestionRows,
+  buildBatchReviewRows,
   composeBatchAnswer,
+  firstMissingBatchAnswer,
   replyModelConfigured,
   type AnswerRow,
   type BatchAnswerDraft,
@@ -134,6 +138,8 @@ type Screen =
   | "answer-confirm"
   | "answer-stale"
   | "answer-suggestions"
+  | "batch"
+  | "batch-review"
   | "reply"
   | "choices"
   | "voice"
@@ -182,6 +188,14 @@ interface AppState {
   question?: QuestionPrompt;
   questionSummaries: Record<string, PendingQuestionSummary>;
   batchAnswers: Record<string, BatchAnswerState>;
+  /** The question the batch entries belong to; a revision change resets them. */
+  batchRevision?: string;
+  batchIndex: number;
+  /** The phone composer is editing one batch question, not a normal reply. */
+  batchType: boolean;
+  batchQuestionId?: string;
+  voicePurpose: "reply" | "batch";
+  voiceQuestionId?: string;
   answerText?: string;
   pendingAnswerText?: string;
   answerBusy: boolean;
@@ -244,6 +258,12 @@ const state: AppState = {
   question: undefined,
   questionSummaries: {},
   batchAnswers: {},
+  batchRevision: undefined,
+  batchIndex: 0,
+  batchType: false,
+  batchQuestionId: undefined,
+  voicePurpose: "reply",
+  voiceQuestionId: undefined,
   answerText: undefined,
   pendingAnswerText: undefined,
   answerBusy: false,
@@ -831,7 +851,11 @@ function syncPhoneSession(): void {
         48,
       )
     : "No session open";
-  phoneSend.textContent = state.answerMode ? "Send answer" : "Send to session";
+  phoneSend.textContent = state.batchType
+    ? "Save answer"
+    : state.answerMode
+      ? "Send answer"
+      : "Send to session";
   phoneSend.disabled =
     !hasSession || !phoneText.value.trim() || state.answerBusy || state.messageBusy;
 }
@@ -854,6 +878,10 @@ function resetBatchAnswers(): void {
     next[question.id] = { text: "" };
   }
   state.batchAnswers = next;
+  state.batchRevision = state.question?.revision;
+  state.batchIndex = 0;
+  state.batchType = false;
+  state.batchQuestionId = undefined;
 }
 
 function summaryFromPrompt(prompt: QuestionPrompt): PendingQuestionSummary {
@@ -957,6 +985,138 @@ function answerHasFailure(): boolean {
 
 function isBatchQuestion(): boolean {
   return (state.question?.questions.length ?? 0) > 1;
+}
+
+function batchQuestion(): PendingQuestion | undefined {
+  const prompt = state.question;
+  if (!prompt || prompt.questions.length < 2) return undefined;
+  const index = Math.min(
+    Math.max(state.batchIndex, 0),
+    prompt.questions.length - 1,
+  );
+  return prompt.questions[index];
+}
+
+function batchEntryList(): BatchAnswerState[] {
+  return (state.question?.questions ?? []).map(
+    (question) => state.batchAnswers[question.id] ?? { text: "" },
+  );
+}
+
+function batchQuestionRows(): AnswerRow[] {
+  const question = batchQuestion();
+  return question
+    ? buildBatchQuestionRows(question, { voice: voiceAvailable })
+    : [];
+}
+
+function batchReviewRows(): AnswerRow[] {
+  return buildBatchReviewRows(batchEntryList());
+}
+
+function batchQuestionBody(question: PendingQuestion): string {
+  const lines = wrapText(question.text, 54, 2);
+  if (lines.length < 2 && question.context) {
+    lines.push(clampLine(question.context, 54));
+  }
+  return lines.join("\n");
+}
+
+function startBatch(): void {
+  const prompt = state.question;
+  if (!prompt || prompt.questions.length < 2) {
+    state.screen = "answer";
+    render();
+    return;
+  }
+  // Entries belong to one revision: a new prompt starts a clean batch.
+  if (state.batchRevision !== prompt.revision) resetBatchAnswers();
+  state.batchRevision = prompt.revision;
+  state.batchIndex = 0;
+  state.answerError = undefined;
+  state.answerMode = false;
+  state.screen = "batch";
+  phoneQuestionKey = "";
+  updatePhoneQuestion();
+  render();
+}
+
+function advanceBatch(): void {
+  const total = state.question?.questions.length ?? 0;
+  const step = batchStepAfter(state.batchIndex, total);
+  state.batchType = false;
+  state.batchQuestionId = undefined;
+  state.answerMode = false;
+  state.answerError = undefined;
+  state.screen = step.screen;
+  if (step.screen === "batch") state.batchIndex = step.index;
+  phoneQuestionKey = "";
+  updatePhoneQuestion();
+  render();
+}
+
+async function performBatchRow(index: number): Promise<void> {
+  const question = batchQuestion();
+  if (!question) {
+    state.screen = "answer";
+    render();
+    return;
+  }
+  const row = batchQuestionRows()[index];
+  if (!row) return;
+  if (row.kind === "choice") {
+    state.batchAnswers[question.id] = {
+      choice: row.choice,
+      text: row.choice.text,
+    };
+    advanceBatch();
+    return;
+  }
+  if (row.kind !== "action") return;
+
+  if (row.action === "type") {
+    openTypeAnswer();
+  } else if (row.action === "voice") {
+    state.voicePurpose = "batch";
+    state.voiceQuestionId = question.id;
+    state.voiceReturnScreen = "batch";
+    void startVoice();
+  } else if (row.action === "phone") {
+    focusPhoneBatch();
+  } else if (row.action === "back") {
+    back();
+  } else if (row.action === "failure") {
+    openAnswerFailure();
+  }
+}
+
+function performBatchReviewRow(index: number): void {
+  const row = batchReviewRows()[index];
+  if (!row) return;
+  if (row.kind === "answer") {
+    state.batchIndex = row.questionIndex;
+    state.answerError = undefined;
+    state.screen = "batch";
+    phoneQuestionKey = "";
+    updatePhoneQuestion();
+    render();
+    return;
+  }
+  if (row.kind !== "action") return;
+  if (row.action === "back") {
+    back();
+    return;
+  }
+  if (row.action !== "send") return;
+  const missing = firstMissingBatchAnswer(batchEntryList());
+  if (missing !== undefined) {
+    // Never send a partial batch: point at the question that still needs one.
+    state.answerError = `Answer question ${missing + 1} first.`;
+    render();
+    return;
+  }
+  state.answerError = undefined;
+  void sendBatchAnswers();
 }
 
 function answerSummary(): string {
@@ -2103,6 +2263,8 @@ async function openChat(
   state.suggestionLoading = false;
   state.suggestionError = undefined;
   state.voiceReturnScreen = "chat";
+  state.voicePurpose = "reply";
+  state.voiceQuestionId = undefined;
   state.interruptReturnScreen = "chat";
   state.turnFailureReturnScreen = "chat";
   lastChatScrollAt = 0;
@@ -2238,7 +2400,13 @@ async function refreshAssistantAvailability(): Promise<void> {
     if (voice === voiceAvailable && reply === replyAvailable) return;
     voiceAvailable = voice;
     replyAvailable = reply;
-    if (state.screen === "answer" || state.screen === "reply") render();
+    if (
+      state.screen === "answer" ||
+      state.screen === "reply" ||
+      state.screen === "batch"
+    ) {
+      render();
+    }
   } catch {
     // Keep the last known capability: a failed settings read is not a reason
     // to remove a row the user can still use.
@@ -2337,6 +2505,18 @@ function focusPhoneAnswer(): void {
 }
 
 function openTypeAnswer(): void {
+  if (state.screen === "batch") {
+    const question = batchQuestion();
+    state.batchType = Boolean(question);
+    state.batchQuestionId = question?.id;
+    if (question) {
+      phoneText.value = state.batchAnswers[question.id]?.text ?? "";
+      syncPhoneSession();
+    }
+  } else {
+    state.batchType = false;
+    state.batchQuestionId = undefined;
+  }
   state.answerMode = true;
   state.screen = "answer-type";
   updatePhoneQuestion();
@@ -2366,6 +2546,15 @@ async function openAttentionByID(id: string | undefined): Promise<void> {
 }
 
 async function performAnswerRow(index: number): Promise<void> {
+  if (state.screen === "batch") {
+    await performBatchRow(index);
+    return;
+  }
+  if (state.screen === "batch-review") {
+    performBatchReviewRow(index);
+    return;
+  }
+
   if (state.screen === "answer-stale") {
     if (state.answerStale === "changed" && index === 0 && state.sessionRef) {
       await loadQuestion(state.sessionRef);
@@ -2418,7 +2607,13 @@ async function performAnswerRow(index: number): Promise<void> {
     return;
   }
 
-  if (row.action === "phone") {
+  if (row.kind !== "action") return;
+
+  if (row.action === "batch") {
+    startBatch();
+  } else if (row.action === "back") {
+    back();
+  } else if (row.action === "phone") {
     focusPhoneBatch();
   } else if (row.action === "type") {
     openTypeAnswer();
@@ -2535,6 +2730,8 @@ function updatePhoneQuestion(): void {
       "answer-type",
       "answer-sent",
       "answer-confirm",
+      "batch",
+      "batch-review",
     ].includes(state.screen);
   phoneQuestionPanel.hidden = !visible;
   if (!question || !visible) {
@@ -2728,6 +2925,10 @@ async function sendBatchAnswers(): Promise<void> {
   if (prompt.questions.length < 2) return;
   const drafts = batchDrafts(true);
   if (!drafts) return;
+  const failureScreen: Screen =
+    state.screen === "batch" || state.screen === "batch-review"
+      ? "batch-review"
+      : "answer";
 
   const text = composeBatchAnswer(drafts);
   const answers = buildBatchAnswerMetadata(prompt, drafts);
@@ -2796,7 +2997,7 @@ async function sendBatchAnswers(): Promise<void> {
       return;
     }
     state.answerError = failure.short;
-    state.screen = "answer";
+    state.screen = failureScreen;
     setPhoneStatus(failure.short, true);
     updatePhoneQuestion();
     render();
@@ -3288,7 +3489,13 @@ async function startVoice(): Promise<void> {
   // A retry from the VOICE failure screen keeps the original destination.
   if (origin !== "voice") {
     state.voiceReturnScreen =
-      origin === "answer" || origin === "reply" ? origin : "chat";
+      origin === "answer" || origin === "reply" || origin === "batch"
+        ? origin
+        : "chat";
+    if (origin !== "batch") {
+      state.voicePurpose = "reply";
+      state.voiceQuestionId = undefined;
+    }
   }
   voiceBusy = true;
   const settings = await client.assistantSettings().catch(() => undefined);
@@ -3297,6 +3504,8 @@ async function startVoice(): Promise<void> {
     voiceBusy = false;
     state.screen = state.voiceReturnScreen;
     state.voiceReturnScreen = "chat";
+    state.voicePurpose = "reply";
+    state.voiceQuestionId = undefined;
     setPhoneStatus("Voice transcription is not configured.", true);
     render();
     return;
@@ -3408,13 +3617,20 @@ async function stopVoice(): Promise<void> {
       showVoiceOutcome();
       return;
     }
-    phoneText.value = text;
-    syncPhoneSession();
+    const batchVoice = state.voicePurpose === "batch";
+    if (!batchVoice) {
+      phoneText.value = text;
+      syncPhoneSession();
+    }
     voicePhase = "done";
     voiceCaption = "Transcript ready.";
     voiceDetail = captured;
     voiceHeard = text;
-    setPhoneStatus("Transcript ready. Send from the glasses or the phone.");
+    setPhoneStatus(
+      batchVoice
+        ? "Transcript ready. Save it as this answer on the glasses."
+        : "Transcript ready. Send from the glasses or the phone.",
+    );
   } catch (error) {
     voicePhase = "failed";
     voiceCaption = "Transcription failed.";
@@ -3468,6 +3684,7 @@ function voiceView(): VoiceScreen {
     detail: voiceDetail,
     caption: voiceCaption,
     heard: voiceHeard,
+    batch: state.voicePurpose === "batch",
   });
 }
 
@@ -3479,6 +3696,7 @@ function voiceInputHandler(input: GlassInput | undefined): void {
   if (input?.type === "list-click") {
     if (voicePhase !== "done" || voiceBusy) return;
     if (input.index === 0) void sendVoiceTranscript();
+    else if (state.voicePurpose === "batch") closeVoice();
     else editVoiceOnPhone();
     return;
   }
@@ -3507,6 +3725,8 @@ function voiceInputHandler(input: GlassInput | undefined): void {
 function closeVoice(): void {
   const target = state.voiceReturnScreen;
   state.voiceReturnScreen = "chat";
+  state.voicePurpose = "reply";
+  state.voiceQuestionId = undefined;
   state.screen = target;
   render();
 }
@@ -3514,6 +3734,15 @@ function closeVoice(): void {
 function editVoiceOnPhone(): void {
   voicePhase = "listening";
   voiceHeard = "";
+  if (state.voiceReturnScreen === "batch") {
+    state.voiceReturnScreen = "chat";
+    state.voicePurpose = "reply";
+    state.voiceQuestionId = undefined;
+    state.screen = "batch";
+    openTypeAnswer();
+    setPhoneStatus("Edit this answer, then save.");
+    return;
+  }
   if (state.voiceReturnScreen === "answer" && state.question) {
     state.voiceReturnScreen = "chat";
     openTypeAnswer();
@@ -3530,6 +3759,20 @@ function editVoiceOnPhone(): void {
 async function sendVoiceTranscript(): Promise<void> {
   const text = voiceHeard.trim();
   if (!text || !client || !state.sessionRef || state.messageBusy) return;
+  if (state.voicePurpose === "batch") {
+    const id = state.voiceQuestionId ?? batchQuestion()?.id;
+    if (!state.question || !id) return;
+    // A batch transcript is one answer, not a reply to the session.
+    state.batchAnswers[id] = { text };
+    state.voicePurpose = "reply";
+    state.voiceQuestionId = undefined;
+    state.voiceReturnScreen = "chat";
+    phoneText.value = "";
+    syncPhoneSession();
+    setPhoneStatus("Answer saved.");
+    advanceBatch();
+    return;
+  }
   phoneText.value = "";
   syncPhoneSession();
   state.voiceReturnScreen = "chat";
@@ -3755,6 +3998,31 @@ function back(): void {
     voiceInputHandler({ type: "back" });
     return;
   }
+  if (state.screen === "batch") {
+    state.batchType = false;
+    state.batchQuestionId = undefined;
+    state.answerMode = false;
+    state.answerError = undefined;
+    if (state.batchIndex > 0) {
+      state.batchIndex -= 1;
+    } else {
+      state.screen = "answer";
+    }
+    phoneQuestionKey = "";
+    updatePhoneQuestion();
+    render();
+    return;
+  }
+  if (state.screen === "batch-review") {
+    const total = state.question?.questions.length ?? 0;
+    state.batchIndex = Math.max(0, total - 1);
+    state.answerError = undefined;
+    state.screen = "batch";
+    phoneQuestionKey = "";
+    updatePhoneQuestion();
+    render();
+    return;
+  }
   if (state.screen === "failure") {
     const target = state.failureReturnScreen;
     state.failure = undefined;
@@ -3778,8 +4046,15 @@ function back(): void {
     return;
   }
   if (state.screen === "answer-type") {
-    state.screen = "answer";
-    state.answerMode = false;
+    if (state.batchType) {
+      state.batchType = false;
+      state.batchQuestionId = undefined;
+      state.answerMode = false;
+      state.screen = "batch";
+    } else {
+      state.screen = "answer";
+      state.answerMode = false;
+    }
     updatePhoneQuestion();
     render();
     return;
@@ -4034,6 +4309,8 @@ function handleListClick(index: number): void {
     case "answer-confirm":
     case "answer-stale":
     case "answer-suggestions":
+    case "batch":
+    case "batch-review":
       void performAnswerRow(index);
       break;
     case "reply":
@@ -4409,6 +4686,49 @@ function render(): void {
     }
     return;
   }
+  if (state.screen === "batch") {
+    const question = batchQuestion();
+    if (!question) {
+      state.screen = "answer";
+      render();
+      return;
+    }
+    const total = state.question?.questions.length ?? 0;
+    const header = clampLine(
+      `ANSWER · Q${state.batchIndex + 1}/${total}`,
+      40,
+    );
+    const body = batchQuestionBody(question);
+    const items = batchQuestionRows().map((row) => row.label);
+    const footer = state.answerBusy
+      ? "Saving…"
+      : state.answerError
+        ? clampLine(state.answerError, 60)
+        : "Tap choose · Back ×2";
+    if (setPreview(header, body, footer, items)) {
+      void showPage(listPage(header, items, footer, body));
+    }
+    return;
+  }
+  if (state.screen === "batch-review") {
+    const prompt = state.question;
+    if (!prompt || prompt.questions.length < 2) {
+      state.screen = "answer";
+      render();
+      return;
+    }
+    const header = clampLine(`REVIEW · ${prompt.questions.length} answers`, 40);
+    const items = batchReviewRows().map((row) => row.label);
+    const footer = state.answerBusy
+      ? "Sending…"
+      : state.answerError
+        ? clampLine(state.answerError, 60)
+        : "Tap edit · Send all";
+    if (setPreview(header, items.join("\n"), footer, items)) {
+      void showPage(listPage(header, items, footer));
+    }
+    return;
+  }
   if (
     state.screen === "answer" ||
     state.screen === "answer-confirm"
@@ -4781,6 +5101,19 @@ async function sendPhone(): Promise<void> {
   const text = phoneText.value.trim();
   if (!text || !client || !state.sessionRef || state.messageBusy) return;
   phoneSend.disabled = true;
+
+  if (state.batchType) {
+    const id = state.batchQuestionId;
+    if (!id) return;
+    // Batch typing edits one entry and advances; it never sends an answer.
+    state.batchAnswers[id] = { text };
+    state.answerError = undefined;
+    phoneText.value = "";
+    syncPhoneSession();
+    setPhoneStatus("Answer saved.");
+    advanceBatch();
+    return;
+  }
 
   if (state.answerMode && state.question) {
     await sendAnswer(text, "phone");

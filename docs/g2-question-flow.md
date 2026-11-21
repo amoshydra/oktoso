@@ -7,8 +7,9 @@ implemented. Does not modify `glass-ux.md`, `wearables.md`, or `ui-ia.md`; those
 need a short amendment when this is approved.
 
 Scope: answering AI-agent questions from Even G2 glasses and the G2 phone
-companion. The glasses support choices, sentinel-aware free text, voice, and a
-short list of suggested answers; the phone remains the keyboard.
+companion. The glasses support choices, sentinel-aware free text, voice, a short
+list of suggested answers, and a multi-question batch answered one question at a
+time; the phone remains the keyboard and the batch fallback.
 
 ---
 
@@ -34,11 +35,13 @@ identify which container was hit. The spike confirmed that a four-container page
 six-item list scrolls and selects beyond the visible four rows.
 
 A choice sends in one tap. Destructive choices open a `CONFIRM` screen first;
-sensitive questions add a text warning but still send normally. Free text and
-multiple questions hand off to the phone card, which puts the existing composer
-into answer mode. A sentinel choice such as `Other` becomes `Type your own
-answer` instead of a row that would send the literal word. When transcription or
-the reply model is configured, the same screen offers `Speak answer` and 2–3
+sensitive questions add a text warning but still send normally. Free text hands
+off to the phone card, which puts the existing composer into answer mode. A
+multi-question prompt opens the same screen with `› Answer N questions` (one
+question per glass screen, then review) and `› Answer N questions on phone` as
+the fallback. A sentinel choice such as `Other` becomes `Type your own answer`
+instead of a row that would send the literal word. When transcription or the
+reply model is configured, the same screen offers `Speak answer` and 2–3
 `Suggested answers`; both reuse the normal message path. Every send carries the
 question revision and an idempotency key; if the question changed, the hub
 rejects the send and the glasses ask the user to review instead of silently
@@ -130,7 +133,8 @@ The hard parts are not rendering a list:
 5. **The transcript is never more than one back away.** `Read chat` is always on
    the answer screen; back returns to the exact line.
 6. **The phone is the keyboard, not the product.** Choices work on the glasses.
-   Free text and multiple questions use the phone.
+   Free text hands off to the phone; a batch is answered question by question on
+   the glass, with the phone form kept as the fallback.
 7. **Monochrome state uses position and borders.** No color-only meaning; no
    icons without labels.
 8. **No hidden gestures.** Tap, double tap, scroll. No long-press requirement.
@@ -269,8 +273,8 @@ was.
   the six-line viewport and the scroll model. A synthetic answer card at the
   bottom would consume most of the transcript.
 - **Versus phone-first:** requiring the phone for every answer defeats the
-  glasses. The phone remains the fallback for typing, long lists, and multiple
-  questions.
+  glasses. The phone remains the fallback for typing and long lists, and for a
+  batch it is always one row away, but it is not the only way to answer.
 - **Versus reply-menu-first:** the generic reply menu hides the question and
   mixes `Continue`, `Explain risk`, and the actual choices. The question screen
   shows the decision first. The reply menu remains the no-question path.
@@ -285,6 +289,8 @@ was.
 |---|---|---|
 | `chat` | Read transcript. Footer advertises a pending question. | Existing six-line chat, text containers. |
 | `answer` | Choose or start a free-form answer. | Header, summary, one list (choices + action rows), footer hint. List is the only capture. |
+| `batch` | Answer one question of a multi-question prompt. | Same layout as `answer`; header `ANSWER · Q1/N`, question summary, numbered choices + `Type answer` / `Speak answer` / `Answer on phone` / `Back`. |
+| `batch-review` | Review every batch answer and send them together. | Header `REVIEW · N answers`, one numbered answer row per question, `Send all` / `Back`. |
 | `suggested` | Pick a model-written candidate answer. | Header, question summary, one list of 2–3 suggestions, footer hint. Back → `ANSWER`. |
 | `confirm` | Review a destructive answer. | Header, summary, list `Send`/`Cancel`, footer hint. |
 | `type` | Wait for the phone keyboard. | Header, summary, text body (only capture), footer hint. |
@@ -319,7 +325,16 @@ They are entered from chat and always return to chat or `answer`.
 | `answer` | Tap choice row | `sending` | Unless `requiresConfirmation`. |
 | `answer` | Tap confirm choice row | `confirm` | Exact text + consequence shown. |
 | `answer` | Tap `Type answer` row | `type` | Focus phone composer. |
-| `answer` | Tap `Answer on phone` row | `type` | Multiple questions; phone form. |
+| `answer` | Tap `Answer N questions` row | `batch` | Multiple questions; opens Q1 on the glass. |
+| `answer` | Tap `Answer N questions on phone` row | `type` | Whole-batch phone form; the entries stay in the batch. |
+| `batch` | Tap numbered choice | `batch` / `batch-review` | Stores `{choice, text}` and advances; review after the last question. |
+| `batch` | Tap `Type answer` row | `type` | Batch mode: the phone save stores the entry and advances. |
+| `batch` | Tap `Speak answer` row | `voice` | Batch mode: `Send` stores the transcript and advances, never a reply. |
+| `batch` | Tap `Answer on phone` row | `batch` | Phone form for the whole batch, entries preserved; Back stays in the batch. |
+| `batch` | Double tap / back | `batch` / `answer` | Previous question, or `ANSWER` at Q1. |
+| `batch-review` | Tap a numbered answer | `batch` | Jumps to that question to edit it. |
+| `batch-review` | Tap `Send all` | `sent` | Validates every entry first; never sends a partial batch. |
+| `batch-review` | Double tap / back | `batch` | Returns to the last question. |
 | `answer` | Tap `Answer in Inbox` row | `attention` (existing) | Provider-native question wins. |
 | `answer` | Tap `Speak answer` row | `voice` | Recording; back/cancel returns to `answer`. |
 | `answer` | Tap `Suggested answers` row | `suggested` | Model candidates; back returns to `answer`. |
@@ -360,7 +375,9 @@ hard-coded footer index.
 | Layout | Rows, in index order |
 |---|---|
 | Provider-native question (`attentionID`) | `Answer in Inbox`, then optional `Failure ›`, then `Read chat`, `Stop agent` |
-| Multiple questions | `Answer on phone`, then optional `Failure ›`, then `Read chat`, `Stop agent` |
+| Multiple questions (`answer`) | `Answer N questions`; `Answer N questions on phone`; optional `Failure ›` |
+| Each batch question (`batch`) | choices numbered from 1; `Type answer` when free text or a sentinel; `Speak answer` when configured; `Answer on phone`; `Back` |
+| Batch review (`batch-review`) | one numbered answer row per question; `Send all`; `Back` |
 | Free-form, no choices | optional `Speak answer` first, then `Type answer` (or `Type your own answer` for a sentinel), optional `Suggested answers`, optional `Failure ›`, `Read chat`, `Stop agent` |
 | Choices, free text allowed | choices; `Type answer` (or `Type your own answer`); `Speak answer`; `Suggested answers`; `Failure ›`; `Read chat`; `Stop agent` |
 | Choices, no free text | choices; `Speak answer`; `Suggested answers`; `Failure ›`; `Read chat`; `Stop agent` |
@@ -373,7 +390,9 @@ the literal sentinel is never sent. Voice follows the choices so a stray first
 tap cannot open the microphone; it may lead only when the question has no
 choices. Suggested answers are model text and always send as free text. The
 `Failure ›` row is present only when the chat has a recoverable failure, and the
-`Stop agent` row keeps the same confirmation screen as the chat menu.
+`Stop agent` row keeps the same confirmation screen as the chat menu. In the
+batch, every question renumbers from 1, a sentinel becomes `Type answer`, and
+the review rows are edit targets rather than send targets.
 
 If a future variant adds a row, append it before `Read chat` and `Stop agent`,
 and do not renumber existing rows without updating the routing and tests.
@@ -748,6 +767,52 @@ the reply model is disabled or missing a base URL/model.
 The `type` body is the single capture. Tapping it retries the phone handoff; back
 returns to `ANSWER` and keeps the composer text.
 
+### 4.9.1 Batch question and review
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ ANSWER · Q1/2                                             │ 32
+├──────────────────────────────────────────────────────────────┤
+│ Which branch should I target for the release?                │ 56
+│ The migration will drop legacy_users.                        │
+├──────────────────────────────────────────────────────────────┤
+│ ▸ release/2.4                                                │ 156
+│   main                                                       │
+│   Type answer                                                │
+│   Speak answer                                               │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│ Tap choose · Back ×2                                         │ 42
+└──────────────────────────────────────────────────────────────┘
+```
+
+`Answer on phone` and `Back` follow below the fold. Tapping a choice stores it
+and opens `ANSWER · Q2/2`; `Back` steps to the previous question, or to `ANSWER`
+at Q1. `Answer on phone` opens the whole-batch phone form without losing the
+entries already chosen. Type and voice save into the current question and
+advance; neither sends until `Send all`.
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ REVIEW · 2 answers                                        │ 32
+├──────────────────────────────────────────────────────────────┤
+│ ▸ 1 release/2.4                                              │ 156
+│   2 No, do not force push                                    │
+│   Send all                                                   │
+│   Back                                                       │
+│                                                              │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│ Tap edit · Send all                                          │ 42
+└──────────────────────────────────────────────────────────────┘
+```
+
+A numbered review row jumps back to that question to edit it. `Send all` first
+checks that every question has an answer; an incomplete batch shows
+`Answer question N first.` in the footer and stays on review. The send composes
+one numbered message and the per-question `answers` metadata, exactly like the
+phone form.
+
 ### 4.10 Phone companion question card
 
 ```text
@@ -788,11 +853,13 @@ label, not the 52-character glass label.
 | list | 3 | 0, 88 | 576 × 156 | **1** | choices + action rows |
 | footer | 4 | 0, 246 | 576 × 42 | **0** | hint only |
 
-`answer`, `more`, `confirm`, `error`, and `stale` use this four-container layout
-with the list as the only capture. `sending`, `sent`, and `type` replace the list
-with a text body at the same position (container 3, capture 1); `sending` ignores
-input, `sent` returns to chat, and `type` retries the phone handoff. Total
-containers never exceed four.
+`answer`, `batch`, `batch-review`, `more`, `confirm`, `error`, and `stale` use
+this four-container layout with the list as the only capture. `sending`, `sent`,
+and `type` replace the list with a text body at the same position (container 3,
+capture 1); `sending` ignores input, `sent` returns to chat, and `type` retries
+the phone handoff. `batch-review` uses the same layout with no summary body, so
+the numbered answers and `Send all` get the full list height. Total containers
+never exceed four.
 
 Do not add a second footer text container with capture enabled. The spike showed
 that any page with two captures returns `false`, and a tap on the only text
@@ -828,7 +895,13 @@ a click when the user taps it.
 
 - `answer`: the selected choice is primary. `Type answer`, `Speak answer`,
   `Suggested answers`, `Read chat`, and `Stop agent` are secondary action rows;
-  they may require one scroll. The list is the only place to act.
+  they may require one scroll. The list is the only place to act. For a batch,
+  `Answer N questions` is primary and the phone row is the fallback.
+- `batch`: the selected choice is primary; `Type answer`, `Speak answer`,
+  `Answer on phone`, and `Back` are secondary. The question itself is the
+  decision, so only one question is on the screen at a time.
+- `batch-review`: `Send all` is primary; a numbered answer row edits one entry,
+  and `Back` returns to the last question.
 - `confirm`: `Send` is row 1 and primary; `Cancel` is row 2 and secondary. The
   confirmation screen itself is the safety gate; the choice that opened it was
   already deliberate.
@@ -980,18 +1053,24 @@ suggestions, and Stop are first-class rows.
 The API returns `questions[]`, not a single object. If more than one question is
 detected in the latest message:
 
-- Glass: `ANSWER · 2 questions`; summary shows `Q1`; list is
-  `Answer on phone`, `Read chat`, `Stop agent`, with `Failure ›` when the chat
-  has a recoverable failure.
-- Phone: card shows every question, each with its choices or a text field; one
-  `Send answers` composes a numbered message.
-- Do not let the user answer only the last question on the glass by default; the
-  agent may proceed without the others. There is no `Answer last only` escape in
-  v1.
-- The hub rejects a partial batch with `question_incomplete`. Answering only
-  the last question on the glass is not supported in v1.
-- The phone composes the numbered message and includes every question ID in the
-  batch metadata.
+- Glass entry: `ANSWER · N questions`; summary shows `Q1`; list is
+  `Answer N questions`, `Answer N questions on phone`, with `Failure ›` when the
+  chat has a recoverable failure.
+- Glass batch: `ANSWER · Q1/N` shows one question with its numbered choices,
+  `Type answer` (when free text or a sentinel applies), `Speak answer` (when
+  configured), `Answer on phone`, and `Back`. Choosing, typing, or speaking
+  stores that question's entry and advances. The last answer opens
+  `REVIEW · N answers`.
+- Review: one numbered row per answer (tap to edit), `Send all`, and `Back`. A
+  missing entry blocks the send with `Answer question N first.`; the hub rejects
+  a partial batch with `question_incomplete` as a second guard.
+- Phone: the fallback card shows every question, each with its choices or a text
+  field; one `Send answers` composes the same numbered message. Entries chosen on
+  the glass are preserved.
+- The phone row remains on every batch question, so the user is never trapped on
+  the glass.
+- The composed message and batch metadata include every question ID; this is the
+  same wire shape for both surfaces.
 
 ### 6.6 Truncation and formatting
 
@@ -1127,9 +1206,9 @@ export interface AnswerDraft {
   source: AnswerSource;
 }
 
-// Multiple questions are answered together, never one at a time on the glass.
-// The wire format is `answers: AnswerDraft[]`; each draft repeats the shared
-// message ID and revision so the hub can validate the whole batch.
+// A batch is answered one question at a time on the glass and sent together:
+// each draft repeats the shared message ID and revision so the hub can validate
+// the whole batch. The phone form builds the same shape.
 export interface AnswerBatch {
   answers: AnswerDraft[];
 }
@@ -1144,12 +1223,16 @@ export type AnswerRow =
         | "voice"
         | "suggested"
         | "failure"
+        | "batch"
         | "phone"
         | "read"
         | "stop"
-        | "attention";
+        | "attention"
+        | "send"
+        | "back";
       label: string;
-    };
+    }
+  | { kind: "answer"; questionIndex: number; label: string };
 ```
 
 `QuestionPrompt` is the only render input. `AnswerDraft` is the only send input.
@@ -1173,12 +1256,11 @@ function rowsFor(
   }
   if (prompt.questions.length > 1) {
     return [
-      { kind: "action", action: "phone", label: "Answer on phone" },
+      { kind: "action", action: "batch", label: "Answer N questions" },
+      { kind: "action", action: "phone", label: "Answer N questions on phone" },
       ...(options.failure
         ? [{ kind: "action", action: "failure", label: "Failure ›" } as const]
         : []),
-      { kind: "action", action: "read", label: "Read chat" },
-      { kind: "action", action: "stop", label: "Stop agent" },
     ];
   }
 
@@ -1225,8 +1307,9 @@ const hint = rows.some((row) => row.kind === "choice")
 ```
 
 No `if (kind === "yesno")` screen. Yes/no is two synthesized choices followed by
-the same action rows. Free-form is a list with zero choices. Multiple is a phone
-form. `Sent`/`Type` are text bodies with one capture; `Sending` captures but
+the same action rows. Free-form is a list with zero choices. Multiple is a batch
+of one list screen per question plus a review screen; the phone form is the
+fallback. `Sent`/`Type` are text bodies with one capture; `Sending` captures but
 ignores input.
 
 ### 7.2 Composition table
@@ -1239,7 +1322,7 @@ ignores input.
 | Sentinel | choice label `Other` etc. | `{ text: composer }` | `Type your own answer` row → `type` | Composer answer mode |
 | Voice | configured transcription | `{ text: transcript }` | `Speak answer` → voice → Send | Transcript into the composer |
 | Suggestion | reply model (`mode=answer`) | `{ text: candidate }` | `Suggested answers` → candidate | Chips above composer |
-| Multiple | `questions.length > 1` | `AnswerBatch` | `Answer on phone` list row | Form of all questions |
+| Multiple | `questions.length > 1` | `AnswerBatch` | `batch` per question → `batch-review` → `Send all`; `Answer N questions on phone` fallback | Form of all questions |
 
 Voice and suggestions are additive: both send ordinary text, so they reuse the
 message and error paths rather than adding a second wire shape. A voice
@@ -1348,7 +1431,7 @@ Content-Type: application/json
 }
 ```
 
-For multiple questions, the phone sends one batch:
+For multiple questions, both the phone form and the glass review send one batch:
 
 ```json
 {
@@ -1405,7 +1488,9 @@ answer metadata. States: `LISTENING` (tap to stop), `TRANSCRIBING`, then the
 result screen with `Send` / `Edit on phone`. Never auto-send; STT errors and
 ambient speech are too likely. On the answer screen voice follows the choices;
 it may lead only when there are no choices. Back and Cancel return to the screen
-that opened the microphone.
+that opened the microphone. On a batch question the result offers `Send` /
+`Back`; `Send` stores the transcript as that question's entry and advances
+instead of sending a reply.
 
 **Suggestions.** `Suggested answers` calls `reply-options` with `mode=answer`.
 The hub passes the pending question (text + choices) and the last messages to
@@ -1431,7 +1516,8 @@ Hand off to the phone when:
 
 - the question has no choices (free-form);
 - it has more than six choices;
-- there are multiple questions;
+- a batch is easier to fill in one form (the glass always keeps
+  `Answer on phone` as the fallback);
 - the answer needs more than ~200 characters (the user chooses to type);
 - the glasses cannot show the question safely (sensitive data, very long);
 - the user explicitly taps the `Type answer` / `Answer on phone` list row
@@ -1461,6 +1547,7 @@ self-sufficient for yes/no and short choice lists.
 For multiple questions, the card is a form: each question has its own choice
 buttons or text field, selections are local until `Send answers`, and the whole
 batch is reviewed before sending. A choice tap in this mode selects, not sends.
+The glass review screen shares these entries.
 
 ### 8.3 One composer, not two
 
@@ -1468,8 +1555,9 @@ For a **single question**, the card has no textarea; the existing composer is th
 only input. For **multiple questions**, the card becomes a compact form with one
 choice set or one text field per question and a single `Send answers` button.
 That is a deliberate exception: a batch must be composed and reviewed as a unit,
-and the generic composer cannot represent two fields. The glass never renders
-this form; it routes to `Answer on phone`.
+and the generic composer cannot represent two fields. The glass batch/type flow
+uses the same entries and sends the same batch from `REVIEW`; the phone form is
+the fallback for the whole batch.
 
 The single-question composer modes are:
 
@@ -1588,7 +1676,7 @@ prompt may not propagate to the parent UI and can stall the parent turn.
 |---|---|---|
 | No question | Chat tap opens `reply` for a decision, otherwise `session` actions (`Stop` when running, `Phone keyboard`). | `SESSION` |
 | Question is streaming | No prompt; footer keeps `Working`. | `Working` |
-| Multiple questions | Phone form for all; glass `Answer on phone`. | `ANSWER · 2 questions` |
+| Multiple questions | Glass batch one question at a time, then `REVIEW` → `Send all`; the phone form is the fallback. | `ANSWER · Q1/2` → `REVIEW · 2 answers` |
 | Question changed while answering | Freeze list; `stale`; no silent swap. | `Question changed. Review before answering.` |
 | Answer sent elsewhere | `stale`; no retry. | `Answered already.` |
 | Send fails (hub) | Keep answer; `Retry` / `Choose again`. | `Couldn’t send. <reason>` |
@@ -1839,8 +1927,10 @@ screen has exactly one capture.
 
 - Scroll rule: four rows visible; up to six choices; the normal action rows
   follow the sixth. No paging.
-- Multiple questions route to the phone; list `Answer on phone`, `Read chat`,
-  `Stop agent`.
+- Multiple questions open `ANSWER · N questions` with `Answer N questions` and
+  `Answer N questions on phone`. The glass batch is one question per screen,
+  then `REVIEW`; `Send all` sends one numbered message with per-question
+  metadata. The phone form remains the fallback and shares the entries.
 - Free-answer sentinels become `Type your own answer`; the literal sentinel is
   never sent. There is no separate `MORE` list.
 - Voice, `Suggested answers`, and `Failure ›` are rows on `ANSWER`; voice follows
@@ -1848,7 +1938,8 @@ screen has exactly one capture.
 - Chat `Read chat` returns to the question line.
 
 **Acceptance:** all six choices reachable with scrolling; two questions answered
-on the phone; `Stop agent` reachable from `ANSWER` and confirmed; voice and
+on the glass and sent from `REVIEW`; the phone form answers the same batch when
+preferred; `Stop agent` reachable from `ANSWER` and confirmed; voice and
 suggestions never auto-send; a failure does not take the chat tap while a
 question is open; back paths are correct.
 
@@ -1907,7 +1998,7 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | 4 | How reliable is tap vs double-tap timing while walking? | Accidental back or send. | Scripted hardware checklist. |
 | 5 | Should unread chat questions relabel the inbox row `QUESTION`? | Discoverability vs inbox noise/cost. | User test with real sessions; v1.1. |
 | 6 | Confirm every answer, or only destructive ones? | Speed vs safety. | User test; current recommendation is destructive only. |
-| 7 | Multiple questions: phone-only, or allow `Answer last only`? | Partial answers can confuse the agent. | Product decision; v1 recommends phone-only. |
+| 7 | Multiple questions: batch-on-glass only, or also allow `Answer last only`? | Partial answers can confuse the agent. | Product decision; the glass now answers every question and `Send all` validates completeness, so `Answer last only` remains rejected. |
 | 8 | Is model extraction worth the latency/cost for medium-confidence questions? | Recall vs determinism. | Offline eval on real transcripts. |
 | 9 | How should sentence splitting and truncation handle CJK, RTL, and emoji? | The parser and 52-char labels are English/Latin assumptions. | Localization review; use code points, not UTF-16 units. |
 | 10 | How do provider-native questions and chat questions overlap in practice? | Double answering or wrong path. | Test OpenCode forms and Hermes clarify sessions. |
@@ -1928,6 +2019,8 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | Chat footer, question + failure | `? Answer · … · Failure ›` |
 | Answer header | `ANSWER · <session>` |
 | Answer header, multiple | `ANSWER · 2 questions` |
+| Batch header | `ANSWER · Q1/2` |
+| Review header | `REVIEW · 2 answers` |
 | Answer header, stale | `ANSWER · changed` |
 | Answer header, resolved | `ANSWER · resolved` |
 | Question prefix | `Q  ` |
@@ -1938,7 +2031,9 @@ activation, double-tap timing, scroll feel, refresh latency, and glyph coverage.
 | List rows, choice + free text | choices, `Type answer`, `Speak answer`, `Suggested answers`, `Failure ›`, `Read chat`, `Stop agent` |
 | List rows, free-form | `Speak answer`, `Type answer`, `Suggested answers`, `Failure ›`, `Read chat`, `Stop agent` |
 | List rows, sentinel | choices without the sentinel, `Type your own answer`, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
-| List rows, multiple | `Answer on phone`, `Failure ›`, `Read chat`, `Stop agent` |
+| List rows, multiple | `Answer 2 questions`, `Answer 2 questions on phone`, `Failure ›` |
+| List rows, batch question | choices, `Type answer`, `Speak answer`, `Answer on phone`, `Back` |
+| List rows, batch review | `1 <answer>`, `2 <answer>`, `Send all`, `Back` |
 | List rows, no free text | choices, `Speak answer`, `Suggested answers`, `Read chat`, `Stop agent` |
 | List rows, >6 choices | first six, then the normal action rows |
 | List rows, provider-native | `Answer in Inbox`, `Failure ›`, `Read chat`, `Stop agent` |

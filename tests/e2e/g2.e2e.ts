@@ -558,4 +558,135 @@ describe("G2 hosted app", () => {
     await tapRowMatching(/Type your own answer/);
     await previewMatches(/TYPE/);
   });
+
+  it("answers a two-question batch on the glass and sends from review", async () => {
+    await requirePage().route(
+      "**/api/v1/sessions/*/question",
+      async (route) => {
+        if (route.request().method() !== "GET") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              sessionRef: "desktop-opencode:ses_index",
+              messageId: "msg_batch",
+              revision: "msg_batch:1",
+              askedAt: 1,
+              generatedAt: 1,
+              questions: [
+                {
+                  id: "msg_batch:q0",
+                  text: "Which branch should I target?",
+                  kind: "choice",
+                  choices: [
+                    {
+                      id: "b0",
+                      label: "release/2.4",
+                      text: "release/2.4",
+                      kind: "choice",
+                      source: "explicit",
+                    },
+                    {
+                      id: "b1",
+                      label: "main",
+                      text: "main",
+                      kind: "choice",
+                      source: "explicit",
+                    },
+                  ],
+                  allowsFreeText: true,
+                  allowsVoice: false,
+                  multiSelect: false,
+                  risk: "normal",
+                  confidence: "high",
+                  source: "explicit",
+                },
+                {
+                  id: "msg_batch:q1",
+                  text: "Should I force push?",
+                  kind: "boolean",
+                  choices: [
+                    {
+                      id: "b2",
+                      label: "No",
+                      text: "No",
+                      kind: "boolean",
+                      source: "explicit",
+                    },
+                    {
+                      id: "b3",
+                      label: "Yes",
+                      text: "Yes",
+                      kind: "boolean",
+                      source: "explicit",
+                    },
+                  ],
+                  allowsFreeText: false,
+                  allowsVoice: false,
+                  multiSelect: false,
+                  risk: "destructive",
+                  confidence: "high",
+                  source: "explicit",
+                },
+              ],
+            },
+          }),
+        });
+      },
+    );
+    let sent: { text?: string; answers?: unknown[] } = {};
+    await requirePage().route("**/api/v1/sessions/*/messages", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      sent = route.request().postDataJSON() ?? {};
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ accepted: true }),
+      });
+    });
+
+    await openSession(/Refactor session index/);
+    await previewMatches(/\? Answer/);
+    await textTap();
+    const entry = await previewMatches(/ANSWER/);
+    expect(entry).toContain("ANSWER · 2 questions");
+    expect(await listLabels()).toEqual([
+      "› Answer 2 questions",
+      "› Answer 2 questions on phone",
+    ]);
+
+    await tapRowMatching(/^› Answer 2 questions$/);
+    await previewMatches(/ANSWER · Q1\/2/);
+    expect(await listLabels()).toContain("1 release/2.4");
+    await tapRowMatching(/^1 release\/2\.4$/);
+
+    await previewMatches(/ANSWER · Q2\/2/);
+    expect(await listLabels()).toContain("2 Yes");
+    await tapRowMatching(/^2 Yes$/);
+
+    const review = await previewMatches(/REVIEW · 2 answers/);
+    expect(review).toContain("1 release/2.4");
+    await tapRowMatching(/^› Send all$/);
+    await previewMatches(/SENT/);
+
+    expect(sent.text).toBe("1. release/2.4\n2. Yes");
+    expect(sent.answers).toHaveLength(2);
+    expect(sent.answers?.[0]).toMatchObject({
+      questionId: "msg_batch:q0",
+      choiceId: "b0",
+      source: "choice",
+    });
+    expect(sent.answers?.[1]).toMatchObject({
+      questionId: "msg_batch:q1",
+      choiceId: "b3",
+      source: "boolean",
+    });
+  });
 });

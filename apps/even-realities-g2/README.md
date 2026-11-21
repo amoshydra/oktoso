@@ -79,8 +79,12 @@ Screenshot capture and framing are documented in
   from the local reply model, `Read chat`, and a confirmed `Stop agent`.
   Provider-native `question` tool calls use the same chat answer flow as
   text questions; the Inbox form remains the formal alternative.
-- **Batch answers** — every question in a multi-question turn is shown on the
-  phone and sent as one numbered message.
+- **Batch answers** — a multi-question turn opens `ANSWER` with `› Answer N
+  questions` and `› Answer N questions on phone`. The glass path answers one
+  question per screen (`ANSWER · Q1/N`), then `REVIEW · N answers`, and `Send
+  all` sends the same one numbered message with per-question metadata. Each
+  question keeps `Type answer` / `Speak answer` / `Answer on phone` / `Back`;
+  the phone form stays the fallback and shares the same entries.
 - **Question discovery** — Home, Recent, and Inbox mark pending questions before
   the chat is opened, including provider-native questions.
 - **Current session** — the last opened session is stored locally and restored
@@ -119,7 +123,9 @@ the transcript with **Send** / **Edit on phone**, or the failure as a plain
 sentence. Sizes, frame counts, and timings go to the phone log, not the glass.
 A microphone that never delivered
 a frame therefore says so on the glasses instead of silently returning to the
-chat. One tap on the result sends the reply; Back leaves. Taps that opened or
+chat. One tap on the result sends the reply; Back leaves. For a batch question
+the result offers `Send` / `Back` and saves the transcript as that question's
+answer, then advances to the next question; it never sends a chat reply. Taps that opened or
 closed the previous screen are ignored for a moment so a single gesture never
 acts twice. After a send the glasses return to the chat, and the view follows
 the message in as soon as the provider echoes it, even when the echo lands a
@@ -145,7 +151,8 @@ Inbox
 Chat
 ├─ Answer           choices / Type your own answer / Speak answer /
 │                   Suggested answers / Failure
-├─ Batch            Answer N questions on phone / Failure
+├─ Batch            one question at a time, then review, or the phone form
+├─ Review           numbered answers, tap to edit, Send all
 ├─ Suggested        model answers for the open question, tap to send
 ├─ Type             phone keyboard handoff
 ├─ Reply            answer / opposite (`Alt`) / ask, plus canned
