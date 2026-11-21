@@ -1502,3 +1502,15 @@ list of file-configured objects.
 - The card keeps the same confirm/cancel grammar; nothing new to learn.
 - Error copy for a 5xx names the likely cause (loading or GPU busy) because
   that is what actually happens on this host.
+
+## Cross-session search (2026-11-21)
+
+- The evidence line gains `N search hits` only when the context carried any.
+  It answers "did the assistant actually look elsewhere?" without opening a
+  panel.
+- A hit names the session and ref in the answer's prose. The session scope
+  cannot read that transcript, so it says the detail is outside the thread
+  rather than paraphrasing a snippet as fact.
+- Metadata matching is deliberately broad (any term in project, path, model,
+  agent); the five-hit cap and the cited snippet keep a false positive
+  visible.

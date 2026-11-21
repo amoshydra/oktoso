@@ -61,6 +61,7 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
       asOf,
       failures,
       historyAt,
+      search,
     } = turn.context;
     if (scope === "global") {
       if (attention !== undefined && attention > 0) {
@@ -81,6 +82,9 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
     }
     if (failures !== undefined && failures > 0) {
       parts.push(`${failures} ${failures === 1 ? "failure" : "failures"}`);
+    }
+    if (search !== undefined && search > 0) {
+      parts.push(`${search} search ${search === 1 ? "hit" : "hits"}`);
     }
     if (asOf !== undefined) {
       parts.push(`session as of ${asOfLabel(asOf)}`);
