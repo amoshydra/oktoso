@@ -65,8 +65,6 @@ describe("G2 answer model", () => {
       "1 Yes",
       "2 No",
       "› Type answer",
-      "› Read chat",
-      "› Stop agent",
     ]);
   });
 
@@ -75,13 +73,13 @@ describe("G2 answer model", () => {
       question({ allowsFreeText: false }),
       prompt(),
     );
-    expect(labels(rows)).toEqual(["1 Yes", "2 No", "› Read chat", "› Stop agent"]);
+    expect(labels(rows)).toEqual(["1 Yes", "2 No"]);
   });
 
   it("routes provider-native questions to the inbox form", () => {
     expect(
       labels(buildAnswerRows(question(), prompt({ attentionID: "attention-1" }))),
-    ).toEqual(["› Answer in Inbox", "› Read chat", "› Stop agent"]);
+    ).toEqual(["› Answer in Inbox"]);
   });
 
   it("routes multiple questions to the phone", () => {
@@ -92,7 +90,7 @@ describe("G2 answer model", () => {
       labels(
         buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo),
       ),
-    ).toEqual(["› Answer on phone", "› Read chat", "› Stop agent"]);
+    ).toEqual(["› Answer 2 questions on phone"]);
     expect(buildAnswerSummary(promptWithTwo.questions[0]!, promptWithTwo)).toContain(
       "+1 more on phone",
     );
@@ -131,8 +129,6 @@ describe("G2 answer model", () => {
     expect(labels(rows)).toEqual([
       "1 Use the mirror",
       "› Type your own answer",
-      "› Read chat",
-      "› Stop agent",
     ]);
     expect(
       rows.some((row) => row.kind === "choice" && row.choice.id === "c1"),
@@ -156,8 +152,6 @@ describe("G2 answer model", () => {
       "› Speak answer",
       "› Type your own answer",
       "› Suggested answers",
-      "› Read chat",
-      "› Stop agent",
     ]);
   });
 
@@ -174,8 +168,6 @@ describe("G2 answer model", () => {
       "› Speak answer",
       "› Suggested answers",
       "› Failure",
-      "› Read chat",
-      "› Stop agent",
     ]);
     expect(rows[0]?.kind).toBe("choice");
   });
@@ -190,12 +182,10 @@ describe("G2 answer model", () => {
       "› Speak answer",
       "› Type answer",
       "› Suggested answers",
-      "› Read chat",
-      "› Stop agent",
     ]);
   });
 
-  it("keeps failure, read, and stop reachable on the batch form", () => {
+  it("keeps the batch failure reachable", () => {
     const promptWithTwo = prompt({
       questions: [question(), question({ id: "msg_1:q1" })],
     });
@@ -206,10 +196,8 @@ describe("G2 answer model", () => {
         }),
       ),
     ).toEqual([
-      "› Answer on phone",
+      "› Answer 2 questions on phone",
       "› Failure",
-      "› Read chat",
-      "› Stop agent",
     ]);
   });
 
