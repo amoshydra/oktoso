@@ -6,11 +6,15 @@ import type {
   QuestionPrompt,
 } from "@amoshydra/oktoso-contracts";
 import {
+  batchStepAfter,
   buildAnswerMetadata,
   buildAnswerRows,
   buildAnswerSummary,
   buildBatchAnswerMetadata,
+  buildBatchQuestionRows,
+  buildBatchReviewRows,
   composeBatchAnswer,
+  firstMissingBatchAnswer,
   isFreeAnswerSentinel,
   replyModelConfigured,
 } from "./answer-model";
@@ -82,7 +86,7 @@ describe("G2 answer model", () => {
     ).toEqual(["› Answer in Inbox"]);
   });
 
-  it("routes multiple questions to the phone", () => {
+  it("offers the glass batch and the phone fallback", () => {
     const promptWithTwo = prompt({
       questions: [question(), question({ id: "msg_1:q1" })],
     });
@@ -90,9 +94,12 @@ describe("G2 answer model", () => {
       labels(
         buildAnswerRows(promptWithTwo.questions[0]!, promptWithTwo),
       ),
-    ).toEqual(["› Answer 2 questions on phone"]);
+    ).toEqual([
+      "› Answer 2 questions",
+      "› Answer 2 questions on phone",
+    ]);
     expect(buildAnswerSummary(promptWithTwo.questions[0]!, promptWithTwo)).toContain(
-      "+1 more on phone",
+      "+1 more",
     );
   });
 
@@ -196,9 +203,101 @@ describe("G2 answer model", () => {
         }),
       ),
     ).toEqual([
+      "› Answer 2 questions",
       "› Answer 2 questions on phone",
       "› Failure",
     ]);
+  });
+
+  it("builds one batch question with numbered choices and escapes", () => {
+    const rows = buildBatchQuestionRows(question(), { voice: true });
+    expect(labels(rows)).toEqual([
+      "1 Yes",
+      "2 No",
+      "› Type answer",
+      "› Speak answer",
+      "› Answer on phone",
+      "› Back",
+    ]);
+    expect(rows[0]?.kind).toBe("choice");
+    expect(rows.filter((row) => row.kind === "action").map((row) => row.action)).toEqual([
+      "type",
+      "voice",
+      "phone",
+      "back",
+    ]);
+  });
+
+  it("turns a batch sentinel into a free-text row and never numbers it", () => {
+    const rows = buildBatchQuestionRows(
+      question({
+        kind: "choice",
+        allowsFreeText: false,
+        choices: [choice("c0", "Use the mirror"), choice("c1", "Other")],
+      }),
+    );
+    expect(labels(rows)).toEqual([
+      "1 Use the mirror",
+      "› Type answer",
+      "› Answer on phone",
+      "› Back",
+    ]);
+    expect(
+      rows.some((row) => row.kind === "choice" && row.choice.id === "c1"),
+    ).toBe(false);
+  });
+
+  it("omits the type row when a batch question forbids free text", () => {
+    expect(
+      labels(
+        buildBatchQuestionRows(question({ allowsFreeText: false })),
+      ),
+    ).toEqual(["1 Yes", "2 No", "› Answer on phone", "› Back"]);
+  });
+
+  it("numbers a batch review and offers Send all and Back", () => {
+    const rows = buildBatchReviewRows([
+      { text: "Yes" },
+      { text: "Postgres" },
+    ]);
+    expect(labels(rows)).toEqual([
+      "1 Yes",
+      "2 Postgres",
+      "› Send all",
+      "› Back",
+    ]);
+    expect(rows[1]).toEqual({
+      kind: "answer",
+      label: "2 Postgres",
+      questionIndex: 1,
+    });
+  });
+
+  it("shows an unanswered batch review row instead of an empty row", () => {
+    expect(labels(buildBatchReviewRows([{ text: " " }]))[0]).toBe(
+      "1 No answer yet",
+    );
+  });
+
+  it("advances a batch and lands on review after the last question", () => {
+    expect(batchStepAfter(0, 3)).toEqual({ screen: "batch", index: 1 });
+    expect(batchStepAfter(1, 3)).toEqual({ screen: "batch", index: 2 });
+    expect(batchStepAfter(2, 3)).toEqual({ screen: "batch-review" });
+    expect(batchStepAfter(0, 1)).toEqual({ screen: "batch-review" });
+  });
+
+  it("finds the first unanswered batch question", () => {
+    expect(
+      firstMissingBatchAnswer([
+        { text: "Yes", choice: choice("c0", "Yes", "boolean") },
+        { text: "" },
+        { text: "Postgres" },
+      ]),
+    ).toBe(1);
+    expect(
+      firstMissingBatchAnswer([{ text: "Yes" }, { text: "Postgres" }]),
+    ).toBeUndefined();
+    expect(firstMissingBatchAnswer([])).toBeUndefined();
   });
 
   it("builds batch metadata and a numbered message", () => {

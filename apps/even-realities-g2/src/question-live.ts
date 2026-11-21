@@ -7,6 +7,8 @@ const DRAFT_SCREENS = new Set([
   "answer-confirm",
   "answer-suggestions",
   "answer-stale",
+  "batch",
+  "batch-review",
 ]);
 
 export function holdsQuestionDraft(screen: string): boolean {

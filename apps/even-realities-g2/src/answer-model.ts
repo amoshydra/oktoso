@@ -13,15 +13,18 @@ export type AnswerAction =
   | "suggested"
   | "failure"
   | "attention"
+  | "batch"
   | "phone"
   | "read"
   | "stop"
   | "send"
-  | "cancel";
+  | "cancel"
+  | "back";
 
 export type AnswerRow =
   | { kind: "choice"; label: string; choice: AnswerChoice }
-  | { kind: "action"; label: string; action: AnswerAction };
+  | { kind: "action"; label: string; action: AnswerAction }
+  | { kind: "answer"; label: string; questionIndex: number };
 
 export interface AnswerRowOptions {
   /** The hub has a usable transcription endpoint. */
@@ -84,13 +87,13 @@ export function buildAnswerRows(
   }
 
   if (prompt.questions.length > 1) {
-    // A batch needs every answer in one request, and only the phone form can
-    // collect them. Name the work instead of saying "Answer on phone".
+    // A batch can be answered one question at a time on the glass, or collected
+    // in one phone form. Name both paths; the batch screen keeps the phone as a
+    // fallback for the whole batch.
+    const count = prompt.questions.length;
     return [
-      actionRow(
-        "phone",
-        `Answer ${prompt.questions.length} questions on phone`,
-      ),
+      actionRow("batch", `Answer ${count} questions`),
+      actionRow("phone", `Answer ${count} questions on phone`),
       ...failureRows(options),
     ];
   }
@@ -140,6 +143,81 @@ function failureRows(options: AnswerRowOptions): AnswerRow[] {
   return options.failure ? [actionRow("failure", "Failure")] : [];
 }
 
+/**
+ * One question of a batch. Choices are numbered from 1 for this question; the
+ * action rows below the fold keep the phone fallback and Back reachable on
+ * every step. A sentinel is a free-text escape here too, and voice follows the
+ * free-text row so the first tap never opens the microphone by accident.
+ */
+export function buildBatchQuestionRows(
+  question: PendingQuestion,
+  options: AnswerRowOptions = {},
+): AnswerRow[] {
+  const choices: AnswerRow[] = question.choices
+    .filter((choice) => !isFreeAnswerSentinel(choice))
+    .slice(0, 6)
+    .map((choice, index) => ({
+      kind: "choice" as const,
+      label: clampLine(`${index + 1}  ${choice.label}`, 54),
+      choice,
+    }));
+
+  const rows: AnswerRow[] = [...choices];
+  const sentinel = question.choices.some(isFreeAnswerSentinel);
+  if (question.allowsFreeText || sentinel) {
+    rows.push(actionRow("type", "Type answer"));
+  }
+  if (options.voice) rows.push(actionRow("voice", "Speak answer"));
+  rows.push(actionRow("phone", "Answer on phone"));
+  rows.push(actionRow("back", "Back"));
+  return rows;
+}
+
+export type BatchStep =
+  | { screen: "batch"; index: number }
+  | { screen: "batch-review" };
+
+/**
+ * The step after answering question `index`. The flow only advances after an
+ * answer, so the last question lands on review with every entry present.
+ */
+export function batchStepAfter(index: number, total: number): BatchStep {
+  const next = index + 1;
+  return next > 0 && next < total
+    ? { screen: "batch", index: next }
+    : { screen: "batch-review" };
+}
+
+/** The first question without an answer, or undefined for a complete batch. */
+export function firstMissingBatchAnswer(
+  answers: Array<{ text: string; choice?: AnswerChoice } | undefined>,
+): number | undefined {
+  const index = answers.findIndex(
+    (answer) => (answer?.choice?.text ?? answer?.text ?? "").trim() === "",
+  );
+  return index === -1 ? undefined : index;
+}
+
+/**
+ * Review rows double as edit targets: the number leads the answer, and the
+ * last two rows send the batch or step back into the questions.
+ */
+export function buildBatchReviewRows(
+  answers: Array<{ text: string }>,
+): AnswerRow[] {
+  const rows: AnswerRow[] = answers.map((answer, index) => ({
+    kind: "answer" as const,
+    label: clampLine(
+      `${index + 1}  ${answer.text.trim() || "No answer yet"}`,
+      54,
+    ),
+    questionIndex: index,
+  }));
+  rows.push(actionRow("send", "Send all"));
+  rows.push(actionRow("back", "Back"));
+  return rows;
+}
+
 export function buildAnswerSummary(
   question: PendingQuestion,
   prompt?: QuestionPrompt,
@@ -156,9 +234,7 @@ export function buildAnswerSummary(
     prompt &&
     prompt.questions.length > 1
   ) {
-    lines.push(
-      clampLine(`+${prompt.questions.length - 1} more on phone`, 54),
-    );
+    lines.push(clampLine(`+${prompt.questions.length - 1} more`, 54));
   }
   return lines.join("\n");
 }

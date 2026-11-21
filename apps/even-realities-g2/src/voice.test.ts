@@ -122,6 +122,13 @@ describe("G2 voice helpers", () => {
     expect(done.items).toEqual(["Send", "Edit on phone"]);
     expect(done.body).toBe("Send this to the session, please.");
     expect(done.footer).toBe("Tap choose   Back ×2");
+
+    const batch = voiceScreen({
+      phase: "done",
+      heard: "Postgres",
+      batch: true,
+    });
+    expect(batch.items).toEqual(["Send", "Back"]);
   });
 
   it("shows a failed capture with the reason and no stats", () => {
