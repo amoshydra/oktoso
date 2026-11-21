@@ -128,16 +128,35 @@ export const zAssistantStepKind = z.enum([
   "history",
   "model",
   "tool",
+  "fetch",
+  "subagent",
+  "other",
 ]);
+
+/**
+ * Short, machine-readable facts for a step: the tile's label and the rows of
+ * its detail panel. Kept separate from `detail` so a renderer never parses
+ * prose.
+ */
+export const zAssistantStepMetrics = z.record(
+  z.string(),
+  z.union([z.string(), z.number()]),
+);
 
 export const zAssistantStep = z.object({
   id: z.string().min(1),
   kind: zAssistantStepKind,
   label: z.string(),
+  /** One sentence of prose, when the facts need explaining. */
   detail: z.string().optional(),
-  status: z.enum(["running", "ok", "error"]),
+  status: z.enum(["running", "ok", "error", "cancelled"]),
   at: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative().optional(),
+  /** Optional tile headline, when `label` is too long for a 49px tile. */
+  title: z.string().optional(),
+  metrics: zAssistantStepMetrics.optional(),
+  /** Groups a step under another, e.g. tool calls inside one model turn. */
+  parentId: z.string().optional(),
 });
 
 export const zAssistantTurn = z.object({
@@ -263,6 +282,8 @@ export type AssistantRunState = z.infer<typeof zAssistantRunState>;
 export type AssistantActionKind = z.infer<typeof zAssistantActionKind>;
 export type AssistantAnswer = z.infer<typeof zAssistantAnswer>;
 export type AssistantStep = z.infer<typeof zAssistantStep>;
+export type AssistantStepMetrics = z.infer<typeof zAssistantStepMetrics>;
+export type AssistantStepStatus = AssistantStep["status"];
 export type AssistantStepKind = z.infer<typeof zAssistantStepKind>;
 export type AssistantModels = z.infer<typeof zAssistantModels>;
 export type AssistantQuestion = z.infer<typeof zAssistantQuestion>;

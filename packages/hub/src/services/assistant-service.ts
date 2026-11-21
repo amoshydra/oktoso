@@ -29,7 +29,7 @@ import type {
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { Logger } from "../lib/logger";
 import { badRequest, conflict, notFound } from "../domain/errors";
-import { capActivity } from "./activity";
+import { capActivity, RunTrace, type StepSink } from "./activity";
 import type { AttentionService } from "./attention-service";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
@@ -109,17 +109,6 @@ interface ToolCall {
   id?: string;
   name: string;
   arguments: string;
-}
-
-interface StepSink {
-  done(
-    kind: AssistantStepKind,
-    label: string,
-    detail?: string,
-    durationMs?: number,
-  ): void;
-  begin(kind: AssistantStepKind, label: string, detail?: string): AssistantStep;
-  finish(step: AssistantStep, detail?: string): void;
 }
 
 interface RunRecord {
@@ -793,42 +782,11 @@ export class AssistantService {
     const { logger } = this.options;
     const thread = this.findThread(record.run.threadId);
     const model = thread.model?.trim() || this.model();
-    const steps: AssistantStep[] = [];
-    const push = (step: AssistantStep): void => {
-      steps.push(step);
-      this.emit(record, { type: "step", step });
-    };
-    const sink: StepSink = {
-      done: (kind, label, detail, durationMs) => {
-        push({
-          id: `stp_${randomUUID()}`,
-          kind,
-          label,
-          status: "ok",
-          at: this.now(),
-          ...(detail ? { detail } : {}),
-          ...(durationMs === undefined ? {} : { durationMs }),
-        });
-      },
-      begin: (kind, label, detail) => {
-        const step: AssistantStep = {
-          id: `stp_${randomUUID()}`,
-          kind,
-          label,
-          status: "running",
-          at: this.now(),
-          ...(detail ? { detail } : {}),
-        };
-        push(step);
-        return step;
-      },
-      finish: (step, detail) => {
-        step.status = "ok";
-        step.durationMs = this.now() - step.at;
-        if (detail) step.detail = detail;
-        this.emit(record, { type: "step", step: { ...step } });
-      },
-    };
+    const trace = new RunTrace({
+      now: () => this.now(),
+      emit: (step) => this.emit(record, { type: "step", step }),
+    });
+    const sink: StepSink = trace;
 
     let text = "";
     let usage: AssistantTurn["usage"];
@@ -861,6 +819,12 @@ export class AssistantService {
         usage
           ? `${model} · ${usage.promptTokens} in / ${usage.completionTokens} out`
           : model,
+        usage
+          ? {
+              promptTokens: usage.promptTokens,
+              completionTokens: usage.completionTokens,
+            }
+          : undefined,
       );
       // A provider may end the stream cleanly on abort; a stop still wins.
       if (record.controller.signal.aborted) {
@@ -873,6 +837,8 @@ export class AssistantService {
           "tool",
           result.call.name,
           canPropose ? truncate(result.call.arguments, 140) : "ignored · writes off",
+          undefined,
+          { action: result.call.name, bytes: result.call.arguments.length },
         );
       }
       if (result.call && canPropose) {
@@ -884,7 +850,7 @@ export class AssistantService {
           built.targets,
           usage,
           built.context,
-          steps,
+          trace.items(),
           model,
         );
         if (turn.action?.status === "pending") {
@@ -901,7 +867,7 @@ export class AssistantService {
         usage,
         undefined,
         built.context,
-        steps,
+        trace.items(),
         model,
       );
       this.finish(record, "done", { turn });
@@ -914,20 +880,14 @@ export class AssistantService {
       if (!stopped) {
         logger.warn("assistant run failed", { runId: record.run.id, error: message });
       }
-      for (const step of steps) {
-        if (step.status !== "running") continue;
-        step.status = "error";
-        step.detail = message;
-        step.durationMs = this.now() - step.at;
-        this.emit(record, { type: "step", step: { ...step } });
-      }
+      trace.settle(stopped ? "cancelled" : "error", message);
       const turn = await this.appendAnswer(
         record.run.threadId,
         text,
         usage,
         message,
         built?.context,
-        steps,
+        trace.items(),
         model,
       );
       this.finish(record, state, { turn, message });
@@ -1469,6 +1429,7 @@ export class AssistantService {
       "Read session",
       `${messages.length} turns · ${waiting.data.length} attention`,
       this.now() - readStarted,
+      { turns: messages.length, attention: waiting.data.length },
     );
 
     const historyStarted = this.now();
@@ -1481,6 +1442,7 @@ export class AssistantService {
       "Provider compaction",
       history?.summary ? stamp(history.summary.at) : "none",
       this.now() - historyStarted,
+      { compaction: history?.summary ? "available" : "none" },
     );
 
     const searchStarted = this.now();
@@ -1492,6 +1454,7 @@ export class AssistantService {
         "Searched sessions",
         `“${query}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
         this.now() - searchStarted,
+        { query, hits: hits.length },
       );
     }
 
@@ -1532,6 +1495,7 @@ export class AssistantService {
       "Read project",
       `${page.data.length} sessions · ${waiting.data.length} attention`,
       this.now() - readStarted,
+      { sessions: page.data.length, attention: waiting.data.length },
     );
     const refs = new Set(page.data.map((session) => session.ref));
     const attention = waiting.data.filter((item) => refs.has(item.sessionRef));
@@ -1551,6 +1515,7 @@ export class AssistantService {
         "Searched sessions",
         `“${query}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
         this.now() - searchStarted,
+        { query, hits: hits.length },
       );
     }
     for (const hit of hits) targets.set(hit.ref, hit.title);
@@ -1563,6 +1528,7 @@ export class AssistantService {
         "Read target",
         resolved.map((session) => session.title).join(", "),
         this.now() - targetStarted,
+        { sessions: resolved.length },
       );
     }
     for (const session of resolved) targets.set(session.ref, session.title);
@@ -1615,6 +1581,7 @@ export class AssistantService {
       "Read inbox",
       `${waiting.data.length} items · ${page.data.length} sessions`,
       this.now() - readStarted,
+      { attention: waiting.data.length, sessions: page.data.length },
     );
     const now = this.now();
     const running = page.data.filter((session) => session.status === "running");

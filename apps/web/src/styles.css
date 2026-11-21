@@ -6235,45 +6235,73 @@ button.assistant-scope:hover {
   font-size: 12px;
 }
 
-/* --- Assistant activity (same grammar as the chat) ---------------------- */
+/* --- Assistant activity: hub families in the chat's grammar ------------- */
 
-.agent-activity [data-kind="model"] {
-  --kind: #a9bdff;
+/* Hub steps reuse a tool family's hue; no new palette, no new tokens. */
+.agent-activity [data-kind="context"] { --kind: #8dbccc; }
+.agent-activity [data-kind="history"] { --kind: #b3a8dd; }
+.agent-activity [data-kind="model"] { --kind: #cda2bb; }
+.agent-activity [data-kind="tool"] { --kind: #cdb18c; }
+.agent-activity [data-kind="other"] { --kind: #a6b0bf; }
+
+html[data-theme="light"] .agent-activity [data-kind="context"] { --kind: #2f7f93; }
+html[data-theme="light"] .agent-activity [data-kind="history"] { --kind: #6b5bb5; }
+html[data-theme="light"] .agent-activity [data-kind="model"] { --kind: #a34a76; }
+html[data-theme="light"] .agent-activity [data-kind="tool"] { --kind: #8a6a2f; }
+
+/* A cancelled step is neither healthy nor failed: it is simply closed. */
+.activity-tile[data-status="cancelled"] .activity-tile-dot {
+  background: var(--faint);
 }
 
-.assistant-activity-detail {
-  grid-column: 1 / -1;
-  margin: 2px 0 4px;
-  padding: 8px 10px;
-  color: var(--text);
-  font-size: var(--text-xs);
+.activity-tile[data-status="cancelled"] .activity-tile-meta {
+  color: var(--faint);
+}
+
+.tool-status.cancelled {
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+/* A child step sits under its parent without becoming a second grid. */
+.activity-tile[data-depth="1"] {
+  margin-left: var(--space-3);
+}
+
+.activity-step-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
   line-height: 1.5;
   overflow-wrap: anywhere;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--radius-xs);
 }
 
-.assistant-activity-detail-head {
+.activity-step-metrics {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.activity-step-metrics > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);
-  font-weight: 600;
 }
 
-.assistant-activity-detail-time {
+.activity-step-metrics dt {
   color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
+}
+
+.activity-step-metrics dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
-}
-
-.assistant-activity-detail p {
-  margin: 4px 0 0;
-  color: var(--muted);
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 /* --- Global assistant as a modal dialog --------------------------------- */

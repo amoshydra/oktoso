@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -12,11 +13,20 @@ import type {
   AssistantEvent,
   AssistantScope,
   AssistantStep,
-  AssistantStepKind,
   AssistantThreadDetail,
   AssistantTurn,
 } from "@amoshydra/oktoso-contracts";
-import { Icon, type IconName } from "./Icon";
+import {
+  ActivityTiles as ActivityGrid,
+  type ActivityDetailContext,
+} from "./ActivityTiles";
+import {
+  activityStatusLabel,
+  durationLabel,
+  itemsFromAssistantSteps,
+  type ActivityItem,
+} from "./activity-model";
+import { Icon } from "./Icon";
 import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
 
 export interface AssistantDockProps {
@@ -41,14 +51,6 @@ const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
   send: "Send",
   answer: "Answer",
   interrupt: "Stop turn",
-};
-
-const STEP_ICON: Record<AssistantStepKind, IconName> = {
-  context: "file",
-  search: "search",
-  history: "bulb",
-  model: "bot",
-  tool: "code",
 };
 
 /**
@@ -615,159 +617,107 @@ function ActivityBlock({
   steps: AssistantStep[];
   at: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string>();
-  const [perRow, setPerRow] = useState(Math.max(1, steps.length));
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    rootRef.current?.scrollIntoView({ block: "nearest" });
-  }, [open, steps.length]);
-
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const update = () => {
-      const tile = grid.querySelector<HTMLElement>(".activity-tile");
-      if (!tile) return;
-      const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
-      const width = tile.getBoundingClientRect().width;
-      if (width <= 0) return;
-      const next = Math.max(
-        1,
-        Math.floor((grid.clientWidth + gap) / (width + gap)),
-      );
-      setPerRow((current) => (current === next ? current : next));
-    };
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(grid);
-    return () => observer.disconnect();
-  }, [steps.length, open]);
-
-  if (steps.length === 0) return null;
-  const errors = steps.filter((step) => step.status === "error").length;
-  const running = steps.some((step) => step.status === "running");
-  const openIndex = steps.findIndex((step) => step.id === selected);
-  const insertAt =
-    openIndex >= 0
-      ? Math.min((Math.floor(openIndex / perRow) + 1) * perRow, steps.length) - 1
-      : -1;
-  const active = openIndex >= 0 ? steps[openIndex] : undefined;
-
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const buttons = Array.from(
-      grid.querySelectorAll<HTMLButtonElement>(".activity-tile"),
-    );
-    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    if (current < 0) return;
-    let next = current;
-    if (event.key === "ArrowRight") next = Math.min(current + 1, buttons.length - 1);
-    else if (event.key === "ArrowLeft") next = Math.max(current - 1, 0);
-    else if (event.key === "ArrowDown") next = Math.min(current + perRow, buttons.length - 1);
-    else if (event.key === "ArrowUp") next = Math.max(current - perRow, 0);
-    else return;
-    event.preventDefault();
-    buttons[next]?.focus();
-  };
-
+  const items = useMemo(() => itemsFromAssistantSteps(steps), [steps]);
   return (
-    <div className="agent-activity" ref={rootRef}>
-      <button
-        className="agent-activity-toggle"
-        type="button"
-        aria-expanded={open}
-        aria-label={`Agent activity: ${steps.length} ${steps.length === 1 ? "step" : "steps"}${errors ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`}
-        onClick={() => {
-          if (open) setSelected(undefined);
-          setOpen(!open);
-        }}
-      >
-        <span className="agent-activity-label">Agent activity</span>
-        <span className="agent-activity-count">
-          {steps.length} {steps.length === 1 ? "step" : "steps"}
+    <ActivityGrid
+      items={items}
+      label="Agent activity"
+      time={timeLabel(at)}
+      renderDetail={({
+        item,
+        onClose,
+      }: ActivityDetailContext<AssistantStep>) => (
+        <ActivityDetail item={item} onClose={onClose} />
+      )}
+    />
+  );
+}
+
+/**
+ * The dock's detail panel: the chat's chrome, hub facts only.
+ *
+ * There are no provider message parts behind these steps, so this shows the
+ * recorded metrics instead of a file preview or a diff.
+ */
+function ActivityDetail({
+  item,
+  onClose,
+}: {
+  item: ActivityItem<AssistantStep>;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+  const metrics = Object.entries(item.metrics ?? {});
+  useEffect(() => {
+    // The tile row may sit at the bottom of the transcript; bring the panel
+    // into view without moving the composer.
+    const timer = window.setTimeout(() => {
+      ref.current?.scrollIntoView({ block: "nearest" });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [item.id]);
+  return (
+    <section
+      className="activity-step"
+      aria-label={`${item.label} step`}
+      ref={ref}
+    >
+      <header className="activity-step-head">
+        <span className={`tool-status ${item.status}`}>
+          {activityStatusLabel(item.status)}
         </span>
-        {errors > 0 ? (
-          <span className="agent-activity-error">
-            {errors} {errors === 1 ? "error" : "errors"}
+        <span className="activity-step-title">{item.label}</span>
+        {item.metric ? (
+          <span className="activity-step-subtitle">{item.metric}</span>
+        ) : null}
+        {item.durationMs !== undefined ? (
+          <span className="activity-step-time">
+            {durationLabel(item.durationMs)}
           </span>
         ) : null}
-        {running && errors === 0 ? (
-          <span className="agent-activity-running">running</span>
-        ) : null}
-        <time className="agent-activity-time" dateTime={new Date(at).toISOString()}>
-          {timeLabel(at)}
-        </time>
-        <span className="agent-activity-chevron" aria-hidden="true">
-          <Icon name="chevron-right" size={14} />
-        </span>
-      </button>
-
-      {open ? (
-        <div
-          className="agent-activity-grid"
-          role="group"
-          aria-label="Agent steps"
-          ref={gridRef}
-          onKeyDown={onKeyDown}
+        <button
+          className="icon-btn activity-step-close"
+          type="button"
+          aria-label="Close step"
+          onClick={onClose}
         >
-          {steps.map((step, index) => {
-            const isOpen = step.id === selected;
-            return (
-              <Fragment key={step.id}>
-                <button
-                  className="activity-tile"
-                  type="button"
-                  data-kind={step.kind}
-                  data-status={step.status}
-                  data-open={isOpen ? "true" : "false"}
-                  aria-expanded={isOpen}
-                  aria-label={`${step.label}${step.detail ? `, ${step.detail}` : ""}`}
-                  title={step.detail ?? step.label}
-                  onClick={() => setSelected(isOpen ? undefined : step.id)}
-                >
-                  <Icon name={STEP_ICON[step.kind]} size={18} />
-                  <span className="activity-tile-meta">
-                    {step.durationMs !== undefined
-                      ? durationLabel(step.durationMs)
-                      : step.status === "running"
-                        ? "…"
-                        : ""}
-                  </span>
-                  {step.status !== "ok" ? (
-                    <span className="activity-tile-dot" aria-hidden="true" />
-                  ) : null}
-                </button>
-                {active && index === insertAt ? (
-                  <div className="assistant-activity-detail" role="group" aria-label="Step detail">
-                    <div className="assistant-activity-detail-head">
-                      <span>{active.label}</span>
-                      {active.durationMs !== undefined ? (
-                        <span className="assistant-activity-detail-time">
-                          {durationLabel(active.durationMs)}
-                        </span>
-                      ) : null}
-                    </div>
-                    {active.detail ? <p>{active.detail}</p> : null}
-                  </div>
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="agent-activity-dots" aria-hidden="true">
-          {steps.map((step) => (
-            <span key={step.id} className="activity-dot" data-kind={step.kind} />
-          ))}
-        </div>
-      )}
-    </div>
+          <Icon name="x" size={14} />
+        </button>
+      </header>
+      <div className="activity-step-body">
+        {item.detail ? <p className="activity-step-detail">{item.detail}</p> : null}
+        {metrics.length > 0 ? (
+          <dl className="activity-step-metrics">
+            {metrics.map(([key, value]) => (
+              <div key={key}>
+                <dt>{metricLabel(key)}</dt>
+                <dd>{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  turns: "Turns",
+  sessions: "Sessions",
+  attention: "Attention",
+  query: "Query",
+  hits: "Hits",
+  compaction: "Compaction",
+  action: "Action",
+  bytes: "Payload",
+  promptTokens: "Prompt tokens",
+  completionTokens: "Completion tokens",
+};
+
+function metricLabel(key: string): string {
+  return (
+    METRIC_LABELS[key] ??
+    key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase())
   );
 }
 
@@ -942,10 +892,6 @@ function upsertStep(
   const next = [...current];
   next[index] = step;
   return next;
-}
-
-function durationLabel(ms: number): string {
-  return ms < 1_000 ? `${ms}ms` : `${(ms / 1_000).toFixed(1)}s`;
 }
 
 function endpointLabel(baseUrl: string): string {

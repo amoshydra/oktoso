@@ -642,6 +642,41 @@ Priority order: blocking, high, normal. Within a priority, newest first. The inb
 
 The hub stores read markers and attention acknowledgements. Provider-native read state, such as OpenCode `time_viewed`, is updated when possible.
 
+### Agent activity
+
+Activity is a record, not a log line. One run produces one `RunTrace`
+(`packages/hub/src/services/activity.ts`), and the trace is the only thing that
+emits steps.
+
+- Builders receive a `StepSink`. They call `begin`, `finish`, or `done`, and
+  never hold the array. A new builder cannot forget the cap, and cannot emit
+  after the run settles.
+- A step is `{ id, kind, label, status, at, durationMs, detail?, title?,
+  metrics?, parentId? }`. `metrics` is structured facts for the tile and the
+  detail panel; prose never carries numbers a renderer has to parse.
+- Status is `running`, `ok`, `error`, or `cancelled`. A stopped run closes its
+  in-flight steps as `cancelled`, not `error`.
+- The live SSE stream is unbounded. The persisted turn is capped at
+  `MAX_ASSISTANT_ACTIVITY_STEPS` (40) by folding the newest steps into one
+  summary item, because `zAssistantTurn` re-validates on every store write and
+  a tool loop will exceed the cap.
+- `parentId` groups a step under another, so a tool call can belong to the
+  model turn that produced it. The renderer flattens groups one level and
+  promotes an orphan rather than dropping it.
+
+The web has one renderer, `ActivityTiles`, and two adapters in
+`apps/web/src/app/activity-model.ts`:
+
+| Source | Adapter | Detail panel |
+|---|---|---|
+| Chat message parts | `itemsFromChatSteps` | Preview, diff, prev/next |
+| Assistant hub steps | `itemsFromAssistantSteps` | Recorded metrics |
+
+Both resolve to `ActivityItem`. The chat can show more because provider parts
+carry more; the dock shows what the hub actually recorded. The grid, counts,
+status rules, keyboard model, and disclosure position are shared, which is what
+keeps the two from drifting again.
+
 ## 11. Persistence
 
 Use SQLite when Node's `node:sqlite` is available. Fall back to a JSON file for small deployments. The schema is small:

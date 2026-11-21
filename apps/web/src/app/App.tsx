@@ -53,6 +53,8 @@ import {
   scanPairingQr,
   type ConnectionStatus,
 } from "@amoshydra/oktoso-client";
+import { ActivityTiles as ActivityGrid } from "./ActivityTiles";
+import { itemsFromChatSteps } from "./activity-model";
 import { AssistantDock } from "./AssistantDock";
 import { BrandMark } from "./BrandMark";
 import { pastedFiles } from "./clipboard";
@@ -1256,7 +1258,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.37 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.38 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -7557,20 +7559,6 @@ function TranscriptMessage(props: {
   );
 }
 
-const STEP_ICONS: Record<StepKind, Parameters<typeof Icon>[0]["name"]> = {
-  think: "bulb",
-  shell: "terminal",
-  execute: "code",
-  read: "file",
-  write: "file-plus",
-  edit: "pencil",
-  search: "search",
-  fetch: "globe",
-  subagent: "bot",
-  image: "image",
-  other: "activity",
-};
-
 function stepStatusLabel(status: StepStatus): string {
   return status === "error" ? "error" : status === "running" ? "running" : "completed";
 }
@@ -7641,6 +7629,12 @@ function stepSubtitle(step: ActivityStep): string {
  * its own line under the row of the selected tile, like a disclosure - never a
  * modal. The grid height is the only cost; the transcript keeps scrolling.
  */
+/**
+ * The chat's adapter for the shared activity grid.
+ *
+ * Provider parts are resolved here - subagent status comes from the session
+ * list - and then handed to the one renderer as the common view model.
+ */
 function ActivityTiles(props: {
   steps: ActivityStep[];
   client: HubClient;
@@ -7651,11 +7645,6 @@ function ActivityTiles(props: {
   subagentStatus?: Record<string, Session["status"] | "unknown">;
   header?: { label: string; at?: number };
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [openKey, setOpenKey] = useState<string>();
-  const [perRow, setPerRow] = useState(Math.max(1, props.steps.length));
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const openIndex = props.steps.findIndex((step) => step.key === openKey);
   const resolved = useMemo(
     () =>
       props.steps.map((step) => {
@@ -7674,168 +7663,33 @@ function ActivityTiles(props: {
       }),
     [props.steps, props.subagentStatus, props.resource.providerID],
   );
-  const errors = resolved.filter((step) => step.status === "error").length;
-  const running = resolved.some((step) => step.status === "running");
-
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const update = () => {
-      const tile = grid.querySelector<HTMLElement>(".activity-tile");
-      if (!tile) return;
-      const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
-      const width = tile.getBoundingClientRect().width;
-      if (width <= 0) return;
-      const next = Math.max(1, Math.floor((grid.clientWidth + gap) / (width + gap)));
-      setPerRow((current) => (current === next ? current : next));
-    };
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(grid);
-    return () => observer.disconnect();
-  }, [props.steps.length, expanded]);
-
-  useEffect(() => {
-    props.onStepOpenChange?.(openKey !== undefined);
-    if (openKey === undefined) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenKey(undefined);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [openKey]);
-
-  if (props.steps.length === 0) return null;
-
-  const insertAt =
-    openIndex >= 0
-      ? Math.min((Math.floor(openIndex / perRow) + 1) * perRow, props.steps.length) - 1
-      : -1;
-
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const buttons = Array.from(
-      grid.querySelectorAll<HTMLButtonElement>(".activity-tile"),
-    );
-    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    if (current < 0) return;
-    let next = current;
-    if (event.key === "ArrowRight") next = Math.min(current + 1, buttons.length - 1);
-    else if (event.key === "ArrowLeft") next = Math.max(current - 1, 0);
-    else if (event.key === "ArrowDown") next = Math.min(current + perRow, buttons.length - 1);
-    else if (event.key === "ArrowUp") next = Math.max(current - perRow, 0);
-    else return;
-    event.preventDefault();
-    buttons[next]?.focus();
-  };
+  const items = useMemo(() => itemsFromChatSteps(resolved), [resolved]);
 
   return (
-    <article className={`agent-activity ${expanded ? "expanded" : "collapsed"}`}>
-      <button
-        className="agent-activity-toggle"
-        type="button"
-        aria-expanded={expanded}
-        aria-label={`${props.header?.label ?? "Steps"}: ${props.steps.length} ${props.steps.length === 1 ? "step" : "steps"}${errors > 0 ? `, ${errors} error${errors === 1 ? "" : "s"}` : ""}`}
-        onClick={() => {
-          if (expanded) setOpenKey(undefined);
-          setExpanded(!expanded);
-        }}
-      >
-        <span className="agent-activity-label">{props.header?.label ?? "Steps"}</span>
-        <span className="agent-activity-count">
-          {props.steps.length} {props.steps.length === 1 ? "step" : "steps"}
-        </span>
-        {errors > 0 ? (
-          <span className="agent-activity-error">
-            {errors} {errors === 1 ? "error" : "errors"}
-          </span>
-        ) : null}
-        {running && errors === 0 ? (
-          <span className="agent-activity-running">running</span>
-        ) : null}
-        {props.header?.at !== undefined ? (
-          <time
-            className="agent-activity-time"
-            dateTime={new Date(props.header.at).toISOString()}
-          >
-            {formatTime(props.header.at)}
-          </time>
-        ) : null}
-        <span className="agent-activity-chevron" aria-hidden="true">
-          <Icon name={expanded ? "chevron-right" : "chevron-right"} size={14} />
-        </span>
-      </button>
-      {expanded ? null : (
-        <div className="agent-activity-dots" aria-hidden="true">
-          {resolved.map((step) => (
-            <span
-              className="activity-dot"
-              key={step.key}
-              data-kind={step.kind}
-              data-status={step.status}
-            />
-          ))}
-        </div>
+    <ActivityGrid
+      items={items}
+      label={props.header?.label ?? "Steps"}
+      {...(props.header?.at !== undefined
+        ? { time: formatTime(props.header.at) }
+        : {})}
+      {...(props.onStepOpenChange
+        ? { onStepOpenChange: props.onStepOpenChange }
+        : {})}
+      renderDetail={({ item, index, total, onClose, onPrev, onNext }) => (
+        <StepPanel
+          step={item.data!}
+          index={index}
+          total={total}
+          client={props.client}
+          resource={props.resource}
+          {...(props.onPreviewFile ? { onPreviewFile: props.onPreviewFile } : {})}
+          {...(props.onOpenSession ? { onOpenSession: props.onOpenSession } : {})}
+          onClose={onClose}
+          onPrev={() => onPrev?.()}
+          onNext={() => onNext?.()}
+        />
       )}
-      {expanded ? (
-      <div
-        className="agent-activity-grid"
-        role="group"
-        aria-label={props.header?.label ?? "Agent steps"}
-        ref={gridRef}
-        onKeyDown={onKeyDown}
-      >
-        {resolved.map((step, index) => {
-          const open = step.key === openKey;
-          return (
-            <Fragment key={step.key}>
-              <button
-                className="activity-tile"
-                type="button"
-                data-kind={step.kind}
-                data-status={step.status}
-                data-open={open ? "true" : "false"}
-                aria-expanded={open}
-                aria-label={[
-                  step.label,
-                  stepStatusLabel(step.status),
-                  step.metric && step.metric !== stepStatusLabel(step.status)
-                    ? step.metric
-                    : undefined,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}
-                title={step.title ?? step.metric}
-                onClick={() => setOpenKey(open ? undefined : step.key)}
-              >
-                <Icon name={STEP_ICONS[step.kind]} size={18} />
-                <span className="activity-tile-meta">{step.metric ?? ""}</span>
-                {step.status !== "completed" ? (
-                  <span className="activity-tile-dot" aria-hidden="true" />
-                ) : null}
-              </button>
-              {openIndex >= 0 && index === insertAt ? (
-                <StepPanel
-                  step={resolved[openIndex]!}
-                  index={openIndex}
-                  total={props.steps.length}
-                  client={props.client}
-                  resource={props.resource}
-                  onPreviewFile={props.onPreviewFile}
-                  onOpenSession={props.onOpenSession}
-                  onClose={() => setOpenKey(undefined)}
-                  onPrev={() => setOpenKey(props.steps[openIndex - 1]?.key)}
-                  onNext={() => setOpenKey(props.steps[openIndex + 1]?.key)}
-                />
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </div>
-      ) : null}
-    </article>
+    />
   );
 }
 
