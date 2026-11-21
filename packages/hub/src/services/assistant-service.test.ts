@@ -1057,6 +1057,185 @@ describe("AssistantService", () => {
     ).toBe(true);
   });
 
+  it("pages past the first provider page so old turns are reachable", async () => {
+    const newest = [
+      {
+        id: "a2",
+        sessionRef: session.ref,
+        role: "assistant" as const,
+        createdAt: 4,
+        parts: [{ type: "text" as const, text: "newest turn" }],
+      },
+      {
+        id: "a1",
+        sessionRef: session.ref,
+        role: "user" as const,
+        createdAt: 3,
+        parts: [{ type: "text" as const, text: "second newest" }],
+      },
+    ];
+    const oldest = [
+      {
+        id: "b2",
+        sessionRef: session.ref,
+        role: "assistant" as const,
+        createdAt: 2,
+        parts: [{ type: "text" as const, text: "older turn" }],
+      },
+      {
+        id: "b1",
+        sessionRef: session.ref,
+        role: "user" as const,
+        createdAt: 1,
+        parts: [{ type: "text" as const, text: "the very first request" }],
+      },
+    ];
+    const pages: string[] = [];
+    let round = 0;
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      function: {
+                        name: "read_turns",
+                        arguments: JSON.stringify({ from: 1, to: 1 }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([delta("The first request was in turn 1."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        messages: async (
+          _ref: string,
+          query: { limit?: number; cursor?: string },
+        ): Promise<MessagePage> => {
+          // Only the transcript read pages; the history scan gets one empty
+          // page and stays out of the count.
+          if (query.limit !== 200) {
+            return { data: [], cursor: { next: null, previous: null } };
+          }
+          pages.push(query.cursor ?? "first");
+          if (!query.cursor) {
+            return {
+              data: newest,
+              cursor: { next: "page-2", previous: null },
+            };
+          }
+          return {
+            data: oldest,
+            cursor: { next: null, previous: null },
+          };
+        },
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "what did I ask first?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    expect(pages).toEqual(["first", "page-2"]);
+    const toolMessage = bodies[1]?.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(toolMessage?.content).toContain("the very first request");
+    expect(toolMessage?.content).not.toContain("capped");
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.messages).toBe(1);
+  });
+
+  it("says when the deep read was capped instead of implying a short session", async () => {
+    let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    let calls = 0;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        messages: async (
+          _ref: string,
+          query: { limit?: number },
+        ): Promise<MessagePage> => {
+          if (query.limit !== 200) {
+            return { data: [], cursor: { next: null, previous: null } };
+          }
+          calls += 1;
+          return {
+            data: [
+              {
+                id: `m${calls}`,
+                sessionRef: session.ref,
+                role: "user",
+                createdAt: calls,
+                parts: [{ type: "text", text: `turn ${calls}` }],
+              },
+            ],
+            cursor: { next: `page-${calls + 1}`, previous: null },
+          };
+        },
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    await service.postMessage(thread.id, { text: "anything" });
+    await waitFor(() => body.messages.length > 0);
+
+    const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(calls).toBe(10);
+    expect(prompt).toContain("The oldest turns are not loaded");
+    expect(prompt).toContain("capped at the newest 10");
+  });
+
   it("forces an answer when the tool rounds run out", async () => {
     const bodies: Array<{ tools?: unknown[]; messages: Array<{ role: string; content: string | null }> }> = [];
     const fetchImpl = (async (_url: string, init: RequestInit) => {

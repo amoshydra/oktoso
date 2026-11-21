@@ -70,6 +70,10 @@ const MAX_TOOL_RESULT_CHARS = 6_000;
 const MAX_TOOL_RESULTS_TOTAL = 24_000;
 const TOOL_TRANSCRIPT_LIMIT = 200;
 const MAX_TOOL_SESSIONS = 3;
+/** Deep transcript: five pages, four megabytes, three and a half seconds. */
+const MAX_TRANSCRIPT_PAGES = 10;
+const MAX_TRANSCRIPT_CHARS = 32_000_000;
+const TRANSCRIPT_BUDGET_MS = 5_000;
 const HISTORY_SCAN_LIMIT = 100;
 const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 
@@ -157,6 +161,13 @@ interface ToolRun {
   metrics?: Record<string, string | number>;
   /** Turns the model actually saw, for the evidence line. */
   reads?: Array<{ ref: string; turn: number }>;
+}
+
+interface Transcript {
+  messages: Message[];
+  complete: boolean;
+  pages: number;
+  chars: number;
 }
 
 interface AssistantTools {
@@ -1583,19 +1594,24 @@ export class AssistantService {
    */
   private crossSessionTools(allowed: Session[]): AssistantTools {
     const byRef = new Map(allowed.map((session) => [session.ref, session]));
-    const cache = new Map<string, Message[]>();
+    const cache = new Map<string, Transcript>();
     const touched = new Set<string>();
 
-    const load = async (ref: string): Promise<Message[]> => {
+    const load = async (ref: string): Promise<Transcript> => {
       const cached = cache.get(ref);
       if (cached) return cached;
-      const page = await this.options.sessions.messages(ref, {
-        limit: TOOL_TRANSCRIPT_LIMIT,
-        order: "desc",
-      });
-      const messages = [...page.data].reverse();
-      cache.set(ref, messages);
-      return messages;
+      const transcript = await this.loadTranscript(ref);
+      cache.set(ref, transcript);
+      return transcript;
+    };
+
+    /** A provider failure becomes a tool result, not a failed run. */
+    const safeLoad = async (ref: string): Promise<Transcript | undefined> => {
+      try {
+        return await load(ref);
+      } catch {
+        return undefined;
+      }
     };
 
     /** Claim one of the run's session slots before touching a transcript. */
@@ -1767,7 +1783,11 @@ export class AssistantService {
       if (budget) return { output: budget, label: "Read session" };
 
       if (name === "read_session_turns") {
-        const messages = await load(ref);
+        const transcript = await safeLoad(ref);
+        if (!transcript) {
+          return { output: `could not read ${ref} right now`, label: "Read session" };
+        }
+        const messages = transcript.messages;
         const total = Math.max(1, messages.length);
         const from = clamp(numberArg(args.from, 1), 1, total);
         const to = clamp(numberArg(args.to, from), from, total);
@@ -1784,7 +1804,7 @@ export class AssistantService {
           MAX_TOOL_RESULT_CHARS,
         );
         return {
-          output: `SESSION ${session.title} [${session.ref}] · ${messages.length} turns\n\n${output || "no turns in that range"}`,
+          output: `SESSION ${session.title} [${session.ref}] · ${messages.length} turns${transcript.complete ? "" : ` (capped at the newest ${messages.length})`}\n\n${output || "no turns in that range"}`,
           label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
           detail: `${session.title} · ${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
           metrics: { turns: selected.length },
@@ -1793,7 +1813,11 @@ export class AssistantService {
       }
 
       if (name === "list_tool_calls") {
-        const messages = await load(ref);
+        const transcript = await safeLoad(ref);
+        if (!transcript) {
+          return { output: `could not read ${ref} right now`, label: "Listed tool calls" };
+        }
+        const messages = transcript.messages;
         const raw = stringArg(args.status).toLowerCase();
         const wanted =
           raw === "failed" || raw === "failure"
@@ -1830,7 +1854,11 @@ export class AssistantService {
       }
 
       if (name === "read_tool_output") {
-        const messages = await load(ref);
+        const transcript = await safeLoad(ref);
+        if (!transcript) {
+          return { output: `could not read ${ref} right now`, label: "Read tool output" };
+        }
+        const messages = transcript.messages;
         const turn = clamp(numberArg(args.turn, 1), 1, Math.max(1, messages.length));
         const message = messages[turn - 1];
         const toolParts =
@@ -1902,6 +1930,7 @@ export class AssistantService {
             properties: {
               query: { type: "string" },
               limit: { type: "integer", minimum: 1, maximum: 20 },
+              offset: { type: "integer", minimum: 0 },
             },
             required: ["query"],
           },
@@ -1965,18 +1994,22 @@ export class AssistantService {
             return { output: "query is required", label: "Searched transcript" };
           }
           const limit = clamp(numberArg(args.limit, 8), 1, 20);
-          const matches: string[] = [];
+          const offset = Math.max(0, numberArg(args.offset, 0));
+          const all: string[] = [];
           for (const row of rows) {
             const at = row.text.toLowerCase().indexOf(query.toLowerCase());
             if (at < 0) continue;
             const snippet = row.text
               .slice(Math.max(0, at - 160), at + query.length + 240)
               .replace(/\s+/g, " ");
-            matches.push(`turn ${row.turn} · ${row.role}: …${snippet}…`);
-            if (matches.length >= limit) break;
+            all.push(`turn ${row.turn} · ${row.role}: …${snippet}…`);
           }
+          const matches = all.slice(offset, offset + limit);
+          const header = all.length
+            ? `${all.length} ${all.length === 1 ? "match" : "matches"}; showing ${matches.length} from ${offset}`
+            : "no matches";
           return {
-            output: matches.length ? matches.join("\n") : "no matches",
+            output: [header, ...matches].join("\n"),
             label: "Searched transcript",
             detail: `“${truncate(query, 80)}” · ${matches.length} ${matches.length === 1 ? "hit" : "hits"}`,
             metrics: { query, hits: matches.length },
@@ -2107,17 +2140,15 @@ export class AssistantService {
     const sessionRef = scope.sessionRef;
     const { sessions, attention, questions } = this.options;
     const readStarted = this.now();
-    const [session, waiting, questionPrompt, page] = await Promise.all([
+    const [session, waiting, questionPrompt, transcript] = await Promise.all([
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
       questions.get(sessionRef).catch(() => null),
-      // Tools need the widest page; the opening message only gets the digest.
-      sessions.messages(sessionRef, {
-        limit: TOOL_TRANSCRIPT_LIMIT,
-        order: "desc",
-      }),
+      // The tools number turns over the whole loaded transcript, so it is
+      // paged here, not lazily. The opening still only gets the digest.
+      this.loadTranscript(sessionRef),
     ]);
-    const messages = [...page.data].reverse();
+    const messages = transcript.messages;
     steps.done(
       "context",
       "Read session",
@@ -2129,7 +2160,7 @@ export class AssistantService {
     const historyStarted = this.now();
     const history = await this.loadHistory(
       sessionRef,
-      page.data[0]?.id,
+      messages.at(-1)?.id,
     ).catch(() => undefined);
     steps.done(
       "history",
@@ -2164,6 +2195,7 @@ export class AssistantService {
       canWrite: this.writesEnabled(),
       assistantModel: model,
       transcript: false,
+      transcriptComplete: transcript.complete,
     });
     return {
       ...rendered,
@@ -2477,6 +2509,54 @@ export class AssistantService {
    * request keeps running; if it lands, it refreshes the cache for the next
    * ask (stale-while-revalidate).
    */
+  /**
+   * The session from the newest message back, page by page, oldest first.
+   *
+   * A single provider page is 200 messages, which is not the session. The
+   * tools number turns over what this returns, so the page set is loaded as a
+   * whole: paging later would renumber turns the model already cited.
+   *
+   * Bounded on three axes (pages, characters, time). When one cuts the scan
+   * short, `complete` is false and the prompt says so; an absence is then a
+   * known gap, never a false claim.
+   */
+  private async loadTranscript(sessionRef: string): Promise<Transcript> {
+    const collected: Message[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    let chars = 0;
+    let complete = false;
+    const deadline = this.now() + TRANSCRIPT_BUDGET_MS;
+
+    for (;;) {
+      const page = await this.options.sessions.messages(sessionRef, {
+        limit: TOOL_TRANSCRIPT_LIMIT,
+        order: "desc",
+        ...(cursor ? { cursor } : {}),
+      });
+      pages += 1;
+      collected.push(...page.data);
+      try {
+        chars += JSON.stringify(page.data).length;
+      } catch {
+        chars += page.data.length * 400;
+      }
+      const next = page.cursor.next ?? undefined;
+      if (!next) {
+        complete = true;
+        break;
+      }
+      if (pages >= MAX_TRANSCRIPT_PAGES) break;
+      if (chars >= MAX_TRANSCRIPT_CHARS) break;
+      if (this.now() > deadline) break;
+      cursor = next;
+    }
+
+    // Pages arrive newest first; readers want reading order.
+    collected.reverse();
+    return { messages: collected, complete, pages, chars };
+  }
+
   private async loadHistory(
     sessionRef: string,
     newestMessageID?: string,
@@ -3239,6 +3319,8 @@ export function renderContext(input: {
   assistantModel: string;
   /** When false, the turns stay behind the read-only tools. */
   transcript?: boolean;
+  /** False when a page, character, or time cap stopped the deep read. */
+  transcriptComplete?: boolean;
 }): { text: string; context: AssistantContext } {
   const { session } = input;
   const digest = mergeDigests(digestMessages(input.messages), input.historyDigest);
@@ -3353,6 +3435,11 @@ export function renderContext(input: {
       lines.join("\n"),
       "",
       `TRANSCRIPT (not pasted: ${input.messages.length} turns, numbered 1..${input.messages.length}; read them with the tools)`,
+      ...(input.transcriptComplete === false
+        ? [
+            `The oldest turns are not loaded (capped at the newest ${input.messages.length}). Say so before concluding something never happened.`,
+          ]
+        : []),
     ].join("\n");
     return {
       text,
