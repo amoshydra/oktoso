@@ -49,6 +49,18 @@ const AGENT_PROMPT = `${SYSTEM_PROMPT}
 
 You have read-only tools over this session's transcript. Use them when the answer needs evidence you were not given: search for a term, read a turn, list tool calls, or read a tool's output. Prefer evidence over memory. Stop as soon as you can answer.`;
 
+const STRICT_PROMPT = `${SYSTEM_PROMPT}
+
+You have read-only tools over this session's transcript. Rules:
+- Never answer an evidence question without calling a tool first. The facts block is metadata, not evidence.
+- Search one term at a time; wildcards and whole questions do not match.
+- Read the turn or output you found before quoting it.
+- Cite the turn number for every claim.
+- If two searches and two reads do not find it, say it is missing instead of guessing.
+- Stop as soon as the evidence answers the question.`;
+
+const TERSE_PROMPT = `Answer from the session transcript. Use the tools; do not guess. Cite turn numbers. One short paragraph.`;
+
 const PART_CAPS = {
   message: 4_000,
   reasoning: 1_200,
@@ -174,7 +186,7 @@ function buildFullContext(session, messages, budget) {
 
 // --- agent tools -----------------------------------------------------------
 
-function makeToolbox(messages) {
+function makeToolbox(messages, options) {
   const index = messages.map((message, turn) => ({ turn, message }));
   const rendered = index.map(({ turn, message }) => ({
     turn,
@@ -184,7 +196,7 @@ function makeToolbox(messages) {
       .join("\n"),
   }));
 
-  const definitions = [
+  const allDefinitions = [
     {
       type: "function",
       function: {
@@ -246,6 +258,15 @@ function makeToolbox(messages) {
       },
     },
   ];
+
+  const definitions = allDefinitions.filter((definition) => {
+    const name = definition.function.name;
+    if (options.toolset === "search") return name === "search_transcript";
+    if (options.toolset === "read") {
+      return name === "search_transcript" || name === "read_turns";
+    }
+    return true;
+  });
 
   function run(name, args) {
     if (name === "search_transcript") {
@@ -314,7 +335,16 @@ function makeToolbox(messages) {
 
 // --- model calls -----------------------------------------------------------
 
-async function chat({ baseUrl, model, messages, tools, toolChoice, timeoutMs = 180_000 }) {
+async function chat({
+  baseUrl,
+  model,
+  messages,
+  tools,
+  toolChoice,
+  thinking,
+  temperature = 0.2,
+  timeoutMs = 180_000,
+}) {
   const started = Date.now();
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
@@ -322,7 +352,10 @@ async function chat({ baseUrl, model, messages, tools, toolChoice, timeoutMs = 1
     body: JSON.stringify({
       model,
       messages,
-      temperature: 0.2,
+      temperature,
+      ...(thinking === undefined
+        ? {}
+        : { chat_template_kwargs: { enable_thinking: thinking } }),
       ...(tools ? { tools } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
@@ -342,15 +375,27 @@ async function chat({ baseUrl, model, messages, tools, toolChoice, timeoutMs = 1
 
 async function runOne(strategy, session, messages, question, options) {
   if (strategy === "agent" || strategy === "hybrid") {
-    const toolbox = makeToolbox(messages);
+    const toolbox = makeToolbox(messages, options);
     // The hybrid hands the model the recent window it already fits, and tools
     // only for what falls outside it. The agent starts with facts alone.
+    const recent =
+      options.opening === "recent"
+        ? `
+
+RECENT TURNS (newest last)\n${clip(renderTurns(messages, "full", options.recentBudget).text, options.recentBudget)}`
+        : "";
     const opening =
       strategy === "hybrid"
         ? `${buildFullContext(session, messages, options.budget)}\n\nQUESTION\n${question}`
-        : `${facts(session)}\n\nThe transcript has ${messages.length} turns. Question: ${question}`;
+        : `${facts(session)}${recent}\n\nThe transcript has ${messages.length} turns. Question: ${question}`;
+    const system =
+      options.prompt === "strict"
+        ? STRICT_PROMPT
+        : options.prompt === "terse"
+          ? TERSE_PROMPT
+          : AGENT_PROMPT;
     const conversation = [
-      { role: "system", content: AGENT_PROMPT },
+      { role: "system", content: system },
       { role: "user", content: opening },
     ];
     let usage = { prompt_tokens: 0, completion_tokens: 0 };
@@ -371,6 +416,8 @@ async function runOne(strategy, session, messages, question, options) {
         messages: conversation,
         tools: last ? undefined : toolbox.definitions,
         toolChoice: last ? undefined : "auto",
+        thinking: options.thinking,
+        temperature: options.temperature,
       });
       usage.prompt_tokens += result.usage.prompt_tokens ?? 0;
       usage.completion_tokens += result.usage.completion_tokens ?? 0;
@@ -429,6 +476,8 @@ async function runOne(strategy, session, messages, question, options) {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: `${context}\n\nQUESTION\n${question}` },
     ],
+    thinking: options.thinking,
+    temperature: options.temperature,
   });
   return {
     strategy,
@@ -451,6 +500,12 @@ function parseArgs(argv) {
     budget: 48_000,
     limit: 200,
     maxSteps: 6,
+    thinking: undefined,
+    temperature: 0.2,
+    opening: "facts",
+    recentBudget: 8_000,
+    toolset: "full",
+    prompt: "default",
     dryRun: false,
     json: false,
     list: false,
@@ -484,6 +539,24 @@ function parseArgs(argv) {
         break;
       case "--max-steps":
         options.maxSteps = Number(value());
+        break;
+      case "--thinking":
+        options.thinking = value() === "on";
+        break;
+      case "--temperature":
+        options.temperature = Number(value());
+        break;
+      case "--opening":
+        options.opening = value();
+        break;
+      case "--recent-budget":
+        options.recentBudget = Number(value());
+        break;
+      case "--toolset":
+        options.toolset = value();
+        break;
+      case "--prompt":
+        options.prompt = value();
         break;
       case "--suite":
         options.suite = value();

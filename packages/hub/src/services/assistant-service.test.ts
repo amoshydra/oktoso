@@ -325,13 +325,137 @@ describe("AssistantService", () => {
     expect(prompt).toContain("New activity in hub");
     expect(prompt).not.toContain("New activity in atlas");
     expect(body.tools).toBeDefined();
-    // Retrieval is a transcript tool; a project thread has no single one.
-    expect(JSON.stringify(body.tools)).not.toContain("search_transcript");
+    // A project thread gets session-scoped tools, not the single-transcript
+    // ones: every read names its session.
+    const toolNames = JSON.stringify(body.tools);
+    expect(toolNames).toContain("search_transcript");
+    expect(toolNames).toContain("read_session_turns");
+    expect(toolNames).toContain("list_sessions");
+    expect(toolNames).not.toContain('"read_turns"');
 
     const done = events.find((event) => event.type === "done");
     if (done?.type !== "done") throw new Error("no done event");
     expect(done.turn.context?.sessions).toBe(2);
-    expect(done.turn.context?.messages).toBeUndefined();
+    expect(done.turn.context?.messages).toBe(0);
+  });
+
+  it("reads a session's transcript through tools from a project thread", async () => {
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+      tools?: Array<{ function: { name: string } }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      function: {
+                        name: "read_session_turns",
+                        arguments: JSON.stringify({
+                          sessionRef: "desktop-opencode:ses_a",
+                          from: 1,
+                          to: 2,
+                        }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([delta("The build broke in turn 1."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(fetchImpl);
+    const thread = await service.createThread({
+      scope: { kind: "project", project: "hub" },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "why is the build red?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(toolMessage?.content).toContain("SESSION Fix the build");
+    expect(toolMessage?.content).toContain("TURN 1");
+    expect(toolMessage?.content).toContain("the build is red");
+    expect(toolMessage?.content).toContain("[tool write · completed]");
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.toolCalls).toBe(1);
+    expect(done.turn.context?.messages).toBe(2);
+    expect(
+      done.turn.activity?.some(
+        (step) => step.kind === "tool" && step.label === "Read turns 1–2",
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses a session outside the project thread's scope", async () => {
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      function: {
+                        name: "read_session_turns",
+                        arguments: JSON.stringify({
+                          sessionRef: "desktop-opencode:ses_c",
+                          from: 1,
+                          to: 2,
+                        }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([delta("That session is outside this thread."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(fetchImpl);
+    const thread = await service.createThread({
+      scope: { kind: "project", project: "hub" },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "read the trip notes" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(toolMessage?.content).toContain("outside this thread's scope");
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.messages).toBe(0);
   });
 
   it("builds a global context from the inbox and running sessions", async () => {

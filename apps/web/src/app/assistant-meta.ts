@@ -73,6 +73,9 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
       if (running !== undefined && running > 0) {
         parts.push(`${running} running`);
       }
+      if (messages !== undefined && messages > 0) {
+        parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
+      }
     } else if (sessions !== undefined) {
       parts.push(`Read ${sessions} ${sessions === 1 ? "session" : "sessions"}`);
     } else if (messages !== undefined && messages > 0) {

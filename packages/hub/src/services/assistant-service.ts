@@ -69,6 +69,7 @@ const MAX_CALLS_PER_ROUND = 3;
 const MAX_TOOL_RESULT_CHARS = 6_000;
 const MAX_TOOL_RESULTS_TOTAL = 24_000;
 const TOOL_TRANSCRIPT_LIMIT = 200;
+const MAX_TOOL_SESSIONS = 3;
 const HISTORY_SCAN_LIMIT = 100;
 const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 
@@ -155,12 +156,12 @@ interface ToolRun {
   detail?: string;
   metrics?: Record<string, string | number>;
   /** Turns the model actually saw, for the evidence line. */
-  turns: number[];
+  reads?: Array<{ ref: string; turn: number }>;
 }
 
 interface AssistantTools {
   definitions: ChatToolDefinition[];
-  run(name: string, argumentsJson: string): ToolRun;
+  run(name: string, argumentsJson: string): Promise<ToolRun>;
   byName(name: string): boolean;
 }
 
@@ -876,7 +877,7 @@ export class AssistantService {
         { role: "user", content: prompt.user },
       ];
       const modelStep = sink.begin("model", "Model", model);
-      const readTurns = new Set<number>();
+      const readTurns = new Set<string>();
       let toolCalls = 0;
       let toolChars = 0;
       let exhausted = false;
@@ -951,11 +952,13 @@ export class AssistantService {
             continue;
           }
           const started = this.now();
-          const outcome = tools.run(entry.name, entry.arguments);
+          const outcome = await tools.run(entry.name, entry.arguments);
           executed += 1;
           toolCalls += 1;
           toolChars += outcome.output.length;
-          for (const turn of outcome.turns) readTurns.add(turn);
+          for (const read of outcome.reads ?? []) {
+            readTurns.add(`${read.ref}:${read.turn}`);
+          }
           sink.done(
             "tool",
             outcome.label,
@@ -1572,6 +1575,303 @@ export class AssistantService {
   // --- context -------------------------------------------------------------
 
   /**
+   * Read-only retrieval across a project or every session.
+   *
+   * Same contract as the session tools, with a session ref on every read. A
+   * ref must be in this thread's scope, and at most three distinct sessions
+   * are read per run, so a global question cannot turn into a crawl.
+   */
+  private crossSessionTools(allowed: Session[]): AssistantTools {
+    const byRef = new Map(allowed.map((session) => [session.ref, session]));
+    const cache = new Map<string, Message[]>();
+    const touched = new Set<string>();
+
+    const load = async (ref: string): Promise<Message[]> => {
+      const cached = cache.get(ref);
+      if (cached) return cached;
+      const page = await this.options.sessions.messages(ref, {
+        limit: TOOL_TRANSCRIPT_LIMIT,
+        order: "desc",
+      });
+      const messages = [...page.data].reverse();
+      cache.set(ref, messages);
+      return messages;
+    };
+
+    /** Claim one of the run's session slots before touching a transcript. */
+    const claim = (ref: string): string | undefined => {
+      if (touched.has(ref)) return undefined;
+      if (touched.size >= MAX_TOOL_SESSIONS) {
+        return `session budget reached (${MAX_TOOL_SESSIONS} distinct sessions). Answer from what you have.`;
+      }
+      touched.add(ref);
+      return undefined;
+    };
+
+    const outside = (ref: string): ToolRun => ({
+      output: `session ${ref || "(none)"} is outside this thread's scope`,
+      label: "Read session",
+    });
+
+    const definitions: ChatToolDefinition[] = [
+      {
+        type: "function",
+        function: {
+          name: "list_sessions",
+          description:
+            "List sessions in this thread's scope with their ref, project, status, and last activity. Use it to find a session by title, project, status, or directory before reading it.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              status: { type: "string" },
+              project: { type: "string" },
+            },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "search_transcript",
+          description:
+            "Search inside sessions' transcripts for a literal string. Pass sessionRef to search one session. Returns the session, ref, and a snippet.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              sessionRef: { type: "string" },
+            },
+            required: ["query"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "read_session_turns",
+          description:
+            "Read numbered turns of one session in full: prose, reasoning, tool input, and tool output.",
+          parameters: {
+            type: "object",
+            properties: {
+              sessionRef: { type: "string" },
+              from: { type: "integer", minimum: 1 },
+              to: { type: "integer", minimum: 1 },
+            },
+            required: ["sessionRef", "from", "to"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_tool_calls",
+          description:
+            "Index one session's tool calls: turn, call index, name, status, short input, and how many failed.",
+          parameters: {
+            type: "object",
+            properties: {
+              sessionRef: { type: "string" },
+              status: { type: "string" },
+            },
+            required: ["sessionRef"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "read_tool_output",
+          description:
+            "Read one tool call's recorded output from a session. Use the turn and call index from list_tool_calls.",
+          parameters: {
+            type: "object",
+            properties: {
+              sessionRef: { type: "string" },
+              turn: { type: "integer", minimum: 1 },
+              index: { type: "integer", minimum: 0 },
+            },
+            required: ["sessionRef", "turn", "index"],
+          },
+        },
+      },
+    ];
+
+    const run = async (
+      name: string,
+      argumentsJson: string,
+    ): Promise<ToolRun> => {
+      const args = parseToolArguments(argumentsJson);
+      if (name === "list_sessions") {
+        const query = stringArg(args.query).toLowerCase();
+        const status = stringArg(args.status).toLowerCase();
+        const project = stringArg(args.project).toLowerCase();
+        const kept = allowed.filter((session) => {
+          if (status && session.status.toLowerCase() !== status) return false;
+          if (project && (session.project ?? "").toLowerCase() !== project) {
+            return false;
+          }
+          if (!query) return true;
+          return [
+            session.title,
+            session.ref,
+            session.project,
+            session.directory,
+            session.agent,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query));
+        });
+        const shown = kept.slice(0, 40);
+        return {
+          output: shown.length
+            ? shown.map(describeSession).join("\n")
+            : "no sessions match",
+          label: "Listed sessions",
+          detail: `${shown.length}${kept.length > shown.length ? ` of ${kept.length}` : ""} ${shown.length === 1 ? "session" : "sessions"}${query ? ` · “${truncate(query, 60)}”` : ""}`,
+          metrics: { sessions: shown.length },
+        };
+      }
+
+      if (name === "search_transcript") {
+        const query = stringArg(args.query);
+        const ref = stringArg(args.sessionRef);
+        if (!query) return { output: "query is required", label: "Searched sessions" };
+        if (ref && !byRef.has(ref)) return outside(ref);
+        const hits = await this.searchSessions(
+          query,
+          (row) => !ref || row.ref === ref,
+          ref ? [byRef.get(ref)!] : allowed,
+        );
+        return {
+          output: hits.length
+            ? hits
+                .slice(0, 10)
+                .map(
+                  (hit) =>
+                    `${hit.title} [${hit.ref}] — ${truncate(hit.snippet ?? "", 300)}`,
+                )
+                .join("\n")
+            : "no matches",
+          label: "Searched sessions",
+          detail: `“${truncate(query, 80)}” · ${hits.length} ${hits.length === 1 ? "hit" : "hits"}`,
+          metrics: { query, hits: hits.length },
+        };
+      }
+
+      const ref = stringArg(args.sessionRef);
+      const session = byRef.get(ref);
+      if (!session) return outside(ref);
+      const budget = claim(ref);
+      if (budget) return { output: budget, label: "Read session" };
+
+      if (name === "read_session_turns") {
+        const messages = await load(ref);
+        const total = Math.max(1, messages.length);
+        const from = clamp(numberArg(args.from, 1), 1, total);
+        const to = clamp(numberArg(args.to, from), from, total);
+        const selected = messages
+          .map((message, index) => ({ turn: index + 1, message }))
+          .filter((row) => row.turn >= from && row.turn <= to);
+        const output = clipHeadTail(
+          selected
+            .map(
+              (row) =>
+                `TURN ${row.turn} · ${row.message.role.toUpperCase()}\n${renderMessageParts(row.message).join("\n")}`,
+            )
+            .join("\n\n"),
+          MAX_TOOL_RESULT_CHARS,
+        );
+        return {
+          output: `SESSION ${session.title} [${session.ref}] · ${messages.length} turns\n\n${output || "no turns in that range"}`,
+          label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
+          detail: `${session.title} · ${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
+          metrics: { turns: selected.length },
+          reads: selected.map((row) => ({ ref, turn: row.turn })),
+        };
+      }
+
+      if (name === "list_tool_calls") {
+        const messages = await load(ref);
+        const raw = stringArg(args.status).toLowerCase();
+        const wanted =
+          raw === "failed" || raw === "failure"
+            ? "error"
+            : raw === "ok" || raw === "success" || raw === "done"
+              ? "completed"
+              : raw || undefined;
+        const lines: string[] = [];
+        let failed = 0;
+        messages.forEach((message, index) => {
+          let call = 0;
+          for (const part of message.parts) {
+            if (part.type !== "tool") continue;
+            const callIndex = call;
+            call += 1;
+            if (part.status === "error" || part.status === "failed") failed += 1;
+            if (wanted && part.status !== wanted) continue;
+            lines.push(
+              `turn ${index + 1} · #${callIndex} · ${part.name} · ${part.status} · ${clipText(redact(describeInput(part.input)), 100)}`,
+            );
+          }
+        });
+        const kept = lines.slice(-40);
+        const header =
+          kept.length === 0
+            ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in ${session.title} (${failed} failed overall)`
+            : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in ${session.title}; ${failed} failed overall`;
+        return {
+          output: [header, ...kept].join("\n"),
+          label: "Listed tool calls",
+          detail: `${session.title} · ${kept.length} ${kept.length === 1 ? "call" : "calls"}`,
+          metrics: { calls: kept.length },
+        };
+      }
+
+      if (name === "read_tool_output") {
+        const messages = await load(ref);
+        const turn = clamp(numberArg(args.turn, 1), 1, Math.max(1, messages.length));
+        const message = messages[turn - 1];
+        const toolParts =
+          message?.parts.filter((part) => part.type === "tool") ?? [];
+        const index = clamp(
+          numberArg(args.index, 0),
+          0,
+          Math.max(0, toolParts.length - 1),
+        );
+        const part = toolParts[index];
+        if (!part) {
+          return {
+            output: "no such turn or tool call",
+            label: "Read tool output",
+            detail: `${session.title} · turn ${turn}`,
+          };
+        }
+        const output = clipHeadTail(
+          redact(toolOutputText(part.output)),
+          MAX_TOOL_RESULT_CHARS,
+        );
+        return {
+          output: output || "(no output recorded)",
+          label: `Read output · ${part.name}`,
+          detail: `${session.title} · turn ${turn} · #${index}`,
+          metrics: { turns: 1, chars: output.length },
+          reads: [{ ref, turn }],
+        };
+      }
+
+      return { output: `unknown tool ${name}`, label: "Tool" };
+    };
+
+    return {
+      definitions,
+      run,
+      byName: (name) => definitions.some((entry) => entry.function.name === name),
+    };
+  }
+
+  /**
    * Read-only retrieval over one session's transcript.
    *
    * Turn numbers are the contract: every tool uses the same 1-based numbering
@@ -1579,7 +1879,10 @@ export class AssistantService {
    * can be opened by (turn, index). Nothing here writes, and every result is
    * redacted, capped, and reported as untrusted data.
    */
-  private sessionTools(messages: Message[]): AssistantTools {
+  private sessionTools(
+    messages: Message[],
+    sessionRef: string,
+  ): AssistantTools {
     const rows = messages.map((message, index) => ({
       turn: index + 1,
       role: message.role,
@@ -1650,13 +1953,16 @@ export class AssistantService {
       },
     ];
 
-    const run = (name: string, argumentsJson: string): ToolRun => {
+    const run = async (
+      name: string,
+      argumentsJson: string,
+    ): Promise<ToolRun> => {
       const args = parseToolArguments(argumentsJson);
       switch (name) {
         case "search_transcript": {
           const query = typeof args.query === "string" ? args.query.trim() : "";
           if (!query) {
-            return { output: "query is required", label: "Searched transcript", turns: [] };
+            return { output: "query is required", label: "Searched transcript" };
           }
           const limit = clamp(numberArg(args.limit, 8), 1, 20);
           const matches: string[] = [];
@@ -1674,7 +1980,6 @@ export class AssistantService {
             label: "Searched transcript",
             detail: `“${truncate(query, 80)}” · ${matches.length} ${matches.length === 1 ? "hit" : "hits"}`,
             metrics: { query, hits: matches.length },
-            turns: [],
           };
         }
         case "read_turns": {
@@ -1695,7 +2000,7 @@ export class AssistantService {
             label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
             detail: `${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
             metrics: { turns: selected.length },
-            turns: selected.map((row) => row.turn),
+            reads: selected.map((row) => ({ ref: sessionRef, turn: row.turn })),
           };
         }
         case "list_tool_calls": {
@@ -1738,7 +2043,6 @@ export class AssistantService {
             label: "Listed tool calls",
             detail: `${kept.length} ${kept.length === 1 ? "call" : "calls"}`,
             metrics: { calls: kept.length },
-            turns: [],
           };
         }
         case "read_tool_output": {
@@ -1752,7 +2056,11 @@ export class AssistantService {
           );
           const part = toolParts[index];
           if (!part) {
-            return { output: "no such turn or tool call", label: "Read tool output", turns: [turn] };
+            return {
+              output: "no such turn or tool call",
+              label: "Read tool output",
+              reads: [{ ref: sessionRef, turn }],
+            };
           }
           const output = clipHeadTail(
             redact(toolOutputText(part.output)),
@@ -1763,11 +2071,11 @@ export class AssistantService {
             label: `Read output · ${part.name}`,
             detail: `turn ${turn} · #${index}`,
             metrics: { turns: 1, chars: output.length },
-            turns: [turn],
+            reads: [{ ref: sessionRef, turn }],
           };
         }
         default:
-          return { output: `unknown tool ${name}`, label: "Tool", turns: [] };
+          return { output: `unknown tool ${name}`, label: "Tool" };
       }
     };
 
@@ -1860,7 +2168,7 @@ export class AssistantService {
     return {
       ...rendered,
       targets: new Map([[session.ref, session.title]]),
-      tools: this.sessionTools(messages),
+      tools: this.sessionTools(messages, session.ref),
       transcriptTurns: messages.length,
     };
   }
@@ -1873,6 +2181,7 @@ export class AssistantService {
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
+    tools?: AssistantTools;
   }> {
     const readStarted = this.now();
     const [page, waiting] = await Promise.all([
@@ -1949,6 +2258,7 @@ export class AssistantService {
           this.now(),
       },
       targets,
+      tools: this.crossSessionTools(page.data),
     };
   }
 
@@ -1959,6 +2269,7 @@ export class AssistantService {
     text: string;
     context: AssistantContext;
     targets: Map<string, string>;
+    tools?: AssistantTools;
   }> {
     const readStarted = this.now();
     const [page, waiting] = await Promise.all([
@@ -2038,6 +2349,7 @@ export class AssistantService {
           this.now(),
       },
       targets,
+      tools: this.crossSessionTools(page.data),
     };
   }
 
@@ -2433,6 +2745,19 @@ TOOLS
 - Search or read before saying something is missing.
 - You have a few rounds. Answer as soon as the evidence supports it; do not keep reading after that.`;
 
+const CROSS_TOOL_RULES = `
+TOOLS (sessions)
+- The transcripts are not pasted here. Read them with the tools.
+- list_sessions finds a session by title, project, status, or directory and returns its ref.
+- search_transcript searches inside sessions; pass sessionRef to narrow to one.
+- read_session_turns(sessionRef, from, to) reads numbered turns in full (prose, reasoning, tool input and output).
+- list_tool_calls(sessionRef, status?) indexes a session's tool calls; status: "error" lists failures.
+- read_tool_output(sessionRef, turn, index) opens one recorded output.
+- Turn numbers are 1-based per session and shared by the tools for that session.
+- Read at most three sessions per answer; cite the session title and its ref.
+- Search or read before saying something is missing. The session index is metadata only.
+- You have a few rounds. Answer as soon as the evidence supports it.`;
+
 const TARGET_ACTION_RULES = `
 ACTIONS
 - This thread can propose one message to a session listed in SESSIONS, SEARCH, or TARGET SESSION. Put the exact message in text and the session's ref in sessionRef.
@@ -2460,7 +2785,9 @@ function renderPrompt(
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
     : "";
   let system = SYSTEM_PROMPT;
-  if (tools) system += `\n${TOOL_RULES}`;
+  if (tools) {
+    system += `\n${scope.kind === "session" ? TOOL_RULES : CROSS_TOOL_RULES}`;
+  }
   if (canWrite) {
     system += `\n${scope.kind === "session" ? ACTION_RULES : TARGET_ACTION_RULES}`;
   }
@@ -2698,13 +3025,9 @@ function renderGlobalContext(input: {
 function renderTranscript(messages: Message[]): string[] {
   const lines: string[] = [];
   for (const message of messages) {
-    const text = message.parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join(" ")
-      .trim();
-    if (!text) continue;
-    lines.push(`${message.role.toUpperCase()}: ${truncate(text, 400)}`);
+    const parts = renderMessageParts(message);
+    if (parts.length === 0) continue;
+    lines.push(`${message.role.toUpperCase()}: ${parts.join("\n")}`);
   }
   return lines;
 }
@@ -3341,6 +3664,14 @@ function parseToolArguments(value: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function stringArg(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function describeSession(session: Session): string {
+  return `${session.title} [${session.ref}] · ${session.project ?? "?"} · ${session.status} · ${stamp(session.updatedAt)}`;
 }
 
 function numberArg(value: unknown, fallback: number): number {

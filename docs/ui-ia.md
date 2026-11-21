@@ -464,6 +464,11 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   `3 turns`, `40 calls`). The evidence line names both: `Read 3 turns · 5 tool
   calls`. The tools cover the newest 200 messages; older turns are reported as
   outside the indexed window, not guessed.
+- **Project and global** threads get the session-scoped version of the same
+  idea: list sessions, search inside them, read a chosen session's turns, and
+  open its tool output. Every read names its session; a run reads at most three.
+  The tile detail carries the session title, so a global answer shows which
+  session each read came from.
 - The footer reads `Read-only · no writes` when writes are off and
   `Writes need your confirmation` when they are on. There is no silent write
   mode.

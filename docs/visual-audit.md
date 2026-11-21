@@ -1591,3 +1591,13 @@ list of file-configured objects.
 - The detail panel shows the same recorded metrics as any other hub step, so a
   retrieval step opens with turn numbers instead of a provider preview. That is
   the intended difference between the two adapters, not a gap.
+
+## Cross-session retrieval (2026-11-21)
+
+- A global or project retrieval step uses the same `tool` tile; what changes is
+  the detail line, which names the session (`Agent Hub - misc fix · turn 169 ·
+  #0`). The tile label stays short, the session lives in the tooltip and panel.
+- `Listed sessions` carries `200 sessions` on the overview thread, which is
+  the honest size of what the model could see, not a decorative count.
+- No new visual grammar: retrieval inside one session and across many are the
+  same tile with a different detail.
