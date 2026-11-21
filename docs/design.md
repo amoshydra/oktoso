@@ -682,9 +682,25 @@ instruction to answer. Every call is a `tool` activity step, and the turns it
 returned feed the evidence line (`Read 3 turns · 5 tool calls`). Nothing is
 re-read: a turn counts once.
 
-The page is the provider's newest 200 messages. A question about older evidence
-is answered as "outside the indexed window" rather than guessed; paging deeper
-on demand is the next step.
+Project and global threads use the same loop over many sessions. The tools take
+a session ref and are limited to the sessions in that thread's scope:
+
+| Tool | Returns |
+|---|---|
+| `list_sessions` | title, ref, project, status, last activity (filters: query/status/project) |
+| `search_transcript` | cross-session hits, optionally narrowed by ref |
+| `read_session_turns` | one session's numbered turns |
+| `list_tool_calls` | one session's call index and failure count |
+| `read_tool_output` | one call's output |
+
+A run reads at most three distinct sessions, and a ref outside the scope is
+refused rather than fetched. The resolved-session tails in the opening use the
+same part renderer as the session scope, so reasoning and tool output are
+present there too.
+
+The page is the provider's newest 200 messages per session. A question about
+older evidence is answered as "outside the indexed window" rather than
+guessed; paging deeper on demand is the next step.
 
 The web has one renderer, `ActivityTiles`, and two adapters in
 `apps/web/src/app/activity-model.ts`:

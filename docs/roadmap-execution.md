@@ -941,6 +941,13 @@ Sprint exit criteria:
   with a four-round governor, per-call and per-run caps, a forced final answer,
   and one activity step per call. Scope: `packages/contracts/src/assistant.ts`,
   `packages/hub/src/services/assistant-service.ts`.
+- [x] G23. Overview and project retrieval. The cross-session tools
+  (`list_sessions`, `search_transcript`, `read_session_turns`,
+  `list_tool_calls`, `read_tool_output`) take a ref limited to the thread's
+  scope, with a three-session budget and the same rounds/caps. Resolved-session
+  tails use the shared part renderer. Audit:
+  `docs/reports/assistant-tool-loop-audit.md` — full tools and four rounds are
+  load-bearing; reasoning, a recent window, and a terse prompt are not.
 - [ ] G22. Session ask: page older than the newest 200 messages. The tools
   report the window honestly today; a cursor-backed read would let an answer
   reach a failure from the start of a long session.

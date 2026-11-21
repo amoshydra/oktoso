@@ -1277,6 +1277,25 @@ function loadStoredCurrent(): StoredCurrent | undefined {
   }
 }
 
+function clearCurrentSession(): void {
+  state.sessionRef = undefined;
+  state.sessionTitle = undefined;
+  state.sessionProject = undefined;
+  state.sessionParentRef = undefined;
+  state.sessionStatus = undefined;
+  state.chatMessages = [];
+  state.chatLines = [];
+  state.chatLineMessages = [];
+  state.chatMessageCount = 0;
+  state.chatOffset = 0;
+  state.chatActivity = "";
+  state.question = undefined;
+  state.returnScreen = "home";
+  persistCurrent();
+  updatePhoneQuestion();
+  updatePhoneState();
+}
+
 function persistCurrent(): void {
   if (!state.sessionRef || !state.sessionTitle) {
     localStorage.removeItem(CURRENT_KEY);
@@ -2257,6 +2276,7 @@ async function openChat(
   origin: Screen = "inbox",
 ): Promise<void> {
   if (!client) return;
+  const previousRef = state.sessionRef;
   chatLoadSequence += 1;
   if (replyPrefetchTimer) {
     clearTimeout(replyPrefetchTimer);
@@ -2269,6 +2289,11 @@ async function openChat(
   state.sessionParentRef = undefined;
   state.sessionStatus = undefined;
   persistCurrent();
+  if (previousRef !== ref) {
+    // A draft typed for the previous chat must never be sent to this one.
+    phoneText.value = "";
+    syncPhoneSession();
+  }
   state.returnScreen = origin;
   state.chatMessages = [];
   state.chatLines = [];
@@ -3170,6 +3195,12 @@ async function loadChat(quiet: boolean): Promise<void> {
     if (sequence !== chatLoadSequence || state.sessionRef !== ref) return;
     const failure = classifyFailure(error);
     markStreamUnreachable(failure);
+    if (failure.kind === "not-found") {
+      // A deleted session must not stay in Current, or Home loops back here.
+      clearCurrentSession();
+      showFailure(error, { returnScreen: "home" });
+      return;
+    }
     if (failure.kind === "auth" || state.chatMessages.length === 0) {
       showFailure(error, {
         returnScreen: state.returnScreen,
@@ -4095,6 +4126,11 @@ function back(): void {
     state.answerMode = false;
     updatePhoneQuestion();
     render();
+    // Reading happened while the answer was open; do not show a stale chat.
+    if (state.sessionRef) {
+      void loadChat(false);
+      void loadQuestion(state.sessionRef);
+    }
     return;
   }
   if (state.screen === "answer-suggestions") {

@@ -1,0 +1,20 @@
+{
+  "questions": [
+    {
+      "question": "Which edit tool call failed in this session, in which file, and what did it say?",
+      "expect": "oldString|could not find"
+    },
+    {
+      "question": "How many tests passed when the suite first failed in this session?",
+      "expect": "110"
+    },
+    {
+      "question": "How many tests pass in the most recent full run?",
+      "expect": "112"
+    },
+    {
+      "question": "What did the last git log command report about the commit signature?",
+      "expect": "good signature|signed"
+    }
+  ]
+}
