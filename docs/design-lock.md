@@ -968,6 +968,11 @@ radius, or color token.
   becomes a proxy URL; a path on the hub origin was the failure mode.
 - Media is served with `Accept-Ranges` and `206`/`Content-Range`, so the
   player can seek. Documents keep the 20 MB cap; audio and video get 256 MB.
+- Clicking a media mention opens the same preview sheet as an image, with a
+  native player; it streams through a short-lived, path-scoped preview ticket
+  (a media element cannot send the hub token) and never starts a download.
+- An inline `<video>`/`<audio>` in a message is hydrated the same way: the
+  session path is swapped for a ticket URL before the element loads.
 - No new colour, type role, radius, or spacing token.
 
 ## Change policy
@@ -997,9 +1002,11 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 ## Verification reference
 
 The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.41` media pass was verified live: a message's `<video>` now
-resolves to the hub proxy URL with `controls` and `preload="metadata"` (the
-request was intercepted, so no media was fetched), and a session file answered
-a `bytes=0-3` request with `206`, `Content-Range`, and a 4-byte body. The
+hydrates to a `/preview/<ticket>/…` URL with `controls` and
+`preload="metadata"`, clicking a media mention opens the preview sheet with the
+same ticket-backed player, and a session file answered a `bytes=0-3` request
+with `206`, `Content-Range`, and a 4-byte body. Media requests were intercepted
+in both checks, so no video content was fetched. The
 `design-v1.40` cross-session retrieval was verified live from the overview
 dialog: it listed the index for a named session, read turn 169's output, and
 quoted `Tests: 871 passed` / `65 passed`, with the evidence line `2 tool calls ·

@@ -47,7 +47,7 @@ describe("preview limits", () => {
     expect(previewMaxBytes("text")).toBe(1024 * 1024);
     expect(previewMaxBytes("html")).toBe(5 * 1024 * 1024);
     expect(previewMaxBytes("image")).toBe(20 * 1024 * 1024);
-    expect(previewMaxBytes("video")).toBe(20 * 1024 * 1024);
+    expect(previewMaxBytes("video")).toBe(256 * 1024 * 1024);
   });
 
   it("treats only Markdown and text as readable source", () => {

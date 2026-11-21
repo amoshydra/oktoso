@@ -745,8 +745,11 @@ cannot make the hub serve an arbitrary MIME type.
   upstream streaming is the next step if a hub ever runs on a small device.
 - A message `file` part with audio or video MIME renders a player inline, and
   Markdown `<video>`/`<audio>`/`<source>` URLs are resolved through the same
-  session-resource pass as `<img>`; a relative path becomes a proxy URL the
-  browser can actually fetch.
+  session-resource pass as `<img>`.
+- Media elements cannot send the bearer token, so a session path is exchanged
+  for a short-lived, path-scoped preview ticket (the same mechanism HTML
+  previews use). The ticket route serves bytes with ranges, and the preview
+  sheet uses it for video/audio instead of downloading a blob.
 
 Provider history stays in the provider. The hub caches recent session pages and message pages in memory with a short TTL. The cache is not authoritative.
 

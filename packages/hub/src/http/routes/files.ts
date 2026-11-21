@@ -176,6 +176,10 @@ export function registerFileRoutes(
     }
 
     const resource = await sessions.readFile(ticket.ref, joined);
+    const ranged = sliceForRange(resource, c.req.header("range"));
+    if (ranged.status === 416) {
+      return c.body(null, 416, ranged.headers);
+    }
     const contentType = previewContentType(joined, resource.contentType);
     // resourceHeaders only whitelists bare types; keep the charset for the
     // browser but pass the bare type so the file renders inline.
@@ -188,6 +192,6 @@ export function registerFileRoutes(
     headers["Content-Security-Policy"] = isHtml ? FRAME_CSP : ASSET_CSP;
     headers["X-Frame-Options"] = "SAMEORIGIN";
     headers["Cache-Control"] = "private, max-age=60";
-    return c.body(resource.body, 200, headers);
+    return c.body(ranged.body, ranged.status, { ...headers, ...ranged.headers });
   });
 }

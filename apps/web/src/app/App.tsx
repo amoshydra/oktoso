@@ -120,7 +120,6 @@ import {
   updateOptimisticStatus,
 } from "./optimistic";
 import {
-  attachmentProxyPath,
   resolveSessionResource,
   type ResourceContext,
 } from "./urls";
@@ -8741,6 +8740,33 @@ function Markdown(props: {
 
   useEffect(() => {
     const container = containerRef.current;
+    const sessionRef = props.resource.sessionRef;
+    if (!container || !sessionRef) return;
+    let cancelled = false;
+    // Media elements cannot send the hub token: swap the session path for a
+    // short-lived ticket URL that the preview route serves with ranges.
+    const elements = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-preview-path]"),
+    );
+    for (const element of elements) {
+      const path = element.getAttribute("data-preview-path");
+      if (!path || element.getAttribute("src")) continue;
+      void props.client
+        .previewTicket(sessionRef, path)
+        .then((ticket) => {
+          if (!cancelled && element.isConnected) {
+            element.setAttribute("src", ticket.url);
+          }
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [html, props.client, props.resource.sessionRef]);
+
+  useEffect(() => {
+    const container = containerRef.current;
     if (!container || !providerID) return;
     let cancelled = false;
     const created: string[] = [];
@@ -8865,29 +8891,16 @@ function MessagePartView(props: {
       /\.(?:mp3|m4a|wav|ogg|flac)(?:[?#]|$)/i.test(part.url ?? "");
 
     if ((isVideo || isAudio) && (dataUrl || link.url)) {
-      const src =
-        dataUrl ??
-        (link.attachment && props.resource.providerID
-          ? attachmentProxyPath(props.resource.providerID, link.url!)
-          : link.url!);
       return (
         <figure className="message-attachment">
-          {isVideo ? (
-            <video
-              className="message-attachment-video"
-              src={src}
-              controls
-              playsInline
-              preload="metadata"
-            />
-          ) : (
-            <audio
-              className="message-attachment-audio"
-              src={src}
-              controls
-              preload="metadata"
-            />
-          )}
+          <MediaPlayer
+            client={props.client}
+            providerID={props.resource.providerID}
+            url={link.url}
+            dataUrl={dataUrl}
+            viaProxy={link.attachment}
+            kind={isVideo ? "video" : "audio"}
+          />
           <figcaption>
             <span className="message-file-name">{part.name}</span>
             {part.mimeType ? (
@@ -9071,8 +9084,19 @@ function FilePreview(props: {
     };
 
     const load = async () => {
-      if (previewKind(props.path) === "html") {
+      const guessed = previewKind(props.path);
+      if (guessed === "html") {
         await loadFrame();
+        return;
+      }
+      // Video and audio stream through a short-lived, path-scoped ticket: a
+      // media element cannot carry the bearer token, and a 100 MB blob is
+      // worse than a ranged URL.
+      if (guessed === "video" || guessed === "audio") {
+        const ticket = await props.client.previewTicket(sessionRef, props.path);
+        if (!cancelled) {
+          setState({ status: "media", url: ticket.url, kind: guessed });
+        }
         return;
       }
 
@@ -9182,6 +9206,94 @@ function FilePreview(props: {
         </div>
       </section>
     </>
+  );
+}
+
+/**
+ * A video or audio file part.
+ *
+ * The element cannot send the hub token, so a provider-hosted file is fetched
+ * with the client and played from an object URL, the same way an image is.
+ * Data URLs need no round trip.
+ */
+function MediaPlayer(props: {
+  client: HubClient;
+  providerID?: string;
+  url?: string;
+  dataUrl?: string;
+  viaProxy: boolean;
+  kind: "video" | "audio";
+}) {
+  const [src, setSrc] = useState<string | undefined>(props.dataUrl);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (props.dataUrl) {
+      setSrc(props.dataUrl);
+      setFailed(false);
+      return;
+    }
+    if (!props.url) {
+      setSrc(undefined);
+      return;
+    }
+    if (!props.viaProxy) {
+      setSrc(props.url);
+      setFailed(false);
+      return;
+    }
+    if (!props.providerID) {
+      setFailed(true);
+      return;
+    }
+
+    let cancelled = false;
+    let objectURL: string | undefined;
+    setSrc(undefined);
+    setFailed(false);
+    void props.client
+      .attachment(props.providerID, props.url)
+      .then((blob) => {
+        if (cancelled) return;
+        objectURL = URL.createObjectURL(blob);
+        setSrc(objectURL);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    };
+  }, [props.client, props.dataUrl, props.providerID, props.url, props.viaProxy]);
+
+  if (failed) {
+    return (
+      <div className="message-file-meta" role="alert">
+        This media could not be loaded.
+      </div>
+    );
+  }
+  if (!src) {
+    return <div className="message-file-meta">Loading media…</div>;
+  }
+
+  return props.kind === "video" ? (
+    <video
+      className="message-attachment-video"
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+    />
+  ) : (
+    <audio
+      className="message-attachment-audio"
+      src={src}
+      controls
+      preload="metadata"
+    />
   );
 }
 

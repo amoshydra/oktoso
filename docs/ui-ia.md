@@ -350,8 +350,10 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - An audio or video attachment renders as a player in the message, not a
   download chip: native controls, `preload="metadata"`, width capped to the
   transcript. A Markdown `<video>` or `<audio>` with a session-relative path is
-  resolved to the hub proxy, so it plays instead of asking the hub origin for
-  an HTML page. Media is served with byte ranges, so seeking works.
+  resolved to a short-lived preview ticket, so it plays instead of asking the
+  hub origin for an HTML page. Clicking a media mention opens the same preview
+  sheet used for images, with a native player, instead of downloading. Media is
+  served with byte ranges, so seeking works.
 - A completed assistant message with text exposes one quiet `Copy` action after the message. It copies the raw text parts, including Markdown fences, and never includes reasoning or tool payloads. Success reads `Copied` for two seconds; failure reads `Copy failed`. Both are announced to screen readers.
 - When the provider exposes in-chat branches, an assistant message with siblings shows one quiet branch picker beside Copy. It reads `‹ n / N ›`, uses 28px controls on desktop and 44px on mobile, and switches the visible path in place. The picker is absent for providers without branch support.
 - When the provider exposes `retry`, a completed assistant reply shows one quiet `Retry` action beside Copy. Retry creates a new assistant sibling under the same user message and leaves the old answer reachable through the branch picker. The action is absent when the provider does not support retry, and it reads `Retrying…` while the new response runs.

@@ -118,7 +118,8 @@ const MIME_TYPES: Record<string, string> = {
 
 const TEXT_MAX_BYTES = 1024 * 1024;
 const HTML_MAX_BYTES = 5 * 1024 * 1024;
-const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+const MEDIA_MAX_BYTES = 256 * 1024 * 1024;
 
 /** Every extension the transcript turns into a preview button. */
 export const PREVIEW_EXTENSIONS = new Set([
@@ -155,6 +156,7 @@ export function previewMimeType(path: string, mimeType?: string): string {
 export function previewMaxBytes(kind: PreviewKind): number {
   if (kind === "html") return HTML_MAX_BYTES;
   if (kind === "markdown" || kind === "text") return TEXT_MAX_BYTES;
+  if (kind === "image" || kind === "pdf") return IMAGE_MAX_BYTES;
   return MEDIA_MAX_BYTES;
 }
 
