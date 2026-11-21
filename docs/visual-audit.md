@@ -1579,3 +1579,15 @@ list of file-configured objects.
   squeezed into 49px.
 - `cancelled` has its own quiet treatment: neutral pill, faint dot. Marking a
   user stop as an error was inaccurate and looked like a fault.
+
+## Retrieval activity (2026-11-21)
+
+- Retrieval reuses the tool family rather than adding a "search" grammar of its
+  own. Four labels are enough: `Searched transcript`, `Read turns N–M`,
+  `Listed tool calls`, `Read output · <tool>`.
+- Each tile carries the count it returned (`5 hits`, `3 turns`, `40 calls`).
+  The duration is irrelevant at 1 ms and would make a successful retrieval look
+  like a no-op.
+- The detail panel shows the same recorded metrics as any other hub step, so a
+  retrieval step opens with turn numbers instead of a provider preview. That is
+  the intended difference between the two adapters, not a gap.

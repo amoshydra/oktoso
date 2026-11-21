@@ -62,6 +62,7 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
       failures,
       historyAt,
       search,
+      toolCalls,
     } = turn.context;
     if (scope === "global") {
       if (attention !== undefined && attention > 0) {
@@ -74,8 +75,11 @@ export function turnMetaParts(turn: AssistantTurn): string[] {
       }
     } else if (sessions !== undefined) {
       parts.push(`Read ${sessions} ${sessions === 1 ? "session" : "sessions"}`);
-    } else if (messages !== undefined) {
+    } else if (messages !== undefined && messages > 0) {
       parts.push(`Read ${messages} ${messages === 1 ? "turn" : "turns"}`);
+    }
+    if (toolCalls !== undefined && toolCalls > 0) {
+      parts.push(`${toolCalls} tool ${toolCalls === 1 ? "call" : "calls"}`);
     }
     if (omitted !== undefined && omitted > 0) {
       parts.push(`${omitted} older omitted`);

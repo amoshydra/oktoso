@@ -1475,6 +1475,9 @@ components:
                   omitted:
                     type: integer
                     minimum: 0
+                  toolCalls:
+                    type: integer
+                    minimum: 0
                   chars:
                     type: integer
                     minimum: 0
@@ -1901,6 +1904,9 @@ components:
                 omitted:
                   type: integer
                   minimum: 0
+                toolCalls:
+                  type: integer
+                  minimum: 0
                 chars:
                   type: integer
                   minimum: 0
@@ -2255,6 +2261,9 @@ components:
                     omitted:
                       type: integer
                       minimum: 0
+                    toolCalls:
+                      type: integer
+                      minimum: 0
                     chars:
                       type: integer
                       minimum: 0
@@ -2535,6 +2544,9 @@ components:
                       type: integer
                       minimum: 0
                     omitted:
+                      type: integer
+                      minimum: 0
+                    toolCalls:
                       type: integer
                       minimum: 0
                     chars:
@@ -9027,6 +9039,9 @@ paths:
                         type: integer
                         minimum: 0
                       omitted:
+                        type: integer
+                        minimum: 0
+                      toolCalls:
                         type: integer
                         minimum: 0
                       chars:

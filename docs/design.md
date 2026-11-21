@@ -664,6 +664,28 @@ emits steps.
   model turn that produced it. The renderer flattens groups one level and
   promotes an orphan rather than dropping it.
 
+**Session scope reads through tools.** The transcript is not pasted into the
+prompt. The opening message carries the facts, the attention list, the
+failures/work digest, and a one-line index of recent calls; the turns themselves
+are behind four read-only tools:
+
+| Tool | Returns |
+|---|---|
+| `search_transcript` | Matching turn numbers with a snippet |
+| `read_turns` | Full numbered turns (prose, reasoning, tool input/output) |
+| `list_tool_calls` | Turn, call index, name, status, short input, failure count |
+| `read_tool_output` | One call's recorded output |
+
+The loop is bounded: four rounds, three calls per round, 6 KB per result,
+24 KB of results per run, and a final round with the tools removed plus an
+instruction to answer. Every call is a `tool` activity step, and the turns it
+returned feed the evidence line (`Read 3 turns · 5 tool calls`). Nothing is
+re-read: a turn counts once.
+
+The page is the provider's newest 200 messages. A question about older evidence
+is answered as "outside the indexed window" rather than guessed; paging deeper
+on demand is the next step.
+
 The web has one renderer, `ActivityTiles`, and two adapters in
 `apps/web/src/app/activity-model.ts`:
 

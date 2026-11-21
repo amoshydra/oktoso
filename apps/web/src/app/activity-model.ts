@@ -86,6 +86,8 @@ function tileMetric(step: AssistantStep): string | undefined {
   if (sessions !== undefined) return plural(sessions, "session", "sessions");
   const hits = count(metrics.hits);
   if (hits !== undefined) return plural(hits, "hit", "hits");
+  const calls = count(metrics.calls);
+  if (calls !== undefined) return plural(calls, "call", "calls");
   if (typeof metrics.compaction === "string") {
     return metrics.compaction === "none" ? "none" : "compacted";
   }
