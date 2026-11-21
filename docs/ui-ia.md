@@ -462,8 +462,9 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   through four read-only tools — search, read turns, list tool calls, read one
   output — and each call is a `tool` tile with its result count (`5 hits`,
   `3 turns`, `40 calls`). The evidence line names both: `Read 3 turns · 5 tool
-  calls`. The tools cover the newest 200 messages; older turns are reported as
-  outside the indexed window, not guessed.
+  calls`. The tools page the session back to 2,000 messages (200 per provider
+  page, 32 MB, 5 s); if a cap stops the scan, the answer says the oldest turns
+  are not loaded instead of guessing.
 - **Project and global** threads get the session-scoped version of the same
   idea: list sessions, search inside them, read a chosen session's turns, and
   open its tool output. Every read names its session; a run reads at most three.

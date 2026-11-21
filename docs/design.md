@@ -698,9 +698,12 @@ refused rather than fetched. The resolved-session tails in the opening use the
 same part renderer as the session scope, so reasoning and tool output are
 present there too.
 
-The page is the provider's newest 200 messages per session. A question about
-older evidence is answered as "outside the indexed window" rather than
-guessed; paging deeper on demand is the next step.
+The transcript is loaded page by page (the provider caps a page at 200
+messages) up to 2,000 messages, 32 MB, or 5 seconds, whichever comes first.
+The whole loaded set is numbered once, so a turn cited early in a run means the
+same thing later. When a cap stops the scan, the prompt says the oldest turns
+are not loaded; an absence is a stated gap, never a guess. The cross-session
+tools load a touched session the same way, cached for the run.
 
 The web has one renderer, `ActivityTiles`, and two adapters in
 `apps/web/src/app/activity-model.ts`:

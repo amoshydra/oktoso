@@ -92,8 +92,8 @@ start returning whole files instead of turns.
   the session index would not separate the configs.
 - The runner executes tools in the script, not the hub; the hub adds audit,
   redaction, and the session budget (three sessions) on top.
-- Older-than-200-message evidence is out of reach for every configuration
-  here; see G22.
+- The runner still fetches 200 messages. Production now pages to 2,000
+  (G22), so a rerun of this audit could use deeper evidence.
 
 ## Reproduce
 

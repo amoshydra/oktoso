@@ -948,6 +948,9 @@ Sprint exit criteria:
   tails use the shared part renderer. Audit:
   `docs/reports/assistant-tool-loop-audit.md` — full tools and four rounds are
   load-bearing; reasoning, a recent window, and a terse prompt are not.
-- [ ] G22. Session ask: page older than the newest 200 messages. The tools
-  report the window honestly today; a cursor-backed read would let an answer
-  reach a failure from the start of a long session.
+- [x] G22. Session ask: page older than the newest 200 messages. The transcript
+  is now loaded page by page (200 per provider page) up to 2,000 messages,
+  32 MB, or 5 s, then numbered once. `search_transcript` returns the total and
+  accepts an offset, so a broad term can be paged. Cross-session reads use the
+  same loader, cached per run. A cap is stated in the prompt; the failed edit
+  at turn 186 of a 1,876-turn session is now found and quoted.
