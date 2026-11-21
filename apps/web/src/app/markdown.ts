@@ -23,6 +23,18 @@ export interface MarkdownOptions {
   headingOffset?: number;
 }
 
+/** A session-relative path, not a URL, a data URI, or an absolute path. */
+function isRelativeMediaPath(value: string | undefined): value is string {
+  if (!value) return false;
+  const raw = value.trim();
+  return (
+    raw.length > 0 &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(raw) &&
+    !raw.startsWith("//") &&
+    !raw.startsWith("/")
+  );
+}
+
 export function renderMarkdown(
   text: string,
   context?: ResourceContext,
@@ -135,12 +147,15 @@ export function renderMarkdown(
   }
 
   for (const media of template.content.querySelectorAll("video, audio")) {
-    const resolved = resolveSessionResource(
-      media.getAttribute("src") ?? undefined,
-      context ?? {},
-      "link",
-    );
-    if (!resolved.url) {
+    const raw = media.getAttribute("src") ?? undefined;
+    const resolved = resolveSessionResource(raw, context ?? {}, "link");
+    if (isRelativeMediaPath(raw)) {
+      // A media element cannot carry the bearer token. Keep the session path
+      // and let the component swap in a short-lived preview ticket, which the
+      // preview route serves with byte ranges.
+      media.removeAttribute("src");
+      media.setAttribute("data-preview-path", raw);
+    } else if (!resolved.url) {
       // A <source> child may carry the URL; the source pass fills it.
       media.removeAttribute("src");
     } else {
@@ -157,18 +172,19 @@ export function renderMarkdown(
   }
 
   for (const source of template.content.querySelectorAll("source")) {
-    const resolved = resolveSessionResource(
-      source.getAttribute("src") ?? undefined,
-      context ?? {},
-      "link",
-    );
-    if (!resolved.url) continue;
-    source.setAttribute(
-      "src",
-      resolved.attachment && context?.providerID
-        ? attachmentProxyPath(context.providerID, resolved.url)
-        : resolved.url,
-    );
+    const raw = source.getAttribute("src") ?? undefined;
+    const resolved = resolveSessionResource(raw, context ?? {}, "link");
+    if (isRelativeMediaPath(raw)) {
+      source.removeAttribute("src");
+      source.setAttribute("data-preview-path", raw);
+    } else if (resolved.url) {
+      source.setAttribute(
+        "src",
+        resolved.attachment && context?.providerID
+          ? attachmentProxyPath(context.providerID, resolved.url)
+          : resolved.url,
+      );
+    }
   }
 
   for (const image of template.content.querySelectorAll("img")) {

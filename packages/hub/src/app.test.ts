@@ -445,6 +445,26 @@ describe("hub app", () => {
     );
   });
 
+  it("serves a preview ticket with byte ranges and no bearer token", async () => {
+    const { app } = await createTestApp();
+    const ref = encodeURIComponent("desktop-opencode:ses_auth");
+    const ticket = await app.request(
+      `/api/v1/sessions/${ref}/preview?path=${encodeURIComponent("plots/chart.png")}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(ticket.status).toBe(200);
+    const { url } = (await ticket.json()) as { url: string };
+
+    // A media element cannot send the token; the ticket is the capability.
+    const ranged = await app.request(url, {
+      headers: { Range: "bytes=0-1" },
+    });
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers.get("accept-ranges")).toBe("bytes");
+    expect(ranged.headers.get("content-range")).toMatch(/^bytes 0-1\/\d+$/);
+    expect((await ranged.arrayBuffer()).byteLength).toBe(2);
+  });
+
   it("rejects an unsatisfiable byte range", async () => {
     const { app } = await createTestApp();
     const ref = encodeURIComponent("desktop-opencode:ses_auth");
