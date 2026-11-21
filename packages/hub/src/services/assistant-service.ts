@@ -97,7 +97,8 @@ export interface AssistantServiceOptions {
   /** Optional: transcript search over the cache, used by project/global. */
   search?: SearchService;
   logger: Logger;
-  settings: AssistantAgentSettings;
+  /** A getter so a settings save applies to the next run without a restart. */
+  settings: AssistantAgentSettings | (() => AssistantAgentSettings);
   now?: () => number;
   fetchImpl?: typeof fetch;
   audit?: (entry: AssistantAuditEntry) => void | Promise<void>;
@@ -361,13 +362,18 @@ export class AssistantService {
     }
   }
 
+  private agent(): AssistantAgentSettings {
+    const settings = this.options.settings;
+    return typeof settings === "function" ? settings() : settings;
+  }
+
   status(): AssistantStatus {
     return {
       enabled: this.ready(),
       model: this.model(),
       readOnly: !this.writesEnabled(),
       canWrite: this.writesEnabled(),
-      maxContextMessages: this.options.settings.maxContextMessages,
+      maxContextMessages: this.agent().maxContextMessages,
     };
   }
 
@@ -960,7 +966,7 @@ export class AssistantService {
         }),
         signal: AbortSignal.any([
           record.controller.signal,
-          AbortSignal.timeout(this.options.settings.timeoutMs),
+          AbortSignal.timeout(this.agent().timeoutMs),
         ]),
       },
     );
@@ -1440,14 +1446,14 @@ export class AssistantService {
     if (scope.kind === "global") return this.buildGlobalContext(question, steps);
 
     const sessionRef = scope.sessionRef;
-    const { sessions, attention, questions, settings } = this.options;
+    const { sessions, attention, questions } = this.options;
     const readStarted = this.now();
     const [session, waiting, questionPrompt, page] = await Promise.all([
       sessions.get(sessionRef),
       attention.list({ sessionRef }).catch(() => ({ data: [] })),
       questions.get(sessionRef).catch(() => null),
       sessions.messages(sessionRef, {
-        limit: settings.maxContextMessages,
+        limit: this.agent().maxContextMessages,
         order: "desc",
       }),
     ]);
@@ -1946,28 +1952,28 @@ export class AssistantService {
 
   private ready(): boolean {
     return (
-      this.options.settings.enabled &&
+      this.agent().enabled &&
       this.baseUrl().length > 0 &&
       this.model().length > 0
     );
   }
 
   private writesEnabled(): boolean {
-    return Boolean(this.options.settings.allowWrite) && this.ready();
+    return Boolean(this.agent().allowWrite) && this.ready();
   }
 
   private baseUrl(): string {
     return (
-      this.options.settings.baseUrl.trim() ||
-      this.options.settings.fallback?.baseUrl ||
+      this.agent().baseUrl.trim() ||
+      this.agent().fallback?.baseUrl ||
       ""
     );
   }
 
   private model(): string {
     return (
-      this.options.settings.model.trim() ||
-      this.options.settings.fallback?.model ||
+      this.agent().model.trim() ||
+      this.agent().fallback?.model ||
       ""
     );
   }

@@ -20,6 +20,14 @@ const logger = {
 } as unknown as Logger;
 
 const baseConfig: AssistantConfig = {
+  agent: {
+    enabled: false,
+    baseUrl: "",
+    model: "",
+    timeoutMs: 90_000,
+    maxContextMessages: 20,
+    allowWrite: false,
+  },
   reply: {
     enabled: true,
     baseUrl: "http://model.test/v1",

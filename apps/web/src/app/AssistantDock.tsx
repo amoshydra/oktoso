@@ -20,6 +20,7 @@ export interface AssistantDockProps {
   project?: string;
   /** Global threads are a modal dialog; session/project threads dock. */
   presentation?: "dock" | "dialog";
+  onOpenSettings?: () => void;
   onClose: () => void;
 }
 
@@ -55,6 +56,7 @@ export function AssistantDock({
   title,
   project,
   presentation = "dock",
+  onOpenSettings,
   onClose,
 }: AssistantDockProps) {
   const [scope, setScope] = useState<AssistantScope>(initialScope);
@@ -530,6 +532,18 @@ export function AssistantDock({
                   Applies to the next question. Past answers keep the model that
                   wrote them.
                 </div>
+                {onOpenSettings ? (
+                  <button
+                    className="assistant-model-link"
+                    type="button"
+                    onClick={() => {
+                      setModelOpen(false);
+                      onOpenSettings();
+                    }}
+                  >
+                    Change endpoint
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

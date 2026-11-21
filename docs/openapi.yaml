@@ -936,6 +936,31 @@ components:
     AssistantView:
       type: object
       properties:
+        agent:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            timeoutMs:
+              type: integer
+            maxContextMessages:
+              type: integer
+            allowWrite:
+              type: boolean
+            hasApiKey:
+              type: boolean
+          required:
+            - enabled
+            - baseUrl
+            - model
+            - timeoutMs
+            - maxContextMessages
+            - allowWrite
+            - hasApiKey
         reply:
           type: object
           properties:
@@ -2655,6 +2680,29 @@ components:
     AssistantInput:
       type: object
       properties:
+        agent:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            baseUrl:
+              type: string
+            model:
+              type: string
+            apiKey:
+              type:
+                - string
+                - "null"
+            timeoutMs:
+              type: integer
+              minimum: 5000
+              maximum: 600000
+            maxContextMessages:
+              type: integer
+              minimum: 4
+              maximum: 60
+            allowWrite:
+              type: boolean
         reply:
           type: object
           properties:

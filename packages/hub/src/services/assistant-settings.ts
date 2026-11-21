@@ -1,4 +1,7 @@
 import type {
+  AssistantAgentConfig,
+  AssistantAgentTest,
+  AssistantAgentTestInput,
   AssistantConfig,
   AssistantInput,
   AssistantView,
@@ -19,6 +22,9 @@ export class AssistantSettingsService {
   async update(input: AssistantInput): Promise<AssistantView> {
     await this.store.update((state) => {
       const current = state.settings;
+      if (input.agent) {
+        state.settings.agent = mergeConfig(current.agent, input.agent);
+      }
       if (input.reply) {
         state.settings.reply = mergeConfig(current.reply, input.reply);
       }
@@ -32,8 +38,62 @@ export class AssistantSettingsService {
     return this.view();
   }
 
+  /** First boot only: show the config-file endpoint in the settings panel. */
+  async seedAgent(config: AssistantAgentConfig): Promise<void> {
+    const current = this.store.getState().settings.agent;
+    if (current.baseUrl.trim() || current.model.trim()) return;
+    await this.store.update((state) => {
+      state.settings.agent = {
+        ...state.settings.agent,
+        enabled: config.enabled,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        timeoutMs: config.timeoutMs,
+        maxContextMessages: config.maxContextMessages,
+        allowWrite: config.allowWrite,
+      };
+    });
+  }
+
+  async testAgent(input: AssistantAgentTestInput): Promise<AssistantAgentTest> {
+    const started = Date.now();
+    const key = input.apiKey?.trim() || this.config().agent.apiKey;
+    try {
+      const response = await fetch(`${trimSlash(input.baseUrl)}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
+        },
+        body: JSON.stringify({
+          model: input.model,
+          messages: [{ role: "user", content: "Reply with OK." }],
+          temperature: 0,
+          max_tokens: 1,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      return {
+        ok: response.ok,
+        status: response.status,
+        latencyMs: Date.now() - started,
+        model: input.model,
+        ...(response.ok ? {} : { error: `Endpoint returned HTTP ${response.status}` }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - started,
+        model: input.model,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   async listModels(
-    target: "reply" | "transcription",
+    target: "agent" | "reply" | "transcription",
   ): Promise<{ data: string[]; baseUrl: string }> {
     const config = this.config()[target];
     if (!config.baseUrl) {
@@ -63,6 +123,15 @@ export class AssistantSettingsService {
 
 function toView(config: AssistantConfig): AssistantView {
   return {
+    agent: {
+      enabled: config.agent.enabled,
+      baseUrl: config.agent.baseUrl,
+      model: config.agent.model,
+      timeoutMs: config.agent.timeoutMs,
+      maxContextMessages: config.agent.maxContextMessages,
+      allowWrite: config.agent.allowWrite,
+      hasApiKey: Boolean(config.agent.apiKey),
+    },
     reply: {
       enabled: config.reply.enabled,
       baseUrl: config.reply.baseUrl,

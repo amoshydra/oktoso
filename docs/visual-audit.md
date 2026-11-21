@@ -1535,3 +1535,16 @@ list of file-configured objects.
   project threads stay docked so the cited transcript remains on screen.
 - Scope icons (bot, layers, globe) carry the distinction without another
   colour or a new control.
+
+## Assistant endpoint settings (2026-11-21)
+
+- The panel mirrors Reply assistance and Voice transcription: same form grid,
+  same check fields, same masked key, same `form-actions` row. A fourth visual
+  grammar for "the endpoint" would be noise.
+- `Test connection` reports the model and latency in a single status line; a
+  failure uses the danger colour and the same line height, so the form does not
+  jump.
+- `Load models` writes into a datalist, not a locked select: an endpoint that
+  does not implement `/models` still accepts a typed id.
+- The dock's `Change endpoint` link is a quiet text action inside the model
+  menu, not a new header control.

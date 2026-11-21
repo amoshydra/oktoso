@@ -1,6 +1,8 @@
 import type {
   AssistantInput,
   AssistantActionDecision,
+  AssistantAgentTest,
+  AssistantAgentTestInput,
   AssistantEvent,
   AssistantMessageInput,
   AssistantRun,
@@ -602,7 +604,7 @@ export class HubClient {
   }
 
   async assistantModels(
-    target: "reply" | "transcription",
+    target: "agent" | "reply" | "transcription",
   ): Promise<{ data: string[]; baseUrl: string }> {
     const response = await this.request<{
       data: { data: string[]; baseUrl: string };
@@ -776,6 +778,16 @@ export class HubClient {
         { retryable: true },
       );
     }
+  }
+
+  async testAssistantAgent(
+    input: AssistantAgentTestInput,
+  ): Promise<AssistantAgentTest> {
+    const response = await this.request<{ data: AssistantAgentTest }>(
+      "/api/v1/settings/assistant/agent/test",
+      { method: "POST", body: input },
+    );
+    return response.data;
   }
 
   async transcribe(
