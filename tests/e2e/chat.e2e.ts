@@ -1316,8 +1316,14 @@ describe("transcript loading", () => {
     await page!.waitForTimeout(1_500);
     await page!.getByRole("button", { name: "Retry", exact: true }).click();
     await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
-    await page!.unroute(route);
-    await page!.unroute(sessionRoute);
+
+    // Unroute deterministically. Background refreshes can still have a session
+    // header (or transcript) request in flight here. Removing the last matching
+    // handler while one is in flight makes Playwright continue that request on
+    // its own, after which the handler's own fulfill() rejects with "Route is
+    // already handled!" once the test body has finished. "wait" lets the
+    // in-flight handlers complete before the interception patterns are removed.
+    await page!.unrouteAll({ behavior: "wait" });
   });
 
   it("shows an error and Retry, never the empty state, when the load fails", async () => {
