@@ -621,6 +621,22 @@ describe("chat sending", () => {
     );
     expect(await page!.locator(".topbar-title").textContent()).toContain("fork");
   });
+
+  it("streams a file-part video through a preview ticket", async () => {
+    await openSession("Fix auth race in gateway");
+    const video = page!.locator("video.message-attachment-video").last();
+    await video.waitFor({ timeout: 5_000 });
+    const src = await video.getAttribute("src");
+    // A session path becomes a ticket URL, not an authenticated blob.
+    expect(src).toMatch(/^\/preview\/[0-9a-f-]+\/race\.mp4$/);
+
+    const ranged = await page!.request.get(`${BASE_URL}${src}`, {
+      headers: { Range: "bytes=0-3" },
+    });
+    expect(ranged.status()).toBe(206);
+    expect(ranged.headers()["content-range"]).toMatch(/^bytes 0-3\/\d+$/);
+    expect((await ranged.body()).byteLength).toBe(4);
+  });
 });
 
 describe("session search", () => {
