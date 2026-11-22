@@ -1,6 +1,7 @@
 import {
   MAX_MEDIA_RESOURCE_BYTES,
   type ProviderResource,
+  type ProviderResourceOpen,
 } from "@amoshydra/oktoso-providers";
 
 const INLINE_IMAGE_TYPES = new Set([
@@ -63,6 +64,13 @@ export interface ByteRange {
   end: number;
 }
 
+/** The metadata a response needs, with or without a buffered body. */
+export interface ResourceMeta {
+  contentType?: string;
+  filename?: string;
+  contentLength?: number;
+}
+
 /**
  * Parse a single `bytes=` range. A missing or non-byte range is `undefined`
  * (serve the whole file); an unsatisfiable one is `"invalid"` (416).
@@ -97,9 +105,8 @@ export function parseByteRange(
 /**
  * Slice a buffered resource for a Range request.
  *
- * The provider read is still whole-file; only the client side is ranged. That
- * is enough for seeking and for clients that require 206, without teaching
- * every adapter to forward byte ranges.
+ * Used only when the provider ignored the range and the whole body is already
+ * in memory; a provider that honors `Range` is relayed untouched.
  */
 export type RangedResource =
   | { status: 416; body: undefined; headers: Record<string, string> }
@@ -119,10 +126,7 @@ export function sliceForRange(
     return {
       status: 416,
       body: undefined,
-      headers: {
-        "Accept-Ranges": "bytes",
-        "Content-Range": `bytes */${total}`,
-      },
+      headers: notSatisfiableHeaders(total),
     };
   }
   if (!range) {
@@ -135,12 +139,162 @@ export function sliceForRange(
   return {
     status: 206,
     body: resource.body.subarray(range.start, range.end + 1),
-    headers: {
-      "Accept-Ranges": "bytes",
-      "Content-Range": `bytes ${range.start}-${range.end}/${total}`,
-      "Content-Length": String(range.end - range.start + 1),
-    },
+    headers: rangeHeaders({
+      status: 206,
+      contentLength: range.end - range.start + 1,
+      contentRange: `bytes ${range.start}-${range.end}/${total}`,
+    }),
   };
+}
+
+/** Headers for a resource that advertises seek support. */
+export function rangeHeaders(input: {
+  status: 200 | 206;
+  contentLength?: number;
+  contentRange?: string;
+}): Record<string, string> {
+  const headers: Record<string, string> = { "Accept-Ranges": "bytes" };
+  if (input.contentLength !== undefined) {
+    headers["Content-Length"] = String(input.contentLength);
+  }
+  if (input.status === 206 && input.contentRange) {
+    headers["Content-Range"] = input.contentRange;
+  }
+  return headers;
+}
+
+export function notSatisfiableHeaders(total?: number): Record<string, string> {
+  return {
+    "Accept-Ranges": "bytes",
+    "Content-Range": `bytes */${total === undefined ? "*" : total}`,
+  };
+}
+
+/** Headers for a relayed provider response, buffered or streaming. */
+export function openedResourceHeaders(
+  opened: ProviderResourceOpen,
+  options: ResourceHeaderOptions = {},
+): Record<string, string> {
+  if (opened.status === 416) return notSatisfiableHeaders(opened.totalBytes);
+  return {
+    ...resourceHeaders(opened, options),
+    ...rangeHeaders(opened),
+  };
+}
+
+/**
+ * The range to forward upstream. Only a single `bytes=` range is forwarded;
+ * anything else is left for the local slicer so a provider cannot be asked for
+ * a multipart response the hub does not parse.
+ */
+export function forwardedRange(value: string | undefined): { range?: string } {
+  if (!value) return {};
+  return /^bytes=\d*-\d*$/.test(value.trim()) ? { range: value.trim() } : {};
+}
+
+/**
+ * Resolve a client range against a provider response.
+ *
+ * A provider that honored the range already answered 206 and is relayed as-is.
+ * One that ignored it answered 200 with the whole body, so the hub drops the
+ * bytes before the range and cancels the upstream read at the end. That keeps
+ * seeking working against providers that do not implement `Range`, without
+ * buffering the file.
+ */
+export function applyRange(
+  opened: ProviderResourceOpen,
+  rangeHeader: string | undefined,
+): ProviderResourceOpen {
+  if (opened.status === 416 || !rangeHeader || opened.status === 206) {
+    return opened;
+  }
+  const total = opened.totalBytes ?? opened.contentLength;
+  if (total === undefined) {
+    // The provider did not declare a size, so `206` is not honest.
+    return opened;
+  }
+  const range = parseByteRange(rangeHeader, total);
+  if (range === "invalid") return { status: 416, totalBytes: total };
+  if (!range) return opened;
+
+  return {
+    ...opened,
+    status: 206,
+    contentLength: range.end - range.start + 1,
+    contentRange: `bytes ${range.start}-${range.end}/${total}`,
+    totalBytes: total,
+    stream: sliceStream(opened.stream, range),
+  };
+}
+
+/** Serve a buffered resource through the streaming shape, for adapters without `openFile`. */
+export function openBufferedResource(
+  resource: ProviderResource,
+  rangeHeader: string | undefined,
+): ProviderResourceOpen {
+  const ranged = sliceForRange(resource, rangeHeader);
+  if (ranged.status === 416) return { status: 416, totalBytes: resource.body.byteLength };
+  return {
+    status: ranged.status,
+    stream: streamOf(ranged.body),
+    ...(resource.contentType ? { contentType: resource.contentType } : {}),
+    ...(resource.filename ? { filename: resource.filename } : {}),
+    contentLength: ranged.body.byteLength,
+    ...(ranged.headers["Content-Range"]
+      ? { contentRange: ranged.headers["Content-Range"] }
+      : {}),
+    totalBytes: resource.body.byteLength,
+  };
+}
+
+function streamOf(body: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(body);
+      controller.close();
+    },
+  });
+}
+
+/** Forward only `range.start … range.end` of a stream, then cancel upstream. */
+function sliceStream(
+  stream: ReadableStream<Uint8Array>,
+  range: ByteRange,
+): ReadableStream<Uint8Array> {
+  const reader = stream.getReader();
+  let position = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          const chunkStart = position;
+          position += value.byteLength;
+          if (position <= range.start) continue;
+
+          const from = Math.max(0, range.start - chunkStart);
+          const to = Math.min(value.byteLength, range.end + 1 - chunkStart);
+          if (to > from) controller.enqueue(value.subarray(from, to));
+
+          if (position > range.end) {
+            await reader.cancel().catch(() => undefined);
+            controller.close();
+            return;
+          }
+          if (to > from) return;
+        }
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason).catch(() => undefined);
+    },
+  });
 }
 
 /**
@@ -172,7 +326,7 @@ export interface ResourceHeaderOptions {
 
 /** Headers shared by the attachment proxy and the session file reader. */
 export function resourceHeaders(
-  resource: ProviderResource,
+  resource: ResourceMeta,
   options: ResourceHeaderOptions = {},
 ): Record<string, string> {
   const contentType = safeContentType(resource.contentType);
@@ -185,7 +339,9 @@ export function resourceHeaders(
   return {
     "Cache-Control": "private, max-age=300",
     "Content-Disposition": `${inline ? "inline" : "attachment"}${filename ? `; filename="${filename}"` : ""}`,
-    "Content-Length": String(resource.body.byteLength),
+    ...(resource.contentLength === undefined
+      ? {}
+      : { "Content-Length": String(resource.contentLength) }),
     "Content-Security-Policy": "default-src 'none'; sandbox",
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",

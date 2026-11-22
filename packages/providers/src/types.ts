@@ -44,6 +44,45 @@ export interface ProviderResource {
   filename?: string;
 }
 
+/**
+ * A provider resource whose body is still streaming.
+ *
+ * The hub relays this to the client, so a 100 MB video never passes through a
+ * hub-side buffer. `contentRange` is set when the provider honored a `Range`
+ * request; otherwise the caller is holding the whole resource.
+ */
+export interface ProviderResourceStream {
+  status: 200 | 206;
+  stream: ReadableStream<Uint8Array>;
+  contentType?: string;
+  filename?: string;
+  /** Bytes in this response body, from `Content-Length`. */
+  contentLength?: number;
+  /** Raw `Content-Range`, e.g. `bytes 0-1023/8192`. */
+  contentRange?: string;
+  /** Whole-resource size, parsed from `Content-Range`. */
+  totalBytes?: number;
+}
+
+/** The provider refused a range: the resource is shorter than `totalBytes`. */
+export interface ProviderResourceUnsatisfiable {
+  status: 416;
+  totalBytes?: number;
+}
+
+export type ProviderResourceOpen =
+  | ProviderResourceStream
+  | ProviderResourceUnsatisfiable;
+
+export interface ProviderResourceOptions {
+  /** Override the resource cap, e.g. for a video the browser streams. */
+  maxBytes?: number;
+  /** `bytes=start-end`; forwarded upstream when the provider supports it. */
+  range?: string;
+  /** Abort a body that is still open after this long. Defaults to ten minutes. */
+  streamTimeoutMs?: number;
+}
+
 export interface ProviderAttachment {
   name: string;
   mimeType: string;
@@ -63,6 +102,8 @@ export interface ProviderFileRequest {
   path: string;
   /** Override the resource cap, e.g. for a video the browser streams. */
   maxBytes?: number;
+  /** `bytes=start-end`; forwarded upstream when the provider supports it. */
+  range?: string;
 }
 
 export interface ProviderSendInput extends SendInput {
@@ -140,12 +181,23 @@ export interface ProviderAdapter {
   readResource?(
     url: string,
     signal: AbortSignal,
-    options?: { maxBytes?: number },
+    options?: ProviderResourceOptions,
   ): Promise<ProviderResource>;
+  /** Streaming media path; falls back to `readResource` when absent. */
+  openResource?(
+    url: string,
+    signal: AbortSignal,
+    options?: ProviderResourceOptions,
+  ): Promise<ProviderResourceOpen>;
   readFile?(
     input: ProviderFileRequest,
     signal: AbortSignal,
   ): Promise<ProviderResource>;
+  /** Streaming file path; falls back to `readFile` when absent. */
+  openFile?(
+    input: ProviderFileRequest,
+    signal: AbortSignal,
+  ): Promise<ProviderResourceOpen>;
   subscribe?(
     onEvent: (event: ProviderEvent) => void,
     signal: AbortSignal,

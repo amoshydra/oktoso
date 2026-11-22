@@ -149,6 +149,47 @@ describe("OpenCodeAdapter.readFile", () => {
   });
 });
 
+describe("OpenCodeAdapter.openFile", () => {
+  it("forwards a seek upstream and keeps the provider's content range", async () => {
+    let seen: string | undefined;
+    const server = createServer((request, response) => {
+      seen = request.headers.range;
+      response.writeHead(206, {
+        "content-type": "video/mp4",
+        "content-range": "bytes 2-3/10",
+        "content-length": "2",
+      });
+      response.end("cd");
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const adapter = new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    });
+
+    const opened = await adapter.openFile(
+      {
+        ref: "ses_test",
+        directory: "/tmp/project",
+        path: "clips/race.mp4",
+        maxBytes: 256 * 1024 * 1024,
+        range: "bytes=2-3",
+      },
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(seen).toBe("bytes=2-3");
+    expect(opened.status).toBe(206);
+    if (opened.status === 416) throw new Error("unsatisfiable");
+    expect(opened.contentRange).toBe("bytes 2-3/10");
+    expect(opened.filename).toBe("race.mp4");
+    expect(await new Response(opened.stream).text()).toBe("cd");
+  });
+});
+
 describe("OpenCodeAdapter form attention", () => {
   it("keeps option descriptions, the custom answer, and required fields", async () => {
     const server = createServer((request, response) => {

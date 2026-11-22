@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProviderError } from "../errors";
-import { readProviderResource } from "./resource";
+import { openProviderResource, readProviderResource } from "./resource";
 
 type Handler = (request: IncomingMessage, response: ServerResponse) => void;
 
@@ -164,5 +164,82 @@ describe("readProviderResource", () => {
         providerLabel: "Test",
       }),
     ).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("openProviderResource", () => {
+  it("forwards a range upstream and relays the provider's 206", async () => {
+    let seen: string | undefined;
+    const baseUrl = await serve((request, response) => {
+      seen = request.headers.range;
+      response.writeHead(206, {
+        "Content-Type": "video/mp4; charset=binary",
+        "Content-Range": "bytes 2-3/10",
+        "Content-Length": "2",
+      });
+      response.end("cd");
+    });
+
+    const opened = await openProviderResource({
+      url: `${baseUrl}/api/fs/read/clip.mp4`,
+      baseUrl,
+      headers: {},
+      signal: AbortSignal.timeout(2_000),
+      providerLabel: "Test",
+      range: "bytes=2-3",
+    });
+
+    expect(seen).toBe("bytes=2-3");
+    expect(opened.status).toBe(206);
+    if (opened.status === 416) throw new Error("unsatisfiable");
+    expect(opened.contentType).toBe("video/mp4");
+    expect(opened.contentRange).toBe("bytes 2-3/10");
+    expect(opened.contentLength).toBe(2);
+    expect(opened.totalBytes).toBe(10);
+    expect(await new Response(opened.stream).text()).toBe("cd");
+  });
+
+  it("reports an unsatisfiable range with the resource size", async () => {
+    const baseUrl = await serve((_request, response) => {
+      response.writeHead(416, { "Content-Range": "bytes */10" });
+      response.end();
+    });
+
+    const opened = await openProviderResource({
+      url: `${baseUrl}/clip.mp4`,
+      baseUrl,
+      headers: {},
+      signal: AbortSignal.timeout(2_000),
+      providerLabel: "Test",
+      range: "bytes=99-100",
+    });
+
+    expect(opened).toEqual({ status: 416, totalBytes: 10 });
+  });
+
+  it("checks the whole resource, not the slice, against the cap", async () => {
+    const baseUrl = await serve((_request, response) => {
+      response.writeHead(206, {
+        "Content-Type": "video/mp4",
+        "Content-Range": "bytes 0-9/1000",
+        "Content-Length": "10",
+      });
+      response.end("0123456789");
+    });
+
+    await expect(
+      openProviderResource({
+        url: `${baseUrl}/clip.mp4`,
+        baseUrl,
+        headers: {},
+        signal: AbortSignal.timeout(2_000),
+        providerLabel: "Test",
+        range: "bytes=0-9",
+        maxBytes: 500,
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_request",
+
+    });
   });
 });

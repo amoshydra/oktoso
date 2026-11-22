@@ -739,10 +739,15 @@ cannot make the hub serve an arbitrary MIME type.
 
 - Documents and images keep a **20 MB** proxy cap.
 - Audio and video get a **256 MB** cap, because a normal 1080p clip is larger
-  than an attachment. The provider read is whole-file; the hub then serves
-  byte ranges from the buffer (`206`, `Accept-Ranges`, `Content-Range`), which
-  is enough for seeking and for clients that require a partial response. True
-  upstream streaming is the next step if a hub ever runs on a small device.
+  than an attachment.
+- The provider body is streamed, not buffered, and a single `bytes=` range is
+  forwarded upstream: a seek asks the provider for that slice instead of
+  re-reading the clip. A provider that answers `206` is relayed with its own
+  `Content-Range`; one that ignores the range is sliced on the fly; one that
+  declares no size is served whole, because a `206` needs a total. The cap is
+  checked against the whole resource, not the slice, and a stalled body is
+  dropped after ten minutes. A provider without a streaming path falls back to
+  a buffered read and a local slice.
 - A message `file` part with audio or video MIME renders a player inline, and
   Markdown `<video>`/`<audio>`/`<source>` URLs are resolved through the same
   session-resource pass as `<img>`.

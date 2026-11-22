@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+import type { ProviderResourceOpen } from "@amoshydra/oktoso-providers";
 import type { SessionService } from "../../services/session-service";
 import type { AppEnv } from "../types";
 import { badRequest, notFound } from "../../domain/errors";
 import {
+  applyRange,
+  forwardedRange,
+  notSatisfiableHeaders,
+  openedResourceHeaders,
+  rangeHeaders,
   resourceHeaders,
   safeContentType,
-  sliceForRange,
 } from "../resource-response";
 
 const MAX_PATH_LENGTH = 1024;
@@ -106,15 +111,14 @@ export function registerFileRoutes(
       throw badRequest("The file path is too long");
     }
 
-    const resource = await sessions.readFile(c.req.param("ref"), path);
-    const ranged = sliceForRange(resource, c.req.header("range"));
-    if (ranged.status === 416) {
-      return c.body(null, 416, ranged.headers);
-    }
-    return c.body(ranged.body, ranged.status, {
-      ...resourceHeaders(resource, { openInTab: true }),
-      ...ranged.headers,
-    });
+    const opened = applyRange(
+      await sessions.openFile(c.req.param("ref"), path, {
+        ...forwardedRange(c.req.header("range")),
+        signal: c.req.raw.signal,
+      }),
+      c.req.header("range"),
+    );
+    return relay(c, opened);
   });
 
   /**
@@ -175,16 +179,21 @@ export function registerFileRoutes(
       throw badRequest("The file path escapes the preview");
     }
 
-    const resource = await sessions.readFile(ticket.ref, joined);
-    const ranged = sliceForRange(resource, c.req.header("range"));
-    if (ranged.status === 416) {
-      return c.body(null, 416, ranged.headers);
-    }
-    const contentType = previewContentType(joined, resource.contentType);
-    // resourceHeaders only whitelists bare types; keep the charset for the
-    // browser but pass the bare type so the file renders inline.
+    const resource = await sessions.openFile(ticket.ref, joined, {
+      ...forwardedRange(c.req.header("range")),
+      signal: c.req.raw.signal,
+    });
+    const opened = applyRange(resource, c.req.header("range"));
+    if (opened.status === 416) return relay(c, opened);
+
+    const contentType = previewContentType(joined, opened.contentType);
     const headers = resourceHeaders(
-      { ...resource, contentType: contentType.split(";")[0]!.trim() },
+      {
+        ...opened,
+        // Keep the charset for the browser but pass the bare type so the file
+        // renders inline.
+        contentType: contentType.split(";")[0]!.trim(),
+      },
       { openInTab: true },
     );
     headers["Content-Type"] = contentType;
@@ -192,6 +201,24 @@ export function registerFileRoutes(
     headers["Content-Security-Policy"] = isHtml ? FRAME_CSP : ASSET_CSP;
     headers["X-Frame-Options"] = "SAMEORIGIN";
     headers["Cache-Control"] = "private, max-age=60";
-    return c.body(ranged.body, ranged.status, { ...headers, ...ranged.headers });
+    return c.body(opened.stream, opened.status, {
+      ...headers,
+      ...rangeHeaders(opened),
+    });
   });
+}
+
+/**
+ * Relay a provider response. Headers come from the resource, so a 206 keeps the
+ * provider's `Content-Range` instead of recomputing it.
+ */
+function relay(c: Context<AppEnv>, opened: ProviderResourceOpen) {
+  if (opened.status === 416) {
+    return c.body(null, 416, notSatisfiableHeaders(opened.totalBytes));
+  }
+  return c.body(
+    opened.stream,
+    opened.status,
+    openedResourceHeaders(opened, { openInTab: true }),
+  );
 }

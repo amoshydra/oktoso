@@ -373,6 +373,13 @@ constraint, not a product toggle. The Settings screen explains the requirement.
   `GET /api/fs/read/{path}?location[directory]={session directory}`. The hub
   never reads the provider's disk and the browser never learns the provider
   address.
+- The hub streams the provider body instead of buffering it, and forwards a
+  single `bytes=` range. Seeking a video asks the provider for that slice
+  rather than downloading the clip again. A provider that answers `206` is
+  relayed with its own `Content-Range`; one that ignores the range is sliced on
+  the fly, and one that declares no size is served whole. The cap is checked
+  against the whole resource (256 MB for media, 20 MB otherwise), not against
+  the slice, and a body that stalls is dropped after ten minutes.
 - Images, text (Markdown, plain text, JSON, HTML), and media (MP4, WebM, MOV,
   MP3, WAV, OGG, M4A, FLAC) are served inline with a sandbox CSP. Unknown types
   fall back to `application/octet-stream` and download.
