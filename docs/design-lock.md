@@ -945,6 +945,10 @@ radius, or color token.
   time), then the reads it made, then the answer.
 - The opening activity the user already knows — context, history, search — is
   unchanged. Retrieval steps follow them, in call order.
+- A transcript read states its boundary in the same detail line: `whole
+  session, turns 1..N`, or `turns -3..N (read back 4 older turns); older turns
+  not loaded (back-page budget reached)`. Turn 0 and below are older than the
+  initial window; a number cited earlier never shifts.
 
 ## Cross-session retrieval (2026-11-21)
 

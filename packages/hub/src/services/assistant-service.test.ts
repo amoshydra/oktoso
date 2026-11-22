@@ -217,6 +217,94 @@ function toolCallsStream(
   ];
 }
 
+/** One page of a provider transcript, newest first, like the real adapter. */
+function transcriptPage(sessionRef: string, end: number, count = 200): Message[] {
+  const first = Math.max(1, end - count + 1);
+  const data: Message[] = [];
+  for (let n = end; n >= first; n -= 1) {
+    data.push({
+      id: `m${n}`,
+      sessionRef,
+      role: n % 2 === 0 ? "assistant" : "user",
+      createdAt: n,
+      parts: [{ type: "text", text: `message ${n}` }],
+    });
+  }
+  return data;
+}
+
+/** A provider split into newest-first pages; `calls` records paged reads. */
+function pagedProvider(pages: Message[][], calls: string[]) {
+  return async (
+    _ref: string,
+    query: { limit?: number; cursor?: string },
+  ): Promise<MessagePage> => {
+    if (query.limit !== 200) {
+      return { data: [], cursor: { next: null, previous: null } };
+    }
+    const index = query.cursor ? Number(query.cursor) : 0;
+    calls.push(query.cursor ?? "first");
+    return {
+      data: pages[index] ?? [],
+      cursor: {
+        next: index + 1 < pages.length ? String(index + 1) : null,
+        previous: index > 0 ? String(index - 1) : null,
+      },
+    };
+  };
+}
+
+/** A provider that never reaches its oldest page. */
+function endlessProvider(calls: string[], text: (n: number) => string) {
+  return async (
+    _ref: string,
+    query: { limit?: number; cursor?: string },
+  ): Promise<MessagePage> => {
+    if (query.limit !== 200) {
+      return { data: [], cursor: { next: null, previous: null } };
+    }
+    const index = query.cursor ? Number(query.cursor) : 0;
+    calls.push(query.cursor ?? "first");
+    const end = 1_000_000 - index * 200;
+    const data: Message[] = [];
+    for (let n = end; n > end - 200; n -= 1) {
+      data.push({
+        id: `m${n}`,
+        sessionRef: session.ref,
+        role: "assistant",
+        createdAt: n,
+        parts: [{ type: "text", text: text(n) }],
+      });
+    }
+    return {
+      data,
+      cursor: { next: String(index + 1), previous: null },
+    };
+  };
+}
+
+function buildSession(
+  fetchImpl: typeof fetch,
+  provider: SessionService["messages"],
+) {
+  return new AssistantService({
+    store: new MemoryStateStore(),
+    sessions: fakeSessions({ messages: provider }),
+    actions: { send: async () => ({}) } as unknown as SessionActions,
+    attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+    questions: { get: async () => null } as unknown as QuestionService,
+    logger: logger(),
+    settings: {
+      enabled: true,
+      baseUrl: "http://model.test/v1",
+      model: "test-model",
+      timeoutMs: 5_000,
+      maxContextMessages: 20,
+    },
+    fetchImpl,
+  });
+}
+
 function sseResponse(chunks: string[], status = 200): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
@@ -1640,8 +1728,295 @@ describe("AssistantService", () => {
 
     const prompt = body.messages.find((message) => message.role === "user")?.content ?? "";
     expect(calls).toBe(10);
-    expect(prompt).toContain("The oldest turns are not loaded");
-    expect(prompt).toContain("capped at the newest 10");
+    expect(prompt).toContain("10 turns loaded");
+    expect(prompt).toContain("the session start is not reached");
+    expect(prompt).toContain("turn 0 and below");
+  });
+
+  it("reads a turn older than the initial window on demand with a stable number", async () => {
+    const calls: string[] = [];
+    const pages = Array.from({ length: 12 }, (_, index) =>
+      transcriptPage(session.ref, 2_400 - index * 200),
+    );
+    // Message 400 sits immediately before the initial window (turns 1..2000),
+    // so after one back-page it is turn 0.
+    pages[10]![0] = {
+      ...pages[10]![0]!,
+      parts: [{ type: "text", text: "older target" }],
+    };
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1 || round === 2) {
+        return sseResponse(
+          toolCallStream(`call_${round}`, "read_turns", { from: 0, to: 0 }),
+        );
+      }
+      return sseResponse([delta("Read the older turn."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildSession(fetchImpl, pagedProvider(pages, calls));
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "what is immediately before the window?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessages =
+      bodies[2]?.messages.filter((message) => message.role === "tool") ?? [];
+    expect(toolMessages).toHaveLength(2);
+    // Same turn number, same content, and the second read does not page again.
+    expect(toolMessages[0]?.content).toContain("TURN 0");
+    expect(toolMessages[0]?.content).toContain("older target");
+    expect(toolMessages[0]?.content).toContain("read back 200 older turns");
+    expect(toolMessages[0]?.content).toContain("older turns not loaded");
+    expect(toolMessages[1]?.content).toContain("TURN 0");
+    expect(toolMessages[1]?.content).toContain("older target");
+    expect(calls).toHaveLength(11);
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.messages).toBe(1);
+    expect(
+      done.turn.activity?.some(
+        (step) => step.kind === "tool" && step.detail?.includes("read back 200 older turns"),
+      ),
+    ).toBe(true);
+  });
+
+  it("says the session start was reached when a back-page finishes there", async () => {
+    const calls: string[] = [];
+    const pages = [
+      ...Array.from({ length: 10 }, (_, index) =>
+        transcriptPage(session.ref, 2_050 - index * 200),
+      ),
+      transcriptPage(session.ref, 50),
+    ];
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "read_turns", { from: -100, to: -100 }),
+        );
+      }
+      return sseResponse([delta("Read the first turn."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildSession(fetchImpl, pagedProvider(pages, calls));
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "what did I ask first?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(toolMessage?.content).toContain("session start reached");
+    expect(toolMessage?.content).toContain("whole session");
+    expect(toolMessage?.content).toContain("TURN -49");
+    expect(toolMessage?.content).toContain("message 1");
+    expect(toolMessage?.content).not.toContain("older turns not loaded");
+    expect(calls).toHaveLength(11);
+  });
+
+  it("stops a very long back-page at the run budget and says how far it read", async () => {
+    const calls: string[] = [];
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "read_turns", {
+            from: -10_000,
+            to: -10_000,
+          }),
+        );
+      }
+      return sseResponse([delta("Stopped at the budget."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildSession(
+      fetchImpl,
+      endlessProvider(calls, (n) => `deep note ${n}`),
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "read the very old turns",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(calls).toHaveLength(20); // 10 initial pages + 10 back-page budget
+    expect(toolMessage?.content).toContain("TURN -1999");
+    expect(toolMessage?.content).toContain("read back 2000 older turns");
+    expect(toolMessage?.content).toContain("older turns not loaded");
+    expect(toolMessage?.content).toContain("back-page budget reached");
+  });
+
+  it("searches older turns on demand and reports the searched boundary", async () => {
+    const calls: string[] = [];
+    const pages = [
+      ...Array.from({ length: 10 }, (_, index) =>
+        transcriptPage(session.ref, 2_100 - index * 200),
+      ),
+      transcriptPage(session.ref, 100),
+    ];
+    // The oldest message is the one the loaded window cannot see.
+    pages[10]![99] = {
+      ...pages[10]![99]!,
+      parts: [{ type: "text", text: "the needle is here" }],
+    };
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "search_transcript", { query: "needle" }),
+        );
+      }
+      return sseResponse([delta("Found the needle."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildSession(fetchImpl, pagedProvider(pages, calls));
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "where is the needle?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(calls).toHaveLength(11);
+    expect(toolMessage?.content).toContain("turn -99");
+    expect(toolMessage?.content).toContain("the needle is here");
+    expect(toolMessage?.content).toContain("searched the whole session");
+    expect(toolMessage?.content).not.toContain("older turns not searched");
+  });
+
+  it("states the search boundary when the budget ends before the term is found", async () => {
+    const calls: string[] = [];
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "search_transcript", {
+            query: "absentneedle",
+          }),
+        );
+      }
+      return sseResponse([delta("Not found."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildSession(
+      fetchImpl,
+      endlessProvider(calls, (n) => `deep note ${n}`),
+    );
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "find absentneedle",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(calls).toHaveLength(20);
+    expect(toolMessage?.content).toContain("no matches");
+    expect(toolMessage?.content).toContain("read back 2000 older turns");
+    expect(toolMessage?.content).toContain("older turns not searched");
+    expect(toolMessage?.content).toContain("back-page budget reached");
+  });
+
+  it("pages a cross-session read back on demand under the same budget", async () => {
+    const calls: string[] = [];
+    const pages = Array.from({ length: 12 }, (_, index) =>
+      transcriptPage(session.ref, 2_400 - index * 200),
+    );
+    pages[10]![0] = {
+      ...pages[10]![0]!,
+      parts: [{ type: "text", text: "older cross target" }],
+    };
+    const bodies: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "read_session_turns", {
+            sessionRef: session.ref,
+            from: 0,
+            to: 0,
+          }),
+        );
+      }
+      return sseResponse([delta("Read the older cross turn."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async () => ({
+          data: [session],
+          cursor: { next: null, previous: null },
+        }),
+        messages: pagedProvider(pages, calls),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: { list: async () => ({ data: [] }) } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "what is immediately before the window?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(calls).toHaveLength(11);
+    expect(toolMessage?.content).toContain("TURN 0");
+    expect(toolMessage?.content).toContain("older cross target");
+    expect(toolMessage?.content).toContain("read back 200 older turns");
+    expect(toolMessage?.content).toContain("older turns not loaded");
   });
 
   it("forces an answer when the tool rounds run out", async () => {

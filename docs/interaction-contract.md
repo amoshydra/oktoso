@@ -419,6 +419,18 @@ Assistant retrieval (internal to the hub; no public route)
 - Paging does not change the retrieval budgets: 6 KB per result and 24 KB per
   run still bound the conversation, and a run still touches at most three
   distinct sessions.
+- A session transcript starts as the newest 2,000 messages (10 pages, 32 MB,
+  5 s). A turn or search older than that pages back from the provider cursor
+  on demand under the run's deep budget: 10 more pages (2,000 messages),
+  32 MB, and 5 s of paging time. Turn numbers stay stable — 1..N from the
+  oldest loaded, then 0, -1, ... for older turns — so a turn cited earlier
+  keeps its number.
+- The boundary is explicit in the tool result and the activity detail: a read
+  says `whole session, turns -341..2,000 (session start reached)` or
+  `turns -1,999..2,000 (read back 2,000 older turns); older turns not loaded
+  (back-page budget reached)`. A search says whether it covered the whole
+  session or only the newest window. An unsearched or unloaded range is never
+  reported as an absence.
 
 ### Later slices
 

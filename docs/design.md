@@ -713,10 +713,23 @@ too.
 
 The transcript is loaded page by page (the provider caps a page at 200
 messages) up to 2,000 messages, 32 MB, or 5 seconds, whichever comes first.
-The whole loaded set is numbered once, so a turn cited early in a run means the
-same thing later. When a cap stops the scan, the prompt says the oldest turns
-are not loaded; an absence is a stated gap, never a guess. The cross-session
-tools load a touched session the same way, cached for the run.
+Turns are numbered 1..N from the oldest loaded message. When the window does
+not reach the session start, older turns are 0, -1, -2, ..., and prepending an
+older page lowers the window's origin instead of renumbering a turn the model
+already cited.
+
+An older range or a search the window cannot reach pages back on demand from
+the stored cursor. The initial load stays as it was; the run's deep budget is
+10 more pages (2,000 messages), 32 MB, and 5 seconds of paging time, and it is
+spent only when a tool asks. `read_turns`, `read_tool_output`, and the session
+`search_transcript` use it; a search pages older turns when the loaded window
+cannot fill the requested page. Every result names the boundary: `whole
+session, turns -341..2,000 (session start reached)` or `turns -1,999..2,000
+(read back 2,000 older turns); older turns not loaded (back-page budget
+reached)`. A search says whether it covered the whole session or only the
+newest window. The prompt repeats that an unsearched or unloaded range is a
+gap, never a false absence. The cross-session tools load a touched session the
+same way, cached for the run, and share the run's deep budget.
 
 The web has one renderer, `ActivityTiles`, and two adapters in
 `apps/web/src/app/activity-model.ts`:

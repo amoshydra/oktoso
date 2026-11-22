@@ -1618,6 +1618,23 @@ text block.
   retrieval step opens with turn numbers instead of a provider preview. That is
   the intended difference between the two adapters, not a gap.
 
+## Deep transcript reads (2026-11-22)
+
+A session longer than the initial 2,000-turn window used to be a hard cliff:
+the model saw "older turns not loaded" and no tool could reach them.
+
+- A tool that asks below the window pulls older provider pages on demand, under
+  a per-run budget shared by every session in the thread. The initial window is
+  unchanged, so a long session does not make every answer slower.
+- Turn numbers stay stable: the initial window is 1..N and prepending an older
+  page lowers the first number through 0, -1, -2 rather than shifting what was
+  already cited. The same turn cited twice keeps its number.
+- Every read carries its boundary in the detail line (`whole session, turns
+  1..N`, or `turns -3..N (read back 4 older turns); older turns not loaded`),
+  so the evidence line cannot imply a complete session when it is not.
+- No new tile, icon, colour, or panel. The boundary is a sentence in the
+  existing detail row, and the step panel still shows recorded metrics only.
+
 ## Cross-session retrieval paging (2026-11-22)
 
 The retrieval loop can now page a cross-session search, so the detail line
