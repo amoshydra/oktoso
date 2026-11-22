@@ -125,3 +125,21 @@ current session — and reported that the last `git log` showed no signature.
 Caveat: `spike-context.mjs` still runs its own copy of the pre-paging prompt
 and tools, so this measures the model and the session, not the shipped `offset`
 paging or the on-demand back-fill. A production-loop runner is the next step.
+
+## Production runner (2026-11-23)
+
+`scripts/bench-assistant.mjs` drives the shipped loop instead of the spike's
+private copy: it creates a hub assistant thread, asks the suite, and reads the
+recorded answer, usage, activity, and tool calls through the API. That makes it
+the honest check for prompt, paging, and back-fill changes.
+
+    node scripts/bench-assistant.mjs --free --suite questions.json
+
+- `--free` picks a visible session with no assistant thread; `--session <ref>`
+  targets a named one and refuses to reuse an existing thread unless `--append`
+  is passed (those turns stay in the user's history).
+- The runner deletes the thread it created (`--keep` leaves it for inspection).
+- `--json` returns answers for scoring; the console prints PASS/MISS plus
+  latency, input tokens, and tool calls.
+- Questions that instruct the session ("send OK") can produce an action card
+  instead of prose; benchmark suites should ask about the transcript.
