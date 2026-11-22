@@ -60,9 +60,10 @@ export class AssistantSettingsService {
     return (plain === undefined ? rest : { ...rest, apiKey: plain }) as T;
   }
 
-  private seal<T extends { apiKey?: string }>(config: T): T {
-    if (!config.apiKey || this.secrets.isSealed(config.apiKey)) return config;
-    return { ...config, apiKey: this.secrets.seal(config.apiKey) };
+  private seal<T extends { apiKey?: string | null }>(config: T): T {
+    const key = config.apiKey;
+    if (!key || this.secrets.isSealed(key)) return config;
+    return { ...config, apiKey: this.secrets.seal(key) };
   }
 
   async update(input: AssistantInput): Promise<AssistantView> {
