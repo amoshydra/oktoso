@@ -1750,7 +1750,7 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <span>OpenAI-compatible base URL</span>
             <input
               value={agent.baseUrl}
-              placeholder="https://host/llamacpp/v1"
+              placeholder="https://host/v1"
               onChange={(event) => {
                 const baseUrl = (event.currentTarget as HTMLInputElement).value;
                 setAgent((current) => ({ ...current, baseUrl }));
@@ -1911,7 +1911,7 @@ function AssistantSettingsPanel(props: { client: HubClient }) {
             <span>OpenAI-compatible base URL</span>
             <input
               value={reply.baseUrl}
-              placeholder="https://host/llamacpp/v1"
+              placeholder="https://host/v1"
               onChange={(event) => {
                 const baseUrl = (event.currentTarget as HTMLInputElement).value;
                 setReply((current) => ({ ...current, baseUrl }));
