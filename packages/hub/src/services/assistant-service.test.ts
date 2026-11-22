@@ -136,6 +136,87 @@ function fakeSessions(overrides: Partial<SessionService> = {}): SessionService {
   } as unknown as SessionService;
 }
 
+/**
+ * A paged stand-in for SearchService. Cursors are the numeric offset, which is
+ * all the assistant relies on: it passes them back untouched.
+ */
+function fakeSearch(rows: Array<Record<string, unknown>>) {
+  const calls: Array<{ q: string; limit?: number; cursor?: string }> = [];
+  const search = {
+    calls,
+    search: async (query: { q: string; limit?: number; cursor?: string }) => {
+      calls.push(query);
+      const offset = query.cursor ? Number(query.cursor) : 0;
+      const limit = query.limit ?? 20;
+      return {
+        data: rows.slice(offset, offset + limit),
+        cursor: {
+          previous: offset > 0 ? String(Math.max(0, offset - limit)) : null,
+          next: offset + limit < rows.length ? String(offset + limit) : null,
+        },
+        ready: true,
+        enabled: true,
+      };
+    },
+  };
+  return search;
+}
+
+function searchRows(count: number, overrides: Record<string, unknown> = {}) {
+  return Array.from({ length: count }, (_, index) => {
+    const label = String(index).padStart(2, "0");
+    return {
+      ref: `desktop-opencode:ses_${label}`,
+      title: `Session ${label}`,
+      providerID: "desktop-opencode",
+      project: "hub",
+      updatedAt: 1_000,
+      snippet: `needle note ${index}`,
+      match: "message",
+      score: 1,
+      ...overrides,
+    };
+  });
+}
+
+function toolCallStream(id: string, name: string, args: Record<string, unknown>): string[] {
+  return [
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, id, function: { name, arguments: JSON.stringify(args) } },
+            ],
+          },
+        },
+      ],
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ];
+}
+
+function toolCallsStream(
+  calls: Array<{ id: string; name: string; args: Record<string, unknown> }>,
+): string[] {
+  return [
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: calls.map((call, index) => ({
+              index,
+              id: call.id,
+              function: { name: call.name, arguments: JSON.stringify(call.args) },
+            })),
+          },
+        },
+      ],
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ];
+}
+
 function sseResponse(chunks: string[], status = 200): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
@@ -266,12 +347,13 @@ describe("AssistantService", () => {
     fetchImpl: typeof fetch,
     allowWrite = true,
     search?: unknown,
+    sessions: Session[] = projectSessions,
   ) {
     return new AssistantService({
       store: new MemoryStateStore(),
       sessions: fakeSessions({
         list: async (query: { project?: string }) => ({
-          data: projectSessions.filter(
+          data: sessions.filter(
             (entry) => !query.project || entry.project === query.project,
           ),
           cursor: { next: null, previous: null },
@@ -458,6 +540,332 @@ describe("AssistantService", () => {
     expect(done.turn.context?.messages).toBe(0);
   });
 
+  it("pages past the first ten cross-session hits to find a later session", async () => {
+    const sessions: Session[] = Array.from({ length: 14 }, (_, index) => {
+      const label = String(index).padStart(2, "0");
+      return {
+        ...session,
+        ref: `desktop-opencode:ses_${label}`,
+        nativeID: `ses_${label}`,
+        title: `Session ${label}`,
+        project: "hub",
+        status: "idle",
+      };
+    });
+    const search = fakeSearch(searchRows(14));
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "search_transcript", {
+            query: "needle",
+            limit: 10,
+          }),
+        );
+      }
+      if (round === 2) {
+        return sseResponse(
+          toolCallStream("call_2", "search_transcript", {
+            query: "needle",
+            offset: 10,
+            limit: 10,
+          }),
+        );
+      }
+      return sseResponse([delta("Session 10 has the note."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildScoped(fetchImpl, false, search, sessions);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "where is the needle note?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    // The opening block lists five of fourteen and says the rest exist.
+    const prompt = bodies[0]?.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("showing 5 of 14 matches — more available");
+
+    const toolMessages =
+      bodies[2]?.messages.filter((message) => message.role === "tool") ?? [];
+    // Page one stops at ten and names the next offset.
+    expect(toolMessages[0]?.content).toContain("matches 1–10 of 14");
+    expect(toolMessages[0]?.content).toContain("more available — call again with offset 10");
+    expect(toolMessages[0]?.content).not.toContain("[desktop-opencode:ses_10]");
+
+    // Page two reaches the session ranked eleventh and closes the list.
+    expect(toolMessages[1]?.content).toContain("matches 11–14 of 14");
+    expect(toolMessages[1]?.content).toContain("[desktop-opencode:ses_10]");
+    expect(toolMessages[1]?.content).toContain("no more results");
+
+    // The gap was a fixed first page; the index is now asked for a pool.
+    expect(search.calls.some((call) => (call.limit ?? 0) > 10)).toBe(true);
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.text).toBe("Session 10 has the note.");
+  });
+
+  it("orders cross-session ties by title hit, then recency", async () => {
+    const sessions: Session[] = ["a", "b", "c"].map((letter) => ({
+      ...session,
+      ref: `desktop-opencode:ses_${letter}`,
+      nativeID: `ses_${letter}`,
+      title: `Session ${letter}`,
+      project: "hub",
+      status: "idle",
+    }));
+    const search = fakeSearch([
+      {
+        ref: "desktop-opencode:ses_a",
+        title: "Session a",
+        providerID: "desktop-opencode",
+        updatedAt: 3_000,
+        snippet: "needle in a body",
+        match: "message",
+        score: 1,
+      },
+      {
+        ref: "desktop-opencode:ses_b",
+        title: "Needle in a title",
+        providerID: "desktop-opencode",
+        updatedAt: 1_000,
+        snippet: "Session b",
+        match: "session",
+        score: 1,
+      },
+      {
+        ref: "desktop-opencode:ses_c",
+        title: "Session c",
+        providerID: "desktop-opencode",
+        updatedAt: 5_000,
+        snippet: "needle in a newer body",
+        match: "message",
+        score: 1,
+      },
+    ]);
+    let round = 0;
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+    }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "search_transcript", {
+            query: "needle",
+            limit: 20,
+          }),
+        );
+      }
+      return sseResponse([delta("Ordered the hits."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildScoped(fetchImpl, false, search, sessions);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "where is the needle note?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    const text = toolMessage?.content ?? "";
+    // Equal scores: the title hit leads, then the newer body, then the older.
+    expect(text.indexOf("ses_b")).toBeLessThan(text.indexOf("ses_c"));
+    expect(text.indexOf("ses_c")).toBeLessThan(text.indexOf("ses_a"));
+  });
+
+  it("says a cross-session search is complete instead of implying more", async () => {
+    const sessions: Session[] = [
+      {
+        ...session,
+        ref: "desktop-opencode:ses_00",
+        nativeID: "ses_00",
+        title: "Session 00",
+        project: "hub",
+        status: "idle",
+      },
+    ];
+    const search = fakeSearch(searchRows(1));
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallStream("call_1", "search_transcript", { query: "needle" }),
+        );
+      }
+      return sseResponse([delta("Only Session 0 has the note."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildScoped(fetchImpl, false, search, sessions);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "where is the needle note?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessage = bodies[1]?.messages.find((message) => message.role === "tool");
+    expect(toolMessage?.content).toContain("matches 1–1 of 1");
+    expect(toolMessage?.content).toContain("no more results");
+    expect(toolMessage?.content).not.toContain("more available");
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(
+      done.turn.activity?.some(
+        (step) => step.kind === "tool" && step.detail?.includes("1 of 1"),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the three-session budget on cross-session reads", async () => {
+    const refs = ["a", "b", "c", "d"].map((letter) => `desktop-opencode:ses_${letter}`);
+    const sessions: Session[] = refs.map((ref) => ({
+      ...session,
+      ref,
+      nativeID: ref.split(":")[1]!,
+      title: `Session ${ref.split("_")[1]}`,
+      project: "hub",
+      status: "idle",
+    }));
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallsStream(
+            refs.slice(0, 3).map((ref, index) => ({
+              id: `call_${index}`,
+              name: "read_session_turns",
+              args: { sessionRef: ref, from: 1, to: 1 },
+            })),
+          ),
+        );
+      }
+      if (round === 2) {
+        return sseResponse(
+          toolCallStream("call_4", "read_session_turns", {
+            sessionRef: refs[3],
+            from: 1,
+            to: 1,
+          }),
+        );
+      }
+      return sseResponse([delta("Read three sessions."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildScoped(fetchImpl, false, undefined, sessions);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "read all four sessions",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessages =
+      bodies[2]?.messages.filter((message) => message.role === "tool") ?? [];
+    expect(toolMessages).toHaveLength(4);
+    expect(toolMessages[3]?.content).toContain(
+      "session budget reached (3 distinct sessions)",
+    );
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.messages).toBe(3);
+  });
+
+  it("keeps the per-result and per-run caps on a cross-session search", async () => {
+    const sessions: Session[] = Array.from({ length: 60 }, (_, index) => ({
+      ...session,
+      ref: `desktop-opencode:ses_${index}`,
+      nativeID: `ses_${index}`,
+      title: `Session ${index}`,
+      project: "hub",
+      status: "idle",
+    }));
+    const search = fakeSearch(
+      searchRows(60, {
+        title: `${"Long session title ".repeat(10)}`,
+        snippet: `needle ${"x".repeat(500)}`,
+      }),
+    );
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+      tools?: Array<{ function: { name: string } }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      round += 1;
+      if (round === 1) {
+        return sseResponse(
+          toolCallsStream(
+            [0, 20, 40].map((offset, index) => ({
+              id: `call_${index}`,
+              name: "search_transcript",
+              args: { query: "needle", limit: 20, offset },
+            })),
+          ),
+        );
+      }
+      return sseResponse([delta("Paged the notes."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+
+    const service = buildScoped(fetchImpl, false, search, sessions);
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const accepted = await service.postMessage(thread.id, {
+      text: "where is the needle note?",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const toolMessages =
+      bodies[1]?.messages.filter((message) => message.role === "tool") ?? [];
+    expect(toolMessages).toHaveLength(3);
+    for (const message of toolMessages) {
+      // truncate() keeps the cap and appends one ellipsis character.
+      expect(message.content!.length).toBeLessThanOrEqual(6_001);
+    }
+    expect(
+      toolMessages.reduce((total, message) => total + message.content!.length, 0),
+    ).toBeLessThanOrEqual(24_000);
+
+    // The per-run budget is spent, so the closing round has no retrieval tools.
+    expect(JSON.stringify(bodies[1]?.tools ?? [])).not.toContain("search_transcript");
+    expect(
+      bodies[1]?.messages.some((message) =>
+        message.content?.includes("Stop reading. Answer now"),
+      ),
+    ).toBe(true);
+
+    const done = events.find((event) => event.type === "done");
+    if (done?.type !== "done") throw new Error("no done event");
+    expect(done.turn.context?.toolCalls).toBe(3);
+  });
+
   it("builds a global context from the inbox and running sessions", async () => {
     let body: { messages: Array<{ role: string; content: string }> } = { messages: [] };
     const fetchImpl = (async (_url: string, init: RequestInit) => {
@@ -549,7 +957,7 @@ describe("AssistantService", () => {
     });
     const thread = await service.createThread({ scope: { kind: "global" } });
     const accepted = await service.postMessage(thread.id, {
-      text: "which agent works on gpu orchestrator? prompt this session http://192.0.2.10:8787/sessions/desktop-opencode%3Ases_a",
+      text: "which agent works on gpu orchestrator? prompt this session http://127.0.0.1:4096/sessions/desktop-opencode%3Ases_a",
     });
     const events: AssistantEvent[] = [];
     service.subscribe(accepted.run.id, 0, (event) => events.push(event));

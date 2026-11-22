@@ -688,15 +688,28 @@ a session ref and are limited to the sessions in that thread's scope:
 | Tool | Returns |
 |---|---|
 | `list_sessions` | title, ref, project, status, last activity (filters: query/status/project) |
-| `search_transcript` | cross-session hits, optionally narrowed by ref |
+| `search_transcript` | one cross-session hit per session, paged by `offset`, optionally narrowed by ref |
 | `read_session_turns` | one session's numbered turns |
 | `list_tool_calls` | one session's call index and failure count |
 | `read_tool_output` | one call's output |
 
+Cross-session search is not cut at the first index page. `search_transcript`
+asks the index for a pool of up to 200 sessions, merges the index hits with
+metadata matches, and orders them by score, title hit, recency, and ref so the
+order is total. It returns 10 rows by default (20 maximum) and accepts
+`offset`. The first line states the evidence: `matches 1–10 of 14; more
+available — call again with offset 10`, then `matches 11–14 of 14; no more
+results` on the next page. The opening SEARCH block lists five hits and its
+heading says `showing 5 of 14 matches — more available`, so a partial list is
+never presented as complete. A session ranked outside the first page is a
+known gap the model can page, not a false absence.
+
 A run reads at most three distinct sessions, and a ref outside the scope is
-refused rather than fetched. The resolved-session tails in the opening use the
-same part renderer as the session scope, so reasoning and tool output are
-present there too.
+refused rather than fetched. The per-call and per-run character budgets are
+unchanged; paging only changes which rows a call returns, never how much of a
+row is kept. The resolved-session tails in the opening use the same part
+renderer as the session scope, so reasoning and tool output are present there
+too.
 
 The transcript is loaded page by page (the provider caps a page at 200
 messages) up to 2,000 messages, 32 MB, or 5 seconds, whichever comes first.
