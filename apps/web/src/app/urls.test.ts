@@ -5,6 +5,7 @@ import {
   previewableFilePath,
   resolveProviderUrl,
   resolveSessionResource,
+  sessionFileTarget,
 } from "./urls";
 
 const base = "http://127.0.0.1:4096";
@@ -171,5 +172,45 @@ describe("previewableFilePath", () => {
     expect(previewableFilePath("--with-flag")).toBeUndefined();
     expect(previewableFilePath("")).toBeUndefined();
     expect(previewableFilePath(undefined)).toBeUndefined();
+  });
+});
+
+describe("sessionFileTarget", () => {
+  const resource = {
+    baseUrl: base,
+    providerID: "desktop-opencode",
+    providerType: "opencode",
+    directory: "/home/me/project",
+    sessionRef: "desktop-opencode:ses_auth",
+    fileRead: true,
+  };
+
+  it("maps a session path to the ref and path a ticket needs", () => {
+    expect(sessionFileTarget("tmp/site/clip.mp4", resource)).toEqual({
+      ref: "desktop-opencode:ses_auth",
+      path: "tmp/site/clip.mp4",
+    });
+    expect(
+      sessionFileTarget("/home/me/project/voice.m4a", resource)?.path,
+    ).toBe("voice.m4a");
+  });
+
+  it("leaves data URLs, provider URLs, and unknown types on the blob path", () => {
+    expect(
+      sessionFileTarget("data:video/mp4;base64,AAAA", resource),
+    ).toBeUndefined();
+    expect(
+      sessionFileTarget(`${base}/api/fs/read/clip.mp4`, resource),
+    ).toBeUndefined();
+    expect(sessionFileTarget("archive.zip", resource)).toBeUndefined();
+  });
+
+  it("needs a session and the files capability", () => {
+    expect(
+      sessionFileTarget("clip.mp4", { ...resource, sessionRef: undefined }),
+    ).toBeUndefined();
+    expect(
+      sessionFileTarget("clip.mp4", { ...resource, fileRead: false }),
+    ).toBeUndefined();
   });
 });

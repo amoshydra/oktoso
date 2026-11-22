@@ -217,6 +217,12 @@ const OPENCODE_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
           mimeType: "text/plain",
           url: "/api/files/notes.txt",
         },
+        {
+          type: "file",
+          name: "race.mp4",
+          mimeType: "video/mp4",
+          url: "clips/race.mp4",
+        },
       ],
     },
     {

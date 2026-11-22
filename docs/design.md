@@ -754,7 +754,11 @@ cannot make the hub serve an arbitrary MIME type.
 - Media elements cannot send the bearer token, so a session path is exchanged
   for a short-lived, path-scoped preview ticket (the same mechanism HTML
   previews use). The ticket route serves bytes with ranges, and the preview
-  sheet uses it for video/audio instead of downloading a blob.
+  sheet uses it for video/audio instead of downloading a blob. A transcript
+  file part that maps back to a session path does the same, so the browser
+  streams a 100 MB clip and seeks with `Range`; a provider file with no session
+  path keeps the authenticated blob. The ticket lasts ten minutes, so the
+  player renews it on an element error and resumes where it stopped.
 
 Provider history stays in the provider. The hub caches recent session pages and message pages in memory with a short TTL. The cache is not authoritative.
 

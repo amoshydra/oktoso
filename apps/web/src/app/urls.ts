@@ -54,6 +54,27 @@ export interface ResolvedResource {
   attachment: boolean;
 }
 
+export interface SessionFileTarget {
+  ref: string;
+  path: string;
+}
+
+/**
+ * A message resource that maps back to a file in the session directory.
+ *
+ * Markdown media carries the session path, so the browser can play it through
+ * a preview ticket instead of a token-authenticated blob. A provider URL or a
+ * data URL has no path here and stays on the blob path.
+ */
+export function sessionFileTarget(
+  value: string | undefined,
+  context: ResourceContext,
+): SessionFileTarget | undefined {
+  if (!context.sessionRef || !context.fileRead) return undefined;
+  const path = previewableFilePath(value, context.directory);
+  return path ? { ref: context.sessionRef, path } : undefined;
+}
+
 export function attachmentProxyPath(
   providerID: string,
   url: string,

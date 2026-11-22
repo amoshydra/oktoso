@@ -588,6 +588,11 @@ discovery surface.
 - HTML gets a ten-minute ticket at `/preview/<ticket>/<path>` so its relative
   assets resolve and its scripts run in a sandboxed, opaque-origin frame. The
   ticket is scoped to the file's directory and cannot reach the hub API.
+- A transcript video or audio file part whose URL is a session path plays
+  through the same ticket, so the browser streams it with `Range` instead of
+  fetching a blob. A part that only has a provider URL keeps the authenticated
+  blob. When a ticket expires mid-playback the player mints a fresh one and
+  resumes at the previous position; a second failure shows the inline error.
 - The hub rejects escaping and absolute paths and never returns provider
   credentials or a provider URL to the browser.
 - An image read renders the bytes embedded in the tool result, so the image is

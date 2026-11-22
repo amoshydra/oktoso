@@ -121,7 +121,9 @@ import {
 } from "./optimistic";
 import {
   resolveSessionResource,
+  sessionFileTarget,
   type ResourceContext,
+  type SessionFileTarget,
 } from "./urls";
 import {
   collectToolImages,
@@ -8890,7 +8892,12 @@ function MessagePartView(props: {
       Boolean(part.mimeType?.startsWith("audio/")) ||
       /\.(?:mp3|m4a|wav|ogg|flac)(?:[?#]|$)/i.test(part.url ?? "");
 
-    if ((isVideo || isAudio) && (dataUrl || link.url)) {
+    // A file inside the session directory can stream from a preview ticket:
+    // seeking asks the provider for a slice, and a 100 MB clip never becomes a
+    // hub-side buffer. The element also never needs the bearer token.
+    const sessionFile = sessionFileTarget(part.url, props.resource);
+
+    if ((isVideo || isAudio) && (dataUrl || link.url || sessionFile)) {
       return (
         <figure className="message-attachment">
           <MediaPlayer
@@ -8900,6 +8907,7 @@ function MessagePartView(props: {
             dataUrl={dataUrl}
             viaProxy={link.attachment}
             kind={isVideo ? "video" : "audio"}
+            {...(sessionFile ? { sessionFile } : {})}
           />
           <figcaption>
             <span className="message-file-name">{part.name}</span>
@@ -9186,15 +9194,37 @@ function FilePreview(props: {
           ) : kind === "image" ? (
             <img className="file-preview-image" src={state.url} alt={name} />
           ) : kind === "video" ? (
-            <video
-              className="file-preview-video"
-              src={state.url}
-              controls
-              playsInline
-              preload="metadata"
-            />
+            sessionRef ? (
+              <TicketMedia
+                client={props.client}
+                sessionRef={sessionRef}
+                path={props.path}
+                kind="video"
+                className="file-preview-video"
+                initialSrc={state.url}
+              />
+            ) : (
+              <video
+                className="file-preview-video"
+                src={state.url}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            )
           ) : kind === "audio" ? (
-            <audio className="file-preview-audio" src={state.url} controls />
+            sessionRef ? (
+              <TicketMedia
+                client={props.client}
+                sessionRef={sessionRef}
+                path={props.path}
+                kind="audio"
+                className="file-preview-audio"
+                initialSrc={state.url}
+              />
+            ) : (
+              <audio className="file-preview-audio" src={state.url} controls />
+            )
           ) : (
             <iframe
               className="file-preview-frame"
@@ -9210,11 +9240,124 @@ function FilePreview(props: {
 }
 
 /**
+ * Video or audio served through a preview ticket.
+ *
+ * The element cannot send the hub token, so it plays a ticket URL and the
+ * browser streams it with `Range` requests. A ticket lives for ten minutes,
+ * which a paused video can outlast; when the element errors it mints a fresh
+ * ticket and resumes at the same position.
+ */
+function TicketMedia(props: {
+  client: HubClient;
+  sessionRef: string;
+  path: string;
+  kind: "video" | "audio";
+  className: string;
+  initialSrc?: string;
+}) {
+  const [src, setSrc] = useState<string | undefined>(props.initialSrc);
+  const [failed, setFailed] = useState(false);
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
+  const renewals = useRef(0);
+  const resume = useRef<{ at: number; playing: boolean } | undefined>(undefined);
+
+  useEffect(() => {
+    if (props.initialSrc) {
+      setSrc(props.initialSrc);
+      setFailed(false);
+      renewals.current = 0;
+      return;
+    }
+    let cancelled = false;
+    renewals.current = 0;
+    setSrc(undefined);
+    setFailed(false);
+    void props.client
+      .previewTicket(props.sessionRef, props.path)
+      .then((ticket) => {
+        if (!cancelled) setSrc(ticket.url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, props.initialSrc, props.path, props.sessionRef]);
+
+  const attach = useCallback((element: HTMLMediaElement | null) => {
+    mediaRef.current = element;
+  }, []);
+
+  /** The ticket expired or the stream dropped: renew at the same position. */
+  const renewTicket = () => {
+    if (renewals.current >= 2) {
+      setFailed(true);
+      return;
+    }
+    renewals.current += 1;
+    const media = mediaRef.current;
+    resume.current = media
+      ? { at: media.currentTime, playing: !media.paused }
+      : undefined;
+    void props.client
+      .previewTicket(props.sessionRef, props.path)
+      .then((ticket) => setSrc(ticket.url))
+      .catch(() => setFailed(true));
+  };
+
+  const resumePlayback = () => {
+    const media = mediaRef.current;
+    const pending = resume.current;
+    resume.current = undefined;
+    if (!media || !pending) return;
+    // The reload succeeded, so a later expiry may renew again.
+    renewals.current = 0;
+    if (pending.at > 0) media.currentTime = pending.at;
+    if (pending.playing) void media.play().catch(() => undefined);
+  };
+
+  if (failed) {
+    return (
+      <div className="message-file-meta" role="alert">
+        This media could not be loaded.
+      </div>
+    );
+  }
+  if (!src) {
+    return <div className="message-file-meta">Loading media…</div>;
+  }
+
+  return props.kind === "video" ? (
+    <video
+      className={props.className}
+      ref={attach}
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+      onError={renewTicket}
+      onLoadedMetadata={resumePlayback}
+    />
+  ) : (
+    <audio
+      className={props.className}
+      ref={attach}
+      src={src}
+      controls
+      preload="metadata"
+      onError={renewTicket}
+      onLoadedMetadata={resumePlayback}
+    />
+  );
+}
+
+/**
  * A video or audio file part.
  *
- * The element cannot send the hub token, so a provider-hosted file is fetched
- * with the client and played from an object URL, the same way an image is.
- * Data URLs need no round trip.
+ * A session file plays through a preview ticket (see `TicketMedia`), so a
+ * 100 MB clip is streamed instead of fetched as a blob. Data URLs need no round
+ * trip, and any other provider file keeps the authenticated blob path.
  */
 function MediaPlayer(props: {
   client: HubClient;
@@ -9223,11 +9366,13 @@ function MediaPlayer(props: {
   dataUrl?: string;
   viaProxy: boolean;
   kind: "video" | "audio";
+  sessionFile?: SessionFileTarget;
 }) {
   const [src, setSrc] = useState<string | undefined>(props.dataUrl);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (props.sessionFile) return;
     if (props.dataUrl) {
       setSrc(props.dataUrl);
       setFailed(false);
@@ -9266,7 +9411,26 @@ function MediaPlayer(props: {
       cancelled = true;
       if (objectURL) URL.revokeObjectURL(objectURL);
     };
-  }, [props.client, props.dataUrl, props.providerID, props.url, props.viaProxy]);
+  }, [
+    props.client,
+    props.dataUrl,
+    props.providerID,
+    props.url,
+    props.viaProxy,
+    props.sessionFile,
+  ]);
+
+  if (props.sessionFile) {
+    return (
+      <TicketMedia
+        client={props.client}
+        sessionRef={props.sessionFile.ref}
+        path={props.sessionFile.path}
+        kind={props.kind}
+        className={`message-attachment-${props.kind}`}
+      />
+    );
+  }
 
   if (failed) {
     return (
@@ -9288,12 +9452,7 @@ function MediaPlayer(props: {
       preload="metadata"
     />
   ) : (
-    <audio
-      className="message-attachment-audio"
-      src={src}
-      controls
-      preload="metadata"
-    />
+    <audio className="message-attachment-audio" src={src} controls preload="metadata" />
   );
 }
 
