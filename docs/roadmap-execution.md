@@ -949,6 +949,10 @@ Sprint exit criteria:
   tails use the shared part renderer. Audit:
   `docs/reports/assistant-tool-loop-audit.md` — full tools and four rounds are
   load-bearing; reasoning, a recent window, and a terse prompt are not.
+  `search_transcript` pages the index by `offset` over a 200-session pool and
+  states `matches 11–14 of 14; no more results` (or how many remain), so a
+  session outside the first ten is reachable and a partial list is never
+  presented as complete.
 - [x] G22. Session ask: page older than the newest 200 messages. The transcript
   is now loaded page by page (200 per provider page) up to 2,000 messages,
   32 MB, or 5 s, then numbered once. `search_transcript` returns the total and

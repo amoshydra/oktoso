@@ -407,6 +407,19 @@ The existing `GET/PUT /api/v1/settings/assistant` remains the configuration
 surface. `GET /api/v1/settings/assistant/transcription/models` remains the model
 discovery surface.
 
+Assistant retrieval (internal to the hub; no public route)
+
+- Project and global threads search with `search_transcript`, which pages the
+  session index by `offset` (10 rows by default, 20 maximum) and states
+  `matches 11–14 of 14; no more results` or `matches 1–10 of 14; more available
+  — call again with offset 10` before the rows.
+- The opening SEARCH block lists five hits and its heading says
+  `showing 5 of 14 matches — more available`, so a truncated list is never
+  rendered as complete.
+- Paging does not change the retrieval budgets: 6 KB per result and 24 KB per
+  run still bound the conversation, and a run still touches at most three
+  distinct sessions.
+
 ### Later slices
 
 - True in-chat editing for Open WebUI as a user-sibling operation.
