@@ -653,6 +653,69 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
   response.end(JSON.stringify(payload));
 }
 
+/**
+ * Serve a fake file the way a real provider does: the size is declared, and a
+ * single `bytes` range is answered with `206` and `Content-Range`.
+ */
+function serveFileBody(
+  request: IncomingMessage,
+  response: ServerResponse,
+  body: Buffer | string,
+  headers: Record<string, string>,
+): void {
+  const buffer = typeof body === "string" ? Buffer.from(body) : body;
+  const range = parseFakeRange(request.headers.range, buffer.length);
+  if (range === "invalid") {
+    response.writeHead(416, {
+      ...headers,
+      "accept-ranges": "bytes",
+      "content-range": `bytes */${buffer.length}`,
+    });
+    response.end();
+    return;
+  }
+  if (!range) {
+    response.writeHead(200, {
+      ...headers,
+      "accept-ranges": "bytes",
+      "content-length": String(buffer.length),
+    });
+    response.end(buffer);
+    return;
+  }
+  const slice = buffer.subarray(range.start, range.end + 1);
+  response.writeHead(206, {
+    ...headers,
+    "accept-ranges": "bytes",
+    "content-range": `bytes ${range.start}-${range.end}/${buffer.length}`,
+    "content-length": String(slice.length),
+  });
+  response.end(slice);
+}
+
+function parseFakeRange(
+  value: string | string[] | undefined,
+  total: number,
+): { start: number; end: number } | "invalid" | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
+  if (!match) return undefined;
+  const [, rawStart = "", rawEnd = ""] = match;
+  if (rawStart === "" && rawEnd === "") return "invalid";
+  if (rawStart === "") {
+    const suffix = Number(rawEnd);
+    if (!Number.isFinite(suffix) || suffix <= 0) return "invalid";
+    return { start: Math.max(0, total - suffix), end: total - 1 };
+  }
+  const start = Number(rawStart);
+  const end = rawEnd === "" ? total - 1 : Number(rawEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+    return "invalid";
+  }
+  if (start >= total) return "invalid";
+  return { start, end: Math.min(end, total - 1) };
+}
+
 function page<T>(items: T[], url: URL): { data: T[]; cursor: { previous: string | null; next: string | null } } {
   const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50)));
   const offset = Math.max(0, Number(url.searchParams.get("cursor") ?? 0));
@@ -841,28 +904,25 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       response.end("Not found");
       return;
     }
-    response.writeHead(200, {
+    serveFileBody(request, response, file.body, {
       "content-type": file.type,
       "content-disposition": `attachment; filename="${segments.at(-1)}"`,
     });
-    response.end(file.body);
     return;
   }
   if (path.startsWith("/api/files/")) {
     const name = path.split("/").at(-1) || "attachment";
     if (name.endsWith(".txt")) {
-      response.writeHead(200, {
+      serveFileBody(request, response, "fake attachment", {
         "content-type": "text/plain",
         "content-disposition": `inline; filename="${name}"`,
       });
-      response.end("fake attachment");
       return;
     }
-    response.writeHead(200, {
+    serveFileBody(request, response, FAKE_PNG, {
       "content-type": "image/png",
       "content-disposition": `inline; filename="${name}"`,
     });
-    response.end(FAKE_PNG);
     return;
   }
   if (path === "/api/info") {

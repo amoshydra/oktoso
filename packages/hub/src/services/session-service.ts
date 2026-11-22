@@ -21,11 +21,13 @@ import {
   ProviderError,
   relativeSessionPath,
   type ProviderAdapter,
+  type ProviderFileRequest,
   type ProviderInboxItem,
   type ProviderResource,
+  type ProviderResourceOpen,
 } from "@amoshydra/oktoso-providers";
 import { AppError, badRequest, notFound, notImplemented } from "../domain/errors";
-import { mediaMaxBytes } from "../http/resource-response";
+import { mediaMaxBytes, openBufferedResource } from "../http/resource-response";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import type { AttachmentStore } from "./attachment-store";
@@ -40,6 +42,10 @@ import {
   syncSignal,
   waitAtMost,
 } from "./provider-sync";
+
+/** A provider that advertises file reads; `fileRequest` guarantees `readFile`. */
+type FileAdapter = ProviderAdapter &
+  Required<Pick<ProviderAdapter, "readFile">>;
 
 function toLineageNode(
   session: Session,
@@ -415,6 +421,63 @@ export class SessionService {
    * before it reaches the adapter.
    */
   async readFile(ref: string, path: string): Promise<ProviderResource> {
+    const { adapter, input } = await this.fileRequest(ref, path);
+    return adapter.readFile(
+      input,
+      operationSignal(this.registry, adapter.id, 20_000),
+    );
+  }
+
+  /**
+   * Stream a session file, forwarding a seek upstream.
+   *
+   * Browsers seek media with `Range`. Asking the provider for that slice keeps
+   * the hub from pulling a 100 MB clip again for every seek. Only the provider
+   * *answer* is on a timeout; the body is relayed under its own stream deadline
+   * so a long video is not cut off at the read timeout.
+   */
+  async openFile(
+    ref: string,
+    path: string,
+    options: { range?: string; signal?: AbortSignal } = {},
+  ): Promise<ProviderResourceOpen> {
+    const { adapter, input } = await this.fileRequest(ref, path);
+    const request = options.range ? { ...input, range: options.range } : input;
+    if (!adapter.openFile) {
+      const resource = await adapter.readFile(
+        request,
+        operationSignal(this.registry, adapter.id, 20_000),
+      );
+      return openBufferedResource(resource, options.range);
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      this.registry.timeoutMs(adapter.id),
+    );
+    (timer as { unref?: () => void }).unref?.();
+    try {
+      const signal = options.signal
+        ? AbortSignal.any([controller.signal, options.signal])
+        : controller.signal;
+      return await adapter.openFile(request, signal);
+    } catch (error) {
+      // A provider that never answers is offline from the client's point of
+      // view, not a failed file read.
+      if (controller.signal.aborted) {
+        throw providerOfflineError(adapter.id, "unresponsive");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async fileRequest(
+    ref: string,
+    path: string,
+  ): Promise<{ adapter: FileAdapter; input: ProviderFileRequest }> {
     const adapter = this.adapterForRef(ref);
     if (!adapter) throw notFound("Session not found");
     if (!adapter.capabilities.files || !adapter.readFile) {
@@ -432,8 +495,9 @@ export class SessionService {
       ).directory;
     }
 
-    return adapter.readFile(
-      {
+    return {
+      adapter: adapter as FileAdapter,
+      input: {
         ref,
         directory,
         path: relativeSessionPath(path, directory),
@@ -441,8 +505,7 @@ export class SessionService {
           ? {}
           : { maxBytes: mediaMaxBytes(path) }),
       },
-      operationSignal(this.registry, adapter.id, 20_000),
-    );
+    };
   }
 
   async sendMessage(

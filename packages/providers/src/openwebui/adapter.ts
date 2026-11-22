@@ -19,10 +19,12 @@ import type {
   ProviderAdapter,
   ProviderAttachment,
   ProviderResource,
+  ProviderResourceOpen,
+  ProviderResourceOptions,
   ProviderSendInput,
 } from "../types";
 import { ProviderError } from "../errors";
-import { readProviderResource } from "../http/resource";
+import { openProviderResource, readProviderResource } from "../http/resource";
 
 export interface OpenWebUIAdapterOptions {
   id: string;
@@ -674,7 +676,7 @@ export class OpenWebUIAdapter implements ProviderAdapter {
   async readResource(
     url: string,
     signal: AbortSignal,
-    options: { maxBytes?: number } = {},
+    options: ProviderResourceOptions = {},
   ): Promise<ProviderResource> {
     return readProviderResource({
       url,
@@ -682,9 +684,22 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       headers: { Authorization: `Bearer ${this.token}` },
       signal,
       providerLabel: "Open WebUI",
-      ...(options.maxBytes === undefined
-        ? {}
-        : { maxBytes: options.maxBytes }),
+      ...options,
+    });
+  }
+
+  async openResource(
+    url: string,
+    signal: AbortSignal,
+    options: ProviderResourceOptions = {},
+  ): Promise<ProviderResourceOpen> {
+    return openProviderResource({
+      url,
+      baseUrl: this.baseUrl,
+      headers: { Authorization: `Bearer ${this.token}` },
+      signal,
+      providerLabel: "Open WebUI",
+      ...options,
     });
   }
 

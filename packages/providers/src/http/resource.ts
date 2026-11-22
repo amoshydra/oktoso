@@ -1,9 +1,15 @@
 import { ProviderError } from "../errors";
-import type { ProviderResource } from "../types";
+import type {
+  ProviderResource,
+  ProviderResourceOpen,
+  ProviderResourceStream,
+} from "../types";
 
 export const MAX_RESOURCE_BYTES = 20 * 1024 * 1024;
 /** Media is streamed by the browser; an attachment cap does not apply. */
 export const MAX_MEDIA_RESOURCE_BYTES = 256 * 1024 * 1024;
+/** A stalled body cannot pin a provider socket forever. */
+export const RESOURCE_STREAM_TIMEOUT_MS = 10 * 60 * 1_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export interface ReadProviderResourceOptions {
@@ -13,6 +19,9 @@ export interface ReadProviderResourceOptions {
   signal: AbortSignal;
   providerLabel: string;
   maxBytes?: number;
+  /** `bytes=start-end`; the provider may ignore it and return the whole file. */
+  range?: string;
+  streamTimeoutMs?: number;
 }
 
 /**
@@ -25,13 +34,110 @@ export async function readProviderResource(
   options: ReadProviderResourceOptions,
 ): Promise<ProviderResource> {
   const maxBytes = options.maxBytes ?? MAX_RESOURCE_BYTES;
+  const opened = await openProviderResource({ ...options, range: undefined });
+  if (!("stream" in opened)) {
+    throw new ProviderError(
+      "invalid_request",
+      `${options.providerLabel} attachment range is not satisfiable`,
+      { status: 416, retryable: false },
+    );
+  }
+  const body = await collectStream(opened.stream, maxBytes);
+  return {
+    body,
+    ...(opened.contentType ? { contentType: opened.contentType } : {}),
+    ...(opened.filename ? { filename: opened.filename } : {}),
+  };
+}
+
+/**
+ * Open a provider resource without buffering it.
+ *
+ * A `range` is forwarded upstream. A provider that honors it answers `206` and
+ * the body is relayed as-is; one that ignores it answers `200` and the caller
+ * decides whether to serve the whole file or slice it. `maxBytes` applies to
+ * the whole resource, not to the requested range, so a `Range` cannot be used
+ * to read past the media cap.
+ */
+export async function openProviderResource(
+  options: ReadProviderResourceOptions,
+): Promise<ProviderResourceOpen> {
+  const maxBytes = options.maxBytes ?? MAX_RESOURCE_BYTES;
+  const { response, url } = await fetchResource(options);
+
+  if (response.status === 416) {
+    const totalBytes = totalFromContentRange(
+      response.headers.get("content-range"),
+    );
+    await response.body?.cancel().catch(() => undefined);
+    return { status: 416, ...(totalBytes === undefined ? {} : { totalBytes }) };
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw providerStatusError(options.providerLabel, response.status);
+  }
+
+  const declaredLength = numberHeader(response.headers.get("content-length"));
+  const contentRange =
+    response.status === 206
+      ? (response.headers.get("content-range") ?? undefined)
+      : undefined;
+  const totalBytes =
+    totalFromContentRange(contentRange) ??
+    (response.status === 200 ? declaredLength : undefined);
+
+  // The cap protects the hub's memory. A ranged response is checked against
+  // the resource it belongs to, since `Content-Length` only counts the slice.
+  const size = totalBytes ?? declaredLength;
+  if (size !== undefined && size > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw tooLarge(maxBytes);
+  }
+
+  const contentType = response.headers
+    .get("content-type")
+    ?.split(";")[0]
+    ?.trim()
+    .toLowerCase();
+  const filename =
+    filenameFromDisposition(response.headers.get("content-disposition")) ??
+    filenameFromURL(url);
+
+  const stream = response.body
+    ? guardStream(
+        response.body,
+        maxBytes,
+        options.streamTimeoutMs ?? RESOURCE_STREAM_TIMEOUT_MS,
+      )
+    : emptyStream();
+
+  const opened: ProviderResourceStream = {
+    status: response.status === 206 ? 206 : 200,
+    stream,
+    ...(contentType ? { contentType } : {}),
+    ...(filename ? { filename } : {}),
+    ...(declaredLength === undefined ? {} : { contentLength: declaredLength }),
+    ...(contentRange ? { contentRange } : {}),
+    ...(totalBytes === undefined ? {} : { totalBytes }),
+  };
+  return opened;
+}
+
+async function fetchResource(
+  options: ReadProviderResourceOptions,
+): Promise<{ response: Response; url: URL }> {
   let current = providerURL(options.url, options.baseUrl, options.providerLabel);
   let response: Response | undefined;
+  const headers: Record<string, string> = {
+    Accept: "*/*",
+    ...options.headers,
+  };
+  if (options.range) headers.Range = options.range;
 
   for (let hop = 0; hop < 4; hop += 1) {
     try {
       response = await fetch(current, {
-        headers: { Accept: "*/*", ...options.headers },
+        headers,
         redirect: "manual",
         signal: options.signal,
       });
@@ -74,32 +180,7 @@ export async function readProviderResource(
       `${options.providerLabel} attachment redirected too many times`,
     );
   }
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined);
-    throw providerStatusError(options.providerLabel, response.status);
-  }
-
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    await response.body?.cancel().catch(() => undefined);
-    throw tooLarge(maxBytes);
-  }
-
-  const body = await readLimitedBody(response, maxBytes);
-  const contentType = response.headers
-    .get("content-type")
-    ?.split(";")[0]
-    ?.trim()
-    .toLowerCase();
-  const filename =
-    filenameFromDisposition(response.headers.get("content-disposition")) ??
-    filenameFromURL(current);
-
-  return {
-    body,
-    ...(contentType ? { contentType } : {}),
-    ...(filename ? { filename } : {}),
-  };
+  return { response, url: current };
 }
 
 function providerURL(value: string, baseUrl: string, providerLabel: string): URL {
@@ -127,17 +208,74 @@ function providerURL(value: string, baseUrl: string, providerLabel: string): URL
   return target;
 }
 
-async function readLimitedBody(
-  response: Response,
+/**
+ * Enforce the cap on a body whose length the provider did not declare, and
+ * drop a body that stalls. Either failure surfaces as a stream error, which
+ * closes the client connection instead of buffering the overflow.
+ */
+function guardStream(
+  source: ReadableStream<Uint8Array>,
   maxBytes: number,
-): Promise<Uint8Array<ArrayBuffer>> {
-  if (!response.body) {
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength > maxBytes) throw tooLarge(maxBytes);
-    return buffer;
+  timeoutMs: number,
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let total = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stopTimer = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  if (timeoutMs > 0 && Number.isFinite(timeoutMs)) {
+    timer = setTimeout(() => {
+      timer = undefined;
+      void reader.cancel().catch(() => undefined);
+    }, timeoutMs);
+    // A paused video must not keep the process alive on shutdown.
+    (timer as { unref?: () => void }).unref?.();
   }
 
-  const reader = response.body.getReader();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          stopTimer();
+          controller.close();
+          return;
+        }
+        total += value.byteLength;
+        if (total > maxBytes) {
+          stopTimer();
+          await reader.cancel().catch(() => undefined);
+          controller.error(tooLarge(maxBytes));
+          return;
+        }
+        controller.enqueue(value);
+      } catch (error) {
+        stopTimer();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      stopTimer();
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  });
+}
+
+function emptyStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
+}
+
+async function collectStream(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
@@ -147,7 +285,7 @@ async function readLimitedBody(
       if (!value) continue;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel();
+        await reader.cancel().catch(() => undefined);
         throw tooLarge(maxBytes);
       }
       chunks.push(value);
@@ -165,6 +303,18 @@ async function readLimitedBody(
   return body;
 }
 
+function numberHeader(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** `bytes 0-1023/8192` → 8192; `bytes 0-1023/*` → undefined. */
+export function totalFromContentRange(value: string | null | undefined): number | undefined {
+  const match = value ? /\/(\d+)\s*$/.exec(value) : null;
+  return match?.[1] ? Number(match[1]) : undefined;
+}
+
 function providerStatusError(providerLabel: string, status: number): ProviderError {
   if (status === 401 || status === 403) {
     return new ProviderError(
@@ -180,9 +330,11 @@ function providerStatusError(providerLabel: string, status: number): ProviderErr
     });
   }
   if (status === 429) {
-    return new ProviderError("rate_limited", `${providerLabel} rate limit reached`, {
-      status,
-    });
+    return new ProviderError(
+      "rate_limited",
+      `${providerLabel} rate limit reached`,
+      { status },
+    );
   }
   return new ProviderError(
     status >= 500 ? "internal" : "invalid_request",
@@ -192,9 +344,11 @@ function providerStatusError(providerLabel: string, status: number): ProviderErr
 }
 
 function tooLarge(maxBytes: number): ProviderError {
+  const mb = maxBytes / (1024 * 1024);
+  const label = mb >= 1 ? `${Math.round(mb)} MB` : `${maxBytes} bytes`;
   return new ProviderError(
     "invalid_request",
-    `Attachment exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB limit`,
+    `Attachment exceeds the ${label} limit`,
     { details: { maxBytes }, retryable: false },
   );
 }

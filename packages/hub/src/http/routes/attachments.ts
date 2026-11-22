@@ -1,15 +1,24 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ProviderRegistry } from "../../services/provider-registry";
 import type { AttachmentStore } from "../../services/attachment-store";
+import type {
+  ProviderAdapter,
+  ProviderResourceOpen,
+} from "@amoshydra/oktoso-providers";
 import type { AppEnv } from "../types";
 import { badRequest, notFound, notImplemented } from "../../domain/errors";
 import {
+  applyRange,
+  forwardedRange,
   mediaMaxBytes,
-  resourceHeaders,
-  sliceForRange,
+  notSatisfiableHeaders,
+  openBufferedResource,
+  openedResourceHeaders,
 } from "../resource-response";
 
 const MAX_URL_LENGTH = 4096;
+/** The provider must answer quickly; the body is streamed after that. */
+const HEADER_TIMEOUT_MS = 20_000;
 
 export function registerAttachmentRoutes(
   app: Hono<AppEnv>,
@@ -56,18 +65,56 @@ export function registerAttachmentRoutes(
     }
 
     const cap = mediaMaxBytes(url);
+    const opened = applyRange(
+      await openAttachment(adapter, url, c, cap),
+      c.req.header("range"),
+    );
+    if (opened.status === 416) {
+      return c.body(null, 416, notSatisfiableHeaders(opened.totalBytes));
+    }
+    return c.body(
+      opened.stream,
+      opened.status,
+      openedResourceHeaders(opened),
+    );
+  });
+}
+
+/**
+ * Open the provider resource, preferring the streaming path.
+ *
+ * The timeout covers the provider's answer only. A media body outlives it,
+ * otherwise a video longer than twenty seconds would be cut off mid-stream.
+ */
+async function openAttachment(
+  adapter: ProviderAdapter,
+  url: string,
+  c: Context<AppEnv>,
+  cap: number | undefined,
+): Promise<ProviderResourceOpen> {
+  const options = {
+    ...(cap === undefined ? {} : { maxBytes: cap }),
+    ...forwardedRange(c.req.header("range")),
+  };
+  if (!adapter.openResource) {
+    if (!adapter.readResource) {
+      throw notImplemented("This provider does not expose attachments");
+    }
     const resource = await adapter.readResource(
       url,
-      AbortSignal.timeout(20_000),
-      cap === undefined ? {} : { maxBytes: cap },
+      AbortSignal.timeout(HEADER_TIMEOUT_MS),
+      options,
     );
-    const ranged = sliceForRange(resource, c.req.header("range"));
-    if (ranged.status === 416) {
-      return c.body(null, 416, ranged.headers);
-    }
-    return c.body(ranged.body, ranged.status, {
-      ...resourceHeaders(resource),
-      ...ranged.headers,
-    });
-  });
+    return openBufferedResource(resource, c.req.header("range"));
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEADER_TIMEOUT_MS);
+  (timer as { unref?: () => void }).unref?.();
+  try {
+    const signal = AbortSignal.any([controller.signal, c.req.raw.signal]);
+    return await adapter.openResource(url, signal, options);
+  } finally {
+    clearTimeout(timer);
+  }
 }

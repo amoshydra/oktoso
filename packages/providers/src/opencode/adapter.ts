@@ -22,11 +22,13 @@ import type {
   ProviderFileRequest,
   ProviderInboxItem,
   ProviderResource,
+  ProviderResourceOpen,
+  ProviderResourceOptions,
   ProviderSendInput,
 } from "../types";
 import { ProviderError } from "../errors";
 import { normalizeSessionPath } from "../files";
-import { readProviderResource } from "../http/resource";
+import { openProviderResource, readProviderResource } from "../http/resource";
 import { readSse } from "../http/sse";
 
 export interface OpenCodeAdapterOptions {
@@ -712,7 +714,7 @@ export class OpenCodeAdapter implements ProviderAdapter {
   async readResource(
     url: string,
     signal: AbortSignal,
-    options: { maxBytes?: number } = {},
+    options: ProviderResourceOptions = {},
   ): Promise<ProviderResource> {
     return readProviderResource({
       url,
@@ -720,9 +722,22 @@ export class OpenCodeAdapter implements ProviderAdapter {
       headers: { Authorization: this.authorization },
       signal,
       providerLabel: "OpenCode",
-      ...(options.maxBytes === undefined
-        ? {}
-        : { maxBytes: options.maxBytes }),
+      ...options,
+    });
+  }
+
+  async openResource(
+    url: string,
+    signal: AbortSignal,
+    options: ProviderResourceOptions = {},
+  ): Promise<ProviderResourceOpen> {
+    return openProviderResource({
+      url,
+      baseUrl: this.baseUrl,
+      headers: { Authorization: this.authorization },
+      signal,
+      providerLabel: "OpenCode",
+      ...options,
     });
   }
 
@@ -737,6 +752,49 @@ export class OpenCodeAdapter implements ProviderAdapter {
     input: ProviderFileRequest,
     signal: AbortSignal,
   ): Promise<ProviderResource> {
+    const { url, path } = await this.fileURL(input, signal);
+    let resource;
+    try {
+      resource = await this.readResource(url, signal, {
+        ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+      });
+    } catch (error) {
+      throw this.fileError(error, path);
+    }
+    return {
+      ...resource,
+      filename: resource.filename ?? path.split("/").at(-1),
+    };
+  }
+
+  /**
+   * Stream a session file, forwarding a seek to the provider.
+   *
+   * The browser seeks a video with `Range`; answering it upstream keeps the hub
+   * from downloading a 100 MB clip again for every seek.
+   */
+  async openFile(
+    input: ProviderFileRequest,
+    signal: AbortSignal,
+  ): Promise<ProviderResourceOpen> {
+    const { url, path } = await this.fileURL(input, signal);
+    let opened;
+    try {
+      opened = await this.openResource(url, signal, {
+        ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+        ...(input.range === undefined ? {} : { range: input.range }),
+      });
+    } catch (error) {
+      throw this.fileError(error, path);
+    }
+    if (!("stream" in opened)) return opened;
+    return { ...opened, filename: opened.filename ?? path.split("/").at(-1) };
+  }
+
+  private async fileURL(
+    input: ProviderFileRequest,
+    signal: AbortSignal,
+  ): Promise<{ url: string; path: string }> {
     const path = normalizeSessionPath(input.path);
     const directory =
       input.directory ?? (await this.getSession(input.ref, signal)).directory;
@@ -753,28 +811,22 @@ export class OpenCodeAdapter implements ProviderAdapter {
       .join("/");
     const url = new URL(`/api/fs/read/${encoded}`, this.baseUrl);
     url.searchParams.set("location[directory]", directory);
+    return { url: url.toString(), path };
+  }
 
-    let resource;
-    try {
-      resource = await this.readResource(url.toString(), signal, {
-        ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
-      });
-    } catch (error) {
-      // A missing project file is not a missing attachment; name the path and
-      // the scope so the UI can say something useful.
-      if (error instanceof ProviderError && error.code === "not_found") {
-        throw new ProviderError(
-          "not_found",
-          `File not found in this session's working directory: ${path}`,
-          { status: 404, retryable: false },
-        );
-      }
-      throw error;
+  /**
+   * A missing project file is not a missing attachment; name the path and the
+   * scope so the UI can say something useful.
+   */
+  private fileError(error: unknown, path: string): unknown {
+    if (error instanceof ProviderError && error.code === "not_found") {
+      return new ProviderError(
+        "not_found",
+        `File not found in this session's working directory: ${path}`,
+        { status: 404, retryable: false },
+      );
     }
-    return {
-      ...resource,
-      filename: resource.filename ?? path.split("/").at(-1),
-    };
+    return error;
   }
 
   async renameSession(
