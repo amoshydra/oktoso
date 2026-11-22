@@ -22,6 +22,17 @@ const HUB_PORT = 8801;
 const TOKEN = "e2e-token-long-enough";
 const BASE_URL = `http://127.0.0.1:${HUB_PORT}`;
 const ANSWER = "The session is waiting on the e2e question.";
+const MARKDOWN_ANSWER = [
+  "## Diagnosis",
+  "",
+  "The **runner** is stuck on `pnpm test`.",
+  "",
+  "```sh",
+  "pnpm test --filter auth",
+  "```",
+  "",
+  "See `plots/chart.png` for the race.",
+].join("\n");
 
 let provider: FakeProviderServer | undefined;
 let model: Server | undefined;
@@ -60,6 +71,7 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
           "Cache-Control": "no-cache",
         });
         const wantsAction = body.includes("ACTION:");
+        const wantsMarkdown = body.includes("Show it as markdown");
         const frames = wantsAction
           ? [
               `data: ${JSON.stringify({
@@ -91,7 +103,11 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
               "data: [DONE]\n\n",
             ]
           : [
-              `data: ${JSON.stringify({ choices: [{ delta: { content: ANSWER } }] })}\n\n`,
+              `data: ${JSON.stringify({
+                choices: [
+                  { delta: { content: wantsMarkdown ? MARKDOWN_ANSWER : ANSWER } },
+                ],
+              })}\n\n`,
               `data: ${JSON.stringify({
                 choices: [{ delta: {}, finish_reason: "stop" }],
                 usage: { prompt_tokens: 42, completion_tokens: 8 },
@@ -254,6 +270,46 @@ describe("session assistant", () => {
         hasText: "why is this stuck?",
       }).count(),
     ).toBe(1);
+  });
+
+
+  it("renders an answer as Markdown and opens a mentioned file", async () => {
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    await page!.locator("#assistant-input").fill("Show it as markdown");
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").press("Enter");
+
+    const answer = page!
+      .locator(".assistant-turn.assistant .assistant-turn-text")
+      .last();
+    // The dock offsets headings by one, so `##` renders as `h3`.
+    await answer
+      .locator("h3", { hasText: "Diagnosis" })
+      .waitFor({ timeout: 15_000 });
+    expect(await answer.locator("strong").first().innerText()).toBe("runner");
+    expect(await answer.locator("pre code").first().innerText()).toContain(
+      "pnpm test --filter auth",
+    );
+
+    const mention = answer.locator(
+      '.file-mention[data-file-path="plots/chart.png"]',
+    );
+    await mention.click();
+    const sheet = page!.locator(".file-preview");
+    await sheet.waitFor({ timeout: 5_000 });
+    expect(await sheet.locator(".file-preview-title").innerText()).toBe(
+      "chart.png",
+    );
+
+    // Escape closes the sheet, not the dock behind it.
+    await page!.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached" });
+    await page!.locator("#session-assistant").waitFor({ state: "visible" });
   });
 
   it("dates the provider compaction behind the answer", async () => {

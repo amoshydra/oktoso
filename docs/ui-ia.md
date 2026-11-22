@@ -432,6 +432,12 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   `Read-only · no writes`.
 - The hub reports what it read and which model answered as **agent activity**,
   directly above the answer; the action card is the only write surface.
+- The answer renders like a chat message, through the same Markdown renderer:
+  headings offset by one, lists, tables, fenced code, inline media through a
+  preview ticket, and Mermaid. A file mention is the chat's quiet preview
+  button and opens the same sheet when the thread has a session directory.
+  Project and global threads have no single directory, so they keep the text,
+  code, and links without file targets. The question stays plain text.
 - **Writes (M2).** When `assistant.allowWrite` is on, the model may propose one
   action: send a message, answer a **normal** pending question, or stop the
   running turn. It may not answer a permission prompt (`destructive` or

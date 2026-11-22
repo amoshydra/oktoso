@@ -26,8 +26,11 @@ import {
   itemsFromAssistantSteps,
   type ActivityItem,
 } from "./activity-model";
+import { FilePreview } from "./FilePreview";
 import { Icon } from "./Icon";
+import { Markdown } from "./Markdown";
 import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
+import type { ResourceContext } from "./urls";
 
 export interface AssistantDockProps {
   client: HubClient;
@@ -86,6 +89,8 @@ export function AssistantDock({
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(true);
   const [canWrite, setCanWrite] = useState(false);
+  const [resource, setResource] = useState<ResourceContext>({});
+  const [previewPath, setPreviewPath] = useState<string | undefined>(undefined);
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [modelsBase, setModelsBase] = useState("");
@@ -158,6 +163,42 @@ export function AssistantDock({
     };
   }, [client, scope]);
 
+  /**
+   * The session resource context, so an answer renders like a chat message.
+   *
+   * Only the session scope has a directory to resolve files against; project
+   * and global threads keep plain Markdown because a mention has no single
+   * session to open.
+   */
+  useEffect(() => {
+    if (scope.kind !== "session") {
+      setResource({});
+      return;
+    }
+    const ref = scope.sessionRef;
+    let cancelled = false;
+    void Promise.all([client.session(ref), client.providers()])
+      .then(([session, providers]) => {
+        if (cancelled) return;
+        const provider = providers.find((entry) => entry.id === session.providerID);
+        setResource({
+          baseUrl: provider?.baseUrl,
+          providerID: session.providerID,
+          providerType: provider?.type,
+          directory: session.directory,
+          sessionRef: session.ref,
+          fileRead: Boolean(provider?.capabilities.files),
+        });
+      })
+      .catch(() => {
+        // Without the session the answer still renders, minus file previews.
+        if (!cancelled) setResource({ sessionRef: ref });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, scope]);
+
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [turns, streamText, liveSteps]);
@@ -165,6 +206,8 @@ export function AssistantDock({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // The preview sheet owns Escape while it is open.
+      if (previewPath) return;
       if (modelOpen) {
         setModelOpen(false);
         return;
@@ -173,7 +216,7 @@ export function AssistantDock({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modelOpen, onClose]);
+  }, [modelOpen, onClose, previewPath]);
 
   useEffect(() => {
     if (!modelOpen) return;
@@ -412,7 +455,21 @@ export function AssistantDock({
                   <ActivityBlock steps={turn.activity} at={turn.createdAt} />
                 ) : null}
                 {turn.text || turn.error ? (
-                  <div className="assistant-turn-text">{turn.text}</div>
+                  turn.role === "assistant" ? (
+                    <div className="assistant-turn-text">
+                      <Markdown
+                        text={turn.text}
+                        client={client}
+                        resource={resource}
+                        headingOffset={1}
+                        {...(resource.sessionRef
+                          ? { onPreviewFile: setPreviewPath }
+                          : {})}
+                      />
+                    </div>
+                  ) : (
+                    <div className="assistant-turn-text">{turn.text}</div>
+                  )
                 ) : turn.action ? null : (
                   <div className="assistant-turn-text">…</div>
                 )}
@@ -433,9 +490,22 @@ export function AssistantDock({
             {liveSteps.length > 0 ? (
               <ActivityBlock steps={liveSteps} at={Date.now()} />
             ) : null}
-            <div className="assistant-turn-text">
-              {streamText || <span className="assistant-waiting">Reading…</span>}
-              <span className="assistant-caret" aria-hidden="true" />
+            <div
+              className={`assistant-turn-text${streamText ? " is-streaming" : ""}`}
+            >
+              {streamText ? (
+                <Markdown
+                  text={streamText}
+                  client={client}
+                  resource={resource}
+                  headingOffset={1}
+                  {...(resource.sessionRef
+                    ? { onPreviewFile: setPreviewPath }
+                    : {})}
+                />
+              ) : (
+                <span className="assistant-waiting">Reading…</span>
+              )}
             </div>
           </article>
         ) : null}
@@ -561,6 +631,16 @@ export function AssistantDock({
           </span>
         </div>
       </footer>
+
+      {previewPath && resource.sessionRef ? (
+        <FilePreview
+          path={previewPath}
+          client={client}
+          resource={resource}
+          onPreviewFile={setPreviewPath}
+          onClose={() => setPreviewPath(undefined)}
+        />
+      ) : null}
     </aside>
   );
 
@@ -909,7 +989,6 @@ function modelLabel(id: string): string {
   if (!id) return "Default model";
   const clean = id
     .replace(/-GGUF.*$/i, "")
-    .replace(/Uncensored.*$/i, "")
     .replace(/[-_]+$/, "");
   return clean.length > 26 ? `${clean.slice(0, 26)}…` : clean;
 }

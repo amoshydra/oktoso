@@ -5823,6 +5823,10 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   font-size: var(--text-base);
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+/* A plain question keeps its line breaks; an answer is rendered Markdown. */
+.assistant-turn.user .assistant-turn-text {
   white-space: pre-wrap;
 }
 
@@ -5836,10 +5840,12 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   color: var(--muted);
 }
 
-.assistant-caret {
+/* The streaming caret sits at the end of the last rendered block. */
+.assistant-turn-text.is-streaming .message-markdown > :last-child::after {
+  content: "";
   display: inline-block;
   width: 6px;
-  height: 14px;
+  height: 1em;
   margin-left: 2px;
   vertical-align: -2px;
   background: var(--accent);
