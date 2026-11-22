@@ -1,12 +1,13 @@
-# Design Lock — v1.41
+# Design Lock — v1.42
 
 Status: **frozen**.
 
-- Version: `design-v1.41`
-- Parent: `design-v1.40`
+- Version: `design-v1.42`
+- Parent: `design-v1.41`
 - Date: 2026-11-22
-- Git tag: `design-v1.41`
+- Git tag: `design-v1.42`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.42 scope: assistant answers render as Markdown, with the chat's file previews.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
 - v1.3 scope: composer attachments, Open WebUI in-chat branch switching and retry, and OpenCode session forks.
@@ -955,6 +956,9 @@ radius, or color token.
 - A read outside the thread's scope is refused and becomes an error-free
   `Read session` step with "outside this thread's scope"; it is not a failure
   dot, because the assistant did nothing wrong.
+- A paged cross-session search reports its window in the step detail
+  (`10 of 14 hits · more available`) and the step panel carries the matched
+  total. The tile, grid, and colours are unchanged.
 - No new kind, icon, colour, or token.
 
 ## Media in messages (2026-11-22)
@@ -974,6 +978,23 @@ radius, or color token.
 - An inline `<video>`/`<audio>` in a message is hydrated the same way: the
   session path is swapped for a ticket URL before the element loads.
 - No new colour, type role, radius, or spacing token.
+
+## Assistant answer rendering (2026-11-22)
+
+- The activity block and the evidence line are unchanged. The answer below them
+  is rendered with the chat's Markdown renderer: headings offset by one, lists,
+  tables, fenced code, inline images, `<video>`/`<audio>`, and Mermaid.
+- A file mention in an answer is the same quiet button as in a message and
+  opens the same preview sheet, when the thread has a session directory.
+  Preview tickets, the 256 MB media cap, and the ten-minute renewal apply
+  unchanged.
+- A project or global thread has no single session directory, so its answer
+  keeps the text, code, links, and tables but turns no mention into a button.
+- The user's question stays plain text: it is a prompt, not prose to read.
+- Streaming keeps the 6px accent caret, now at the end of the last rendered
+  block. The caret stays decorative and the log stays a polite live region.
+- No new type role, colour, radius, or spacing token. Answer text remains
+  14px/1.6 on `--sidebar`.
 
 ## Change policy
 
@@ -1001,7 +1022,10 @@ This lock covers UI and UX only. Architecture, API contracts, provider adapters,
 
 ## Verification reference
 
-The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.41` media pass was verified live: a message's `<video>` now
+The `design-v1` reference was reviewed in dark and light themes at 1440, 1024, 390, and 320px, including inbox, sessions, chat, details, providers, settings, search, and the new-session modal. The `design-v1.1` transcript revision was verified at 1280 and 390px against live 1,000+ message sessions. The `design-v1.2` copy/dictation revision was verified at 1440, 1024, 390, and 320px in both themes; the copy action, recording state, transcription, error, and disabled states were checked against the live chat and a fake OpenAI-compatible STT endpoint. The `design-v1.15` Overview revision was reviewed in dark and light at 1440, 1024, 390, and 320px: the usage table at wide widths, the stacked rows below 1100px, the dashes for unreported data, and the renamed rail and bottom-bar labels. The `design-v1.16`–`design-v1.19` revisions were reviewed at 1440, 1024, 390, and 320px in both themes: mobile session scope and Inbox filters, the accessibility headings/focus/QR/live-region pass, the rename form and focus return, and the narrow Search filter labels. The `design-v1.42` assistant answer rendering is covered by the assistant e2e:
+an answer with a heading, bold text, a fenced command, and a file mention
+renders as Markdown, the mention opens the preview sheet, and Escape closes the
+sheet without closing the dock. The full gates pass at 721 unit tests and 46 e2e tests. The `design-v1.3` attachment/branching revision was verified against the live OpenCode provider (upload, send, file rendering, fork) and a fake Open WebUI provider (branch picker, 2/2 → 1/2 switch, replaced transcript, retry to 3/3). The `design-v1.41` media pass was verified live: a message's `<video>` now
 hydrates to a `/preview/<ticket>/…` URL with `controls` and
 `preload="metadata"`, clicking a media mention opens the preview sheet with the
 same ticket-backed player, and a session file answered a `bytes=0-3` request

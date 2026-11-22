@@ -1367,6 +1367,32 @@ list of file-configured objects.
   - The usage line only appears when the endpoint reports usage in the stream
     (llama.cpp does; some providers do not).
 
+## Assistant answer rendering (2026-11-22)
+
+The dock answers questions about the transcript, so its answer is prose the
+user reads. It now uses the chat's Markdown renderer instead of a pre-wrapped
+text block.
+
+- **Why share the renderer.** An answer that cites `plots/chart.png` or a fenced
+  command should read the same as the message that produced it. A second
+  renderer would drift, and media hydration, Mermaid, and the file preview
+  already exist.
+- **Typography.** `.assistant-turn-text` keeps 14px/1.6 on `--sidebar`; the
+  shared `.message-markdown` rules own paragraph, list, table, and code
+  spacing. The question keeps its line breaks because it is a prompt.
+- **Caret.** The 6px accent caret moves from an inline sibling to the end of the
+  last rendered block (`:last-child::after`), so it cannot sit on a line of its
+  own. It stays a pseudo-element, invisible to assistive technology.
+- **File previews.** A mention opens the same sheet as the chat. The dock loads
+  the session's provider context once per scope so the preview and tickets have
+  a directory; project and global threads pass no directory, so mentions stay
+  code spans rather than dead buttons.
+- **Escaping.** The preview owns Escape while it is open; the dock's own Escape
+  handler stands down, so closing the sheet does not also close the panel.
+- **Known follow-up.** The dock re-parses Markdown on each stream delta. At the
+  measured answer sizes this is invisible; a faster endpoint would want
+  animation-frame batching, the same note as the streaming text itself.
+
 ## Assistant write confirmations (2026-11-20)
 
 - **The card is the consent surface.** It is deliberately not a modal: the
@@ -1591,6 +1617,21 @@ list of file-configured objects.
 - The detail panel shows the same recorded metrics as any other hub step, so a
   retrieval step opens with turn numbers instead of a provider preview. That is
   the intended difference between the two adapters, not a gap.
+
+## Cross-session retrieval paging (2026-11-22)
+
+The retrieval loop can now page a cross-session search, so the detail line
+states its window instead of implying a complete list.
+
+- A search step reads `“query” · 10 of 14 hits · more available` when it
+  returned a slice, and `10 of 14 hits` without the suffix once the list is
+  exhausted. A single hit keeps the old `1 hit`.
+- The step panel carries `hits` (the page size) and the matched `total`, plus a
+  `more` row only while a further page exists. It is the same tile and the same
+  rows grammar; no new kind, icon, or colour.
+- The model-facing result header (`matches 1–10 of 14; more available`) is not
+  UI, but the detail above it is derived from the same count, so the two cannot
+  disagree.
 
 ## Cross-session retrieval (2026-11-21)
 
