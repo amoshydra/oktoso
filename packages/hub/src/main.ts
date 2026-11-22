@@ -55,6 +55,7 @@ import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
 import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
+import { createSecretBox } from "./lib/secret-box";
 import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
@@ -667,7 +668,11 @@ async function main(): Promise<void> {
       eventBus,
       logger,
     );
-    const assistantSettings = new AssistantSettingsService(store);
+    const assistantSettings = new AssistantSettingsService(
+      store,
+      createSecretBox(config.token),
+    );
+    await assistantSettings.migrate();
     // First boot with the new settings store: show the config-file endpoint in
     // Settings instead of an empty form. Later saves are runtime-owned.
     await assistantSettings.seedAgent({
@@ -717,6 +722,7 @@ async function main(): Promise<void> {
           timeoutMs: agent.timeoutMs,
           maxContextMessages: agent.maxContextMessages,
           allowWrite: agent.allowWrite,
+          apiKey: agent.apiKey || reply.apiKey,
         };
       },
     });

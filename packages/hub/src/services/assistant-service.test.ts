@@ -326,6 +326,7 @@ function delta(text: string): string {
 function build(fetchImpl: typeof fetch, overrides: {
   maxContextMessages?: number;
   allowWrite?: boolean;
+  apiKey?: string;
 } = {}) {
   const store = new MemoryStateStore();
   const audits: Array<Record<string, unknown>> = [];
@@ -357,6 +358,7 @@ function build(fetchImpl: typeof fetch, overrides: {
       timeoutMs: 5_000,
       maxContextMessages: overrides.maxContextMessages ?? 20,
       allowWrite: overrides.allowWrite ?? false,
+      ...(overrides.apiKey ? { apiKey: overrides.apiKey } : {}),
     },
     fetchImpl,
   });
@@ -372,6 +374,36 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
+
+describe("AssistantService gateway auth", () => {
+  it("sends the configured key to the model and the model list", async () => {
+    const seen: Array<{ url: string; auth?: string }> = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      const auth = (init.headers as Record<string, string> | undefined)?.Authorization;
+      seen.push({ url: String(url), auth });
+      if (String(url).endsWith("/models")) {
+        return new Response(JSON.stringify({ data: [{ id: "test-model" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const { service } = build(fetchImpl, { apiKey: "gateway-key" });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: "desktop-opencode:ses_a" },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "hi" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    await service.listModels();
+
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    expect(seen.every((entry) => entry.auth === "Bearer gateway-key")).toBe(true);
+  });
+});
 
 describe("AssistantService", () => {
   const projectSessions: Session[] = [

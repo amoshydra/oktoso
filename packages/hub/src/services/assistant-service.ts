@@ -102,6 +102,8 @@ export interface AssistantAgentSettings {
   maxContextMessages: number;
   /** Writes are opt-in per hub. Read-only is the default. */
   allowWrite?: boolean;
+  /** Bearer key for a gateway that requires one. */
+  apiKey?: string;
   /** Reply settings, used when the agent block leaves a field empty. */
   fallback?: { baseUrl: string; model: string };
 }
@@ -428,7 +430,10 @@ export class AssistantService {
     if (!baseUrl) return { data: current ? [current] : [], current, baseUrl };
     try {
       const response = await this.fetchImpl(`${trimSlash(baseUrl)}/models`, {
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          ...(this.apiKey() ? { Authorization: `Bearer ${this.apiKey()}` } : {}),
+        },
         signal: AbortSignal.timeout(8_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1128,6 +1133,7 @@ export class AssistantService {
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          ...(this.apiKey() ? { Authorization: `Bearer ${this.apiKey()}` } : {}),
         },
         body: JSON.stringify({
           model,
@@ -3024,6 +3030,10 @@ export class AssistantService {
       this.agent().fallback?.model ||
       ""
     );
+  }
+
+  private apiKey(): string {
+    return this.agent().apiKey?.trim() || "";
   }
 
   private currentRunId(threadId: string): string | undefined {
