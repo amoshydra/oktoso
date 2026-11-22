@@ -641,31 +641,32 @@ Schedule one bet at a time, each with its own acceptance before it starts.
     reported that no file edits were visible when four were. Splitting a
     **deduped action digest** from the **text-only transcript** fixed it: the
     same question then named the edited files.
-  - Model comparison, 2026-11-19, same four sessions and prompts, warm, 24 GB
-    host. local model at 32k ctx: 0.5–2.7 s (avg 1.7), a measured footprint.
-    smaller-model: 2.6–3.7 s (avg 3.0), a smaller footprint. Both were correct on
-    the planning and Hermes sessions. the primary model cited turns and stayed tighter;
-    the smaller model mistyped a session ref and answered the cache session from the wrong
-    thread. the primary model is the default; `ASK_MODEL` overrides it.
-  - The local preset's earlier load failures were VRAM, not config: with VR and
-    the ASR server stopped, the unchanged 131k preset loaded. `ctx-size` is now
-    32768 (the largest observed prompt is ~4k tokens), costing meaningfully less.
-    `~/.llama/draft/local-model` cannot be used as
-    a draft head: a small vocabulary against the model's a much larger vocabulary.
+  - Model comparison, 2026-11-19, same four sessions and prompts, warm. The
+    primary model answered in 0.5–2.7 s (avg 1.7); a smaller variant answered
+    in 2.6–3.7 s (avg 3.0). Both were correct on the planning and Hermes
+    sessions. The primary model cited turns and stayed tighter; the variant
+    mistyped a session ref and answered the cache session from the wrong
+    thread. The primary model is the default; `ASK_MODEL` overrides it.
+  - The earlier load failures were memory pressure, not config: with the VR
+    headroom and the ASR server stopped, the unchanged 131k preset loaded.
+    `ctx-size` is now 32768 (the largest observed prompt is ~4k tokens), which
+    lowered the footprint. The draft-head model cannot be used as a speculative
+    head: its vocabulary is far smaller than the model's.
   - Honesty held. On an error session whose recorded turns contain no error
     text, both models said so and named the next thing to check instead of
     inventing a cause.
-  - Cold start is cheaper than assumed: a cold 27B load added ~2.5 s. M1 can
+  - Cold start is cheaper than assumed: a cold model load added ~2.5 s. M1 can
     show a brief "waking model" row; it does not need a state machine.
-  - The assistant and dictation do not co-reside with a 27B on 24 GB. With the local model
-    resident, the ASR model OOMs after three retries (very little free memory), falls back to
-    CPU, and a 3.9 s clip takes 43 s. ASR now goes through the orchestrator at
-    `/asr/...` (`the orchestrator` `a commit`): a transcription POST that needs
-    VRAM unloads llama models first, ComfyUI is reclaimed if idle, and an LLM
-    request waits for that swap instead of racing it. Measured: cold switch
-    8.4 s (unload + ASR load + transcript), warm 0.5–0.7 s, return trip ~4 s.
-    The hub's transcription base URL is `http://127.0.0.1:8080/asr/v1`; a
-    direct `:8081` call bypasses the gate and can still starve itself.
+  - The assistant and dictation do not co-reside with the large model on this
+    host. With the assistant model resident, dictation fails after three
+    retries (not enough free memory), falls back to CPU, and a 3.9 s clip takes
+    43 s. ASR now goes through the local orchestrator at `/asr/...`: a
+    transcription request that needs the accelerator unloads the assistant
+    model first, reclaims the image generator if idle, and an LLM request waits
+    for that swap instead of racing it. Measured: cold switch 8.4 s (unload +
+    ASR load + transcript), warm 0.5–0.7 s, return trip ~4 s. The hub's
+    transcription base URL is the orchestrator's `/asr/v1`; a direct call to the
+    ASR port bypasses the gate and can still starve itself.
 
 - [x] G7. Session assistant (M1: read-only, session scope). The chat topbar's
   **Ask** action opens one hub-owned thread per session
@@ -679,9 +680,9 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   (SSE). Threads live in hub state (40 threads, 200 turns each).
   - Model config is `assistant` in `hub.config.json` (enabled, baseUrl, model,
     timeoutMs, maxContextMessages), falling back to the reply endpoint and
-    model when empty. On this host it is local model at 32k.
+    model when empty. On this host it is the local model at 32k context.
   - Measured live: 1.7–2.7 s warm for a 2–4k-token context; 8.4 s for the first
-    dictation after an assistant answer because the 24 GB card swaps ASR in
+    dictation after an assistant answer because the model swaps out for ASR on the accelerator
     (see G6). The dock streams deltas, keeps partial text on Stop, and hides
     itself when the hub has no model.
   - Verified at 1440/1280/1024/390px in both themes, no overflow and no console
@@ -702,7 +703,7 @@ Schedule one bet at a time, each with its own acceptance before it starts.
     kind, session, event, outcome, duration; never message text).
   - A pending action locks the thread: a second question returns 409 and the
     composer explains why. A failed proposal stays visible with its error.
-  - Verified live against the local model 27B (proposal, editable text, cancel) and in
+  - Verified live against the local model (proposal, editable text, cancel) and in
     `tests/e2e/assistant.e2e.ts` against a fake provider (confirm → send →
     `Sent` → reload).
   - Hardening after audit: cancel is no longer gated by `allowWrite`; a
@@ -772,7 +773,7 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   may propose one `send` to a session present in context; project/global still
   cannot answer or interrupt. The card names the target and the action reads
   `Send to "<session>"`. Model 5xx errors get actionable copy. Live: global
-  search found this session from a transcript hit; a URL-named session
+  search found a session from a transcript hit; a URL-named session
   produced a pending targeted send (cancelled).
 
 - [x] G16. Cross-session search in every scope. The session builder now runs
@@ -781,7 +782,7 @@ Schedule one bet at a time, each with its own acceptance before it starts.
   `SEARCH` lists up to five hits; the evidence line counts them. Query-gated:
   stop-word-only questions do not search. Live: from the misc-fix session,
   "which session is working on the trip plan?" named `plan trip` and
-  said its transcript was outside the thread; "gpu orchestrator" named this
+  said its transcript was outside the thread; "release pipeline" named this
   session from a transcript hit.
 
 - [x] G17. Assistant model picker and activity. Threads carry an optional
@@ -889,7 +890,7 @@ These need an answer before the task that depends on them.
    subscription revoke. Avoid a server-side device registry until Phase 8.
    Owner: A4.
 10. **Assistant model config.** Reuse the `reply` block or add one? The G6
-    spike used a 27B model and the reply block points at a 4B. Recommendation:
+    spike used a large model and the reply block points at a small one. Recommendation:
     a separate `assistant` block (baseUrl, model, timeoutMs, maxSteps) that
     defaults to the operator's existing OpenAI-compatible endpoint, so reply
     drafting stays fast and the assistant can be stronger. Owner: M1.

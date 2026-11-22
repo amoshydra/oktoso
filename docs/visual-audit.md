@@ -316,7 +316,7 @@ Private provider images and files now render through the hub instead of the brow
 - The web client fetches provider resources with its normal hub auth, then renders a blob URL. This works for both paired cookie auth and the pasted owner-token fallback; a plain `<img src="/api/v1/...">` would drop the bearer header.
 - Markdown images, image file parts, and file Open actions all use the same path. Third-party public images still load directly.
 - OpenCode writes project-relative file references (`docs/spec.md`, `docs/concepts/plot.png`). Those are resolved through the provider’s `/api/fs/read/...` endpoint with the session directory, not against the provider origin root. Markdown links use the authenticated proxy; clicking one fetches the provider file with the session credentials.
-- Verified against live session `desktop-opencode:ses_auth`: 10 storyboard images rendered at 1400×940 or 1440×900 from blob URLs, and clicking `docs/vr-interaction-spec.md` fetched the file through the proxy with HTTP 200. One reasoning block references `concepts/storyboards/01-browse.png` while the file is under `docs/concepts/...`; that path falls back because it does not exist relative to the session directory.
+- Verified live on a session with ten attached storyboard images: each rendered at 1400×940 or 1440×900 from a blob URL, and clicking a Markdown link fetched the file through the proxy with HTTP 200. One reasoning block references `concepts/storyboards/01-browse.png` while the file is under `docs/concepts/...`; that path falls back because it does not exist relative to the session directory.
 - Verified with provider resource tests for same-origin fetches, same-origin redirects, cross-origin rejection, 20 MB limits, auth errors, and missing files; hub tests for inline/download headers, cross-origin rejection, and auth; and a browser run with the owner-token fallback where markdown images and image file parts rendered from blob URLs.
 - The desktop session sidebar and branch/model controls remain broader follow-ups.
 
@@ -1595,7 +1595,7 @@ list of file-configured objects.
 ## Cross-session retrieval (2026-11-21)
 
 - A global or project retrieval step uses the same `tool` tile; what changes is
-  the detail line, which names the session (`Fix auth race in gateway · turn 169 ·
+  the detail line, which names the session (`Fix auth race in gateway · turn 42 ·
   #0`). The tile label stays short, the session lives in the tooltip and panel.
 - `Listed sessions` carries `200 sessions` on the overview thread, which is
   the honest size of what the model could see, not a decorative count.

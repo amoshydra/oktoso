@@ -171,7 +171,7 @@ phrases; it does not decide whether to suggest or what the state is.
 The prompt also carries a short style example for each state. These are shapes,
 not content: approval ("Go ahead and merge it." / "Hold off until the checks
 pass."), failure ("Use the cached 12.0.0." / "Revert the dependency bump."), and
-challenge ("You're right, fix the remount."). They exist because the small reply
+challenge ("Agreed, drop the extra remount."). They exist because the small reply
 model follows examples more reliably than abstract rules.
 
 The lint rejects:

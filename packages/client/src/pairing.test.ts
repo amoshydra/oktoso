@@ -14,8 +14,8 @@ describe("pairing input", () => {
 
   it("extracts the code from an absolute pairing URL", () => {
     expect(
-      pairingCodeFromInput(`http://192.0.2.10:8787/pair/${CODE}`, {
-        origin: "http://192.0.2.10:8787",
+      pairingCodeFromInput(`http://192.0.2.20:8787/pair/${CODE}`, {
+        origin: "http://192.0.2.20:8787",
       }),
     ).toBe(CODE);
   });

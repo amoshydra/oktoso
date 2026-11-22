@@ -14,7 +14,7 @@
  *   node scripts/ask.mjs --list
  *
  * Options:
- *   --model <id>        override the model (default: local model)
+ *   --model <id>        override the model (default: $ASK_MODEL)
  *   --base-url <url>    override the OpenAI-compatible base URL
  *   --limit <n>         transcript tail size, default 20
  *   --max-chars <n>     per-message character cap, default 1200
@@ -31,9 +31,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DEFAULT_MODEL =
-  process.env.ASK_MODEL ?? "local-model";
-const DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1";
+const DEFAULT_MODEL = process.env.ASK_MODEL ?? "";
+const DEFAULT_BASE_URL = process.env.ASK_BASE_URL ?? "";
 
 const SYSTEM_PROMPT = `You are Oktoso's scoped assistant. You answer questions about one AI agent session using only the context provided.
 
@@ -47,7 +46,7 @@ Rules:
 function parseArgs(argv) {
   const options = {
     model: DEFAULT_MODEL,
-    baseUrl: process.env.ASK_BASE_URL ?? DEFAULT_BASE_URL,
+    baseUrl: DEFAULT_BASE_URL,
     limit: 20,
     maxChars: 1200,
     dryRun: false,
@@ -264,6 +263,10 @@ async function main() {
     console.log(context);
     console.log(`\n--- context: ${context.length} chars · ${messages.length} messages`);
     return;
+  }
+
+  if (!options.baseUrl || !options.model) {
+    throw new Error("Set ASK_BASE_URL and ASK_MODEL, or pass --base-url and --model");
   }
 
   const response = await fetch(`${options.baseUrl.replace(/\/+$/, "")}/chat/completions`, {

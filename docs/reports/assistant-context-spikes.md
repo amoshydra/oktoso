@@ -12,7 +12,7 @@ while keeping the hub's own model and the persisted thread?
 - Session: a private 198-turn session (ref withheld), 53 tool calls, ~176 KB
   of content (5.5 KB prose, 46 KB reasoning, 9 KB tool input, 115 KB tool
   output).
-- Model: the configured hub assistant, `local-model-…` on llama.cpp, one
+- Model: the configured hub assistant (a local instruct model), one
   endpoint, no provider-side generate.
 - Each question ran four ways, same system prompt, temperature 0.2.
 

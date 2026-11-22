@@ -63,10 +63,10 @@ Add a third Assistant panel, **Assistant agent**, above Reply assistance.
 │ [x] Allow confirmed writes   ⚠ actions still need confirmation│
 │                                                               │
 │ OpenAI-compatible base URL                                    │
-│ [http://127.0.0.1:8080/v1             ]  │
+│ [http://127.0.0.1:8080/v1                                 ]  │
 │                                                               │
 │ Model                           Context messages              │
-│ [local-model-…            ▾]    [20                        ]  │
+│ [local-model              ▾]    [20                        ]  │
 │                                                               │
 │ Timeout (ms)                    API key                       │
 │ [90000                      ]   [•••••••• (saved, blank keeps)]│
