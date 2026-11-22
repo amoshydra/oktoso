@@ -7,31 +7,83 @@ import type {
   AssistantView,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
+import type { SecretBox } from "../lib/secret-box";
+
+const KEY_TARGETS = ["agent", "reply", "transcription"] as const;
 
 export class AssistantSettingsService {
-  constructor(private readonly store: StateStore) {}
+  constructor(
+    private readonly store: StateStore,
+    private readonly secrets: SecretBox,
+  ) {}
 
+  /** Provider keys are sealed at rest; the view only says whether one exists. */
   view(): AssistantView {
-    return toView(this.store.getState().settings);
+    return toView(this.config());
   }
 
+  /** In-process config with keys opened; a wrong token leaves the key empty. */
   config(): AssistantConfig {
-    return this.store.getState().settings;
+    const settings = this.store.getState().settings;
+    return {
+      agent: this.open(settings.agent),
+      reply: this.open(settings.reply),
+      transcription: this.open(settings.transcription),
+    };
+  }
+
+  /**
+   * Seal any plaintext key left by an older build. Runs once at startup; a
+   * key that cannot be opened later is simply treated as absent.
+   */
+  async migrate(): Promise<void> {
+    const settings = this.store.getState().settings;
+    const stale = KEY_TARGETS.some((target) => {
+      const key = settings[target].apiKey;
+      return key !== undefined && key.length > 0 && !this.secrets.isSealed(key);
+    });
+    if (!stale) return;
+    await this.store.update((state) => {
+      for (const target of KEY_TARGETS) {
+        const key = state.settings[target].apiKey;
+        if (key !== undefined && key.length > 0 && !this.secrets.isSealed(key)) {
+          state.settings[target].apiKey = this.secrets.seal(key);
+        }
+      }
+    });
+  }
+
+  private open<T extends { apiKey?: string }>(config: T): T {
+    if (!config.apiKey) return config;
+    const plain = this.secrets.open(config.apiKey);
+    const { apiKey: _sealed, ...rest } = config;
+    return (plain === undefined ? rest : { ...rest, apiKey: plain }) as T;
+  }
+
+  private seal<T extends { apiKey?: string }>(config: T): T {
+    if (!config.apiKey || this.secrets.isSealed(config.apiKey)) return config;
+    return { ...config, apiKey: this.secrets.seal(config.apiKey) };
   }
 
   async update(input: AssistantInput): Promise<AssistantView> {
     await this.store.update((state) => {
       const current = state.settings;
       if (input.agent) {
-        state.settings.agent = mergeConfig(current.agent, input.agent);
+        state.settings.agent = mergeConfig(
+          current.agent,
+          this.seal(input.agent),
+        );
       }
       if (input.reply) {
-        state.settings.reply = mergeConfig(current.reply, input.reply);
+        state.settings.reply = mergeConfig(
+          current.reply,
+          this.seal(input.reply),
+        );
       }
       if (input.transcription) {
         state.settings.transcription = mergeConfig(
           current.transcription,
-          input.transcription,
+          this.seal(input.transcription),
         );
       }
     });

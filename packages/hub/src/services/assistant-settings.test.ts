@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { AssistantSettingsService } from "./assistant-settings";
+import { createSecretBox } from "../lib/secret-box";
+
+const box = () => createSecretBox("test-token");
 
 const config = {
   enabled: true,
@@ -17,7 +20,7 @@ afterEach(() => {
 
 describe("AssistantSettingsService agent settings", () => {
   it("seeds the endpoint from config once, then keeps runtime edits", async () => {
-    const service = new AssistantSettingsService(new MemoryStateStore());
+    const service = new AssistantSettingsService(new MemoryStateStore(), box());
     await service.seedAgent(config);
     expect(service.view().agent).toMatchObject({
       baseUrl: "https://config.example/v1",
@@ -35,20 +38,51 @@ describe("AssistantSettingsService agent settings", () => {
     });
   });
 
-  it("stores a key, masks it, and clears it with null", async () => {
-    const service = new AssistantSettingsService(new MemoryStateStore());
+  it("seals a stored key, opens it for calls, and clears it with null", async () => {
+    const store = new MemoryStateStore();
+    const service = new AssistantSettingsService(store, box());
     await service.update({
       agent: { baseUrl: "https://x/v1", model: "m", apiKey: "secret" },
     });
+    const stored = store.getState().settings.agent.apiKey ?? "";
+    expect(stored.startsWith("v1:")).toBe(true);
+    expect(stored).not.toContain("secret");
+    expect(service.config().agent.apiKey).toBe("secret");
     expect(service.view().agent?.hasApiKey).toBe(true);
     expect(JSON.stringify(service.view())).not.toContain("secret");
 
     await service.update({ agent: { apiKey: null } });
     expect(service.view().agent?.hasApiKey).toBe(false);
+    expect(service.config().agent.apiKey).toBeUndefined();
+  });
+
+  it("fails closed when the owner token changed", async () => {
+    const store = new MemoryStateStore();
+    await new AssistantSettingsService(store, box()).update({
+      agent: { baseUrl: "https://x/v1", model: "m", apiKey: "secret" },
+    });
+    const other = new AssistantSettingsService(
+      store,
+      createSecretBox("other-token"),
+    );
+    expect(other.config().agent.apiKey).toBeUndefined();
+    expect(other.view().agent?.hasApiKey).toBe(false);
+  });
+
+  it("seals a plaintext key left by an older build", async () => {
+    const store = new MemoryStateStore();
+    await store.update((state) => {
+      state.settings.agent.apiKey = "legacy";
+    });
+    const service = new AssistantSettingsService(store, box());
+    await service.migrate();
+    const stored = store.getState().settings.agent.apiKey ?? "";
+    expect(stored.startsWith("v1:")).toBe(true);
+    expect(service.config().agent.apiKey).toBe("legacy");
   });
 
   it("lists agent models with the saved key", async () => {
-    const service = new AssistantSettingsService(new MemoryStateStore());
+    const service = new AssistantSettingsService(new MemoryStateStore(), box());
     await service.update({
       agent: { baseUrl: "https://models.example/v1", model: "m", apiKey: "k" },
     });
@@ -70,7 +104,7 @@ describe("AssistantSettingsService agent settings", () => {
   });
 
   it("tests the endpoint with the unsaved form values", async () => {
-    const service = new AssistantSettingsService(new MemoryStateStore());
+    const service = new AssistantSettingsService(new MemoryStateStore(), box());
     const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 

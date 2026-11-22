@@ -790,6 +790,13 @@ Provider history stays in the provider. The hub caches recent session pages and 
 
 ## 12. Auth and security
 
+Provider API keys for the assistant, reply, and transcription endpoints are
+sealed in `state.json` with AES-256-GCM; the wrapping key is derived from the
+owner token, so a copied state file alone is useless. Rotating the token makes
+those keys undecryptable and they must be re-entered. This is not a defence
+against a host compromise: the same operator can read the config file and
+derive the key.
+
 The hub has one owner credential and any number of paired device sessions.
 
 ### Pairing and sessions

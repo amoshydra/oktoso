@@ -15,6 +15,7 @@ import { AttentionService } from "./services/attention-service";
 import { DraftService } from "./services/draft-service";
 import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
+import { createSecretBox } from "./lib/secret-box";
 import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
@@ -131,7 +132,7 @@ async function createTestApp(options: {
   const search = new SearchService({ index: searchIndex, sessions });
   const attention = new AttentionService(registry, sessions, store, eventBus, logger);
   const drafts = new DraftService(store);
-  const settings = new AssistantSettingsService(store);
+  const settings = new AssistantSettingsService(store, createSecretBox("test-token"));
   const replies = new ReplyService(settings, sessions, logger);
   const replyFeedback = new ReplyFeedbackStore({
     filePath: join(await tempRoot(), "reply-feedback.jsonl"),

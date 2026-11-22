@@ -40,8 +40,12 @@ to web or wearable clients.
   follow-up.
 - The committed `dev-token-oktoso` value is only for local development. Never
   reuse it for a reachable deployment.
-- Assistant API keys are write-only from the browser and are not returned by the
-  settings API or included in wearable packages.
+- Assistant, reply, and transcription API keys are write-only from the browser
+  and are not returned by the settings API or included in wearable packages.
+  They are sealed at rest with AES-256-GCM under a key derived from the owner
+  token. Rotating `HUB_TOKEN` makes stored keys undecryptable, so re-enter them.
+  Sealing protects a copied `state.json`, not a compromised host: anyone who can
+  read `hub.config.json` can derive the same key.
 
 If a credential was committed or shared, rotate it first, then remove it from
 history. Deleting the file in a later commit does not revoke the credential.
