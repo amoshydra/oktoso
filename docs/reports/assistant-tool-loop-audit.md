@@ -106,3 +106,22 @@ node scripts/spike-context.mjs \
 Knobs: `--thinking on|off`, `--temperature`, `--opening facts|recent`,
 `--recent-budget`, `--toolset full|search|read`, `--prompt default|strict|terse`,
 `--max-steps`.
+
+## Re-run after the retrieval changes (2026-11-22)
+
+The live session this suite targets has grown from 121 to 198 turns, so the
+historical expectations (110 / 112 tests) no longer describe it. Two runs
+against the current snapshot, same four questions, same model and settings:
+
+| Suite | Hits | Time | Prompt | Output | Steps | Calls |
+|---|---|---|---|---|---|---|
+| historical expectations | 1/4 | 24.1 s | 45.4k | 868 | 16 | 12 |
+| current-snapshot expectations | **4/4** | **20.9 s** | **39.7k** | 761 | 16 | 12 |
+
+The 1/4 is suite drift, not a regression: the model answered 53 passed at the
+first failure and 426 in the most recent full run — both correct for the
+current session — and reported that the last `git log` showed no signature.
+
+Caveat: `spike-context.mjs` still runs its own copy of the pre-paging prompt
+and tools, so this measures the model and the session, not the shipped `offset`
+paging or the on-demand back-fill. A production-loop runner is the next step.

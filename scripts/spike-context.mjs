@@ -27,6 +27,11 @@
  *   --dry-run           print contexts, skip the model
  *   --json              one machine-readable report
  *
+ * Environment:
+ *   SPIKE_BASE_URL      OpenAI-compatible base URL (required)
+ *   SPIKE_MODEL         model id (required)
+ *   SPIKE_API_KEY       bearer key for a gated gateway (optional)
+ *
  * This script never writes to the hub or the provider. It is a measurement
  * tool, not a product path.
  */
@@ -36,6 +41,9 @@ import { join } from "node:path";
 
 const DEFAULT_MODEL = process.env.SPIKE_MODEL ?? "";
 const DEFAULT_BASE_URL = process.env.SPIKE_BASE_URL ?? "";
+/** Gateway key; never hardcoded, never printed. */
+const API_KEY =
+  process.env.SPIKE_API_KEY ?? process.env.AGENTHUB_LLM_API_KEY ?? "";
 
 const SYSTEM_PROMPT = `You are Oktoso's session assistant. You answer questions about one AI agent session from its transcript.
 
@@ -348,7 +356,10 @@ async function chat({
   const started = Date.now();
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}),
+    },
     body: JSON.stringify({
       model,
       messages,
