@@ -1,4 +1,5 @@
 {
+  "note": "Snapshot of a 121-turn session from 2026-11-20. The live session has grown, so these expectations drift; use scripts/bench-assistant.mjs for the shipped loop.",
   "questions": [
     {
       "question": "Which edit tool call failed in this session, in which file, and what did it say?",
