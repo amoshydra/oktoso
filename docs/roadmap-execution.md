@@ -954,8 +954,13 @@ Sprint exit criteria:
   session outside the first ten is reachable and a partial list is never
   presented as complete.
 - [x] G22. Session ask: page older than the newest 200 messages. The transcript
-  is now loaded page by page (200 per provider page) up to 2,000 messages,
-  32 MB, or 5 s, then numbered once. `search_transcript` returns the total and
-  accepts an offset, so a broad term can be paged. Cross-session reads use the
-  same loader, cached per run. A cap is stated in the prompt; the failed edit
-  at turn 186 of a 1,876-turn session is now found and quoted.
+  is loaded page by page (200 per provider page) up to 2,000 messages,
+  32 MB, or 5 s. Turns are numbered 1..N from the oldest loaded; older turns
+  are 0, -1, ... and stay stable as pages are prepended. A read or search that
+  falls outside the window pages back from the provider cursor on demand under
+  a per-run deep budget (10 more pages, 2,000 messages, 32 MB, 5 s of paging),
+  and the result states the boundary (`session start reached` or `read back
+  N older turns; older turns not loaded`). `search_transcript` returns the
+  total and accepts an offset, so a broad term can be paged. Cross-session
+  reads use the same loader, cached per run. The failed edit at turn 186 of a
+  1,876-turn session is found and quoted without loading the whole session.

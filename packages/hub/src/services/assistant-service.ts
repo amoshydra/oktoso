@@ -80,6 +80,13 @@ const CONTEXT_SEARCH_HITS = 5;
 const MAX_TRANSCRIPT_PAGES = 10;
 const MAX_TRANSCRIPT_CHARS = 32_000_000;
 const TRANSCRIPT_BUDGET_MS = 5_000;
+/**
+ * On-demand back-paging, per run. The initial window stays 10 pages; a tool
+ * may pull up to this much more only when a range or search asks for it.
+ */
+const MAX_DEEP_PAGES = 10;
+const MAX_DEEP_CHARS = 32_000_000;
+const MAX_DEEP_MS = 5_000;
 const HISTORY_SCAN_LIMIT = 100;
 const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 
@@ -171,10 +178,28 @@ interface ToolRun {
 
 interface Transcript {
   messages: Message[];
+  /**
+   * Turn number of `messages[0]`. It is 1 for the initial window and drops
+   * below 1 as older pages are prepended, so turns already cited keep their
+   * number.
+   */
+  firstTurn: number;
+  /** Cursor for the page immediately older than `messages[0]`. */
+  olderCursor?: string;
+  /** True when `messages[0]` is the session's first message. */
   complete: boolean;
   pages: number;
   chars: number;
 }
+
+/** What one run may still pull from the provider when a tool asks deeper. */
+interface DeepBudget {
+  pages: number;
+  chars: number;
+  ms: number;
+}
+
+type DeepStep = "page" | "start" | "empty" | "budget" | "error";
 
 interface AssistantTools {
   definitions: ChatToolDefinition[];
@@ -1602,6 +1627,9 @@ export class AssistantService {
     const byRef = new Map(allowed.map((session) => [session.ref, session]));
     const cache = new Map<string, Transcript>();
     const touched = new Set<string>();
+    // The run's allowance for pulling pages older than the initial window,
+    // shared by every session it reads.
+    const budget = deepBudget();
     // Paging the same query in one run reuses the ranked list, so an offset
     // walk cannot observe a different order between calls.
     const searches = new Map<string, { rows: SearchResult[]; capped: boolean }>();
@@ -1678,13 +1706,13 @@ export class AssistantService {
         function: {
           name: "read_session_turns",
           description:
-            "Read numbered turns of one session in full: prose, reasoning, tool input, and tool output.",
+            "Read numbered turns of one session in full: prose, reasoning, tool input, and tool output. Turns older than the loaded window are numbered 0, -1, -2, ... and are read on demand within the run's budget.",
           parameters: {
             type: "object",
             properties: {
               sessionRef: { type: "string" },
-              from: { type: "integer", minimum: 1 },
-              to: { type: "integer", minimum: 1 },
+              from: { type: "integer", minimum: -100_000 },
+              to: { type: "integer", minimum: -100_000 },
             },
             required: ["sessionRef", "from", "to"],
           },
@@ -1711,12 +1739,12 @@ export class AssistantService {
         function: {
           name: "read_tool_output",
           description:
-            "Read one tool call's recorded output from a session. Use the turn and call index from list_tool_calls.",
+            "Read one tool call's recorded output from a session. Use the turn and call index from list_tool_calls. A turn older than the loaded window is paged back on demand.",
           parameters: {
             type: "object",
             properties: {
               sessionRef: { type: "string" },
-              turn: { type: "integer", minimum: 1 },
+              turn: { type: "integer", minimum: -100_000 },
               index: { type: "integer", minimum: 0 },
             },
             required: ["sessionRef", "turn", "index"],
@@ -1808,20 +1836,35 @@ export class AssistantService {
       const ref = stringArg(args.sessionRef);
       const session = byRef.get(ref);
       if (!session) return outside(ref);
-      const budget = claim(ref);
-      if (budget) return { output: budget, label: "Read session" };
+      const claimed = claim(ref);
+      if (claimed) return { output: claimed, label: "Read session" };
 
       if (name === "read_session_turns") {
         const transcript = await safeLoad(ref);
         if (!transcript) {
           return { output: `could not read ${ref} right now`, label: "Read session" };
         }
-        const messages = transcript.messages;
-        const total = Math.max(1, messages.length);
-        const from = clamp(numberArg(args.from, 1), 1, total);
-        const to = clamp(numberArg(args.to, from), from, total);
-        const selected = messages
-          .map((message, index) => ({ turn: index + 1, message }))
+        const rawFrom = Math.trunc(numberArg(args.from, 1));
+        const rawTo = Math.trunc(numberArg(args.to, rawFrom));
+        const low = Math.min(rawFrom, rawTo);
+        const high = Math.max(rawFrom, rawTo);
+        let deep: "covered" | "start" | "budget" | "error" = "covered";
+        if (low < transcript.firstTurn) {
+          deep = await this.backFillUntil(
+            ref,
+            transcript,
+            budget,
+            () => transcript.firstTurn <= low,
+          );
+        }
+        const last = lastTurnOf(transcript);
+        const from = clamp(low, transcript.firstTurn, last);
+        const to = clamp(high, from, last);
+        const selected = transcript.messages
+          .map((message, index) => ({
+            turn: transcript.firstTurn + index,
+            message,
+          }))
           .filter((row) => row.turn >= from && row.turn <= to);
         const output = clipHeadTail(
           selected
@@ -1833,9 +1876,9 @@ export class AssistantService {
           MAX_TOOL_RESULT_CHARS,
         );
         return {
-          output: `SESSION ${session.title} [${session.ref}] · ${messages.length} turns${transcript.complete ? "" : ` (capped at the newest ${messages.length})`}\n\n${output || "no turns in that range"}`,
+          output: `SESSION ${session.title} [${session.ref}] · ${transcriptWindow(transcript, deep)}\n\n${output || "no turns in that range"}`,
           label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
-          detail: `${session.title} · ${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
+          detail: `${session.title} · ${selected.length} ${selected.length === 1 ? "turn" : "turns"} · ${transcriptWindow(transcript, deep)}`,
           metrics: { turns: selected.length },
           reads: selected.map((row) => ({ ref, turn: row.turn })),
         };
@@ -1846,7 +1889,6 @@ export class AssistantService {
         if (!transcript) {
           return { output: `could not read ${ref} right now`, label: "Listed tool calls" };
         }
-        const messages = transcript.messages;
         const raw = stringArg(args.status).toLowerCase();
         const wanted =
           raw === "failed" || raw === "failure"
@@ -1856,7 +1898,7 @@ export class AssistantService {
               : raw || undefined;
         const lines: string[] = [];
         let failed = 0;
-        messages.forEach((message, index) => {
+        transcript.messages.forEach((message, index) => {
           let call = 0;
           for (const part of message.parts) {
             if (part.type !== "tool") continue;
@@ -1865,19 +1907,19 @@ export class AssistantService {
             if (part.status === "error" || part.status === "failed") failed += 1;
             if (wanted && part.status !== wanted) continue;
             lines.push(
-              `turn ${index + 1} · #${callIndex} · ${part.name} · ${part.status} · ${clipText(redact(describeInput(part.input)), 100)}`,
+              `turn ${transcript.firstTurn + index} · #${callIndex} · ${part.name} · ${part.status} · ${clipText(redact(describeInput(part.input)), 100)}`,
             );
           }
         });
         const kept = lines.slice(-40);
         const header =
           kept.length === 0
-            ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in ${session.title} (${failed} failed overall)`
-            : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in ${session.title}; ${failed} failed overall`;
+            ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in ${session.title} · ${transcriptWindow(transcript)} (${failed} failed overall)`
+            : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in ${session.title} · ${transcriptWindow(transcript)}; ${failed} failed overall`;
         return {
           output: [header, ...kept].join("\n"),
           label: "Listed tool calls",
-          detail: `${session.title} · ${kept.length} ${kept.length === 1 ? "call" : "calls"}`,
+          detail: `${session.title} · ${kept.length} ${kept.length === 1 ? "call" : "calls"} · ${transcriptWindow(transcript)}`,
           metrics: { calls: kept.length },
         };
       }
@@ -1887,9 +1929,27 @@ export class AssistantService {
         if (!transcript) {
           return { output: `could not read ${ref} right now`, label: "Read tool output" };
         }
-        const messages = transcript.messages;
-        const turn = clamp(numberArg(args.turn, 1), 1, Math.max(1, messages.length));
-        const message = messages[turn - 1];
+        const rawTurn = Math.trunc(numberArg(args.turn, 1));
+        let deep: "covered" | "start" | "budget" | "error" = "covered";
+        if (rawTurn < transcript.firstTurn && !transcript.complete) {
+          deep = await this.backFillUntil(
+            ref,
+            transcript,
+            budget,
+            () => transcript.firstTurn <= rawTurn,
+          );
+        }
+        if (rawTurn < transcript.firstTurn) {
+          const why = transcript.complete
+            ? "before the session start"
+            : "older than the loaded window";
+          return {
+            output: `turn ${rawTurn} is ${why} (${transcriptWindow(transcript, deep)})`,
+            label: "Read tool output",
+            detail: `${session.title} · turn ${rawTurn} · ${transcriptWindow(transcript, deep)}`,
+          };
+        }
+        const message = transcript.messages[rawTurn - transcript.firstTurn];
         const toolParts =
           message?.parts.filter((part) => part.type === "tool") ?? [];
         const index = clamp(
@@ -1902,7 +1962,7 @@ export class AssistantService {
           return {
             output: "no such turn or tool call",
             label: "Read tool output",
-            detail: `${session.title} · turn ${turn}`,
+            detail: `${session.title} · turn ${rawTurn}`,
           };
         }
         const output = clipHeadTail(
@@ -1912,9 +1972,9 @@ export class AssistantService {
         return {
           output: output || "(no output recorded)",
           label: `Read output · ${part.name}`,
-          detail: `${session.title} · turn ${turn} · #${index}`,
+          detail: `${session.title} · turn ${rawTurn} · #${index} · ${transcriptWindow(transcript, deep)}`,
           metrics: { turns: 1, chars: output.length },
-          reads: [{ ref, turn }],
+          reads: [{ ref, turn: rawTurn }],
         };
       }
 
@@ -1931,21 +1991,33 @@ export class AssistantService {
   /**
    * Read-only retrieval over one session's transcript.
    *
-   * Turn numbers are the contract: every tool uses the same 1-based numbering
-   * the opening message promises, so a search hit can be read, and a tool call
-   * can be opened by (turn, index). Nothing here writes, and every result is
-   * redacted, capped, and reported as untrusted data.
+   * Turn numbers are the contract: every tool shares one numbering, so a
+   * search hit can be read and a tool call opened by (turn, index). The
+   * initial window is numbered 1..N from its oldest message; when the session
+   * is longer than that, older turns are 0, -1, -2, ... and are pulled from
+   * the provider on demand under the run's deep budget. Prepending lowers
+   * `firstTurn`, never the numbers already cited.
+   *
+   * Nothing here writes, and every result is redacted, capped, and reported as
+   * untrusted data.
    */
   private sessionTools(
-    messages: Message[],
+    transcript: Transcript,
     sessionRef: string,
   ): AssistantTools {
-    const rows = messages.map((message, index) => ({
-      turn: index + 1,
-      role: message.role,
-      message,
-      text: renderMessageParts(message).join("\n"),
-    }));
+    const budget = deepBudget();
+
+    const rows = () =>
+      transcript.messages.map((message, index) => ({
+        turn: transcript.firstTurn + index,
+        role: message.role,
+        message,
+        text: renderMessageParts(message).join("\n"),
+      }));
+
+    const window = (
+      deep: "covered" | "start" | "budget" | "error" | "none" = "none",
+    ) => transcriptWindow(transcript, deep);
 
     const definitions: ChatToolDefinition[] = [
       {
@@ -1953,7 +2025,7 @@ export class AssistantService {
         function: {
           name: "search_transcript",
           description:
-            "Search this session's transcript (prose, reasoning, tool input, and tool output) for a literal string. Returns matching turn numbers with a snippet.",
+            "Search this session's transcript (prose, reasoning, tool input, and tool output) for a literal string. Returns matching turn numbers with a snippet. Older turns are pulled in within the run's budget when the loaded window cannot fill the page; the header says how far back it searched.",
           parameters: {
             type: "object",
             properties: {
@@ -1970,12 +2042,12 @@ export class AssistantService {
         function: {
           name: "read_turns",
           description:
-            "Read numbered turns in full: prose, reasoning, tool calls, and tool output.",
+            "Read numbered turns in full: prose, reasoning, tool calls, and tool output. Turns older than the loaded window are numbered 0, -1, -2, ... and are read on demand within the run's budget.",
           parameters: {
             type: "object",
             properties: {
-              from: { type: "integer", minimum: 1 },
-              to: { type: "integer", minimum: 1 },
+              from: { type: "integer", minimum: -100_000 },
+              to: { type: "integer", minimum: -100_000 },
             },
             required: ["from", "to"],
           },
@@ -1986,7 +2058,7 @@ export class AssistantService {
         function: {
           name: "list_tool_calls",
           description:
-            "Index the session's tool calls: turn, call index, name, status, and a short input. Use it to find the call whose output you need.",
+            "Index the session's tool calls: turn, call index, name, status, and a short input. Use it to find the call whose output you need. It covers the currently loaded turns.",
           parameters: {
             type: "object",
             properties: { status: { type: "string" } },
@@ -1998,11 +2070,11 @@ export class AssistantService {
         function: {
           name: "read_tool_output",
           description:
-            "Read one tool call's recorded output. Use the turn and the call index from list_tool_calls.",
+            "Read one tool call's recorded output. Use the turn and the call index from list_tool_calls. A turn older than the loaded window is paged back on demand.",
           parameters: {
             type: "object",
             properties: {
-              turn: { type: "integer", minimum: 1 },
+              turn: { type: "integer", minimum: -100_000 },
               index: { type: "integer", minimum: 0 },
             },
             required: ["turn", "index"],
@@ -2024,30 +2096,78 @@ export class AssistantService {
           }
           const limit = clamp(numberArg(args.limit, 8), 1, 20);
           const offset = Math.max(0, numberArg(args.offset, 0));
-          const all: string[] = [];
-          for (const row of rows) {
-            const at = row.text.toLowerCase().indexOf(query.toLowerCase());
-            if (at < 0) continue;
-            const snippet = row.text
-              .slice(Math.max(0, at - 160), at + query.length + 240)
-              .replace(/\s+/g, " ");
-            all.push(`turn ${row.turn} · ${row.role}: …${snippet}…`);
+          const scan = () => {
+            const literal = query.toLowerCase();
+            const found: Array<{ turn: number; line: string }> = [];
+            for (const row of rows()) {
+              const at = row.text.toLowerCase().indexOf(literal);
+              if (at < 0) continue;
+              const snippet = row.text
+                .slice(Math.max(0, at - 160), at + query.length + 240)
+                .replace(/\s+/g, " ");
+              found.push({
+                turn: row.turn,
+                line: `turn ${row.turn} · ${row.role}: …${snippet}…`,
+              });
+            }
+            return found;
+          };
+          let found = scan();
+          let deep: "covered" | "start" | "budget" | "error" = "covered";
+          // A page the window cannot fill is exactly when an older match
+          // matters; page back, then re-scan the extended window.
+          if (found.length < offset + limit && !transcript.complete) {
+            deep = await this.backFillUntil(
+              sessionRef,
+              transcript,
+              budget,
+              () => false,
+            );
+            found = scan();
           }
-          const matches = all.slice(offset, offset + limit);
-          const header = all.length
-            ? `${all.length} ${all.length === 1 ? "match" : "matches"}; showing ${matches.length} from ${offset}`
-            : "no matches";
+          const page = found.slice(offset, offset + limit);
+          const depth =
+            transcript.firstTurn < 1
+              ? `; read back ${1 - transcript.firstTurn} older turns`
+              : "";
+          const searched = transcript.complete
+            ? `the whole session (${transcript.messages.length} turns)`
+            : `the newest ${transcript.messages.length} turns (turns ${transcript.firstTurn}..${lastTurnOf(transcript)}${depth}); older turns not searched${deepNote(deep)}`;
+          const header = found.length
+            ? `${found.length} ${found.length === 1 ? "match" : "matches"}; showing ${page.length} from ${offset} — searched ${searched}`
+            : `no matches in ${searched}`;
           return {
-            output: [header, ...matches].join("\n"),
+            output: [header, ...page.map((entry) => entry.line)].join("\n"),
             label: "Searched transcript",
-            detail: `“${truncate(query, 80)}” · ${matches.length} ${matches.length === 1 ? "hit" : "hits"}`,
-            metrics: { query, hits: matches.length },
+            detail: `“${truncate(query, 80)}” · ${page.length} ${page.length === 1 ? "hit" : "hits"} · searched ${searched}`,
+            metrics: {
+              query,
+              hits: page.length,
+              total: found.length,
+              ...(transcript.complete ? {} : { older: 1 }),
+            },
           };
         }
         case "read_turns": {
-          const from = clamp(numberArg(args.from, 1), 1, Math.max(1, rows.length));
-          const to = clamp(numberArg(args.to, from), from, Math.max(1, rows.length));
-          const selected = rows.filter((row) => row.turn >= from && row.turn <= to);
+          const rawFrom = Math.trunc(numberArg(args.from, 1));
+          const rawTo = Math.trunc(numberArg(args.to, rawFrom));
+          const low = Math.min(rawFrom, rawTo);
+          const high = Math.max(rawFrom, rawTo);
+          let deep: "covered" | "start" | "budget" | "error" = "covered";
+          if (low < transcript.firstTurn) {
+            deep = await this.backFillUntil(
+              sessionRef,
+              transcript,
+              budget,
+              () => transcript.firstTurn <= low,
+            );
+          }
+          const last = lastTurnOf(transcript);
+          const from = clamp(low, transcript.firstTurn, last);
+          const to = clamp(high, from, last);
+          const selected = rows().filter(
+            (row) => row.turn >= from && row.turn <= to,
+          );
           const output = clipHeadTail(
             selected
               .map(
@@ -2058,9 +2178,9 @@ export class AssistantService {
             MAX_TOOL_RESULT_CHARS,
           );
           return {
-            output: output || "no turns in that range",
+            output: `${transcriptWindow(transcript, deep)}\n\n${output || "no turns in that range"}`,
             label: from === to ? `Read turn ${from}` : `Read turns ${from}–${to}`,
-            detail: `${selected.length} ${selected.length === 1 ? "turn" : "turns"}`,
+            detail: `${selected.length} ${selected.length === 1 ? "turn" : "turns"} · ${window(deep)}`,
             metrics: { turns: selected.length },
             reads: selected.map((row) => ({ ref: sessionRef, turn: row.turn })),
           };
@@ -2080,7 +2200,7 @@ export class AssistantService {
                 : raw || undefined;
           const lines: string[] = [];
           let failed = 0;
-          for (const row of rows) {
+          for (const row of rows()) {
             let call = 0;
             for (const part of row.message.parts) {
               if (part.type !== "tool") continue;
@@ -2098,19 +2218,39 @@ export class AssistantService {
           const kept = lines.slice(-40);
           const header =
             kept.length === 0
-              ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in turns 1..${rows.length} (${failed} failed overall)`
-              : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in turns 1..${rows.length}; ${failed} failed overall`;
+              ? `no tool calls${wanted ? ` with status ${wanted}` : ""} in ${window()} (${failed} failed overall)`
+              : `showing ${kept.length} of ${lines.length}${wanted ? ` status=${wanted}` : ""} calls in ${window()}; ${failed} failed overall`;
           return {
             output: [header, ...kept].join("\n"),
             label: "Listed tool calls",
-            detail: `${kept.length} ${kept.length === 1 ? "call" : "calls"}`,
+            detail: `${kept.length} ${kept.length === 1 ? "call" : "calls"} · ${window()}`,
             metrics: { calls: kept.length },
           };
         }
         case "read_tool_output": {
-          const turn = clamp(numberArg(args.turn, 1), 1, Math.max(1, rows.length));
-          const message = messages[turn - 1];
-          const toolParts = message?.parts.filter((part) => part.type === "tool") ?? [];
+          const rawTurn = Math.trunc(numberArg(args.turn, 1));
+          let deep: "covered" | "start" | "budget" | "error" = "covered";
+          if (rawTurn < transcript.firstTurn && !transcript.complete) {
+            deep = await this.backFillUntil(
+              sessionRef,
+              transcript,
+              budget,
+              () => transcript.firstTurn <= rawTurn,
+            );
+          }
+          if (rawTurn < transcript.firstTurn) {
+            const why = transcript.complete
+              ? "before the session start"
+              : "older than the loaded window";
+            return {
+              output: `turn ${rawTurn} is ${why} (${window(deep)})`,
+              label: "Read tool output",
+              detail: `turn ${rawTurn} · ${window(deep)}`,
+            };
+          }
+          const message = transcript.messages[rawTurn - transcript.firstTurn];
+          const toolParts =
+            message?.parts.filter((part) => part.type === "tool") ?? [];
           const index = clamp(
             numberArg(args.index, 0),
             0,
@@ -2121,7 +2261,7 @@ export class AssistantService {
             return {
               output: "no such turn or tool call",
               label: "Read tool output",
-              reads: [{ ref: sessionRef, turn }],
+              reads: [{ ref: sessionRef, turn: rawTurn }],
             };
           }
           const output = clipHeadTail(
@@ -2131,9 +2271,9 @@ export class AssistantService {
           return {
             output: output || "(no output recorded)",
             label: `Read output · ${part.name}`,
-            detail: `turn ${turn} · #${index}`,
+            detail: `turn ${rawTurn} · #${index} · ${window(deep)}`,
             metrics: { turns: 1, chars: output.length },
-            reads: [{ ref: sessionRef, turn }],
+            reads: [{ ref: sessionRef, turn: rawTurn }],
           };
         }
         default:
@@ -2235,7 +2375,7 @@ export class AssistantService {
     return {
       ...rendered,
       targets: new Map([[session.ref, session.title]]),
-      tools: this.sessionTools(messages, session.ref),
+      tools: this.sessionTools(transcript, session.ref),
       transcriptTurns: messages.length,
     };
   }
@@ -2579,12 +2719,14 @@ export class AssistantService {
    * The session from the newest message back, page by page, oldest first.
    *
    * A single provider page is 200 messages, which is not the session. The
-   * tools number turns over what this returns, so the page set is loaded as a
-   * whole: paging later would renumber turns the model already cited.
+   * tools number turns over what this returns, and older pages are appended
+   * later with `backFill`; prepending lowers `firstTurn` instead of shifting
+   * the numbers already cited.
    *
    * Bounded on three axes (pages, characters, time). When one cuts the scan
-   * short, `complete` is false and the prompt says so; an absence is then a
-   * known gap, never a false claim.
+   * short, `complete` is false, `olderCursor` points at the next older page,
+   * and the prompt says so; an absence is then a known gap, never a false
+   * claim.
    */
   private async loadTranscript(sessionRef: string): Promise<Transcript> {
     const collected: Message[] = [];
@@ -2592,6 +2734,7 @@ export class AssistantService {
     let pages = 0;
     let chars = 0;
     let complete = false;
+    let olderCursor: string | undefined;
     const deadline = this.now() + TRANSCRIPT_BUDGET_MS;
 
     for (;;) {
@@ -2612,15 +2755,100 @@ export class AssistantService {
         complete = true;
         break;
       }
-      if (pages >= MAX_TRANSCRIPT_PAGES) break;
-      if (chars >= MAX_TRANSCRIPT_CHARS) break;
-      if (this.now() > deadline) break;
+      if (pages >= MAX_TRANSCRIPT_PAGES) {
+        olderCursor = next;
+        break;
+      }
+      if (chars >= MAX_TRANSCRIPT_CHARS) {
+        olderCursor = next;
+        break;
+      }
+      if (this.now() > deadline) {
+        olderCursor = next;
+        break;
+      }
       cursor = next;
     }
 
     // Pages arrive newest first; readers want reading order.
     collected.reverse();
-    return { messages: collected, complete, pages, chars };
+    return {
+      messages: collected,
+      firstTurn: 1,
+      olderCursor,
+      complete,
+      pages,
+      chars,
+    };
+  }
+
+  /**
+   * Pull one provider page older than the loaded window.
+   *
+   * The page is prepended in reading order and `firstTurn` drops by its size,
+   * so every turn already loaded keeps its number. The run's deep budget is
+   * charged for the page; a provider failure is a boundary, not a failed run.
+   */
+  private async backFill(
+    sessionRef: string,
+    transcript: Transcript,
+    budget: DeepBudget,
+  ): Promise<DeepStep> {
+    if (transcript.complete) return "start";
+    if (budget.pages <= 0 || budget.chars <= 0 || budget.ms <= 0) {
+      return "budget";
+    }
+    const cursor = transcript.olderCursor;
+    if (!cursor) {
+      transcript.complete = true;
+      return "start";
+    }
+    const started = this.now();
+    let page: MessagePage;
+    try {
+      page = await this.options.sessions.messages(sessionRef, {
+        limit: TOOL_TRANSCRIPT_LIMIT,
+        cursor,
+      });
+    } catch {
+      return "error";
+    }
+    budget.pages -= 1;
+    budget.ms -= Math.max(0, this.now() - started);
+    try {
+      budget.chars -= JSON.stringify(page.data).length;
+    } catch {
+      budget.chars -= page.data.length * 400;
+    }
+    if (page.data.length === 0) {
+      transcript.complete = true;
+      transcript.olderCursor = undefined;
+      return "empty";
+    }
+    transcript.messages = [...page.data].reverse().concat(transcript.messages);
+    transcript.firstTurn -= page.data.length;
+    transcript.olderCursor = page.cursor.next ?? undefined;
+    transcript.complete = !transcript.olderCursor;
+    transcript.pages += 1;
+    return transcript.complete ? "start" : "page";
+  }
+
+  /** Back-page until `done()` is true, the start is reached, or the budget ends. */
+  private async backFillUntil(
+    sessionRef: string,
+    transcript: Transcript,
+    budget: DeepBudget,
+    done: () => boolean,
+  ): Promise<"covered" | "start" | "budget" | "error"> {
+    for (;;) {
+      if (done()) return "covered";
+      if (transcript.complete) return "start";
+      const step = await this.backFill(sessionRef, transcript, budget);
+      if (step === "budget") return "budget";
+      if (step === "error") return "error";
+      if (step === "empty") return "start";
+      if (step === "start" && !done()) return "start";
+    }
   }
 
   private async loadHistory(
@@ -2885,9 +3113,10 @@ Trust:
 const TOOL_RULES = `
 TOOLS
 - The transcript is not pasted into this prompt. Read it with the tools: search_transcript finds a term, read_turns reads numbered turns in full (prose, reasoning, tool input and output), list_tool_calls indexes the calls, and read_tool_output opens one call's output.
-- Turn numbers are 1-based and shared by every tool. Cite them ("turn 12").
+- Turn numbers are shared by every tool. In a session longer than the loaded window, turn 1 is the oldest loaded turn, not necessarily the first message; older turns are 0, -1, -2, ... and read_turns pages them back on demand. Cite the number the tool returned ("turn 12", "turn -3").
+- read_turns and search_transcript page older turns within one run budget. When a result says it read back to a turn and older turns are not loaded, say so before concluding something never happened; when it says the session start was reached, the absence is real.
 - Search one term at a time; a whole question rarely matches as a literal string.
-- The RECENT ACTIONS block is only the newest calls and contains no output. list_tool_calls shows the index and how many calls failed; pass status: "error" to list failures.
+- The RECENT ACTIONS block is only the newest calls and contains no output. list_tool_calls shows the index and how many calls failed; pass status: "error" to list failures. list_tool_calls covers the turns loaded so far.
 - Search or read before saying something is missing.
 - You have a few rounds. Answer as soon as the evidence supports it; do not keep reading after that.`;
 
@@ -2898,10 +3127,11 @@ TOOLS (sessions)
 - search_transcript searches inside sessions; pass sessionRef to narrow to one, and limit (1–20) plus offset to page.
 - The first line of a search result says how many sessions matched and whether more are available. When it says more, call it again with the next offset before concluding that a session does not exist or that the list is complete.
 - The opening SEARCH block lists only the first few hits and says how many matched; search_transcript pages the rest. A hit outside the page is not an absent session.
-- read_session_turns(sessionRef, from, to) reads numbered turns in full (prose, reasoning, tool input and output).
-- list_tool_calls(sessionRef, status?) indexes a session's tool calls; status: "error" lists failures.
-- read_tool_output(sessionRef, turn, index) opens one recorded output.
-- Turn numbers are 1-based per session and shared by the tools for that session.
+- read_session_turns(sessionRef, from, to) reads numbered turns in full (prose, reasoning, tool input and output). In a session longer than the loaded window, turn 1 is the oldest loaded turn; older turns are 0, -1, -2, ... and are paged back on demand.
+- When a read says it read back to a turn and older turns are not loaded, say so before concluding something never happened; when it says the session start was reached, the absence is real.
+- list_tool_calls(sessionRef, status?) indexes a session's tool calls over the turns loaded so far; status: "error" lists failures.
+- read_tool_output(sessionRef, turn, index) opens one recorded output and pages older turns back on demand.
+- Turn numbers are shared by the tools for that session.
 - Read at most three sessions per answer; cite the session title and its ref.
 - Search or read before saying something is missing. The session index is metadata only.
 - You have a few rounds. Answer as soon as the evidence supports it.`;
@@ -3010,6 +3240,52 @@ function dedupeSessions(sessions: Session[]): Session[] {
     seen.add(session.ref);
     return true;
   });
+}
+
+/** The per-run allowance for pulling pages older than the initial window. */
+function deepBudget(): DeepBudget {
+  return { pages: MAX_DEEP_PAGES, chars: MAX_DEEP_CHARS, ms: MAX_DEEP_MS };
+}
+
+/**
+ * The boundary sentence every transcript read carries.
+ *
+ * `deep` is the outcome of the back-page attempt, when there was one. A window
+ * that reached the session start says so; one that did not names the oldest
+ * loaded turn and that older turns are still missing.
+ */
+function transcriptWindow(
+  transcript: Transcript,
+  deep: "covered" | "start" | "budget" | "error" | "none" = "none",
+): string {
+  const last = transcript.messages.length
+    ? transcript.firstTurn + transcript.messages.length - 1
+    : transcript.firstTurn;
+  if (transcript.complete) {
+    return transcript.firstTurn === 1
+      ? `whole session, turns 1..${last}`
+      : `whole session, turns ${transcript.firstTurn}..${last} (session start reached)`;
+  }
+  const depth =
+    transcript.firstTurn < 1
+      ? ` (read back ${1 - transcript.firstTurn} older turns)`
+      : "";
+  const state = `turns ${transcript.firstTurn}..${last}${depth}; older turns not loaded`;
+  if (deep === "budget") return `${state} (back-page budget reached)`;
+  if (deep === "error") return `${state} (older read failed)`;
+  return state;
+}
+
+function deepNote(deep: "covered" | "start" | "budget" | "error" | "none"): string {
+  if (deep === "budget") return " (back-page budget reached)";
+  if (deep === "error") return " (older read failed)";
+  return "";
+}
+
+function lastTurnOf(transcript: Transcript): number {
+  return transcript.messages.length
+    ? transcript.firstTurn + transcript.messages.length - 1
+    : transcript.firstTurn;
 }
 
 /**
@@ -3559,16 +3835,12 @@ export function renderContext(input: {
   if (input.transcript === false) {
     // The turns are behind the tools, not in the prompt. The index above is
     // enough to know what to search for; the model reads turns on demand.
-    const text = [
-      lines.join("\n"),
-      "",
-      `TRANSCRIPT (not pasted: ${input.messages.length} turns, numbered 1..${input.messages.length}; read them with the tools)`,
-      ...(input.transcriptComplete === false
-        ? [
-            `The oldest turns are not loaded (capped at the newest ${input.messages.length}). Say so before concluding something never happened.`,
-          ]
-        : []),
-    ].join("\n");
+    const loaded = input.messages.length;
+    const boundary =
+      input.transcriptComplete === false
+        ? `TRANSCRIPT (not pasted: ${loaded} turns loaded, numbered 1..${loaded} from the oldest loaded; the session start is not reached. Older turns are turn 0 and below, and read_turns pages them on demand within the run budget. search_transcript searches the loaded window and pages older turns when a page cannot be filled.)`
+        : `TRANSCRIPT (not pasted: ${loaded} turns, numbered 1..${loaded} from the session start; read them with the tools)`;
+    const text = [lines.join("\n"), "", boundary].join("\n");
     return {
       text,
       context: {
