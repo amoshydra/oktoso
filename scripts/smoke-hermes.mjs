@@ -10,7 +10,7 @@
  * Nothing is written to the Hermes host. Tickets and tokens are never printed.
  *
  * Environment:
- *   HERMES_HOST                default 192.168.0.28
+ *   HERMES_HOST                required
  *   HERMES_SSH                 default root@$HERMES_HOST
  *   HERMES_DASHBOARD_URL       default http://$HERMES_HOST:3000
  *   HERMES_DASHBOARD_USER      optional basic-auth user
@@ -19,7 +19,11 @@
  */
 import { execFileSync } from "node:child_process";
 
-const host = process.env.HERMES_HOST ?? "192.168.0.28";
+const host = process.env.HERMES_HOST;
+if (!host) {
+  console.error("Set HERMES_HOST to the Hermes host.");
+  process.exit(1);
+}
 const sshTarget = process.env.HERMES_SSH ?? `root@${host}`;
 const dashboardURL = (process.env.HERMES_DASHBOARD_URL ?? `http://${host}:3000`).replace(/\/$/, "");
 const user = process.env.HERMES_DASHBOARD_USER;

@@ -31,7 +31,7 @@ describe("terminal pairing panel", () => {
     };
     const lines = buildPairingPanel({
       pairing,
-      urls: ["http://192.168.0.20:8787"],
+      urls: ["http://192.0.2.20:8787"],
       theme,
       width: 64,
       hint: "Run this command again for another link.",
@@ -48,9 +48,9 @@ describe("terminal pairing panel", () => {
       primaryPairingUrl([
         "http://127.0.0.1:8787",
         "http://[::1]:8787",
-        "http://192.168.0.20:8787",
+        "http://192.0.2.20:8787",
       ]),
-    ).toBe("http://192.168.0.20:8787");
+    ).toBe("http://192.0.2.20:8787");
   });
 
   it("formats a countdown", () => {

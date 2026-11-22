@@ -1,5 +1,27 @@
 # Oktoso — Agent Instructions
 
+## Privacy: every artifact is public
+
+This repository is public, and the hub runs on a personal machine. Docs, code comments, tests, fixtures, screenshots, commit messages, issues, and reports are all public artifacts. A fact that is merely true is not therefore publishable.
+
+Never write any of these into a file you intend to commit, a commit message, a PR or issue body, a changelog entry, or a report:
+
+- Machine names, hostnames, LAN or public domain names, IP addresses, ports, mount points, or deployment topology (including provider, model, GPU, and orchestration endpoints).
+- Usernames, home or working directories, absolute paths from any real machine, or shell prompts.
+- Hub, provider, session, device, or API tokens, passwords, cookies, API keys, or key material — even expired or redacted-looking fragments.
+- Session refs (`ses_…`), session or message IDs, private session or project titles, transcript quotes, tool output, attachment names, file listings, or media.
+- Hardware inventory, GPU models, VRAM, local model names chosen for private work, or uptime details.
+
+Use synthetic stand-ins: `example.com`, `provider.test`, `127.0.0.1:4096`, `/home/me/project`, `desktop-opencode:ses_auth`, `Fix auth race in gateway`, `plots/chart.png`, `clips/race.mp4`.
+
+Live verification is described by behaviour and measurement, never by identifier: write “verified live: a 1,876-turn session paged back to the start”, not the session title, ref, host, or provider URL. Never quote the user's words from a real session.
+
+Some sessions are confidential. Do not inspect, extract, render, transcribe, or reference their media or transcripts, even during verification. Treat all session content as private user data, not as source material for docs or tests.
+
+If a leak reaches a commit, do not rewrite history as part of an unrelated change. Report the file, line, commit, and a redacted description to the owner and let them decide.
+
+Run `pnpm privacy:check` before you commit. It scans tracked and untracked files for home paths, private address ranges, local hostnames, session refs, and key-shaped strings, and prints only redacted matches. A finding is a stop sign, not a style nit.
+
 ## UI work starts here
 
 Any change that affects UI, layout, styling, copy, responsive behavior, accessibility, design tokens, or the prototype must first read:

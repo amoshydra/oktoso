@@ -43,6 +43,7 @@
     "prototype": "python3 -m http.server 4174 --bind 0.0.0.0 --directory docs/prototypes",
     "brand:screens": "tsx scripts/brand/screens.ts",
     "brand:check": "tsx scripts/brand/check.ts",
+    "privacy:check": "tsx scripts/privacy-check.ts",
     "prepublishOnly": "pnpm build:single-port",
     "hardware:check": "pnpm --filter @amoshydra/oktoso-even-g2 hardware:check",
     "smoke:hermes": "node scripts/smoke-hermes.mjs",

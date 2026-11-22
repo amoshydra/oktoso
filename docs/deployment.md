@@ -59,7 +59,7 @@ reachability.
       "id": "opencode-termux",
       "type": "opencode",
       "name": "OpenCode Termux",
-      "baseUrl": "http://100.64.0.12:4096",
+      "baseUrl": "http://127.0.0.1:4096",
       "auth": {
         "kind": "basic",
         "username": "opencode",

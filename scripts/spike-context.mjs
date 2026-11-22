@@ -34,8 +34,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DEFAULT_MODEL = "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF";
-const DEFAULT_BASE_URL = "https://gpu.home.local.odlbo.cyou/llamacpp/v1";
+const DEFAULT_MODEL = process.env.SPIKE_MODEL ?? "";
+const DEFAULT_BASE_URL = process.env.SPIKE_BASE_URL ?? "";
 
 const SYSTEM_PROMPT = `You are Oktoso's session assistant. You answer questions about one AI agent session from its transcript.
 
@@ -495,8 +495,8 @@ RECENT TURNS (newest last)\n${clip(renderTurns(messages, "full", options.recentB
 function parseArgs(argv) {
   const options = {
     strategy: "all",
-    model: process.env.SPIKE_MODEL ?? DEFAULT_MODEL,
-    baseUrl: process.env.SPIKE_BASE_URL ?? DEFAULT_BASE_URL,
+    model: DEFAULT_MODEL,
+    baseUrl: DEFAULT_BASE_URL,
     budget: 48_000,
     limit: 200,
     maxSteps: 6,
@@ -628,6 +628,12 @@ async function main() {
   if (!sessionRef || (!question && !suite)) {
     console.error('usage: node scripts/spike-context.mjs <sessionRef> "question" [options]');
     console.error("       node scripts/spike-context.mjs --suite questions.json");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!options.dryRun && (!options.baseUrl || !options.model)) {
+    console.error("Set SPIKE_BASE_URL and SPIKE_MODEL, or pass --base-url and --model.");
     process.exitCode = 1;
     return;
   }

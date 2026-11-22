@@ -11,7 +11,7 @@ which knobs actually improve it — tools, context, prompt, or reasoning?
 - Session: a private 121-turn session (ref withheld), 151 tool calls, ~356 KB
   of tool output, one failed `edit` at turn 38, test runs at turns 69–71 and
   103–112.
-- Model: the configured hub assistant (`Qwen3.8-27B-…`, llama.cpp), temperature
+- Model: the configured hub assistant (a local instruct model), temperature
   0.2, four rounds unless stated.
 - Four questions, all answerable only from tool evidence:
   1. which edit failed, where, and what it said;

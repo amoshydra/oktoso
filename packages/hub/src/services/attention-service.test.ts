@@ -147,7 +147,7 @@ describe("AttentionService subagent policy", () => {
   });
 
   it("scopes attention directories to the owning provider", async () => {
-    const desktopDir = "/home/hamster/repos/oktoso";
+    const desktopDir = "/home/me/oktoso";
     const remoteDir = "/Users/user/repos/work/research";
     const sessions = [
       session({
