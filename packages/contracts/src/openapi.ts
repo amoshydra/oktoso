@@ -97,7 +97,11 @@ import {
   zBranchPoint,
   zBranchSwitchInput,
   zForkInput,
+  zHistoryFileChange,
+  zHistoryMode,
+  zHistoryPrompt,
   zRetryInput,
+  zSessionHistory,
 } from "./index";
 
 import {
@@ -280,6 +284,13 @@ const BranchSwitchInputSchema = registry.register(
 );
 const ForkInputSchema = registry.register("ForkInput", zForkInput);
 const RetryInputSchema = registry.register("RetryInput", zRetryInput);
+const HistoryModeSchema = registry.register("HistoryMode", zHistoryMode);
+const HistoryFileChangeSchema = registry.register(
+  "HistoryFileChange",
+  zHistoryFileChange,
+);
+const HistoryPromptSchema = registry.register("HistoryPrompt", zHistoryPrompt);
+const SessionHistorySchema = registry.register("SessionHistory", zSessionHistory);
 const AttentionTypeSchema = registry.register("AttentionType", zAttentionType);
 const AttentionPrioritySchema = registry.register(
   "AttentionPriority",
@@ -922,6 +933,62 @@ registry.registerPath({
     400: errorResponse("Invalid retry target"),
     404: errorResponse("Session or message not found"),
     501: errorResponse("Provider does not support retry"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/sessions/{ref}/history",
+  tags: ["sessions"],
+  summary: "Read undo and redo state",
+  description:
+    "Reports whether the latest turn can be undone or redone. When a turn is undone, `staged` names the boundary and the changed files, and `prompt` carries the text and attachment names to restore to the composer.",
+  request: { params },
+  responses: {
+    200: { description: "History state", content: json(SessionHistorySchema) },
+    404: errorResponse("Session not found"),
+    501: errorResponse("Provider does not support undo"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/history/undo",
+  tags: ["sessions"],
+  summary: "Undo the latest turn",
+  description:
+    "Reverts the latest user turn for conversation only. Changed files are reported in `staged.files` and are never restored by this endpoint. The undone prompt is returned so the client can restore it to the composer.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Turn undone",
+      content: json(SessionHistorySchema),
+    },
+    404: errorResponse("Session not found"),
+    409: errorResponse("The session is running or has no turn to undo"),
+    501: errorResponse("Provider does not support undo"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sessions/{ref}/history/redo",
+  tags: ["sessions"],
+  summary: "Redo the latest undone turn",
+  description:
+    "Restores the turn hidden by the last undo. The conversation returns to the state before the undo; files stay as they are.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Turn restored",
+      content: json(SessionHistorySchema),
+    },
+    404: errorResponse("Session not found"),
+    409: errorResponse("There is no undone turn"),
+    501: errorResponse("Provider does not support redo"),
     502: errorResponse("Provider failure"),
   },
 });

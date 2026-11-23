@@ -45,6 +45,8 @@ const provider: Provider = {
     branches: false,
     fork: true,
     retry: false,
+    undo: false,
+    redo: false,
     search: false,
     options: true,
     markRead: true,

@@ -107,6 +107,8 @@ interface ProviderCapabilities {
   forms: boolean
   attachments: boolean
   files: boolean
+  undo: boolean
+  redo: boolean
   search: boolean
   rename: boolean
 }
@@ -278,6 +280,9 @@ Endpoints:
 | Pending forms | `GET /api/form` |
 | Reply form | `POST /api/session/{sessionID}/form/{formID}/reply` |
 | Mark viewed | `POST /api/session/{sessionID}/view` |
+| Stage revert | `POST /api/session/{sessionID}/revert/stage` with `{ "messageID", "files": false }` |
+| Commit revert | `POST /api/session/{sessionID}/revert/commit` |
+| Clear revert | `DELETE /api/session/{sessionID}/revert` |
 | Read file | `GET /api/fs/read/{path}?location[directory]={session directory}` |
 
 Capabilities: `list`, `read`, `send`, `create`, `stream`, `interrupt`, `permissions`, `forms`, `attachments`, `files`, `rename`. No search across messages.
@@ -355,7 +360,30 @@ Mapping notes:
 - Approvals and clarify requests are blocking attention items.
 - Hermes keeps sessions in `~/.hermes/state.db`. The hub does not read that database directly in the first release. It uses the APIs.
 
-### 8.4 Future providers
+### 8.4 Undo and redo
+
+Undo removes the latest user turn from the conversation and keeps it available
+for redo. It is conversation-only in v1: a provider may report the files the
+turn changed, but the hub never restores them. The prompt returns to the
+composer so the reader can rewrite it.
+
+| Provider | Undo | Redo |
+|---|---|---|
+| OpenCode | Stage a revert at the user message with `files: false` | Clear the staged revert with `DELETE /revert` |
+| Open WebUI | Move `history.currentId` to the parent of the last user message | Descend to the deepest child, preferring the newest branch |
+
+- OpenCode keeps the staged revert on the session (`Session.Info.revert`).
+  Sending a new prompt commits it, which hides the reverted messages. The
+  adapter reports the staged boundary and `FileDiff.Info` entries as
+  information only.
+- Open WebUI never deletes messages. Undo hides a turn by moving `currentId`
+  up the tree; redo moves it back down. The tree alone therefore carries the
+  undo state, and it survives a hub restart.
+- Both providers refuse undo while a turn is running.
+- `canUndo` requires a user message; Open WebUI also requires that message to
+  have a parent, because the tree cannot represent an empty conversation.
+
+### 8.5 Future providers
 
 The adapter interface covers future providers without changing clients:
 
@@ -397,6 +425,9 @@ POST   /api/v1/sessions
 POST   /api/v1/sessions/:ref/selection
 POST   /api/v1/sessions/:ref/interrupt
 POST   /api/v1/sessions/:ref/compact
+GET    /api/v1/sessions/:ref/history
+POST   /api/v1/sessions/:ref/history/undo
+POST   /api/v1/sessions/:ref/history/redo
 GET    /api/v1/sessions/:ref/draft
 PUT    /api/v1/sessions/:ref/draft
 DELETE /api/v1/sessions/:ref/draft

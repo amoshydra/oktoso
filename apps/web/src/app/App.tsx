@@ -41,6 +41,7 @@ import type {
   ReplyOption,
   SendDelivery,
   Session,
+  SessionHistory,
   SessionSelectionInput,
   SessionStatus,
   SessionWarning,
@@ -4484,6 +4485,12 @@ function SessionDetail(props: {
   const [uploadingAttachments, setUploadingAttachments] = useState(0);
   const [attachmentError, setAttachmentError] = useState<string>();
   const [branches, setBranches] = useState<BranchPoint[]>([]);
+  const [history, setHistory] = useState<SessionHistory | undefined>();
+  const [historyBusy, setHistoryBusy] = useState<"undo" | "redo">();
+  const [historyError, setHistoryError] = useState<string>();
+  const [historyNotice, setHistoryNotice] = useState<string>();
+  const [historyFilesOpen, setHistoryFilesOpen] = useState(false);
+  const [historyPromptOpen, setHistoryPromptOpen] = useState(false);
   const [branchBusy, setBranchBusy] = useState<string>();
   const [retryBusy, setRetryBusy] = useState<string>();
   const [continueBusy, setContinueBusy] = useState<string>();
@@ -4532,6 +4539,9 @@ function SessionDetail(props: {
     dictation.phase === "transcribing";
   const attachSupported = Boolean(sessionProvider?.capabilities.attach);
   const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
+  const historySupported = Boolean(
+    sessionProvider?.capabilities.undo && sessionProvider?.capabilities.redo,
+  );
   const canEdit = Boolean(sessionProvider?.capabilities.fork);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
@@ -4982,6 +4992,19 @@ function SessionDetail(props: {
     };
   }, [dictation]);
 
+  const refreshHistory = useCallback(async () => {
+    if (!sessionProvider?.capabilities.undo) {
+      setHistory(undefined);
+      return;
+    }
+    try {
+      setHistory(await props.client.history(props.sessionRef));
+    } catch {
+      // History is an affordance, not the transcript. Keep the last known
+      // state rather than hiding the banner on a transient provider error.
+    }
+  }, [props.client, props.sessionRef, sessionProvider?.capabilities.undo]);
+
   const refreshLatest = useCallback(
     async (forceBottom = false, replace = false) => {
       // Apply the header as soon as it arrives: a slow transcript should not
@@ -5010,6 +5033,35 @@ function SessionDetail(props: {
     },
     [props.client, props.sessionRef],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    setHistory(undefined);
+    setHistoryError(undefined);
+    setHistoryNotice(undefined);
+    setHistoryFilesOpen(false);
+    setHistoryPromptOpen(false);
+    if (!sessionProvider?.capabilities.undo) return;
+    void props.client
+      .history(props.sessionRef)
+      .then((next) => {
+        if (!cancelled) setHistory(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    props.client,
+    props.sessionRef,
+    sessionProvider?.capabilities.undo,
+  ]);
+
+  useEffect(() => {
+    if (!historyNotice || history?.staged) return;
+    const timer = window.setTimeout(() => setHistoryNotice(undefined), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [historyNotice, history?.staged]);
 
   const retryTranscript = useCallback(async () => {
     if (retryingTranscript) return;
@@ -5107,6 +5159,7 @@ function SessionDetail(props: {
       await props.client.retryMessage(props.sessionRef, messageId);
       await refreshLatest(true, true);
       await refreshBranches();
+      void refreshHistory();
       setAtBottom(true);
     } catch (reason) {
       setBranchError(
@@ -5116,6 +5169,65 @@ function SessionDetail(props: {
       );
     } finally {
       setRetryBusy(undefined);
+    }
+  };
+
+  const undoLastTurn = async () => {
+    if (!historySupported || historyBusy) return;
+    setToolsOpen(false);
+    setHistoryBusy("undo");
+    setHistoryError(undefined);
+    setHistoryNotice(undefined);
+    setHistoryFilesOpen(false);
+    setHistoryPromptOpen(false);
+    try {
+      const next = await props.client.undoLastTurn(props.sessionRef);
+      setHistory(next);
+      const text = next.prompt?.text ?? "";
+      if (text && !draftRef.current.trim()) {
+        updateDraft(text);
+        setHistoryNotice("Prompt restored to the composer.");
+      } else if (text) {
+        setHistoryNotice("Draft kept. Show prompt to insert the undone prompt.");
+      }
+      pendingScroll.current = { mode: "bottom" };
+      setAtBottom(true);
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to undo the last turn.",
+      );
+    } finally {
+      setHistoryBusy(undefined);
+    }
+  };
+
+  const redoLastTurn = async () => {
+    if (!historySupported || historyBusy) return;
+    const stagedPrompt = history?.prompt?.text;
+    setHistoryBusy("redo");
+    setHistoryError(undefined);
+    setHistoryNotice(undefined);
+    try {
+      const next = await props.client.redoLastTurn(props.sessionRef);
+      setHistory(next);
+      setHistoryFilesOpen(false);
+      setHistoryPromptOpen(false);
+      if (stagedPrompt && draftRef.current === stagedPrompt) {
+        await discardDraft();
+      }
+      setHistoryNotice("Turn restored.");
+      await refreshLatest(true);
+      setAtBottom(true);
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to redo the last turn.",
+      );
+    } finally {
+      setHistoryBusy(undefined);
     }
   };
 
@@ -5152,6 +5264,7 @@ function SessionDetail(props: {
       await props.client.switchBranch(props.sessionRef, siblingId);
       await refreshLatest(true, true);
       await refreshBranches();
+      void refreshHistory();
       setAtBottom(true);
     } catch (reason) {
       setBranchError(
@@ -5257,6 +5370,7 @@ function SessionDetail(props: {
       : undefined;
     const queueDelivery =
       delivery === "queue" && running && canQueue;
+    const historyWasStaged = Boolean(history?.staged);
     const previousAttachments = attachments;
     setSending(true);
     setSendError(undefined);
@@ -5343,9 +5457,11 @@ function SessionDetail(props: {
         );
       }
       setSession((current) => (current ? { ...current, status: "running" } : current));
+      setHistoryNotice(undefined);
       window.setTimeout(() => {
-        void refreshLatest(true).catch(() => undefined);
+        void refreshLatest(true, historyWasStaged).catch(() => undefined);
         void refreshBranches();
+        void refreshHistory();
       }, 500);
     } catch (reason) {
       if (shouldQueue(reason)) {
@@ -5875,9 +5991,12 @@ function SessionDetail(props: {
 
     const upserts: Message[] = [];
     let needsRefresh = false;
+    let needsHistory = false;
+    let replaceTranscript = false;
     for (const event of fresh) {
       if (event.type === "resync") {
         needsRefresh = true;
+        needsHistory = true;
         continue;
       }
       if (event.sessionRef !== props.sessionRef) continue;
@@ -5888,6 +6007,17 @@ function SessionDetail(props: {
       }
       if (event.type === "session.updated" || event.type === "message.delta") {
         needsRefresh = true;
+        const eventType =
+          event.data && typeof event.data === "object" && "eventType" in event.data
+            ? (event.data as { eventType?: unknown }).eventType
+            : undefined;
+        if (
+          typeof eventType === "string" &&
+          eventType.startsWith("session.revert.")
+        ) {
+          needsHistory = true;
+          if (eventType === "session.revert.committed") replaceTranscript = true;
+        }
       }
     }
 
@@ -5898,10 +6028,11 @@ function SessionDetail(props: {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => {
         refreshTimer.current = undefined;
-        void refreshLatest().catch(() => undefined);
+        void refreshLatest(false, replaceTranscript).catch(() => undefined);
+        if (needsHistory) void refreshHistory();
       }, 400);
     }
-  }, [props.events, props.sessionRef, refreshLatest]);
+  }, [props.events, props.sessionRef, refreshLatest, refreshHistory]);
 
   useEffect(
     () => () => {
@@ -5971,10 +6102,16 @@ function SessionDetail(props: {
   const selectionDisabled =
     selectionSaving || sending || session?.status === "running";
   const attachInTools = attachSupported && (narrow || (compact && running));
+  const undoAvailable = Boolean(
+    historySupported && history?.canUndo && !history?.staged,
+  );
+  const stagedHistory = history?.staged;
+  const stagedFiles = stagedHistory?.files ?? [];
   const hasComposerTools =
     dictationSupported ||
     (running && canSteer && canQueue) ||
-    attachInTools;
+    attachInTools ||
+    undoAvailable;
   const selectedAgentLabel =
     agentChoices.find((agent) => agent.id === agentValue)?.label ?? "";
   const selectedModelLabel =
@@ -6090,7 +6227,16 @@ function SessionDetail(props: {
     errorAttention && providerError ? providerErrorMessage(providerError) : undefined;
   const hasBlockingAttention = inlineAttention.some((item) => item.priority === "blocking");
   const latestQuestion = latestQuestionText(messages);
-  const transcriptItems = useMemo(() => groupTranscript(messages), [messages]);
+  const stagedBoundary = history?.staged?.messageId;
+  const transcriptMessages = useMemo(() => {
+    if (!stagedBoundary) return messages;
+    const index = messages.findIndex((message) => message.id === stagedBoundary);
+    return index < 0 ? messages : messages.slice(0, index);
+  }, [messages, stagedBoundary]);
+  const transcriptItems = useMemo(
+    () => groupTranscript(transcriptMessages),
+    [transcriptMessages],
+  );
   const composerHint =
     uploadingAttachments > 0
       ? "Uploading attachment…"
@@ -6100,6 +6246,10 @@ function SessionDetail(props: {
         ? "Recording…"
         : dictation.phase === "transcribing"
           ? "Transcribing…"
+          : stagedHistory
+            ? history?.mode === "revert"
+              ? "Sending accepts the undo"
+              : "Sending starts a new branch"
           : draftStatus === "idle" && running
             ? canSteer
               ? "Agent running · Ctrl/⌘ Enter to steer"
@@ -6570,6 +6720,19 @@ function SessionDetail(props: {
               </div>
             ) : null}
 
+            {historyError ? (
+              <div className="alert" role="alert">
+                {historyError}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setHistoryError(undefined)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
             <div className="chat-composer-wrap">
               <span className="sr-only" role="status" aria-live="polite">
                 {queuedItems.length > 0
@@ -6649,6 +6812,112 @@ function SessionDetail(props: {
                     </div>
                   ) : null}
                 </div>
+              ) : null}
+              {stagedHistory ? (
+                <div
+                  className="composer-history"
+                  role="group"
+                  aria-label="Undo staged"
+                >
+                  <span className="sr-only" role="status" aria-live="polite">
+                    {history?.mode === "revert"
+                      ? "Last turn undone."
+                      : "Last turn hidden."}
+                    {historyNotice ? ` ${historyNotice}` : ""}
+                  </span>
+                  <div className="composer-history-head">
+                    <span className="composer-history-title">Undo staged</span>
+                    <span className="composer-history-detail">
+                      {history?.mode === "revert"
+                        ? stagedFiles.length > 0
+                          ? `${stagedFiles.length} file${
+                              stagedFiles.length === 1 ? "" : "s"
+                            } changed, not restored`
+                          : "No files changed"
+                        : "Last turn hidden"}
+                    </span>
+                    <div className="composer-history-buttons">
+                      <button
+                        className="composer-history-action"
+                        type="button"
+                        disabled={running || historyBusy === "redo"}
+                        title={
+                          running
+                            ? "Redo waits for the current run to finish"
+                            : "Restore the undone turn"
+                        }
+                        onClick={() => void redoLastTurn()}
+                      >
+                        {historyBusy === "redo" ? "Restoring…" : "Redo"}
+                      </button>
+                      {history?.prompt ? (
+                        <button
+                          className="composer-history-action"
+                          type="button"
+                          aria-expanded={historyPromptOpen}
+                          onClick={() => setHistoryPromptOpen((open) => !open)}
+                        >
+                          {historyPromptOpen ? "Hide prompt" : "Show prompt"}
+                        </button>
+                      ) : null}
+                      {stagedFiles.length > 0 ? (
+                        <button
+                          className="composer-history-action"
+                          type="button"
+                          aria-expanded={historyFilesOpen}
+                          onClick={() => setHistoryFilesOpen((open) => !open)}
+                        >
+                          {historyFilesOpen ? "Hide files" : "Show files"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {historyPromptOpen && history?.prompt ? (
+                    <div className="composer-history-prompt">
+                      <p>
+                        {history.prompt.text || "This turn had no text."}
+                      </p>
+                      {history.prompt.attachments.length > 0 ? (
+                        <p className="composer-history-attachments">
+                          Attachments: {history.prompt.attachments.join(", ")}
+                        </p>
+                      ) : null}
+                      <button
+                        className="composer-history-action"
+                        type="button"
+                        onClick={() => {
+                          updateDraft(history.prompt?.text ?? "");
+                          setHistoryNotice("Prompt inserted.");
+                        }}
+                      >
+                        Insert prompt
+                      </button>
+                    </div>
+                  ) : null}
+                  {historyFilesOpen && stagedFiles.length > 0 ? (
+                    <ul className="composer-history-files">
+                      {stagedFiles.map((file) => (
+                        <li key={file.path}>
+                          <span className="composer-history-file-path">
+                            {file.path}
+                          </span>
+                          <span
+                            className={`composer-history-file-status ${file.status}`}
+                          >
+                            {file.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {historyNotice ? (
+                    <p className="composer-history-note">{historyNotice}</p>
+                  ) : null}
+                </div>
+              ) : historyNotice ? (
+                <p className="composer-history-notice" role="status">
+                  {historyNotice}
+                </p>
               ) : null}
               <form
                 className="chat-composer"
@@ -6804,6 +7073,24 @@ function SessionDetail(props: {
                   </>
                 ) : null}
                 <div className={`chat-composer-bar ${running ? "running" : ""}`}>
+                  {undoAvailable ? (
+                    <button
+                      className="composer-history-action composer-desktop-tool"
+                      type="button"
+                      aria-label="Undo last turn"
+                      title={
+                        running
+                          ? "Undo waits for the current run to finish"
+                          : "Undo the last turn and return its prompt"
+                      }
+                      disabled={
+                        running || sending || historyBusy === "undo"
+                      }
+                      onClick={() => void undoLastTurn()}
+                    >
+                      {historyBusy === "undo" ? "Undoing…" : "Undo"}
+                    </button>
+                  ) : null}
                   {showSelection ? (
                     <button
                       ref={contextChipRef}
@@ -6919,6 +7206,19 @@ function SessionDetail(props: {
                             role="group"
                             aria-label="Composer tools"
                           >
+                            {undoAvailable ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  running || sending || historyBusy === "undo"
+                                }
+                                onClick={() => void undoLastTurn()}
+                              >
+                                {historyBusy === "undo"
+                                  ? "Undoing…"
+                                  : "Undo last turn"}
+                              </button>
+                            ) : null}
                             {running && canSteer && canQueue ? (
                               <button
                                 type="button"

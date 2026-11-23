@@ -84,6 +84,55 @@ describe("SessionService.compact", () => {
   });
 });
 
+describe("SessionService history", () => {
+  it("refuses undo when the provider does not advertise it", async () => {
+    const adapter = {
+      id: "test",
+      capabilities: {},
+      history: vi.fn(async () => ({ mode: "revert", canUndo: true })),
+    } as unknown as ProviderAdapter;
+    const service = new SessionService(makeRegistry([adapter]), logger);
+
+    await expect(service.undoLastTurn("test:ses_a")).rejects.toMatchObject({
+      code: "not_implemented",
+    });
+    expect(adapter.history).not.toHaveBeenCalled();
+  });
+
+  it("delegates history, undo, and redo to the adapter", async () => {
+    const state = { mode: "revert" as const, canUndo: true, canRedo: false };
+    const history = vi.fn(async () => state);
+    const undoLastTurn = vi.fn(async () => ({
+      mode: "revert" as const,
+      canUndo: false,
+      canRedo: true,
+    }));
+    const redoLastTurn = vi.fn(async () => state);
+    const adapter = {
+      id: "test",
+      capabilities: { undo: true, redo: true },
+      history,
+      undoLastTurn,
+      redoLastTurn,
+    } as unknown as ProviderAdapter;
+    const service = new SessionService(makeRegistry([adapter]), logger);
+
+    await expect(service.history("test:ses_a")).resolves.toEqual(state);
+    await expect(service.undoLastTurn("test:ses_a")).resolves.toMatchObject({
+      canRedo: true,
+    });
+    await expect(service.redoLastTurn("test:ses_a")).resolves.toEqual(state);
+    expect(undoLastTurn).toHaveBeenCalledWith(
+      "test:ses_a",
+      expect.any(AbortSignal),
+    );
+    expect(redoLastTurn).toHaveBeenCalledWith(
+      "test:ses_a",
+      expect.any(AbortSignal),
+    );
+  });
+});
+
 describe("SessionService session cache", () => {
   it("drops a cached session when the provider returns not found", async () => {
     const session = makeSession({

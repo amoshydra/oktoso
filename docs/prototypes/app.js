@@ -372,6 +372,8 @@ const state = {
   searchQuery: '',
   detailsOpen: false,
   detailsClosed: false,
+  undoRef: null,
+  undoPromptOpen: false,
 };
 
 const app = document.getElementById('app');
@@ -902,6 +904,17 @@ function renderChat() {
   const session = selectedSession();
   const provider = providerByID(session.providerID);
   const item = attentionForSession(session.ref);
+  const undoStaged = state.undoRef === session.ref;
+  const lastUserIndex = session.messages.reduce(
+    (found, entry, index) => (entry.role === 'user' ? index : found),
+    -1,
+  );
+  const undoPrompt =
+    undoStaged && lastUserIndex >= 0 ? session.messages[lastUserIndex].text : '';
+  const visibleMessages =
+    undoStaged && lastUserIndex >= 0
+      ? session.messages.slice(0, lastUserIndex)
+      : session.messages;
   const meta = `${providerLabel(provider)} <span class="dot-sep">·</span> ${esc(session.project)} <span class="dot-sep">·</span> ${esc(session.agent)} <span class="dot-sep">·</span> ${esc(session.model)}`;
 
   return `
@@ -926,15 +939,30 @@ function renderChat() {
               <span class="dot-sep">·</span><span class="status-chip ${esc(session.status)}"><i></i>${esc(session.status)}</span>
             </div>
           </div>
-          ${session.messages.map(renderMessage).join('')}
+          ${visibleMessages.map(renderMessage).join('')}
           ${renderInlineAttention(item)}
           ${session.status === 'error' && !item ? renderInlineAttention({ type: 'error', summary: 'The last run failed.', actions: [] }) : ''}
         </div>
       </div>
       <div class="composer-wrap">
+        ${undoStaged ? `
+          <div class="composer-history" role="group" aria-label="Undo staged">
+            <div class="composer-history-head">
+              <span class="composer-history-title">Undo staged</span>
+              <span class="composer-history-detail">1 file changed, not restored</span>
+              <div class="composer-history-buttons">
+                <button class="composer-history-action" type="button" data-redo>Redo</button>
+                <button class="composer-history-action" type="button" data-undo-prompt>${state.undoPromptOpen ? 'Hide prompt' : 'Show prompt'}</button>
+                <button class="composer-history-action" type="button" data-undo-files>Show files</button>
+              </div>
+            </div>
+            ${state.undoPromptOpen ? `<div class="composer-history-prompt"><p>${esc(undoPrompt)}</p></div>` : ''}
+          </div>
+        ` : ''}
         <form class="composer" id="composer-form">
-          <textarea id="composer" placeholder="Reply to ${esc(session.title)}…" rows="1"></textarea>
+          <textarea id="composer" placeholder="Reply to ${esc(session.title)}…" rows="1">${esc(undoPrompt)}</textarea>
           <div class="composer-bar">
+            ${!undoStaged ? `<button class="composer-history-action composer-undo" type="button" aria-label="Undo last turn" title="${session.status === 'running' ? 'Undo waits for the current run to finish' : 'Undo the last turn'}" ${session.status === 'running' ? 'disabled' : ''} data-undo>Undo</button>` : ''}
             <button class="icon-btn" type="button" title="Attach" aria-label="Attach" data-attach>${icon('attach', 15)}</button>
             <select class="composer-select" id="composer-agent" name="agent" aria-label="Agent"><option>${esc(session.agent)}</option></select>
             <select class="composer-select" id="composer-model" name="model" aria-label="Model"><option>${esc(session.model)}</option></select>
@@ -1168,6 +1196,8 @@ function openSession(ref) {
   state.selectedRef = ref;
   state.view = 'chat';
   state.detailsOpen = false;
+  state.undoRef = null;
+  state.undoPromptOpen = false;
   renderApp();
 }
 
@@ -1217,6 +1247,8 @@ function answerQuestion(id, index) {
 function sendMessage(text) {
   const session = selectedSession();
   if (!text.trim()) return;
+  state.undoRef = null;
+  state.undoPromptOpen = false;
   session.messages.push({ role: 'user', text: text.trim(), time: nowMs() });
   session.status = 'running';
   session.updated = nowMs();
@@ -1441,6 +1473,35 @@ document.addEventListener('click', (event) => {
   }
   if (target.matches('[data-more]')) {
     toast('More actions are in the design doc');
+    return;
+  }
+  if (target.matches('[data-undo]')) {
+    state.undoRef = state.selectedRef;
+    state.undoPromptOpen = false;
+    renderApp();
+    requestAnimationFrame(() => {
+      const textarea = document.getElementById('composer');
+      if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+        textarea.focus();
+      }
+    });
+    return;
+  }
+  if (target.matches('[data-redo]')) {
+    state.undoRef = null;
+    state.undoPromptOpen = false;
+    renderApp();
+    return;
+  }
+  if (target.matches('[data-undo-prompt]')) {
+    state.undoPromptOpen = !state.undoPromptOpen;
+    renderApp();
+    return;
+  }
+  if (target.matches('[data-undo-files]')) {
+    toast('Undo keeps files: changed paths are shown, not restored');
     return;
   }
   if (target.matches('[data-attach]')) {

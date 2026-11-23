@@ -49,6 +49,18 @@ async function sendPrompt(text: string): Promise<void> {
   await page.getByRole("button", { name: "Send message" }).click();
 }
 
+async function clearSessionHistory(): Promise<void> {
+  await page!.request.delete(
+    `${BASE_URL}/api/v1/sessions/${encodeURIComponent("desktop-opencode:ses_auth")}/draft`,
+    { headers: { Authorization: `Bearer ${TOKEN}` } },
+  );
+  if (providers[0]) {
+    await fetch(`${providers[0].url}/api/session/ses_auth/revert`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+  }
+}
+
 beforeAll(async () => {
   providers = await Promise.all([
     createFakeProviderServer({ kind: "opencode", port: 0 }),
@@ -138,6 +150,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await page?.close();
   page = undefined;
+  if (providers[0]) {
+    await fetch(`${providers[0].url}/api/session/ses_auth/revert`, {
+      method: "DELETE",
+    }).catch(() => undefined);
+  }
 });
 
 describe("chat sending", () => {
@@ -636,6 +653,97 @@ describe("chat sending", () => {
     expect(ranged.status()).toBe(206);
     expect(ranged.headers()["content-range"]).toMatch(/^bytes 0-3\/\d+$/);
     expect((await ranged.body()).byteLength).toBe(4);
+  });
+});
+
+describe("chat undo and redo", () => {
+  it("undoes the latest turn, shows changed files, and restores it", async () => {
+    await clearSessionHistory();
+    await openSession("Fix auth race in gateway");
+    const prompt = page!.locator(".chat-composer textarea");
+    // A previous failed-send test may still be saving its restored draft.
+    await prompt.fill("");
+    await page!.waitForTimeout(700);
+    const latest = page!.locator(".chat-message.user").last();
+    await latest.waitFor({ state: "visible", timeout: 5_000 });
+    const undoneText = (
+      await latest.locator(".chat-message-parts").innerText()
+    ).trim();
+    expect(undoneText.length).toBeGreaterThan(0);
+    const userMessage = page!.locator(".chat-message.user", {
+      hasText: undoneText,
+    });
+
+    await page!.getByRole("button", { name: "Undo last turn" }).click();
+    const banner = page!.locator(".composer-history");
+    await banner.waitFor({ state: "visible", timeout: 5_000 });
+    expect(await banner.textContent()).toContain("Undo staged");
+    expect(await banner.textContent()).toContain("1 file changed, not restored");
+    expect(await prompt.inputValue()).toBe(undoneText);
+    await userMessage.waitFor({ state: "hidden", timeout: 5_000 });
+
+    await banner.getByRole("button", { name: "Show files" }).click();
+    expect(await banner.textContent()).toContain("src/auth.ts");
+    expect(await banner.textContent()).toContain("modified");
+
+    await banner.getByRole("button", { name: "Redo" }).click();
+    await banner.waitFor({ state: "hidden", timeout: 5_000 });
+    await userMessage.waitFor({ state: "visible", timeout: 5_000 });
+    expect(await prompt.inputValue()).toBe("");
+  });
+
+  it("moves undo into the composer menu on mobile", async () => {
+    await page!.setViewportSize({ width: 390, height: 844 });
+    await clearSessionHistory();
+    await openSession("Fix auth race in gateway");
+    await page!
+      .getByRole("button", { name: "More composer actions" })
+      .click();
+    await page!.getByRole("button", { name: "Undo last turn" }).click();
+    const banner = page!.locator(".composer-history");
+    await banner.waitFor({ state: "visible", timeout: 5_000 });
+    const heights = await banner
+      .locator(".composer-history-action")
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getBoundingClientRect().height),
+      );
+    expect(heights.length).toBeGreaterThan(0);
+    expect(heights.every((height) => height >= 44)).toBe(true);
+    const overflow = await page!.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+    await banner.getByRole("button", { name: "Redo" }).click();
+  });
+
+  it("sending while staged accepts the undo", async () => {
+    await clearSessionHistory();
+    await openSession("Fix auth race in gateway");
+    const prompt = page!.locator(".chat-composer textarea");
+    await prompt.fill("");
+    await page!.waitForTimeout(700);
+    const latest = page!.locator(".chat-message.user").last();
+    await latest.waitFor({ state: "visible", timeout: 5_000 });
+    const undoneText = (
+      await latest.locator(".chat-message-parts").innerText()
+    ).trim();
+    expect(undoneText.length).toBeGreaterThan(0);
+
+    await page!.getByRole("button", { name: "Undo last turn" }).click();
+    const banner = page!.locator(".composer-history");
+    await banner.waitFor({ state: "visible", timeout: 5_000 });
+
+    const text = `After undo ${Date.now()}`;
+    await sendPrompt(text);
+    await banner.waitFor({ state: "hidden", timeout: 10_000 });
+    await page!
+      .locator(".chat-message.user", { hasText: text })
+      .waitFor({ state: "visible", timeout: 5_000 });
+    await page!
+      .locator(".chat-message.user", { hasText: undoneText })
+      .waitFor({ state: "hidden", timeout: 5_000 });
   });
 });
 

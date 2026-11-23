@@ -142,6 +142,43 @@ export const zRetryInput = z.object({
   messageId: z.string().min(1),
 });
 
+/**
+ * How a provider models an undone turn. `revert` stages a rollback that a send
+ * commits; `branch` moves the active node in a message tree instead.
+ */
+export const zHistoryMode = z.enum(["revert", "branch"]);
+
+export const zHistoryFileChange = z.object({
+  path: z.string(),
+  status: z.enum(["added", "deleted", "modified"]),
+  additions: z.number().int().nonnegative().optional(),
+  deletions: z.number().int().nonnegative().optional(),
+});
+
+/** The turn an undo would restore to the composer. */
+export const zHistoryPrompt = z.object({
+  text: z.string(),
+  attachments: z.array(z.string()),
+});
+
+export const zSessionHistory = z.object({
+  mode: zHistoryMode,
+  canUndo: z.boolean(),
+  canRedo: z.boolean(),
+  /**
+   * Present while a turn is undone. `messageId` is the boundary; the client
+   * hides that turn from the transcript until redo or send.
+   */
+  staged: z
+    .object({
+      messageId: z.string().min(1),
+      /** Files the undone turn changed. Informational: v1 never restores them. */
+      files: z.array(zHistoryFileChange),
+    })
+    .optional(),
+  prompt: zHistoryPrompt.optional(),
+});
+
 export const zSendResult = z.object({
   accepted: z.boolean(),
   messageID: z.string().optional(),
@@ -176,6 +213,10 @@ export type BranchPage = z.infer<typeof zBranchPage>;
 export type BranchSwitchInput = z.infer<typeof zBranchSwitchInput>;
 export type ForkInput = z.infer<typeof zForkInput>;
 export type RetryInput = z.infer<typeof zRetryInput>;
+export type HistoryMode = z.infer<typeof zHistoryMode>;
+export type HistoryFileChange = z.infer<typeof zHistoryFileChange>;
+export type HistoryPrompt = z.infer<typeof zHistoryPrompt>;
+export type SessionHistory = z.infer<typeof zSessionHistory>;
 export type MessageRole = z.infer<typeof zMessageRole>;
 export type MessagePart = z.infer<typeof zMessagePart>;
 export type Message = z.infer<typeof zMessage>;

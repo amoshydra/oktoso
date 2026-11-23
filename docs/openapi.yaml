@@ -278,6 +278,10 @@ components:
           type: boolean
         retry:
           type: boolean
+        undo:
+          type: boolean
+        redo:
+          type: boolean
         search:
           type: boolean
         options:
@@ -303,6 +307,8 @@ components:
         - branches
         - fork
         - retry
+        - undo
+        - redo
         - search
         - options
         - markRead
@@ -375,6 +381,10 @@ components:
               type: boolean
             retry:
               type: boolean
+            undo:
+              type: boolean
+            redo:
+              type: boolean
             search:
               type: boolean
             options:
@@ -400,6 +410,8 @@ components:
             - branches
             - fork
             - retry
+            - undo
+            - redo
             - search
             - options
             - markRead
@@ -4435,6 +4447,102 @@ components:
           minLength: 1
       required:
         - messageId
+    HistoryMode:
+      type: string
+      enum:
+        - revert
+        - branch
+    HistoryFileChange:
+      type: object
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+          enum:
+            - added
+            - deleted
+            - modified
+        additions:
+          type: integer
+          minimum: 0
+        deletions:
+          type: integer
+          minimum: 0
+      required:
+        - path
+        - status
+    HistoryPrompt:
+      type: object
+      properties:
+        text:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+      required:
+        - text
+        - attachments
+    SessionHistory:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - revert
+            - branch
+        canUndo:
+          type: boolean
+        canRedo:
+          type: boolean
+        staged:
+          type: object
+          properties:
+            messageId:
+              type: string
+              minLength: 1
+            files:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - added
+                      - deleted
+                      - modified
+                  additions:
+                    type: integer
+                    minimum: 0
+                  deletions:
+                    type: integer
+                    minimum: 0
+                required:
+                  - path
+                  - status
+          required:
+            - messageId
+            - files
+        prompt:
+          type: object
+          properties:
+            text:
+              type: string
+            attachments:
+              type: array
+              items:
+                type: string
+          required:
+            - text
+            - attachments
+      required:
+        - mode
+        - canUndo
+        - canRedo
     AttentionType:
       type: string
       enum:
@@ -7516,6 +7624,129 @@ paths:
                 $ref: "#/components/schemas/Error"
         "501":
           description: Provider does not support retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/history:
+    get:
+      tags:
+        - sessions
+      summary: Read undo and redo state
+      description: Reports whether the latest turn can be undone or redone. When a turn is undone, `staged` names the boundary and the changed files, and `prompt` carries the text and attachment names to restore to the composer.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: History state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionHistory"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support undo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/history/undo:
+    post:
+      tags:
+        - sessions
+      summary: Undo the latest turn
+      description: Reverts the latest user turn for conversation only. Changed files are reported in `staged.files` and are never restored by this endpoint. The undone prompt is returned so the client can restore it to the composer.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Turn undone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionHistory"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The session is running or has no turn to undo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support undo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/history/redo:
+    post:
+      tags:
+        - sessions
+      summary: Redo the latest undone turn
+      description: Restores the turn hidden by the last undo. The conversation returns to the state before the undo; files stay as they are.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Turn restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionHistory"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: There is no undone turn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not support redo
           content:
             application/json:
               schema:

@@ -92,6 +92,10 @@ export const zProviderCapabilities = z.object({
   branches: z.boolean(),
   fork: z.boolean(),
   retry: z.boolean(),
+  /** Revert the latest turn and keep it available for redo. */
+  undo: z.boolean(),
+  /** Restore a turn that was undone. */
+  redo: z.boolean(),
   search: z.boolean(),
   options: z.boolean(),
   markRead: z.boolean(),

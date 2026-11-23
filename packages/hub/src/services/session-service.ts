@@ -9,6 +9,7 @@ import type {
   SendInput,
   SendResult,
   Session,
+  SessionHistory,
   SessionLineage,
   SessionLineageNode,
   SessionListQuery,
@@ -659,6 +660,57 @@ export class SessionService {
       ref,
       siblingId,
       operationSignal(this.registry, adapter.id, 15_000, 5_000),
+    );
+  }
+
+  async history(ref: string): Promise<SessionHistory> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.capabilities.undo || !adapter.history) {
+      throw notImplemented("This provider does not support undo");
+    }
+    this.assertProviderAvailable(adapter.id);
+    return adapter.history(
+      ref,
+      operationSignal(this.registry, adapter.id, 30_000, 5_000),
+    );
+  }
+
+  /**
+   * Undo the latest turn without touching files. Providers report the files the
+   * turn changed; the hub never applies them in v1.
+   */
+  async undoLastTurn(ref: string): Promise<SessionHistory> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (
+      !adapter.capabilities.undo ||
+      !adapter.capabilities.redo ||
+      !adapter.undoLastTurn
+    ) {
+      throw notImplemented("This provider does not support undo");
+    }
+    this.assertProviderAvailable(adapter.id);
+    return adapter.undoLastTurn(
+      ref,
+      operationSignal(this.registry, adapter.id, 60_000, 5_000),
+    );
+  }
+
+  async redoLastTurn(ref: string): Promise<SessionHistory> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (
+      !adapter.capabilities.undo ||
+      !adapter.capabilities.redo ||
+      !adapter.redoLastTurn
+    ) {
+      throw notImplemented("This provider does not support redo");
+    }
+    this.assertProviderAvailable(adapter.id);
+    return adapter.redoLastTurn(
+      ref,
+      operationSignal(this.registry, adapter.id, 60_000, 5_000),
     );
   }
 

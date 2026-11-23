@@ -8,17 +8,17 @@
   },
   "sources": {
     "docs/prototypes/index.html": "e7e5f944c4f77530a293a26abd93d82653023f72289d3ed380af51f66ac5f480",
-    "docs/prototypes/app.js": "07903a7c222d65cd7b27d11d503a88a3cb7a5bf458d4cdec1eec654fc88adc1a",
-    "docs/prototypes/styles.css": "2367b6fc555f41cb27b17c05798f880864a0f6927daf21676d14af2586539324",
+    "docs/prototypes/app.js": "33aa6887c7d86807473f819bf72dbbc4e360592a7b7f09fd705e79feab2b6aa6",
+    "docs/prototypes/styles.css": "b6eda9def6046965e4c2bf0f693f8725440457a09744272d8da0bbb9e6997b41",
     "docs/prototypes/fonts/ibm-plex-mono-latin-400-normal.woff2": "08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7",
     "docs/prototypes/fonts/ibm-plex-mono-latin-500-normal.woff2": "01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22",
     "docs/prototypes/fonts/ibm-plex-mono-latin-600-normal.woff2": "0d1f0b8d0722224e32e9f28261bdc86c79115be73444ae5eceb73976a1bcdf83",
     "docs/prototypes/fonts/inter-latin-wght-normal.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "docs/brand/banner.html": "518d4827de1ed6256787886ddee1719f65fd82574c0064d20ce3998ed72ff179",
-    "apps/web/src/app/App.tsx": "173a931f9a3982f8d02201a336d26eedca50b91b71996911fdeaa3b0ef7e88ba",
+    "apps/web/src/app/App.tsx": "03e9144f3023a703ea79ea2df3449d6ef944fd3675f5654afc4c9dd595fe3f80",
     "apps/web/src/app/BrandMark.tsx": "8e6372196e6cdb777232190300ed37ef4b4779c85fd87cff4ebc78604362d31b",
     "apps/web/src/app/markdown.ts": "c4633ff7140565791d0a56e69c7eae22a4bf9f1b62a0cc4e81b367081f24ca80",
-    "apps/web/src/styles.css": "6fe423ff17470d4d205b85c4a577f198c588789bda854ac223d0ffa26627c5a4",
+    "apps/web/src/styles.css": "2ad69c737050a1c3cdc9e5a689f2551e50545b2239dd2345322ecf631b23c544",
     "packages/ui/src/tokens.css": "8d5fb0250d99761e84119d7a756b5eb5571fe905aaaea7d56ce603428678d449",
     "packages/ui/src/base.css": "c2618249480b726427b61a544bab8f5ddadb2236020c2a9208b06ed548d4ccf1"
   },
@@ -29,7 +29,7 @@
       "height": 900
     },
     "docs/screenshots/session.png": {
-      "sha256": "498fa03afb21b577965364a8be45e52437e9c5c29a061c7ae8ee34d7e930865c",
+      "sha256": "3c2a994357360cffa70151374821ce2fafdaa3cd82cfe5561e74a342f1bfaa37",
       "width": 1440,
       "height": 1100
     },

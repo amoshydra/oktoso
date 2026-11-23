@@ -1,12 +1,13 @@
-# Design Lock — v1.42
+# Design Lock — v1.43
 
 Status: **frozen**.
 
-- Version: `design-v1.42`
-- Parent: `design-v1.41`
-- Date: 2026-11-22
-- Git tag: `design-v1.42`
+- Version: `design-v1.43`
+- Parent: `design-v1.42`
+- Date: 2026-11-23
+- Git tag: `design-v1.43`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.43 scope: last-turn undo and redo in the composer, with the staged banner.
 - v1.42 scope: assistant answers render as Markdown, with the chat's file previews.
 - v1.1 scope: session transcript loading, scroll anchoring, Markdown rendering, and collapsed agent activity.
 - v1.2 scope: the transcript copy action and hub-backed composer dictation.
@@ -1000,6 +1001,29 @@ radius, or color token.
 - No new type role, colour, radius, or spacing token. Answer text remains
   14px/1.6 on `--sidebar`.
 
+## Undo and redo (2026-11-23)
+
+- The composer bar carries one quiet `Undo` text action before the context
+  chip. It is capability-gated on `undo`/`redo`, hidden when there is no turn,
+  and disabled while the agent runs. It is 28px on desktop and moves into `⋯`
+  at 760px and below, where it is 44px.
+- Undoing a turn stages a banner above the composer: `Undo staged`, a muted
+  detail (`No files changed`, `N files changed, not restored`, or `Last turn
+  hidden`), and the `Redo`, `Show prompt`, and `Show files` actions. Redo is
+  not a second always-visible control.
+- The undone turn leaves the transcript. Its prompt replaces the draft only
+  when the draft is empty; otherwise the draft is kept and `Show prompt`
+  offers `Insert prompt`. This keeps typed text safe.
+- Undo is conversation-only in v1. Changed files are listed as information
+  with a text status and the semantic status tone; no file is written,
+  restored, or removed.
+- Send accepts the staged undo: OpenCode commits the revert, Open WebUI
+  branches from the current message. The hint says `Sending accepts the undo`
+  or `Sending starts a new branch`.
+- No new type role, spacing step, radius, colour, or icon. The banner uses the
+  existing surface, strong border, and 8px control radius. There is no global
+  `Ctrl/Cmd+Z` binding; it stays with the textarea.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1037,4 +1061,4 @@ with `206`, `Content-Range`, and a 4-byte body. Media requests were intercepted
 in both checks, so no video content was fetched. The
 `design-v1.40` cross-session retrieval was verified live from the overview
 dialog: it listed the index for a named session, read a tool output and quoted it back, with the evidence line `2 tool calls ·
-5 search hits`. The `design-v1.39` retrieval loop was verified live: asked for the last three tool calls, the dock listed the call index, read three outputs, and answered with each command and its result; the activity block showed `Model 8.4 s`, `Listed tool calls 40 calls`, three `Read output · …` tiles, and the evidence line read `Read 185 turns · 5 tool calls`. The `design-v1.38` shared renderer was verified live: the dock showed `20 turns · compacted · 5 hits · 4.3 s` with a structured query/hits detail, above the answer, and the chat still opened its Reasoning preview with prev/next. The `design-v1.37` activity parity was verified live: steps render above the answer (file/bulb/search/model tiles, durations 7–73ms and 4.4s), completed tiles carry no dot, and the chat's 49px grid is used. The `design-v1.36` endpoint panel was verified live: it seeded the config endpoint and model, `Test connection` answered in 2.7 s on the configured model, and `Change endpoint` from the dock opened Settings. The `design-v1.35` model picker and activity block were verified live: the chip listed the endpoint models (the configured model selected), a search answer produced four tiles (`context · history · search · model`) with durations, and the model tile opened `model · 3196 in / 63 out · 1.5s`. The global thread rendered as a modal `<dialog>`. The `design-v1.34` cross-session search was verified live from a session thread: "which session is working on the trip plan?" returned `plan trip` with 5 hits and stated the transcript was outside the thread. The `design-v1.33` targeted send was verified live: global search found a session from a transcript hit, and a URL-named session produced a pending `Send to "Fix auth race in gateway"` card (cancelled, not sent). The `design-v1.31` project/global scopes were verified live: the session dock switched to `This project` and answered from 12 session summaries; the Overview Ask opened a global thread that reported an empty inbox and one running session; both read-only. The `design-v1.30` expired/interrupted states were verified by unit tests (24h expiry, LRU eviction with a locked thread, restart marking) and the build; the live hub has no expired action to exercise. The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests.
+5 search hits`. The `design-v1.39` retrieval loop was verified live: asked for the last three tool calls, the dock listed the call index, read three outputs, and answered with each command and its result; the activity block showed `Model 8.4 s`, `Listed tool calls 40 calls`, three `Read output · …` tiles, and the evidence line read `Read 185 turns · 5 tool calls`. The `design-v1.38` shared renderer was verified live: the dock showed `20 turns · compacted · 5 hits · 4.3 s` with a structured query/hits detail, above the answer, and the chat still opened its Reasoning preview with prev/next. The `design-v1.37` activity parity was verified live: steps render above the answer (file/bulb/search/model tiles, durations 7–73ms and 4.4s), completed tiles carry no dot, and the chat's 49px grid is used. The `design-v1.36` endpoint panel was verified live: it seeded the config endpoint and model, `Test connection` answered in 2.7 s on the configured model, and `Change endpoint` from the dock opened Settings. The `design-v1.35` model picker and activity block were verified live: the chip listed the endpoint models (the configured model selected), a search answer produced four tiles (`context · history · search · model`) with durations, and the model tile opened `model · 3196 in / 63 out · 1.5s`. The global thread rendered as a modal `<dialog>`. The `design-v1.34` cross-session search was verified live from a session thread: "which session is working on the trip plan?" returned `plan trip` with 5 hits and stated the transcript was outside the thread. The `design-v1.33` targeted send was verified live: global search found a session from a transcript hit, and a URL-named session produced a pending `Send to "Fix auth race in gateway"` card (cancelled, not sent). The `design-v1.31` project/global scopes were verified live: the session dock switched to `This project` and answered from 12 session summaries; the Overview Ask opened a global thread that reported an empty inbox and one running session; both read-only. The `design-v1.30` expired/interrupted states were verified by unit tests (24h expiry, LRU eviction with a locked thread, restart marking) and the build; the live hub has no expired action to exercise. The `design-v1.29` permission rule was verified by unit tests (a destructive question produces a failed action and no send) and the payload card by typecheck/e2e build; the live hub has no destructive question to exercise. The `design-v1.28` history clause was verified live (`history Nov 19` on a turn assembled from a day-old compaction) and in the assistant e2e. The `design-v1.26` time markers were verified in the dock at 1440 and 390px (day label, per-turn times, and the as-of stamp). The `design-v1.24` evidence line was verified live (`Read 8 turns · 1 attention item · 3252 in · 94 out`) and in the assistant e2e. The `design-v1.23` write confirmation was verified live against the local model (proposal, edit, cancel) and end to end against a fake provider (confirm → provider receives the message, card reloads as `Sent`). The `design-v1.22` assistant dock was reviewed in dark and light at 1440, 1280, 1024, and 390px: empty state, streaming, persisted turns, the disabled load state, and the mobile full-width panel, with no console errors and no horizontal overflow. The full gates pass at 776 unit tests and 57 e2e tests. The `design-v1.43` undo/redo revision was reviewed against the static prototype at 1440, 390, and 320px in both themes and in the chat e2e at 1280 and 390px: undo stages the latest turn, the banner reports a changed file without restoring it, the prompt returns to an empty draft, and redo restores the turn, with no horizontal overflow or console errors. The full gates pass at 920 unit tests and 70 e2e tests.

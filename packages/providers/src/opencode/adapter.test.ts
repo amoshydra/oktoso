@@ -445,6 +445,176 @@ describe("OpenCodeAdapter.retryMessage", () => {
   });
 });
 
+async function historyServer(): Promise<{
+  adapter: OpenCodeAdapter;
+  calls: RecordedCall[];
+}> {
+  const calls: RecordedCall[] = [];
+  let revert: { messageID: string; files: unknown[] } | undefined;
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    let raw = "";
+    request.on("data", (chunk) => {
+      raw += chunk;
+    });
+    request.on("end", () => {
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({ method: request.method ?? "GET", path: url.pathname, body });
+      if (url.pathname === "/api/session/ses_test") {
+        json(response, 200, {
+          data: {
+            id: "ses_test",
+            title: "Test session",
+            time: { created: 1, updated: 2 },
+            ...(revert ? { revert } : {}),
+          },
+        });
+        return;
+      }
+      if (url.pathname.endsWith("/message")) {
+        json(response, 200, {
+          data: [
+            {
+              id: "msg_user",
+              type: "user",
+              time: { created: 1 },
+              text: "undo me",
+              files: [
+                {
+                  name: "notes.md",
+                  mime: "text/markdown",
+                  url: "file:///notes.md",
+                },
+              ],
+            },
+          ],
+          cursor: { next: null, previous: null },
+        });
+        return;
+      }
+      if (url.pathname.endsWith("/revert/stage")) {
+        revert = {
+          messageID: String((body as { messageID?: unknown })?.messageID),
+          files: [
+            {
+              file: "src/api.ts",
+              status: "modified",
+              additions: 2,
+              deletions: 1,
+            },
+          ],
+        };
+        json(response, 200, { data: revert });
+        return;
+      }
+      if (url.pathname.endsWith("/revert/commit")) {
+        revert = undefined;
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      if (url.pathname.endsWith("/revert")) {
+        revert = undefined;
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return {
+    adapter: new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    }),
+    calls,
+  };
+}
+
+describe("OpenCodeAdapter history", () => {
+  it("reports the latest turn as undoable", async () => {
+    const { adapter } = await historyServer();
+    const history = await adapter.history(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    expect(history).toEqual({
+      mode: "revert",
+      canUndo: true,
+      canRedo: false,
+    });
+  });
+
+  it("stages a conversation-only undo and returns the prompt", async () => {
+    const { adapter, calls } = await historyServer();
+    const undone = await adapter.undoLastTurn(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(undone).toEqual({
+      mode: "revert",
+      canUndo: false,
+      canRedo: true,
+      staged: {
+        messageId: "msg_user",
+        files: [
+          {
+            path: "src/api.ts",
+            status: "modified",
+            additions: 2,
+            deletions: 1,
+          },
+        ],
+      },
+      prompt: { text: "undo me", attachments: ["notes.md"] },
+    });
+    expect(
+      calls.find((call) => call.path.endsWith("/revert/stage"))?.body,
+    ).toEqual({ messageID: "msg_user", files: false });
+    expect(
+      calls.some((call) => call.path.endsWith("/revert/commit")),
+    ).toBe(false);
+  });
+
+  it("keeps a staged undo visible and clears it on redo", async () => {
+    const { adapter, calls } = await historyServer();
+    await adapter.undoLastTurn(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    const staged = await adapter.history(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    expect(staged.canUndo).toBe(false);
+    expect(staged.canRedo).toBe(true);
+    expect(staged.staged?.files).toHaveLength(1);
+    expect(staged.prompt).toEqual({
+      text: "undo me",
+      attachments: ["notes.md"],
+    });
+
+    const restored = await adapter.redoLastTurn(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    expect(restored.canUndo).toBe(true);
+    expect(restored.canRedo).toBe(false);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "DELETE" && call.path.endsWith("/revert"),
+      ),
+    ).toBe(true);
+  });
+});
+
 async function promptServer(): Promise<{
   adapter: OpenCodeAdapter;
   calls: RecordedCall[];

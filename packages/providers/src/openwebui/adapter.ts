@@ -1,6 +1,7 @@
 import type {
   BranchPoint,
   CreateSessionInput,
+  HistoryPrompt,
   Message,
   MessagePage,
   MessagePart,
@@ -11,6 +12,7 @@ import type {
   SendInput,
   SendResult,
   Session,
+  SessionHistory,
   SessionListQuery,
   SessionPage,
   SessionStatus,
@@ -114,6 +116,8 @@ const openWebUICapabilities: ProviderCapabilities = {
   branches: true,
   fork: false,
   retry: true,
+  undo: true,
+  redo: true,
   search: false,
   options: true,
   markRead: false,
@@ -543,6 +547,95 @@ export class OpenWebUIAdapter implements ProviderAdapter {
     );
   }
 
+  /**
+   * Undo and redo for the latest turn.
+   *
+   * Open WebUI has no delete; the message tree is the history. Undo moves
+   * `history.currentId` to the parent of the last user message, which hides the
+   * turn without deleting anything. Redo descends to the deepest child,
+   * preferring the newest branch, exactly like the branch switcher.
+   */
+  async history(ref: string, signal: AbortSignal): Promise<SessionHistory> {
+    const chat = await this.fetchChat(this.nativeID(ref), signal);
+    return this.historyFromChat(chat);
+  }
+
+  async undoLastTurn(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    const branch = this.currentBranch(chat);
+    const last = branch.at(-1);
+    if (last?.role === "assistant" && last.done === false) {
+      throw new ProviderError(
+        "conflict",
+        "Wait for the current response before undoing the turn",
+      );
+    }
+    const lastUser = [...branch].reverse().find((message) => message.role === "user");
+    const parentId = lastUser?.parentId ?? undefined;
+    if (!lastUser || !parentId) {
+      throw new ProviderError(
+        "invalid_request",
+        "There is no turn to undo in this chat",
+      );
+    }
+    const parent = chat.chat.history?.messages?.[parentId];
+    if (!parent) {
+      throw new ProviderError("not_found", "The previous message is gone");
+    }
+
+    await this.request<OpenWebUIChat>(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      { chat: { history: { currentId: parent.id } } },
+    );
+    return this.history(ref, signal);
+  }
+
+  async redoLastTurn(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const chat = await this.fetchChat(nativeID, signal);
+    const history = chat.chat.history;
+    const messages = history?.messages ?? {};
+    const currentId = history?.currentId ?? this.currentBranch(chat).at(-1)?.id;
+    const current = currentId ? messages[currentId] : undefined;
+    if (!current || (current.childrenIds ?? []).length === 0) {
+      throw new ProviderError("conflict", "There is no undone turn to redo");
+    }
+
+    let leaf = current;
+    const seen = new Set<string>([leaf.id]);
+    for (;;) {
+      const children = (leaf.childrenIds ?? [])
+        .map((id) => messages[id])
+        .filter((message): message is OpenWebUIMessage => Boolean(message));
+      if (children.length === 0) break;
+      const next = children.sort(
+        (left, right) => (right.timestamp ?? 0) - (left.timestamp ?? 0),
+      )[0]!;
+      if (seen.has(next.id)) break;
+      seen.add(next.id);
+      leaf = next;
+    }
+
+    await this.request<OpenWebUIChat>(
+      `/api/v1/chats/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+      "POST",
+      { chat: { history: { currentId: leaf.id } } },
+    );
+    return this.history(ref, signal);
+  }
+
   async retryMessage(
     ref: string,
     messageId: string,
@@ -809,6 +902,39 @@ export class OpenWebUIAdapter implements ProviderAdapter {
       ...(message.done ? { completedAt: createdAt } : {}),
       ...(message.done === false ? { streaming: true } : {}),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    };
+  }
+
+  /**
+   * Derive undo/redo from the tree alone, so it survives a hub restart. Undo
+   * leaves `currentId` on the last visible message; its children are the
+   * undone turn. The direct user child is the prompt to restore.
+   */
+  private historyFromChat(chat: OpenWebUIChat): SessionHistory {
+    const branch = this.currentBranch(chat);
+    const messages = chat.chat.history?.messages ?? {};
+    const currentId = chat.chat.history?.currentId ?? branch.at(-1)?.id;
+    const current = currentId ? messages[currentId] : branch.at(-1);
+    const children = (current?.childrenIds ?? [])
+      .map((id) => messages[id])
+      .filter((message): message is OpenWebUIMessage => Boolean(message));
+    const byNewest = [...children].sort(
+      (left, right) => (right.timestamp ?? 0) - (left.timestamp ?? 0),
+    );
+    const undone =
+      byNewest.find((message) => message.role === "user") ?? byNewest[0];
+    const lastUser = [...branch].reverse().find((message) => message.role === "user");
+
+    return {
+      mode: "branch",
+      canUndo: Boolean(lastUser?.parentId),
+      canRedo: undone !== undefined,
+      ...(undone
+        ? {
+            staged: { messageId: undone.id, files: [] },
+            prompt: openWebUIHistoryPrompt(undone),
+          }
+        : {}),
     };
   }
 
@@ -1279,6 +1405,18 @@ function fileParts(files: unknown): MessagePart[] {
     });
   }
   return parts;
+}
+
+function openWebUIHistoryPrompt(message: OpenWebUIMessage): HistoryPrompt {
+  return {
+    text: contentText(message.content).trim(),
+    attachments: fileParts(message.files)
+      .filter(
+        (part): part is Extract<MessagePart, { type: "file" }> =>
+          part.type === "file",
+      )
+      .map((part) => part.name),
+  };
 }
 
 function errorText(error: unknown): string {

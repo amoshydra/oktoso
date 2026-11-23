@@ -399,6 +399,11 @@ interface FakeOpenCodeInboxItem {
 
 const OPENCODE_INBOX: Record<string, FakeOpenCodeInboxItem[]> = {};
 
+const OPENCODE_REVERTS: Record<
+  string,
+  { messageID: string; files: Array<Record<string, unknown>> }
+> = {};
+
 const INITIAL_OPENCODE_MESSAGES = structuredClone(OPENCODE_MESSAGES);
 const INITIAL_PERMISSION = structuredClone(fakePermission);
 const INITIAL_FORM = structuredClone(fakeForm);
@@ -412,6 +417,9 @@ export function resetFakeProviderState(): void {
   }
   for (const key of Object.keys(OPENCODE_INBOX)) {
     delete OPENCODE_INBOX[key];
+  }
+  for (const key of Object.keys(OPENCODE_REVERTS)) {
+    delete OPENCODE_REVERTS[key];
   }
   fakePermission = structuredClone(INITIAL_PERMISSION);
   fakeForm = structuredClone(INITIAL_FORM);
@@ -1067,7 +1075,10 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
       return;
     }
-    sendJson(response, 200, { data: session });
+    const revert = OPENCODE_REVERTS[session.id];
+    sendJson(response, 200, {
+      data: { ...session, ...(revert ? { revert } : {}) },
+    });
     return;
   }
   const messagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/);
@@ -1117,6 +1128,62 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       return;
     }
   }
+  const revertStageMatch = path.match(/^\/api\/session\/([^/]+)\/revert\/stage$/);
+  if (revertStageMatch && request.method === "POST") {
+    const sessionID = revertStageMatch[1] ?? "";
+    if (!OPENCODE_MESSAGES[sessionID]) {
+      sendJson(response, 404, {
+        _tag: "SessionNotFoundError",
+        message: "Session not found",
+      });
+      return;
+    }
+    const body = await readBody(request);
+    const messageID =
+      typeof body.messageID === "string" ? body.messageID : "";
+    if (!messageID) {
+      sendJson(response, 400, {
+        _tag: "InvalidRequestError",
+        message: "messageID is required",
+      });
+      return;
+    }
+    const revert = {
+      messageID,
+      files: [
+        {
+          file: "src/auth.ts",
+          status: "modified",
+          additions: 2,
+          deletions: 1,
+        },
+      ],
+    };
+    OPENCODE_REVERTS[sessionID] = revert;
+    broadcastEvent("session.revert.staged", { sessionID, ...revert });
+    sendJson(response, 200, { data: revert });
+    return;
+  }
+  const revertCommitMatch = path.match(/^\/api\/session\/([^/]+)\/revert\/commit$/);
+  if (revertCommitMatch && request.method === "POST") {
+    delete OPENCODE_REVERTS[revertCommitMatch[1] ?? ""];
+    broadcastEvent("session.revert.committed", {
+      sessionID: revertCommitMatch[1],
+    });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const revertMatch = path.match(/^\/api\/session\/([^/]+)\/revert$/);
+  if (revertMatch && request.method === "DELETE") {
+    delete OPENCODE_REVERTS[revertMatch[1] ?? ""];
+    broadcastEvent("session.revert.cleared", {
+      sessionID: revertMatch[1],
+    });
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/);
   if (promptMatch && request.method === "POST") {
     const sessionID = promptMatch[1] ?? "";
@@ -1126,6 +1193,16 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       sendJson(response, 404, { _tag: "SessionNotFoundError", message: "Session not found" });
       return;
     }
+    // Sending accepts a staged revert: the reverted turn leaves the visible
+    // conversation before the new prompt is appended.
+    const revert = OPENCODE_REVERTS[sessionID];
+    if (revert) {
+      const boundary = messages.findIndex(
+        (message) => message.id === revert.messageID,
+      );
+      if (boundary >= 0) messages.splice(boundary);
+    }
+    delete OPENCODE_REVERTS[sessionID];
     const text = typeof body.text === "string" ? body.text : "";
     if (body.delivery === "queue") {
       const item: FakeOpenCodeInboxItem = {

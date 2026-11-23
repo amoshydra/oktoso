@@ -61,6 +61,7 @@ import type {
   SendInput,
   SendResult,
   Session,
+  SessionHistory,
   SessionListQuery,
   SessionPage,
   SessionSelectionInput,
@@ -860,6 +861,26 @@ export class HubClient {
     return this.request<SendResult>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/retry`,
       { method: "POST", body: { messageId } },
+    );
+  }
+
+  async history(ref: string): Promise<SessionHistory> {
+    return this.request<SessionHistory>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/history`,
+    );
+  }
+
+  async undoLastTurn(ref: string): Promise<SessionHistory> {
+    return this.request<SessionHistory>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/history/undo`,
+      { method: "POST" },
+    );
+  }
+
+  async redoLastTurn(ref: string): Promise<SessionHistory> {
+    return this.request<SessionHistory>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/history/redo`,
+      { method: "POST" },
     );
   }
 

@@ -7,12 +7,15 @@ import type {
   MessagePage,
   MessagePart,
   MessagesQuery,
+  HistoryFileChange,
+  HistoryPrompt,
   ProviderCapabilities,
   ProviderHealth,
   ProviderOptions,
   SendDelivery,
   SendResult,
   Session,
+  SessionHistory,
   SessionListQuery,
   SessionPage,
   SessionStatus,
@@ -52,6 +55,11 @@ export interface OpenCodeSessionRaw {
   };
   outcome?: "succeeded" | "failed" | "interrupted";
   fork?: { sessionID?: string; boundary?: unknown };
+  /** A staged (or committed) conversation boundary from the revert API. */
+  revert?: {
+    messageID?: string;
+    files?: unknown[];
+  } | null;
   time: {
     created: number;
     updated: number;
@@ -194,6 +202,8 @@ const openCodeCapabilities: ProviderCapabilities = {
   branches: false,
   fork: true,
   retry: true,
+  undo: true,
+  redo: true,
   search: false,
   options: true,
   markRead: true,
@@ -574,6 +584,153 @@ export class OpenCodeAdapter implements ProviderAdapter {
       accepted: true,
       ...(response.data?.id ? { messageID: response.data.id } : {}),
     };
+  }
+
+  /**
+   * Undo and redo for the latest turn.
+   *
+   * OpenCode stages a revert at the user message. Passing `files: false` keeps
+   * the worktree untouched, which is the v1 contract: the changed files are
+   * reported to the client as information and never restored. Sending a new
+   * prompt commits the staged revert, so the undone conversation disappears
+   * for good; redo cancels the stage instead.
+   */
+  async history(ref: string, signal: AbortSignal): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+    );
+    const revert = response.data.revert;
+    if (revert?.messageID) {
+      const user = await this.findMessage(ref, revert.messageID, signal);
+      return {
+        mode: "revert",
+        canUndo: false,
+        canRedo: true,
+        staged: {
+          messageId: revert.messageID,
+          files: toHistoryFiles(revert.files),
+        },
+        ...(user ? { prompt: historyPrompt(user) } : {}),
+      };
+    }
+    const user = await this.latestUserMessage(ref, signal);
+    return {
+      mode: "revert",
+      canUndo: Boolean(user),
+      canRedo: false,
+    };
+  }
+
+  async undoLastTurn(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const current = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+    );
+    if (current.data.revert?.messageID) return this.history(ref, signal);
+
+    const user = await this.latestUserMessage(ref, signal);
+    if (!user) {
+      throw new ProviderError(
+        "invalid_request",
+        "There is no turn to undo in this session",
+      );
+    }
+    const staged = await this.request<{
+      data?: { messageID?: string; files?: unknown[] };
+    }>(
+      `/api/session/${encodeURIComponent(nativeID)}/revert/stage`,
+      {},
+      signal,
+      "POST",
+      { messageID: user.id, files: false },
+    );
+    return {
+      mode: "revert",
+      canUndo: false,
+      canRedo: true,
+      staged: {
+        messageId: staged.data?.messageID ?? user.id,
+        files: toHistoryFiles(staged.data?.files),
+      },
+      prompt: historyPrompt(user),
+    };
+  }
+
+  async redoLastTurn(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const current = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+    );
+    if (current.data.revert) {
+      await this.request(
+        `/api/session/${encodeURIComponent(nativeID)}/revert`,
+        {},
+        signal,
+        "DELETE",
+      );
+    }
+    return this.history(ref, signal);
+  }
+
+  /** The newest user message, paging past long activity tails. */
+  private async latestUserMessage(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<Message | undefined> {
+    let cursor: string | undefined;
+    for (let hop = 0; hop < 10; hop += 1) {
+      const page = await this.getMessages(
+        ref,
+        {
+          limit: 100,
+          order: "desc",
+          ...(cursor ? { cursor } : {}),
+        },
+        signal,
+      );
+      const user = page.data.find((message) => message.role === "user");
+      if (user) return user;
+      if (!page.cursor.next) return undefined;
+      cursor = page.cursor.next;
+    }
+    return undefined;
+  }
+
+  private async findMessage(
+    ref: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<Message | undefined> {
+    let cursor: string | undefined;
+    for (let hop = 0; hop < 10; hop += 1) {
+      const page = await this.getMessages(
+        ref,
+        {
+          limit: 100,
+          order: "desc",
+          ...(cursor ? { cursor } : {}),
+        },
+        signal,
+      );
+      const found = page.data.find((message) => message.id === messageId);
+      if (found) return found;
+      if (!page.cursor.next) return undefined;
+      cursor = page.cursor.next;
+    }
+    return undefined;
   }
 
   async setSessionOptions(
@@ -1650,4 +1807,58 @@ function numberValue(
 ): number | undefined {
   const value = asRecord(record)?.[key];
   return typeof value === "number" ? value : undefined;
+}
+
+/** The text and file names of a user turn, for the restored draft. */
+function historyPrompt(message: Message): HistoryPrompt {
+  return {
+    text: message.parts
+      .filter(
+        (part): part is Extract<MessagePart, { type: "text" }> =>
+          part.type === "text",
+      )
+      .map((part) => part.text)
+      .join("\n")
+      .trim(),
+    attachments: message.parts
+      .filter(
+        (part): part is Extract<MessagePart, { type: "file" }> =>
+          part.type === "file",
+      )
+      .map((part) => part.name),
+  };
+}
+
+/**
+ * OpenCode's revert reports changed files as `FileDiff.Info`. The hub only
+ * needs the name and status; v1 never applies them.
+ */
+function toHistoryFiles(files: unknown): HistoryFileChange[] {
+  if (!Array.isArray(files)) return [];
+  const changes: HistoryFileChange[] = [];
+  for (const item of files) {
+    const record = asRecord(item);
+    const path =
+      stringValue(record?.file) ??
+      stringValue(record?.path) ??
+      stringValue(record?.filename);
+    const status = record?.status;
+    if (
+      !path ||
+      (status !== "added" && status !== "deleted" && status !== "modified")
+    ) {
+      continue;
+    }
+    changes.push({
+      path,
+      status,
+      ...(typeof record?.additions === "number"
+        ? { additions: record.additions }
+        : {}),
+      ...(typeof record?.deletions === "number"
+        ? { deletions: record.deletions }
+        : {}),
+    });
+  }
+  return changes;
 }

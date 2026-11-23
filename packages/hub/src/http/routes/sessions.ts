@@ -171,6 +171,18 @@ export function registerSessionRoutes(
     return c.json(result, 202);
   });
 
+  app.get("/api/v1/sessions/:ref/history", async (c) => {
+    return c.json(await sessions.history(c.req.param("ref")));
+  });
+
+  app.post("/api/v1/sessions/:ref/history/undo", async (c) => {
+    return c.json(await sessions.undoLastTurn(c.req.param("ref")));
+  });
+
+  app.post("/api/v1/sessions/:ref/history/redo", async (c) => {
+    return c.json(await sessions.redoLastTurn(c.req.param("ref")));
+  });
+
   app.get("/api/v1/sessions/:ref/inbox", async (c) => {
     return c.json({ data: await sessions.listInbox(c.req.param("ref")) });
   });

@@ -12,6 +12,7 @@ import type {
   SendDelivery,
   SendResult,
   Session,
+  SessionHistory,
   SessionListQuery,
   SessionPage,
   SessionSelectionInput,
@@ -157,6 +158,12 @@ export interface ProviderAdapter {
     messageId: string,
     signal: AbortSignal,
   ): Promise<SendResult>;
+  /** Current undo/redo state, including a staged (undone) turn. */
+  history?(ref: string, signal: AbortSignal): Promise<SessionHistory>;
+  /** Undo the latest turn. Conversation only: files are reported, not restored. */
+  undoLastTurn?(ref: string, signal: AbortSignal): Promise<SessionHistory>;
+  /** Restore the latest undone turn. */
+  redoLastTurn?(ref: string, signal: AbortSignal): Promise<SessionHistory>;
   listInbox?(ref: string, signal: AbortSignal): Promise<ProviderInboxItem[]>;
   updateInbox?(
     ref: string,
@@ -223,6 +230,8 @@ export const emptyCapabilities: ProviderCapabilities = {
   branches: false,
   fork: false,
   retry: false,
+  undo: false,
+  redo: false,
   search: false,
   options: false,
   markRead: false,

@@ -66,6 +66,8 @@ function provider(config: ProviderConfig): Provider {
       branches: false,
       fork: false,
       retry: false,
+      undo: false,
+      redo: false,
       search: false,
       options: false,
       markRead: false,
