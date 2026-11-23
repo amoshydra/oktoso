@@ -715,6 +715,26 @@ export class SessionService {
   }
 
   /**
+   * Apply the undone turn's file changes. The caller has already confirmed
+   * that current edits to those paths may be overwritten.
+   */
+  async restoreHistoryFiles(ref: string): Promise<SessionHistory> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (
+      !adapter.capabilities.restoreFiles ||
+      !adapter.restoreHistoryFiles
+    ) {
+      throw notImplemented("This provider cannot restore files for an undo");
+    }
+    this.assertProviderAvailable(adapter.id);
+    return adapter.restoreHistoryFiles(
+      ref,
+      operationSignal(this.registry, adapter.id, 120_000, 5_000),
+    );
+  }
+
+  /**
    * Resolves the family of one session: its ancestors up to the root, then
    * every descendant the hub can see. Cycles and runaway depth are cut, and the
    * result says when a cap truncated it.

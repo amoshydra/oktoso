@@ -9,9 +9,9 @@ transcript model.
 - Implemented: copy, dictation, optimistic send with failed-send retry, OpenCode
   and Open WebUI attachments, Open WebUI in-chat branch switching and
   retry-as-a-sibling, OpenCode session forks, OpenCode edit-and-fork, and
-  conversation-only last-turn undo/redo on both providers.
-- Deferred: true in-chat editing for Open WebUI and a full session-family tree
-  UI.
+  OpenCode last-turn undo/redo with opt-in file restore.
+- Deferred: Open WebUI undo (0.13.0 cannot persist a non-leaf `currentId`),
+  true in-chat editing for Open WebUI, and a full session-family tree UI.
 - Related: [`design.md`](design.md), [`ui-ia.md`](ui-ia.md),
   [`visual-audit.md`](visual-audit.md)
 - Spike evidence: the isolated `spike/assistant-ui` branch (not merged)
@@ -358,29 +358,40 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 `GET /api/v1/sessions/{ref}/history`
 
 - Returns `{ mode, canUndo, canRedo, staged?, prompt? }` for the latest turn.
-- `mode` is `revert` (OpenCode) or `branch` (Open WebUI).
-- `staged` carries `{ messageId, files }`. `files` is informational:
-  `{ path, status, additions?, deletions? }`. v1 never restores them.
+- `mode` is `revert` on OpenCode. `branch` stays reserved for a future native
+  path; no provider uses it in v1.
+- `staged` carries `{ messageId, files, filesRestored? }`. `files` is the
+  turn's changed paths (`{ path, status, additions?, deletions? }`) from the
+  provider's read-only diff. `filesRestored` is true once the provider applied
+  them.
 - `prompt` carries the undone turn's `{ text, attachments }` so the client can
   restore the composer draft.
 - A provider without `undo` returns a capability error; the UI hides the control.
+  Open WebUI advertises `undo: false`.
 
 `POST /api/v1/sessions/{ref}/history/undo`
 
 - Undoes the latest user turn. Conversation only: no file is written.
-- OpenCode stages a revert with `files: false` at the user message. Sending a
+- OpenCode stages a revert with `files: false` at the user message, then reads
+  `/api/session/{id}/diff?from={messageID}` to list the changed files. Sending a
   later prompt commits the stage; redo clears it.
-- Open WebUI moves `history.currentId` to the parent of the last user message.
-  The tree is the state, so a hub restart does not lose redo.
-- Returns the same shape as `GET history`. Refused while a turn is running, and
-  when there is no turn (or, on Open WebUI, when the only user message is the
-  root).
+- Returns the same shape as `GET history`. Refused while a turn is running and
+  when there is no turn.
 
 `POST /api/v1/sessions/{ref}/history/redo`
 
-- Restores the turn hidden by the last undo. Files stay as they are.
-- OpenCode clears the staged revert; Open WebUI descends to the deepest child
-  and prefers the newest branch.
+- Restores the turn hidden by the last undo.
+- OpenCode clears the staged revert. Files return to how they were when the
+  turn was undone, so edits made after the undo are overwritten.
+
+`POST /api/v1/sessions/{ref}/history/restore-files`
+
+- Opt-in file restore for a staged undo. The caller has already confirmed that
+  current edits to the affected paths may be overwritten.
+- OpenCode re-stages the same boundary with `files: true`; the response has
+  `staged.filesRestored: true`. Redo then restores both conversation and files.
+- Providers without `restoreFiles` return a capability error; the UI hides the
+  action.
 
 `POST /api/v1/sessions/{ref}/fork`
 

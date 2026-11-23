@@ -109,6 +109,7 @@ interface ProviderCapabilities {
   files: boolean
   undo: boolean
   redo: boolean
+  restoreFiles: boolean
   search: boolean
   rename: boolean
 }
@@ -280,6 +281,7 @@ Endpoints:
 | Pending forms | `GET /api/form` |
 | Reply form | `POST /api/session/{sessionID}/form/{formID}/reply` |
 | Mark viewed | `POST /api/session/{sessionID}/view` |
+| Turn diff | `GET /api/session/{sessionID}/diff?from={messageID}` |
 | Stage revert | `POST /api/session/{sessionID}/revert/stage` with `{ "messageID", "files": false }` |
 | Commit revert | `POST /api/session/{sessionID}/revert/commit` |
 | Clear revert | `DELETE /api/session/{sessionID}/revert` |
@@ -363,25 +365,33 @@ Mapping notes:
 ### 8.4 Undo and redo
 
 Undo removes the latest user turn from the conversation and keeps it available
-for redo. It is conversation-only in v1: a provider may report the files the
-turn changed, but the hub never restores them. The prompt returns to the
-composer so the reader can rewrite it.
+for redo. It is conversation-only by default. OpenCode can also apply the
+turn's file changes on request, through `POST /history/restore-files`. The
+prompt returns to the composer so the reader can rewrite it.
 
-| Provider | Undo | Redo |
-|---|---|---|
-| OpenCode | Stage a revert at the user message with `files: false` | Clear the staged revert with `DELETE /revert` |
-| Open WebUI | Move `history.currentId` to the parent of the last user message | Descend to the deepest child, preferring the newest branch |
+| Provider | Undo | Redo | Files |
+|---|---|---|---|
+| OpenCode | Stage a revert at the user message with `files: false` | Clear the staged revert with `DELETE /revert` | Read-only preview from `diff?from=`; opt-in re-stage with `files: true` |
+| Open WebUI | Not available in v1: the capability is `false` | — | — |
 
 - OpenCode keeps the staged revert on the session (`Session.Info.revert`).
-  Sending a new prompt commits it, which hides the reverted messages. The
-  adapter reports the staged boundary and `FileDiff.Info` entries as
-  information only.
-- Open WebUI never deletes messages. Undo hides a turn by moving `currentId`
-  up the tree; redo moves it back down. The tree alone therefore carries the
-  undo state, and it survives a hub restart.
+  Sending a new prompt commits it, which hides the reverted messages.
+- `files: false` does not populate `Session.Revert.files`; the adapter reads
+  the turn's `FileDiff.Info` list from
+  `GET /api/session/{sessionID}/diff?from={messageID}` instead. That endpoint
+  is read-only and works without applying anything.
+- `files: true` applies the file changes and reports them in
+  `Session.Revert.files`. The client only sends it after the reader confirms
+  that current edits to those paths may be overwritten. `DELETE /revert`
+  restores the conversation and the files to how they were when the turn was
+  undone.
+- Open WebUI 0.13.0 repairs any non-leaf `history.currentId` to the last
+  descendant on every read, so branch-only undo cannot persist. The adapter
+  advertises `undo: false` and the web client hides the control. The
+  `mode: "branch"` contract stays reserved for a future native path; the hub
+  does not delete Open WebUI messages.
 - Both providers refuse undo while a turn is running.
-- `canUndo` requires a user message; Open WebUI also requires that message to
-  have a parent, because the tree cannot represent an empty conversation.
+- `canUndo` requires a user message.
 
 ### 8.5 Future providers
 
@@ -428,6 +438,7 @@ POST   /api/v1/sessions/:ref/compact
 GET    /api/v1/sessions/:ref/history
 POST   /api/v1/sessions/:ref/history/undo
 POST   /api/v1/sessions/:ref/history/redo
+POST   /api/v1/sessions/:ref/history/restore-files
 GET    /api/v1/sessions/:ref/draft
 PUT    /api/v1/sessions/:ref/draft
 DELETE /api/v1/sessions/:ref/draft

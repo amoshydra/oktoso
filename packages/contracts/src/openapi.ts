@@ -995,6 +995,26 @@ registry.registerPath({
 
 registry.registerPath({
   method: "post",
+  path: "/api/v1/sessions/{ref}/history/restore-files",
+  tags: ["sessions"],
+  summary: "Restore the undone turn's files",
+  description:
+    "Applies the file changes of the undone turn. Conversation-only undo never writes files; this opt-in action does, and current edits to the affected paths may be overwritten. Redo restores the conversation and files to how they were when the turn was undone.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Files restored",
+      content: json(SessionHistorySchema),
+    },
+    404: errorResponse("Session not found"),
+    409: errorResponse("No turn is staged for undo"),
+    501: errorResponse("Provider cannot restore files"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
   path: "/api/v1/sessions/{ref}/fork",
   tags: ["sessions"],
   summary: "Fork a session",

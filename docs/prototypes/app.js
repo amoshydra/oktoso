@@ -374,6 +374,8 @@ const state = {
   detailsClosed: false,
   undoRef: null,
   undoPromptOpen: false,
+  filesRestored: false,
+  restoreConfirmOpen: false,
 };
 
 const app = document.getElementById('app');
@@ -949,13 +951,23 @@ function renderChat() {
           <div class="composer-history" role="group" aria-label="Undo staged">
             <div class="composer-history-head">
               <span class="composer-history-title">Undo staged</span>
-              <span class="composer-history-detail">1 file changed, not restored</span>
+              <span class="composer-history-detail">${state.filesRestored ? '1 file restored' : '1 file changed, not restored'}</span>
               <div class="composer-history-buttons">
                 <button class="composer-history-action" type="button" data-redo>Redo</button>
+                ${!state.filesRestored ? '<button class="composer-history-action danger" type="button" data-undo-restore>Restore files</button>' : ''}
                 <button class="composer-history-action" type="button" data-undo-prompt>${state.undoPromptOpen ? 'Hide prompt' : 'Show prompt'}</button>
                 <button class="composer-history-action" type="button" data-undo-files>Show files</button>
               </div>
             </div>
+            ${state.restoreConfirmOpen ? `
+              <div class="composer-history-confirm" role="alertdialog" aria-label="Restore files">
+                <p>Restore 1 file to its state before this turn? Current edits to these paths may be overwritten. Redo restores the conversation and files to how they were when you undid the turn.</p>
+                <div class="composer-history-buttons">
+                  <button class="composer-history-action" type="button" data-undo-confirm-cancel>Cancel</button>
+                  <button class="composer-history-action danger" type="button" data-undo-confirm-restore>Restore files</button>
+                </div>
+              </div>
+            ` : ''}
             ${state.undoPromptOpen ? `<div class="composer-history-prompt"><p>${esc(undoPrompt)}</p></div>` : ''}
           </div>
         ` : ''}
@@ -1198,6 +1210,8 @@ function openSession(ref) {
   state.detailsOpen = false;
   state.undoRef = null;
   state.undoPromptOpen = false;
+  state.filesRestored = false;
+  state.restoreConfirmOpen = false;
   renderApp();
 }
 
@@ -1249,6 +1263,8 @@ function sendMessage(text) {
   if (!text.trim()) return;
   state.undoRef = null;
   state.undoPromptOpen = false;
+  state.filesRestored = false;
+  state.restoreConfirmOpen = false;
   session.messages.push({ role: 'user', text: text.trim(), time: nowMs() });
   session.status = 'running';
   session.updated = nowMs();
@@ -1478,6 +1494,8 @@ document.addEventListener('click', (event) => {
   if (target.matches('[data-undo]')) {
     state.undoRef = state.selectedRef;
     state.undoPromptOpen = false;
+    state.filesRestored = false;
+    state.restoreConfirmOpen = false;
     renderApp();
     requestAnimationFrame(() => {
       const textarea = document.getElementById('composer');
@@ -1492,7 +1510,26 @@ document.addEventListener('click', (event) => {
   if (target.matches('[data-redo]')) {
     state.undoRef = null;
     state.undoPromptOpen = false;
+    state.filesRestored = false;
+    state.restoreConfirmOpen = false;
     renderApp();
+    return;
+  }
+  if (target.matches('[data-undo-restore]')) {
+    state.restoreConfirmOpen = true;
+    renderApp();
+    return;
+  }
+  if (target.matches('[data-undo-confirm-cancel]')) {
+    state.restoreConfirmOpen = false;
+    renderApp();
+    return;
+  }
+  if (target.matches('[data-undo-confirm-restore]')) {
+    state.filesRestored = true;
+    state.restoreConfirmOpen = false;
+    renderApp();
+    toast('Files restored');
     return;
   }
   if (target.matches('[data-undo-prompt]')) {

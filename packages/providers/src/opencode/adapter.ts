@@ -204,6 +204,7 @@ const openCodeCapabilities: ProviderCapabilities = {
   retry: true,
   undo: true,
   redo: true,
+  restoreFiles: true,
   search: false,
   options: true,
   markRead: true,
@@ -590,10 +591,10 @@ export class OpenCodeAdapter implements ProviderAdapter {
    * Undo and redo for the latest turn.
    *
    * OpenCode stages a revert at the user message. Passing `files: false` keeps
-   * the worktree untouched, which is the v1 contract: the changed files are
-   * reported to the client as information and never restored. Sending a new
-   * prompt commits the staged revert, so the undone conversation disappears
-   * for good; redo cancels the stage instead.
+   * the worktree untouched. The turn's changed files come from the read-only
+   * session diff, so the banner can list them without applying anything. A
+   * later opt-in restore re-stages the same boundary with `files: true`.
+   * Sending a new prompt commits the staged revert; redo cancels the stage.
    */
   async history(ref: string, signal: AbortSignal): Promise<SessionHistory> {
     const nativeID = this.nativeID(ref);
@@ -605,13 +606,21 @@ export class OpenCodeAdapter implements ProviderAdapter {
     const revert = response.data.revert;
     if (revert?.messageID) {
       const user = await this.findMessage(ref, revert.messageID, signal);
+      const restored = toHistoryFiles(revert.files);
+      const files =
+        restored.length > 0
+          ? restored
+          : await this.turnDiff(ref, revert.messageID, signal).catch(
+              () => [] as HistoryFileChange[],
+            );
       return {
         mode: "revert",
         canUndo: false,
         canRedo: true,
         staged: {
           messageId: revert.messageID,
-          files: toHistoryFiles(revert.files),
+          files,
+          filesRestored: restored.length > 0,
         },
         ...(user ? { prompt: historyPrompt(user) } : {}),
       };
@@ -652,13 +661,17 @@ export class OpenCodeAdapter implements ProviderAdapter {
       "POST",
       { messageID: user.id, files: false },
     );
+    const files = await this.turnDiff(ref, user.id, signal).catch(
+      () => toHistoryFiles(staged.data?.files),
+    );
     return {
       mode: "revert",
       canUndo: false,
       canRedo: true,
       staged: {
         messageId: staged.data?.messageID ?? user.id,
-        files: toHistoryFiles(staged.data?.files),
+        files,
+        filesRestored: false,
       },
       prompt: historyPrompt(user),
     };
@@ -683,6 +696,49 @@ export class OpenCodeAdapter implements ProviderAdapter {
       );
     }
     return this.history(ref, signal);
+  }
+
+  /** Apply the undone turn's file changes. Redo restores them too. */
+  async restoreHistoryFiles(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory> {
+    const nativeID = this.nativeID(ref);
+    const current = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+    );
+    const messageID = current.data.revert?.messageID;
+    if (!messageID) {
+      throw new ProviderError(
+        "conflict",
+        "Undo a turn before restoring its files",
+      );
+    }
+    await this.request(
+      `/api/session/${encodeURIComponent(nativeID)}/revert/stage`,
+      {},
+      signal,
+      "POST",
+      { messageID, files: true },
+    );
+    return this.history(ref, signal);
+  }
+
+  /** The turn's file changes, read-only. Available before applying them. */
+  private async turnDiff(
+    ref: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<HistoryFileChange[]> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<{ data?: unknown[] }>(
+      `/api/session/${encodeURIComponent(nativeID)}/diff`,
+      { from: messageId },
+      signal,
+    );
+    return toHistoryFiles(response.data);
   }
 
   /** The newest user message, paging past long activity tails. */

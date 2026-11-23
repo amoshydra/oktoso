@@ -686,6 +686,17 @@ describe("chat undo and redo", () => {
     expect(await banner.textContent()).toContain("src/auth.ts");
     expect(await banner.textContent()).toContain("modified");
 
+    await banner.getByRole("button", { name: "Restore files" }).click();
+    const confirm = banner.locator(".composer-history-confirm");
+    await confirm.waitFor({ state: "visible", timeout: 5_000 });
+    expect(await confirm.textContent()).toContain(
+      "Current edits to these paths may be overwritten.",
+    );
+    await confirm.getByRole("button", { name: "Restore files" }).click();
+    await confirm.waitFor({ state: "hidden", timeout: 5_000 });
+    expect(await banner.textContent()).toContain("1 file restored");
+    expect(await banner.getByRole("button", { name: "Restore files" }).count()).toBe(0);
+
     await banner.getByRole("button", { name: "Redo" }).click();
     await banner.waitFor({ state: "hidden", timeout: 5_000 });
     await userMessage.waitFor({ state: "visible", timeout: 5_000 });

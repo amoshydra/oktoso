@@ -4491,6 +4491,8 @@ function SessionDetail(props: {
   const [historyNotice, setHistoryNotice] = useState<string>();
   const [historyFilesOpen, setHistoryFilesOpen] = useState(false);
   const [historyPromptOpen, setHistoryPromptOpen] = useState(false);
+  const [historyConfirmOpen, setHistoryConfirmOpen] = useState(false);
+  const [historyRestoring, setHistoryRestoring] = useState(false);
   const [branchBusy, setBranchBusy] = useState<string>();
   const [retryBusy, setRetryBusy] = useState<string>();
   const [continueBusy, setContinueBusy] = useState<string>();
@@ -4541,6 +4543,9 @@ function SessionDetail(props: {
   const branchesSupported = Boolean(sessionProvider?.capabilities.branches);
   const historySupported = Boolean(
     sessionProvider?.capabilities.undo && sessionProvider?.capabilities.redo,
+  );
+  const restoreFilesSupported = Boolean(
+    sessionProvider?.capabilities.restoreFiles,
   );
   const canEdit = Boolean(sessionProvider?.capabilities.fork);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -5041,6 +5046,7 @@ function SessionDetail(props: {
     setHistoryNotice(undefined);
     setHistoryFilesOpen(false);
     setHistoryPromptOpen(false);
+    setHistoryConfirmOpen(false);
     if (!sessionProvider?.capabilities.undo) return;
     void props.client
       .history(props.sessionRef)
@@ -5180,6 +5186,7 @@ function SessionDetail(props: {
     setHistoryNotice(undefined);
     setHistoryFilesOpen(false);
     setHistoryPromptOpen(false);
+    setHistoryConfirmOpen(false);
     try {
       const next = await props.client.undoLastTurn(props.sessionRef);
       setHistory(next);
@@ -5214,6 +5221,7 @@ function SessionDetail(props: {
       setHistory(next);
       setHistoryFilesOpen(false);
       setHistoryPromptOpen(false);
+      setHistoryConfirmOpen(false);
       if (stagedPrompt && draftRef.current === stagedPrompt) {
         await discardDraft();
       }
@@ -5228,6 +5236,25 @@ function SessionDetail(props: {
       );
     } finally {
       setHistoryBusy(undefined);
+    }
+  };
+
+  const restoreHistoryFiles = async () => {
+    if (!restoreFilesSupported || historyRestoring) return;
+    setHistoryRestoring(true);
+    setHistoryError(undefined);
+    setHistoryNotice(undefined);
+    try {
+      const next = await props.client.restoreHistoryFiles(props.sessionRef);
+      setHistory(next);
+      setHistoryConfirmOpen(false);
+      setHistoryNotice("Files restored.");
+    } catch (reason) {
+      setHistoryError(
+        reason instanceof Error ? reason.message : "Unable to restore files.",
+      );
+    } finally {
+      setHistoryRestoring(false);
     }
   };
 
@@ -6829,11 +6856,15 @@ function SessionDetail(props: {
                     <span className="composer-history-title">Undo staged</span>
                     <span className="composer-history-detail">
                       {history?.mode === "revert"
-                        ? stagedFiles.length > 0
-                          ? `${stagedFiles.length} file${
-                              stagedFiles.length === 1 ? "" : "s"
-                            } changed, not restored`
-                          : "No files changed"
+                        ? stagedFiles.length === 0
+                          ? "No files changed"
+                          : stagedHistory.filesRestored
+                            ? `${stagedFiles.length} file${
+                                stagedFiles.length === 1 ? "" : "s"
+                              } restored`
+                            : `${stagedFiles.length} file${
+                                stagedFiles.length === 1 ? "" : "s"
+                              } changed, not restored`
                         : "Last turn hidden"}
                     </span>
                     <div className="composer-history-buttons">
@@ -6850,6 +6881,19 @@ function SessionDetail(props: {
                       >
                         {historyBusy === "redo" ? "Restoring…" : "Redo"}
                       </button>
+                      {restoreFilesSupported &&
+                      history?.mode === "revert" &&
+                      stagedFiles.length > 0 &&
+                      !stagedHistory.filesRestored ? (
+                        <button
+                          className="composer-history-action danger"
+                          type="button"
+                          disabled={historyRestoring || running}
+                          onClick={() => setHistoryConfirmOpen(true)}
+                        >
+                          Restore files
+                        </button>
+                      ) : null}
                       {history?.prompt ? (
                         <button
                           className="composer-history-action"
@@ -6872,6 +6916,40 @@ function SessionDetail(props: {
                       ) : null}
                     </div>
                   </div>
+                  {historyConfirmOpen ? (
+                    <div
+                      className="composer-history-confirm"
+                      role="alertdialog"
+                      aria-label="Restore files"
+                    >
+                      <p>
+                        Restore {stagedFiles.length} file
+                        {stagedFiles.length === 1 ? "" : "s"} to their state
+                        before this turn? Current edits to these paths may be
+                        overwritten. Redo restores the conversation and files to
+                        how they were when you undid the turn.
+                      </p>
+                      <div className="composer-history-buttons">
+                        <button
+                          className="composer-history-action"
+                          type="button"
+                          autoFocus
+                          disabled={historyRestoring}
+                          onClick={() => setHistoryConfirmOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="composer-history-action danger"
+                          type="button"
+                          disabled={historyRestoring}
+                          onClick={() => void restoreHistoryFiles()}
+                        >
+                          {historyRestoring ? "Restoring…" : "Restore files"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {historyPromptOpen && history?.prompt ? (
                     <div className="composer-history-prompt">
                       <p>

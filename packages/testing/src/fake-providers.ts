@@ -1128,6 +1128,28 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       return;
     }
   }
+  const diffMatch = path.match(/^\/api\/session\/([^/]+)\/diff$/);
+  if (diffMatch && request.method === "GET") {
+    const sessionID = diffMatch[1] ?? "";
+    if (!OPENCODE_MESSAGES[sessionID]) {
+      sendJson(response, 404, {
+        _tag: "SessionNotFoundError",
+        message: "Session not found",
+      });
+      return;
+    }
+    sendJson(response, 200, {
+      data: [
+        {
+          file: "src/auth.ts",
+          status: "modified",
+          additions: 2,
+          deletions: 1,
+        },
+      ],
+    });
+    return;
+  }
   const revertStageMatch = path.match(/^\/api\/session\/([^/]+)\/revert\/stage$/);
   if (revertStageMatch && request.method === "POST") {
     const sessionID = revertStageMatch[1] ?? "";
@@ -1150,14 +1172,17 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     }
     const revert = {
       messageID,
-      files: [
-        {
-          file: "src/auth.ts",
-          status: "modified",
-          additions: 2,
-          deletions: 1,
-        },
-      ],
+      files:
+        body.files === true
+          ? [
+              {
+                file: "src/auth.ts",
+                status: "modified",
+                additions: 2,
+                deletions: 1,
+              },
+            ]
+          : [],
     };
     OPENCODE_REVERTS[sessionID] = revert;
     broadcastEvent("session.revert.staged", { sessionID, ...revert });

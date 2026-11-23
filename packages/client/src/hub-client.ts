@@ -884,6 +884,13 @@ export class HubClient {
     );
   }
 
+  async restoreHistoryFiles(ref: string): Promise<SessionHistory> {
+    return this.request<SessionHistory>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/history/restore-files`,
+      { method: "POST" },
+    );
+  }
+
   async inbox(ref: string): Promise<InboxPage> {
     return this.request<InboxPage>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/inbox`,

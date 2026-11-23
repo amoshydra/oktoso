@@ -96,6 +96,8 @@ export const zProviderCapabilities = z.object({
   undo: z.boolean(),
   /** Restore a turn that was undone. */
   redo: z.boolean(),
+  /** Apply the undone turn's file changes on request. */
+  restoreFiles: z.boolean(),
   search: z.boolean(),
   options: z.boolean(),
   markRead: z.boolean(),

@@ -282,6 +282,8 @@ components:
           type: boolean
         redo:
           type: boolean
+        restoreFiles:
+          type: boolean
         search:
           type: boolean
         options:
@@ -309,6 +311,7 @@ components:
         - retry
         - undo
         - redo
+        - restoreFiles
         - search
         - options
         - markRead
@@ -385,6 +388,8 @@ components:
               type: boolean
             redo:
               type: boolean
+            restoreFiles:
+              type: boolean
             search:
               type: boolean
             options:
@@ -412,6 +417,7 @@ components:
             - retry
             - undo
             - redo
+            - restoreFiles
             - search
             - options
             - markRead
@@ -4524,6 +4530,8 @@ components:
                 required:
                   - path
                   - status
+            filesRestored:
+              type: boolean
           required:
             - messageId
             - files
@@ -7747,6 +7755,49 @@ paths:
                 $ref: "#/components/schemas/Error"
         "501":
           description: Provider does not support redo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/history/restore-files:
+    post:
+      tags:
+        - sessions
+      summary: Restore the undone turn's files
+      description: Applies the file changes of the undone turn. Conversation-only undo never writes files; this opt-in action does, and current edits to the affected paths may be overwritten. Redo restores the conversation and files to how they were when the turn was undone.
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Files restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionHistory"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: No turn is staged for undo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider cannot restore files
           content:
             application/json:
               schema:

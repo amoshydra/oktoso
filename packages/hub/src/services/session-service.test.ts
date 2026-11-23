@@ -99,7 +99,7 @@ describe("SessionService history", () => {
     expect(adapter.history).not.toHaveBeenCalled();
   });
 
-  it("delegates history, undo, and redo to the adapter", async () => {
+  it("delegates history, undo, redo, and file restore to the adapter", async () => {
     const state = { mode: "revert" as const, canUndo: true, canRedo: false };
     const history = vi.fn(async () => state);
     const undoLastTurn = vi.fn(async () => ({
@@ -108,12 +108,14 @@ describe("SessionService history", () => {
       canRedo: true,
     }));
     const redoLastTurn = vi.fn(async () => state);
+    const restoreHistoryFiles = vi.fn(async () => state);
     const adapter = {
       id: "test",
-      capabilities: { undo: true, redo: true },
+      capabilities: { undo: true, redo: true, restoreFiles: true },
       history,
       undoLastTurn,
       redoLastTurn,
+      restoreHistoryFiles,
     } as unknown as ProviderAdapter;
     const service = new SessionService(makeRegistry([adapter]), logger);
 
@@ -122,11 +124,18 @@ describe("SessionService history", () => {
       canRedo: true,
     });
     await expect(service.redoLastTurn("test:ses_a")).resolves.toEqual(state);
+    await expect(
+      service.restoreHistoryFiles("test:ses_a"),
+    ).resolves.toEqual(state);
     expect(undoLastTurn).toHaveBeenCalledWith(
       "test:ses_a",
       expect.any(AbortSignal),
     );
     expect(redoLastTurn).toHaveBeenCalledWith(
+      "test:ses_a",
+      expect.any(AbortSignal),
+    );
+    expect(restoreHistoryFiles).toHaveBeenCalledWith(
       "test:ses_a",
       expect.any(AbortSignal),
     );

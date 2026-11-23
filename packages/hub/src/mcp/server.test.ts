@@ -47,6 +47,7 @@ const provider: Provider = {
     retry: false,
     undo: false,
     redo: false,
+    restoreFiles: false,
     search: false,
     options: true,
     markRead: true,

@@ -492,10 +492,9 @@ async function historyServer(): Promise<{
         });
         return;
       }
-      if (url.pathname.endsWith("/revert/stage")) {
-        revert = {
-          messageID: String((body as { messageID?: unknown })?.messageID),
-          files: [
+      if (url.pathname.endsWith("/diff")) {
+        json(response, 200, {
+          data: [
             {
               file: "src/api.ts",
               status: "modified",
@@ -503,6 +502,23 @@ async function historyServer(): Promise<{
               deletions: 1,
             },
           ],
+        });
+        return;
+      }
+      if (url.pathname.endsWith("/revert/stage")) {
+        const applyFiles = (body as { files?: unknown })?.files === true;
+        revert = {
+          messageID: String((body as { messageID?: unknown })?.messageID),
+          files: applyFiles
+            ? [
+                {
+                  file: "src/api.ts",
+                  status: "modified",
+                  additions: 2,
+                  deletions: 1,
+                },
+              ]
+            : [],
         };
         json(response, 200, { data: revert });
         return;
@@ -571,6 +587,7 @@ describe("OpenCodeAdapter history", () => {
             deletions: 1,
           },
         ],
+        filesRestored: false,
       },
       prompt: { text: "undo me", attachments: ["notes.md"] },
     });
@@ -595,6 +612,7 @@ describe("OpenCodeAdapter history", () => {
     expect(staged.canUndo).toBe(false);
     expect(staged.canRedo).toBe(true);
     expect(staged.staged?.files).toHaveLength(1);
+    expect(staged.staged?.filesRestored).toBe(false);
     expect(staged.prompt).toEqual({
       text: "undo me",
       attachments: ["notes.md"],
@@ -612,6 +630,46 @@ describe("OpenCodeAdapter history", () => {
           call.method === "DELETE" && call.path.endsWith("/revert"),
       ),
     ).toBe(true);
+  });
+
+  it("restores the undone files on request and reports them applied", async () => {
+    const { adapter, calls } = await historyServer();
+    await adapter.undoLastTurn(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+
+    const restored = await adapter.restoreHistoryFiles(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+
+    expect(restored.staged?.filesRestored).toBe(true);
+    expect(restored.staged?.files).toEqual([
+      {
+        path: "src/api.ts",
+        status: "modified",
+        additions: 2,
+        deletions: 1,
+      },
+    ]);
+    const stageCalls = calls.filter((call) =>
+      call.path.endsWith("/revert/stage"),
+    );
+    expect(stageCalls.at(-1)?.body).toEqual({
+      messageID: "msg_user",
+      files: true,
+    });
+  });
+
+  it("refuses to restore files without a staged undo", async () => {
+    const { adapter } = await historyServer();
+    await expect(
+      adapter.restoreHistoryFiles(
+        "desktop-opencode:ses_test",
+        AbortSignal.timeout(5_000),
+      ),
+    ).rejects.toThrow(/Undo a turn/);
   });
 });
 

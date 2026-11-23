@@ -183,6 +183,10 @@ export function registerSessionRoutes(
     return c.json(await sessions.redoLastTurn(c.req.param("ref")));
   });
 
+  app.post("/api/v1/sessions/:ref/history/restore-files", async (c) => {
+    return c.json(await sessions.restoreHistoryFiles(c.req.param("ref")));
+  });
+
   app.get("/api/v1/sessions/:ref/inbox", async (c) => {
     return c.json({ data: await sessions.listInbox(c.req.param("ref")) });
   });

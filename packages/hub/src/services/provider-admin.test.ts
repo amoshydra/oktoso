@@ -68,6 +68,7 @@ function provider(config: ProviderConfig): Provider {
       retry: false,
       undo: false,
       redo: false,
+      restoreFiles: false,
       search: false,
       options: false,
       markRead: false,

@@ -172,8 +172,10 @@ export const zSessionHistory = z.object({
   staged: z
     .object({
       messageId: z.string().min(1),
-      /** Files the undone turn changed. Informational: v1 never restores them. */
+      /** Files the undone turn changed. Informational until files are restored. */
       files: z.array(zHistoryFileChange),
+      /** True once the provider applied those file changes. */
+      filesRestored: z.boolean().optional(),
     })
     .optional(),
   prompt: zHistoryPrompt.optional(),

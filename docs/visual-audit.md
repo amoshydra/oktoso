@@ -1701,33 +1701,41 @@ competing history buttons.
   state.
 - **Staged banner:** a single `surface-2` strip above the composer, using the
   existing 8px control radius and strong border. It reads `Undo staged` in the
-  11px text role, then a muted detail. Files are named as information, never
-  as a warning: `1 file changed, not restored`. `Show files` lists paths in the
-  mono face with a text status; `added`, `modified`, and `deleted` use the
-  semantic success, warning, and danger tones, and the word is always present,
-  so colour is not the only signal.
+  11px text role, then a muted detail: `No files changed`, `1 file changed, not
+  restored`, or `1 file restored`. The list comes from the provider's read-only
+  turn diff, so the reader sees it before anything is written. `Show files`
+  lists paths in the mono face with a text status; `added`, `modified`, and
+  `deleted` use the semantic success, warning, and danger tones, and the word
+  is always present, so colour is not the only signal.
+- **File restore:** `Restore files` is a danger-toned banner action, shown only
+  when files exist, the provider advertises `restoreFiles`, and they are not
+  applied yet. It opens an inline `alertdialog` with the count, the overwrite
+  warning, and the Redo caveat. Cancel is focused first; the confirm action is
+  the same danger tone. The confirmation panel uses the danger border/background
+  mix at 6–8%, never a new colour. After success the action disappears and the
+  banner reads `N files restored`.
 - **Contrast:** title text uses `--text`, detail uses `--muted` (both above the
   4.5:1 floor on `surface-2`), and the 1px border uses `--border-strong`.
   Status chips keep the existing semantic tokens in both themes.
 - **Targets:** the banner and the desktop `Undo` are 28px high, matching quiet
-  message actions. At 760px and below they grow to 44px, and the banner buttons
-  take the full row so they never sit under a thumb's dead corner. Controls
-  wrap before they clip at 360px.
+  message actions. At 760px and below they grow to 44px, and the banner and
+  confirmation buttons take the full row so they never sit under a thumb's dead
+  corner. Controls wrap before they clip at 360px.
 - **States:** idle with history shows one `Undo`; running disables it with a
-  reason; staged hides `Undo` and shows `Redo`, `Show prompt`, and `Show files`;
-  redo clears the banner and writes one quiet `Turn restored` status.
+  reason; staged hides `Undo` and shows `Redo`, `Restore files` when relevant,
+  `Show prompt`, and `Show files`; redo clears the banner and writes one quiet
+  `Turn restored` status.
 - **Draft safety:** the undone prompt replaces the draft only when the draft is
   empty. A non-empty draft is kept, and the banner's `Show prompt` offers
   `Insert prompt`, so undo can never silently discard typed text.
 - **No global shortcut:** `Ctrl/Cmd+Z` stays with the textarea. The control is
   pointer and keyboard reachable through normal button semantics.
-- **Provider copy:** OpenCode's revert mode says files are `not restored`; Open
-  WebUI's branch mode says `Last turn hidden`, because it never had file
-  effects. Both keep the same layout.
+- **Provider copy:** OpenCode is the only live undo provider. Open WebUI
+  0.13.0 repairs any non-leaf `currentId` on read, so it advertises `undo:
+  false` and shows no control rather than shipping a broken branch mode. The
+  same layout reserves `Last turn hidden` for a future branch-mode provider.
 - Verified through the adapter tests, the service tests, and a browser e2e that
-  stages an undo, shows the file list, and redoes the turn. The static
-  prototype carries the desktop control and the staged banner; its mobile bar
-  hides `Undo` as production does, but the prototype has no `⋯` menu.
+  stages an undo, shows the file list, restores the files, and redoes the turn.
 
 ## Media in messages (2026-11-22)
 

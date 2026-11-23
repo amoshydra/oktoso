@@ -164,6 +164,11 @@ export interface ProviderAdapter {
   undoLastTurn?(ref: string, signal: AbortSignal): Promise<SessionHistory>;
   /** Restore the latest undone turn. */
   redoLastTurn?(ref: string, signal: AbortSignal): Promise<SessionHistory>;
+  /** Apply the undone turn's file changes on request. */
+  restoreHistoryFiles?(
+    ref: string,
+    signal: AbortSignal,
+  ): Promise<SessionHistory>;
   listInbox?(ref: string, signal: AbortSignal): Promise<ProviderInboxItem[]>;
   updateInbox?(
     ref: string,
@@ -232,6 +237,7 @@ export const emptyCapabilities: ProviderCapabilities = {
   retry: false,
   undo: false,
   redo: false,
+  restoreFiles: false,
   search: false,
   options: false,
   markRead: false,
