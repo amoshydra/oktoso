@@ -8069,32 +8069,47 @@ function CompactionRow(props: {
   if (!part) return null;
 
   const tokensIn = part.tokens?.input;
-  const meta = [
-    part.reason,
-    tokensIn !== undefined ? `${tokensIn.toLocaleString()} tokens in` : undefined,
-    `${formatChars(part.summary.length)} summary`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const running =
+    part.status === "running" ||
+    part.status === "pending" ||
+    part.status === "streaming";
+  const meta = running
+    ? `${part.reason} · in progress`
+    : [
+        part.reason,
+        tokensIn !== undefined
+          ? `${tokensIn.toLocaleString()} tokens in`
+          : undefined,
+        `${formatChars(part.summary.length)} summary`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
 
   return (
-    <section className="chat-compaction">
+    <section
+      className={`chat-compaction${running ? " running" : ""}`}
+      {...(running ? { "aria-live": "polite" } : {})}
+    >
       <div className="chat-compaction-row">
         <span className="chat-compaction-icon" aria-hidden="true">
           <Icon name="layers" size={16} />
         </span>
-        <span className="chat-compaction-title">Context compacted</span>
+        <span className="chat-compaction-title">
+          {running ? "Compacting context…" : "Context compacted"}
+        </span>
         <span className="chat-compaction-meta">{meta}</span>
-        <button
-          className="text-button chat-compaction-toggle"
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? "Hide summary" : "Show summary"}
-        </button>
+        {running ? null : (
+          <button
+            className="text-button chat-compaction-toggle"
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? "Hide summary" : "Show summary"}
+          </button>
+        )}
       </div>
-      {open ? (
+      {!running && open ? (
         <div className="chat-compaction-body">
           <Markdown
             text={part.summary}

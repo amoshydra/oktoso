@@ -1660,6 +1660,21 @@ states its window instead of implying a complete list.
 - No new visual grammar: retrieval inside one session and across many are the
   same tile with a different detail.
 
+## Compaction running state (2026-11-23)
+
+A compaction used to appear only after its summary existed, and only on a
+message refresh. The adapter now keeps a live compaction record whose status is
+`running` (empty summary) and maps it from the message record, not only from the
+paginated fetch.
+
+- The row reads `Compacting context…` with `auto · in progress` and no
+  disclosure while it runs; the same row becomes `Context compacted` with
+  reason, input tokens, summary size, and Show summary when the summary lands.
+- No new colour, icon, type role, or spacing token. The row keeps its muted
+  border-top/bottom grammar and is announced politely while running.
+- If the provider only writes the record at completion, nothing is shown
+  earlier; the change cannot invent an event the provider never sends.
+
 ## Media in messages (2026-11-22)
 
 - A video or audio `file` part uses the native player, capped at 720×480 on

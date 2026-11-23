@@ -1018,6 +1018,13 @@ export class OpenCodeAdapter implements ProviderAdapter {
       if (typeof info.text === "string" && info.text) {
         live.parts.set("text", { type: "text", text: info.text });
       }
+      // A compaction is a top-level message record, not a content part: map it
+      // here so a running compaction reaches the transcript before its summary.
+      if (info.type === "compaction") {
+        live.role = "system";
+        const part = toCompactionPart(info as unknown as OpenCodeMessageRaw);
+        if (part) live.parts.set("compaction", part);
+      }
       const content = Array.isArray(info.content)
         ? info.content
         : Array.isArray(payload.parts)
@@ -1458,15 +1465,19 @@ async function delay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 function toCompactionPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
-  const summary = typeof raw.summary === "string" ? raw.summary : undefined;
-  if (!summary) return undefined;
+  const status = typeof raw.status === "string" ? raw.status : "completed";
+  const running =
+    status === "running" || status === "pending" || status === "streaming";
+  const summary = typeof raw.summary === "string" ? raw.summary : "";
+  // The summary is the compaction output; while it runs there is none yet.
+  if (!summary && !running) return undefined;
   const tokens = asRecord(raw.tokens);
   const tokenCount = (value: unknown) =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
   return {
     type: "compaction",
     reason: typeof raw.reason === "string" ? raw.reason : "auto",
-    status: typeof raw.status === "string" ? raw.status : "completed",
+    status,
     summary,
     ...(raw.model?.id && raw.model?.providerID
       ? { model: `${raw.model.providerID}/${raw.model.id}` }
