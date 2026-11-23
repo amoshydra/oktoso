@@ -271,6 +271,7 @@ Endpoints:
 | List agents | `GET /api/agent` |
 | List models | `GET /api/model` |
 | Interrupt | `POST /api/session/{sessionID}/interrupt` |
+| Compact | `POST /api/session/{sessionID}/compact` with `{}`; queues an inbox compaction |
 | Events | `GET /api/event` (SSE) |
 | Pending permissions | `GET /api/permission/request` |
 | Reply permission | `POST /api/session/{sessionID}/permission/{requestID}/reply` |
@@ -286,7 +287,7 @@ Mapping notes:
 - OpenCode message records include `type` values beyond chat, such as `idle` and `system`. The adapter returns `user` and `assistant` records and drops lifecycle records.
 - Assistant records carry a `content` array with `text`, `reasoning`, and tool parts. The adapter maps those to `MessagePart`, including tool `state.metadata` and the part-level `created`/`completed` timings used for tile metrics.
 - `shell` records become a single `shell` part (`shellID`, `command`, `status`, `exit`, background flag, output, timings) on a `system` message. Background shells are long-lived and are shown as transcript rows.
-- `compaction` records become a single `compaction` part (`reason`, `status`, `summary`, model, cost, tokens) on a `system` message. A record whose status is still `running` has no summary yet: it is kept with an empty summary and mapped from the live message record, so the transcript can show `Compacting context…` before the summary lands. `synthetic` records stay dropped: they duplicate tool results.
+- `compaction` records become a single `compaction` part (`reason`, `status`, `summary`, model, cost, tokens) on a `system` message. A record whose status is still `running` has no summary yet: it is kept with an empty summary and mapped from the live message record, so the transcript can show `Compacting context…` before the summary lands. A `failed` record is also kept: it carries the provider's `error` and a `retryable` flag (false for `compaction.unavailable`, where retrying cannot help). The hub queues a retry through `POST /api/v1/sessions/:ref/compact`; a session that is already running is refused with a conflict. `synthetic` records stay dropped: they duplicate tool results.
 - `time.busy` marks the start of the active execution, `time.idle` marks the end of the last completed execution, and `time.updated` is the last activity timestamp. A session is running only when `busy` is set and a newer `idle` is absent; a session with no `busy` is idle. A busy run that has not updated for 30 minutes is treated as idle so a failed form/question tool cannot leave the composer on Steer. `outcome` drives error state, and `viewed` drives unread state.
 - Permission requests block the agent. They are blocking attention items.
 - Forms can be simple option lists or complex multi-field forms. The hub exposes the field schema so clients can render what they can and defer complex forms to the web client.
@@ -395,6 +396,7 @@ DELETE /api/v1/sessions/:ref/inbox/:id
 POST   /api/v1/sessions
 POST   /api/v1/sessions/:ref/selection
 POST   /api/v1/sessions/:ref/interrupt
+POST   /api/v1/sessions/:ref/compact
 GET    /api/v1/sessions/:ref/draft
 PUT    /api/v1/sessions/:ref/draft
 DELETE /api/v1/sessions/:ref/draft

@@ -4611,9 +4611,19 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   font-variant-numeric: tabular-nums;
 }
 
-.chat-compaction-toggle {
+.chat-compaction-action {
   order: 0;
   margin-left: auto;
+}
+
+.chat-compaction.failed .chat-compaction-title {
+  color: var(--danger);
+}
+
+.chat-compaction-error {
+  padding: 0 0 var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-xs);
 }
 
 .chat-compaction-body {

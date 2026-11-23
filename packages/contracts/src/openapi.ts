@@ -1008,6 +1008,21 @@ registry.registerPath({
 
 registry.registerPath({
   method: "post",
+  path: "/api/v1/sessions/{ref}/compact",
+  tags: ["sessions"],
+  summary: "Queue a context compaction",
+  request: { params },
+  responses: {
+    204: { description: "Compaction queued" },
+    404: errorResponse("Session not found"),
+    409: errorResponse("The session is running"),
+    501: errorResponse("The provider cannot compact"),
+    502: errorResponse("Provider failure"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
   path: "/api/v1/sessions/{ref}/interrupt",
   tags: ["sessions"],
   summary: "Interrupt a running session",

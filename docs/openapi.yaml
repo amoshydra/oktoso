@@ -3743,6 +3743,10 @@ components:
               type: string
             summary:
               type: string
+            error:
+              type: string
+            retryable:
+              type: boolean
             model:
               type: string
             cost:
@@ -3897,6 +3901,10 @@ components:
                     type: string
                   summary:
                     type: string
+                  error:
+                    type: string
+                  retryable:
+                    type: boolean
                   model:
                     type: string
                   cost:
@@ -4071,6 +4079,10 @@ components:
                           type: string
                         summary:
                           type: string
+                        error:
+                          type: string
+                        retryable:
+                          type: boolean
                         model:
                           type: string
                         cost:
@@ -7650,6 +7662,44 @@ paths:
                 $ref: "#/components/schemas/Error"
         "501":
           description: Provider does not expose session files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{ref}/compact:
+    post:
+      tags:
+        - sessions
+      summary: Queue a context compaction
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "204":
+          description: Compaction queued
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The session is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: The provider cannot compact
           content:
             application/json:
               schema:

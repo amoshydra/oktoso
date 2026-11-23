@@ -26,7 +26,7 @@ import {
   type ProviderResource,
   type ProviderResourceOpen,
 } from "@amoshydra/oktoso-providers";
-import { AppError, badRequest, notFound, notImplemented } from "../domain/errors";
+import { AppError, badRequest, conflict, notFound, notImplemented } from "../domain/errors";
 import { mediaMaxBytes, openBufferedResource } from "../http/resource-response";
 import type { Logger } from "../lib/logger";
 import type { StateStore } from "@amoshydra/oktoso-storage";
@@ -874,6 +874,26 @@ export class SessionService {
     // The send flips the cached copy to `running`; return that, not the
     // pre-send object.
     return this.sessions.get(session.ref) ?? session;
+  }
+
+  /**
+   * Queue a context compaction. The provider runs it asynchronously; the
+   * transcript shows the running record and then the summary.
+   */
+  async compact(ref: string): Promise<void> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter?.compactSession) {
+      throw notImplemented("This provider does not support compacting sessions");
+    }
+    this.assertProviderAvailable(adapter.id);
+    const session = this.sessions.get(ref);
+    if (session?.status === "running") {
+      throw conflict("The session is running; wait for the turn to finish");
+    }
+    await adapter.compactSession(
+      ref,
+      operationSignal(this.registry, adapter.id, 30_000),
+    );
   }
 
   async interrupt(ref: string): Promise<void> {

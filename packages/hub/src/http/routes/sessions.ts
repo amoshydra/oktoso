@@ -244,6 +244,11 @@ export function registerSessionRoutes(
     return c.json(await sessions.setSessionOptions(ref, parsed.data));
   });
 
+  app.post("/api/v1/sessions/:ref/compact", async (c) => {
+    await sessions.compact(c.req.param("ref"));
+    return c.body(null, 204);
+  });
+
   app.post("/api/v1/sessions/:ref/interrupt", async (c) => {
     await sessions.interrupt(c.req.param("ref"));
     return c.body(null, 204);

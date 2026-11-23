@@ -1674,6 +1674,18 @@ paginated fetch.
   border-top/bottom grammar and is announced politely while running.
 - If the provider only writes the record at completion, nothing is shown
   earlier; the change cannot invent an event the provider never sends.
+- A **failed** record keeps its danger title (`Compaction failed`), the
+  provider's error in the meta line, and one quiet **Retry** action. The
+  provider's `compaction.unavailable` is not an error the user can fix, so that
+  row reads `Nothing to compact` and has no action. Retry posts the hub's new
+  compact route; a running session is refused with the hub's conflict line,
+  shown under the row. The danger token is the existing semantic red, not a new
+  colour; the row stays the quiet border-top/bottom grammar.
+- Verified live: a fresh fork showed `Compacting context…` within 0.4 s and
+  `Context compacted` at 17 s; an empty session's manual compaction produced
+  `Nothing to compact yet` and was invisible before this change. Retry is
+  covered by the route test and the adapter's `retryable` mapping; a retryable
+  provider failure needs a failing summarizer to exercise live.
 
 ## Media in messages (2026-11-22)
 

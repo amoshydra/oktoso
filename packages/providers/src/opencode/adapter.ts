@@ -362,6 +362,17 @@ export class OpenCodeAdapter implements ProviderAdapter {
     return this.toSession(response.data);
   }
 
+  async compactSession(ref: string, signal: AbortSignal): Promise<void> {
+    const nativeID = this.nativeID(ref);
+    await this.request<void>(
+      `/api/session/${encodeURIComponent(nativeID)}/compact`,
+      {},
+      signal,
+      "POST",
+      {},
+    );
+  }
+
   async interrupt(ref: string, signal: AbortSignal): Promise<void> {
     const nativeID = this.nativeID(ref);
     await this.request(
@@ -1468,9 +1479,16 @@ function toCompactionPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
   const status = typeof raw.status === "string" ? raw.status : "completed";
   const running =
     status === "running" || status === "pending" || status === "streaming";
+  const failed = status === "failed";
   const summary = typeof raw.summary === "string" ? raw.summary : "";
-  // The summary is the compaction output; while it runs there is none yet.
-  if (!summary && !running) return undefined;
+  // The summary is the compaction output; a running or failed record has none.
+  if (!summary && !running && !failed) return undefined;
+  const error = asRecord(raw.error);
+  const errorMessage =
+    typeof error?.message === "string" && error.message
+      ? error.message
+      : undefined;
+  const errorType = typeof error?.type === "string" ? error.type : undefined;
   const tokens = asRecord(raw.tokens);
   const tokenCount = (value: unknown) =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -1479,6 +1497,12 @@ function toCompactionPart(raw: OpenCodeMessageRaw): MessagePart | undefined {
     reason: typeof raw.reason === "string" ? raw.reason : "auto",
     status,
     summary,
+    ...(failed
+      ? {
+          error: errorMessage ?? "Compaction failed",
+          retryable: errorType !== "compaction.unavailable",
+        }
+      : {}),
     ...(raw.model?.id && raw.model?.providerID
       ? { model: `${raw.model.providerID}/${raw.model.id}` }
       : {}),

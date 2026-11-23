@@ -2137,6 +2137,12 @@ describe("hub app", () => {
       { method: "POST", headers },
     );
     expect(interruptResponse.status).toBe(204);
+
+    const compactResponse = await app.request(
+      `/api/v1/sessions/${encodeURIComponent(created.ref)}/compact`,
+      { method: "POST", headers },
+    );
+    expect(compactResponse.status).toBe(204);
   });
 
   it("queues a prompt in the provider inbox and promotes or removes it", async () => {

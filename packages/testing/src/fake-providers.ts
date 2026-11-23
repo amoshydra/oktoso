@@ -1255,6 +1255,12 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     sendJson(response, 200, { data: { id: userID } });
     return;
   }
+  const compactMatch = path.match(/^\/api\/session\/([^/]+)\/compact$/);
+  if (compactMatch && request.method === "POST") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   const interruptMatch = path.match(/^\/api\/session\/([^/]+)\/interrupt$/);
   if (interruptMatch && request.method === "POST") {
     sendJson(response, 200, { interrupted: true });

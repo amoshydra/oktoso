@@ -262,6 +262,83 @@ describe("OpenCodeAdapter live compaction", () => {
   });
 });
 
+describe("OpenCodeAdapter failed compaction", () => {
+
+  it("keeps a failed compaction with its error and retryability", async () => {
+    const server = createServer((request, response) => {
+      if (request.url !== "/api/event") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      const base = {
+        sessionID: "ses_test",
+        role: "system",
+        type: "compaction",
+        reason: "manual",
+        time: { created: 1_000 },
+      };
+      const frames = [
+        {
+          id: "msg_unavailable",
+          status: "failed",
+          error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+        },
+        {
+          id: "msg_failed",
+          status: "failed",
+          error: { type: "provider_error", message: "The model timed out" },
+        },
+      ];
+      for (const frame of frames) {
+        response.write(
+          `data: ${JSON.stringify({
+            type: "message.updated",
+            properties: { info: { ...base, ...frame } },
+          })}\n\n`,
+        );
+      }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const adapter = new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    });
+
+    type Part = { type: string; status?: string; error?: string; retryable?: boolean };
+    const found: Part[] = [];
+    const stop = await adapter.subscribe((event) => {
+      if (event.type !== "message.updated" && event.type !== "message.created") return;
+      const message = (event.data as { message?: { parts?: Part[] } }).message;
+      const part = message?.parts?.find((entry) => entry.type === "compaction");
+      if (part) found.push(part);
+    }, AbortSignal.timeout(5_000));
+
+    const started = Date.now();
+    while (found.length < 2 && Date.now() - started < 3_000) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    stop();
+
+    expect(found[0]).toMatchObject({
+      type: "compaction",
+      status: "failed",
+      error: "Nothing to compact yet",
+      retryable: false,
+    });
+    expect(found[1]).toMatchObject({
+      type: "compaction",
+      status: "failed",
+      error: "The model timed out",
+      retryable: true,
+    });
+  });
+});
+
 describe("OpenCodeAdapter form attention", () => {
   it("keeps option descriptions, the custom answer, and required fields", async () => {
     const server = createServer((request, response) => {

@@ -139,6 +139,8 @@ export interface ProviderAdapter {
   createSession(input: CreateSessionInput, signal: AbortSignal): Promise<Session>;
 
   interrupt?(ref: string, signal: AbortSignal): Promise<void>;
+  /** Queue a context compaction for the session. */
+  compactSession?(ref: string, signal: AbortSignal): Promise<void>;
   listBranches?(ref: string, signal: AbortSignal): Promise<BranchPoint[]>;
   switchBranch?(
     ref: string,

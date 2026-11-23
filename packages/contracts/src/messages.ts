@@ -37,6 +37,10 @@ export const zMessagePart = z.discriminatedUnion("type", [
     reason: z.string(),
     status: z.string(),
     summary: z.string(),
+    /** Present when the compaction failed. */
+    error: z.string().optional(),
+    /** False when retrying cannot help (for example, nothing to compact). */
+    retryable: z.boolean().optional(),
     model: z.string().optional(),
     cost: z.number().optional(),
     tokens: z

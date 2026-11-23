@@ -8066,6 +8066,8 @@ function CompactionRow(props: {
 }) {
   const part = compactionPart(props.message);
   const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [retryError, setRetryError] = useState<string | undefined>(undefined);
   if (!part) return null;
 
   const tokensIn = part.tokens?.input;
@@ -8073,43 +8075,84 @@ function CompactionRow(props: {
     part.status === "running" ||
     part.status === "pending" ||
     part.status === "streaming";
+  const failed = part.status === "failed" || part.error !== undefined;
+  const retryable = failed && part.retryable === true;
   const meta = running
     ? `${part.reason} · in progress`
-    : [
-        part.reason,
-        tokensIn !== undefined
-          ? `${tokensIn.toLocaleString()} tokens in`
-          : undefined,
-        `${formatChars(part.summary.length)} summary`,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+    : failed
+      ? `${part.reason} · ${part.error ?? "Compaction failed"}`
+      : [
+          part.reason,
+          tokensIn !== undefined
+            ? `${tokensIn.toLocaleString()} tokens in`
+            : undefined,
+          `${formatChars(part.summary.length)} summary`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  const retry = async () => {
+    setWorking(true);
+    setRetryError(undefined);
+    try {
+      await props.client.compactSession(props.message.sessionRef);
+    } catch (error) {
+      setRetryError(
+        error instanceof Error ? error.message : "Unable to retry compaction",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
 
   return (
     <section
-      className={`chat-compaction${running ? " running" : ""}`}
-      {...(running ? { "aria-live": "polite" } : {})}
+      className={`chat-compaction${running ? " running" : ""}${
+        failed ? " failed" : ""
+      }`}
+      {...(running || failed ? { "aria-live": "polite" } : {})}
     >
       <div className="chat-compaction-row">
         <span className="chat-compaction-icon" aria-hidden="true">
           <Icon name="layers" size={16} />
         </span>
         <span className="chat-compaction-title">
-          {running ? "Compacting context…" : "Context compacted"}
+          {running
+            ? "Compacting context…"
+            : failed
+              ? retryable
+                ? "Compaction failed"
+                : "Nothing to compact"
+              : "Context compacted"}
         </span>
         <span className="chat-compaction-meta">{meta}</span>
-        {running ? null : (
+        {retryable ? (
           <button
-            className="text-button chat-compaction-toggle"
+            className="text-button chat-compaction-action"
+            type="button"
+            disabled={working}
+            onClick={() => void retry()}
+          >
+            {working ? "Retrying…" : "Retry"}
+          </button>
+        ) : null}
+        {!running && !failed ? (
+          <button
+            className="text-button chat-compaction-action"
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
           >
             {open ? "Hide summary" : "Show summary"}
           </button>
-        )}
+        ) : null}
       </div>
-      {!running && open ? (
+      {retryError ? (
+        <p className="chat-compaction-error" role="alert">
+          {retryError}
+        </p>
+      ) : null}
+      {!running && !failed && open ? (
         <div className="chat-compaction-body">
           <Markdown
             text={part.summary}

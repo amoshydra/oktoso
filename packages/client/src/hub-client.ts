@@ -359,6 +359,13 @@ export class HubClient {
     });
   }
 
+  async compactSession(ref: string): Promise<void> {
+    await this.request<void>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/compact`,
+      { method: "POST" },
+    );
+  }
+
   async interrupt(ref: string): Promise<void> {
     await this.request<void>(
       `/api/v1/sessions/${encodeURIComponent(ref)}/interrupt`,
