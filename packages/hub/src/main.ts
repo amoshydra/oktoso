@@ -654,6 +654,7 @@ async function main(): Promise<void> {
       store,
       attachments,
       transcripts,
+      previewRoots: config.files?.previewRoots ?? [],
     });
     const search = new SearchService({
       index: searchIndex,

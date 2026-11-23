@@ -232,6 +232,15 @@ export const zHubConfig = z.object({
     .min(0)
     .max(3_600_000)
     .default(30_000),
+  /**
+   * Extra provider-host directories the file preview may read. Kept in the
+   * config file only; there is no settings API for it.
+   */
+  files: z
+    .object({
+      previewRoots: z.array(z.string().min(1)).default([]),
+    })
+    .default({ previewRoots: [] }),
   providers: z.array(zProviderConfig).default([]),
   automation: zAutomationConfig.default({
     enabled: false,

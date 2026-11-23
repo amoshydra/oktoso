@@ -1070,23 +1070,41 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/v1/sessions/{ref}/files/roots",
+  tags: ["sessions"],
+  summary: "List file preview roots for a session",
+  description:
+    "Returns the provider-side directories the session may preview: the session's project canonical directory, its saved worktrees, sandboxes, validated lineage roots, and operator-configured `files.previewRoots`.",
+  request: { params },
+  responses: {
+    200: {
+      description: "Preview roots",
+      content: json(z.object({ data: z.array(z.string()) })),
+    },
+    404: errorResponse("Session not found"),
+    501: errorResponse("Provider does not expose files"),
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/v1/sessions/{ref}/files",
   tags: ["sessions"],
-  summary: "Read a file from a session's working directory",
+  summary: "Read a session file",
   description:
-    "Resolves a path inside the session directory and returns the bytes. Relative paths and absolute paths inside that directory are both accepted; paths that escape it, Windows paths, and parent segments are rejected.",
+    "Resolves a path under a session preview root or exactly matching a write/edit/read tool artifact, and returns the bytes. Relative paths and absolute paths are both accepted; unknown absolute paths and traversal are rejected.",
   request: {
     params,
     query: z.object({
       path: z
         .string()
         .min(1)
-        .openapi({ description: "Path relative to the session directory" }),
+        .openapi({ description: "Session-relative or absolute provider path" }),
     }),
   },
   responses: {
     200: { description: "File bytes" },
-    400: errorResponse("Invalid or escaping path"),
+    400: errorResponse("Invalid, escaping, or unrecorded path"),
     404: errorResponse("Session or file not found"),
     501: errorResponse("Provider does not expose session files"),
     502: errorResponse("Provider failure"),

@@ -13,6 +13,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  artifactPathsFromMessages,
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_BYTES,
 } from "@amoshydra/oktoso-contracts";
@@ -4485,6 +4486,7 @@ function SessionDetail(props: {
   const [uploadingAttachments, setUploadingAttachments] = useState(0);
   const [attachmentError, setAttachmentError] = useState<string>();
   const [branches, setBranches] = useState<BranchPoint[]>([]);
+  const [previewRoots, setPreviewRoots] = useState<string[]>([]);
   const [history, setHistory] = useState<SessionHistory | undefined>();
   const [historyBusy, setHistoryBusy] = useState<"undo" | "redo">();
   const [historyError, setHistoryError] = useState<string>();
@@ -5156,6 +5158,22 @@ function SessionDetail(props: {
   useEffect(() => {
     void refreshBranches();
   }, [refreshBranches]);
+
+  const refreshFileRoots = useCallback(async () => {
+    if (!sessionProvider?.capabilities.files) {
+      setPreviewRoots([]);
+      return;
+    }
+    try {
+      setPreviewRoots(await props.client.fileRoots(props.sessionRef));
+    } catch {
+      setPreviewRoots([]);
+    }
+  }, [props.client, props.sessionRef, sessionProvider?.capabilities.files]);
+
+  useEffect(() => {
+    void refreshFileRoots();
+  }, [refreshFileRoots]);
 
   const retryMessage = async (messageId: string) => {
     if (retryBusy) return;
@@ -6284,6 +6302,10 @@ function SessionDetail(props: {
                 ? "Agent running · Ctrl/⌘ Enter to queue"
                 : "Agent running · interrupt to send"
             : draftStatusLabel(draftStatus);
+  const artifactPaths = useMemo(
+    () => artifactPathsFromMessages(messages, session?.directory),
+    [messages, session?.directory],
+  );
   const resource: ResourceContext = {
     baseUrl: sessionProvider?.baseUrl,
     providerID: session?.providerID,
@@ -6291,6 +6313,8 @@ function SessionDetail(props: {
     directory: session?.directory,
     sessionRef: session?.ref,
     fileRead: Boolean(sessionProvider?.capabilities.files),
+    previewRoots,
+    artifactPaths,
   };
   // A background subagent's launch call completes immediately, so the tool
   // part keeps a stale `running` status. Liveness comes from the child session.

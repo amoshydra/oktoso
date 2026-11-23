@@ -22,6 +22,8 @@ const MAX_TICKETS = 100;
 interface PreviewTicket {
   ref: string;
   base: string;
+  name?: string;
+  exact?: boolean;
   expiresAt: number;
 }
 
@@ -104,6 +106,10 @@ export function registerFileRoutes(
     }
   };
 
+  app.get("/api/v1/sessions/:ref/files/roots", async (c) => {
+    return c.json({ data: await sessions.fileRoots(c.req.param("ref")) });
+  });
+
   app.get("/api/v1/sessions/:ref/files", async (c) => {
     const path = c.req.query("path");
     if (!path) throw badRequest("A file path is required");
@@ -137,19 +143,21 @@ export function registerFileRoutes(
     }
 
     const ref = c.req.param("ref");
-    const clean = posix.normalize(path).replace(/^\/+/, "");
-    if (clean.startsWith("..")) throw badRequest("The file path escapes the session");
-    const base = posix.dirname(clean);
-    const name = posix.basename(clean);
+    const target = await sessions.fileTarget(ref, path);
     const id = randomUUID();
     prune();
     tickets.set(id, {
       ref,
-      base: base === "." ? "" : base,
+      base: target.exact
+        ? target.absolute
+        : posix.dirname(target.absolute),
+      ...(target.exact
+        ? { name: posix.basename(target.absolute), exact: true }
+        : {}),
       expiresAt: Date.now() + TICKET_TTL_MS,
     });
     return c.json({
-      url: `/preview/${id}/${encodeURIComponent(name)}`,
+      url: `/preview/${id}/${encodeURIComponent(posix.basename(target.absolute))}`,
       expiresAt: Date.now() + TICKET_TTL_MS,
     });
   });
@@ -171,10 +179,18 @@ export function registerFileRoutes(
       throw badRequest("A file path is required");
     }
 
-    const joined = posix.normalize(posix.join(ticket.base, requested));
-    if (
+    const joined = ticket.exact
+      ? ticket.base
+      : posix.normalize(posix.join(ticket.base, requested));
+    if (ticket.exact) {
+      if (requested !== ticket.name) {
+        throw badRequest("This preview only serves the recorded file");
+      }
+    } else if (
       joined.startsWith("..") ||
-      (ticket.base !== "" && joined !== ticket.base && !joined.startsWith(`${ticket.base}/`))
+      (ticket.base !== "" &&
+        joined !== ticket.base &&
+        !joined.startsWith(`${ticket.base}/`))
     ) {
       throw badRequest("The file path escapes the preview");
     }

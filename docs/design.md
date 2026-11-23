@@ -446,21 +446,39 @@ GET    /api/v1/attention
 POST   /api/v1/attention/:id/actions/:action
 GET    /api/v1/attachments?provider=&url=
 GET    /api/v1/sessions/:ref/files?path=
+GET    /api/v1/sessions/:ref/files/roots
 GET    /api/v1/events?after=
 GET    /api/v1/search?q=&scope=&provider=&status=&cursor=
 GET    /api/v1/sessions/:ref/lineage
 ```
 
-`GET /api/v1/sessions/:ref/files` reads a file inside the session's working
-directory. The path may be provider-relative or absolute inside that directory;
-the hub strips the directory prefix and rejects anything that escapes it with
-`400`. The provider resolves
-the path with its own credentials, so the hub never reads the provider's disk and
-the browser never learns the provider address. Providers that do not expose files
-return `501`. Images, text (Markdown, text, JSON, HTML), and the common media
-types render inline with a sandbox CSP; unknown types download. The client
-renders by content type with the extension as fallback, and HTML opens in a
-frame with `sandbox=""`.
+`GET /api/v1/sessions/:ref/files` reads a file the session may preview. The
+allowed scope is the union of:
+
+- the project canonical directory, its sandboxes, and its saved worktrees from
+  OpenCode (`GET /api/project`, `GET /api/worktree?projectID=`),
+- validated lineage session roots,
+- operator-configured `files.previewRoots`,
+- exact absolute paths named by `write`, `edit`, or `read` tool parts.
+
+An absolute path under a root is accepted and resolved against that root. A
+path outside every root is accepted only when it exactly matches a recorded
+tool artifact; its parent directory becomes the `location[directory]` for that
+one read. Everything else returns `400`. Relative paths remain anchored to the
+session directory. The provider still resolves the path with its own
+credentials, so the hub never reads the provider's disk and the browser never
+learns the provider address. Providers that do not expose files return `501`.
+Images, text (Markdown, text, JSON, HTML), and the common media types render
+inline with a sandbox CSP; unknown types download.
+
+`GET /api/v1/sessions/:ref/files/roots` returns the provider-side preview roots
+for the session so the client can decide which mentions are clickable. It is
+derived from provider metadata and the host-only config; it is not a
+client-editable list.
+
+`files.previewRoots` in the hub config is the explicit operator escape hatch for
+scratch directories such as `/tmp/opencode`. It stays in the host config file
+(no settings API) and is never derived from message prose.
 
 `GET /api/v1/attachments` is a binary, authenticated proxy for provider-hosted
 images and files. It is not part of the JSON OpenAPI contract: it requires a

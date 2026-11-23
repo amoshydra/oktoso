@@ -7907,12 +7907,50 @@ paths:
       responses:
         "204":
           description: Deleted
+  /api/v1/sessions/{ref}/files/roots:
+    get:
+      tags:
+        - sessions
+      summary: List file preview roots for a session
+      description: "Returns the provider-side directories the session may preview: the session's project canonical directory, its saved worktrees, sandboxes, validated lineage roots, and operator-configured `files.previewRoots`."
+      parameters:
+        - schema:
+            type: string
+          required: true
+          name: ref
+          in: path
+      responses:
+        "200":
+          description: Preview roots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: string
+                required:
+                  - data
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: Provider does not expose files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/sessions/{ref}/files:
     get:
       tags:
         - sessions
-      summary: Read a file from a session's working directory
-      description: Resolves a path inside the session directory and returns the bytes. Relative paths and absolute paths inside that directory are both accepted; paths that escape it, Windows paths, and parent segments are rejected.
+      summary: Read a session file
+      description: Resolves a path under a session preview root or exactly matching a write/edit/read tool artifact, and returns the bytes. Relative paths and absolute paths are both accepted; unknown absolute paths and traversal are rejected.
       parameters:
         - schema:
             type: string
@@ -7922,16 +7960,16 @@ paths:
         - schema:
             type: string
             minLength: 1
-            description: Path relative to the session directory
+            description: Session-relative or absolute provider path
           required: true
-          description: Path relative to the session directory
+          description: Session-relative or absolute provider path
           name: path
           in: query
       responses:
         "200":
           description: File bytes
         "400":
-          description: Invalid or escaping path
+          description: Invalid, escaping, or unrecorded path
           content:
             application/json:
               schema:

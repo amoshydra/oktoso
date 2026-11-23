@@ -402,18 +402,21 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 
 `GET /api/v1/sessions/{ref}/files?path=`
 
-- Reads a file inside the session's working directory.
-- Both forms are accepted: a provider-relative path, or an absolute path that
-  sits inside the session directory. Agents write both (`notes/plan.md`,
-  `/home/me/project/notes/plan.md`), so the hub strips the session directory
-  prefix before resolving. An absolute path outside that directory, a `..`
-  segment, a Windows path, a NUL byte, or a path over 1024 characters returns
+- Reads a file the session may preview. The scope is the session directory,
+  the project canonical directory, its sandboxes and saved worktrees, validated
+  lineage roots, operator `files.previewRoots`, and exact write/edit/read tool
+  artifact paths.
+- A relative path is anchored to the session directory. An absolute path under
+  a root is resolved against that root. An absolute path outside every root is
+  accepted only when it exactly matches a recorded tool artifact; its parent
+  directory becomes the provider location for that read. Anything else returns
   `400 invalid_request`. A missing file returns `404`; providers without `files`
   return `501 not_implemented`.
+- Windows paths, NUL bytes, and paths over 1024 characters are rejected. A
+  relative path that escapes the session directory is rejected.
 - The provider resolves the path with its own credentials. OpenCode uses
-  `GET /api/fs/read/{path}?location[directory]={session directory}`. The hub
-  never reads the provider's disk and the browser never learns the provider
-  address.
+  `GET /api/fs/read/{path}?location[directory]={root}`. The hub never reads the
+  provider's disk and the browser never learns the provider address.
 - The hub streams the provider body instead of buffering it, and forwards a
   single `bytes=` range. Seeking a video asks the provider for that slice
   rather than downloading the clip again. A provider that answers `206` is
@@ -430,6 +433,17 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 - The transcript uses this for the file preview: a mention in message prose and
   the file name on a written-file card. Markdown links inside message prose keep
   their existing resolver.
+
+`GET /api/v1/sessions/{ref}/files/roots`
+
+- Returns the provider-side roots used by the file route. It is derived from
+  provider metadata and the host-only config, not client input.
+- OpenCode maps the session `projectID` to `/api/project` and
+  `/api/worktree?projectID=`, so project worktrees (including those under the
+  OpenCode data directory) are included automatically.
+- Lineage sessions contribute their own validated project roots.
+- `files.previewRoots` in the hub config adds explicit scratch roots such as
+  `/tmp/opencode`. It has no settings API; message prose never creates a root.
 
 `GET /api/v1/sessions?q=`
 

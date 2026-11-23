@@ -1757,6 +1757,28 @@ competing history buttons.
   header, Copy writes `pnpm test --filter auth` to the clipboard, and the label
   and live region read `Copied` and `Copied to clipboard`.
 
+## Preview roots and recorded artifacts (2026-11-24)
+
+- A file mention is previewable when it is under a provider root or exactly
+  matches a path the agent wrote, edited, or read. The sheet itself is
+  unchanged: one path, one close control, same renderer.
+- Roots are derived, not typed: session directory, project canonical directory,
+  saved worktrees (including OpenCode’s data directory), sandboxes, and
+  validated lineage roots. Message prose never creates a root.
+- The operator escape hatch is `files.previewRoots` in the host config, for
+  scratch directories such as `/tmp/opencode`. It is not exposed in Settings;
+  a paired client cannot add `/`.
+- Unknown absolute paths stay plain text or offer the provider fallback. A
+  recorded artifact outside every root uses an exact-file preview ticket, so a
+  generated HTML file renders without granting its sibling directory.
+- No new visual token. The path gate is invisible until it succeeds; failures
+  use the existing inline preview error.
+- Verified live: the session roots returned 10 OpenCode worktrees plus its
+  project root; a recorded `/tmp` PNG returned `200` with its exact ticket, and
+  an unrecorded `/tmp` file plus `/etc/passwd` both returned `400`. The hub unit
+  tests cover relative paths, worktree roots, exact artifacts, and the
+  configured root.
+
 ## Media in messages (2026-11-22)
 
 

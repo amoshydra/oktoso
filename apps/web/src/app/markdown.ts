@@ -140,6 +140,8 @@ export function renderMarkdown(
       const path = previewableFilePath(
         code.textContent ?? undefined,
         context.directory,
+        context.previewRoots,
+        context.artifactPaths,
       );
       if (!path) continue;
 

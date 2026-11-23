@@ -17,10 +17,10 @@ import type {
   SessionSelectionInput,
   SessionWarning,
 } from "@amoshydra/oktoso-contracts";
+import { artifactPathsFromMessages, resolveArtifactPath } from "@amoshydra/oktoso-contracts";
+import { posix } from "node:path";
 import {
-  isAbsoluteSessionPath,
   ProviderError,
-  relativeSessionPath,
   type ProviderAdapter,
   type ProviderFileRequest,
   type ProviderInboxItem,
@@ -76,6 +76,8 @@ export interface SessionServiceOptions {
   transcripts?: TranscriptCacheService;
   syncTimeoutMs?: number;
   coldStartWaitMs?: number;
+  /** Provider-host directories allowed in addition to session/project roots. */
+  previewRoots?: string[];
 }
 
 interface CursorValue {
@@ -87,6 +89,10 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const MAX_LINEAGE_DEPTH = 25;
 const MAX_LINEAGE_NODES = 100;
+const FILE_ROOT_TTL_MS = 60_000;
+const FILE_ARTIFACT_TTL_MS = 15_000;
+const MAX_FILE_ACCESS_ENTRIES = 100;
+const MAX_ARTIFACT_PAGES = 10;
 
 export class SessionService {
   private readonly sessions = new Map<string, Session>();
@@ -97,6 +103,15 @@ export class SessionService {
   private readonly transcripts?: TranscriptCacheService;
   private readonly syncTimeoutMs: number;
   private readonly coldStartWaitMs: number;
+  private readonly previewRoots: string[];
+  private readonly rootCache = new Map<
+    string,
+    { at: number; roots: string[] }
+  >();
+  private readonly artifactCache = new Map<
+    string,
+    { at: number; paths: Set<string> }
+  >();
   private lastSyncAt = 0;
   private synced = false;
   private refreshing?: Promise<void>;
@@ -111,6 +126,9 @@ export class SessionService {
     this.store = options.store;
     this.attachments = options.attachments;
     this.transcripts = options.transcripts;
+    this.previewRoots = (options.previewRoots ?? [])
+      .map(absoluteRoot)
+      .filter((root): root is string => Boolean(root));
     this.syncTimeoutMs = options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS;
     this.coldStartWaitMs =
       options.coldStartWaitMs ?? DEFAULT_SESSION_COLD_START_MS;
@@ -475,6 +493,175 @@ export class SessionService {
     }
   }
 
+  /**
+   * Every provider path the session may preview: the session's project
+   * worktrees, validated lineage roots, and the operator's configured roots.
+   */
+  async fileRoots(ref: string): Promise<string[]> {
+    const cached = this.rootCache.get(ref);
+    if (cached && this.now() - cached.at < FILE_ROOT_TTL_MS) {
+      return cached.roots;
+    }
+
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    this.assertProviderAvailable(adapter.id);
+
+    const session = await this.requireSession(ref);
+    const roots = new Set<string>();
+    const signal = operationSignal(this.registry, adapter.id, 30_000, 5_000);
+    const own = adapter.fileRoots
+      ? await adapter.fileRoots(ref, signal).catch(() => [])
+      : [];
+    for (const root of own) addAbsoluteRoot(roots, root);
+    if (own.length === 0 && session.directory) {
+      addAbsoluteRoot(roots, session.directory);
+    }
+
+    const lineage = await this.lineage(ref).catch(() => undefined);
+    let visited = 0;
+    for (const node of lineage?.nodes ?? []) {
+      if (node.ref === ref || visited >= 8) continue;
+      visited += 1;
+      if (adapter.fileRoots) {
+        const nodeRoots = await adapter
+          .fileRoots(node.ref, signal)
+          .catch(() => []);
+        for (const root of nodeRoots) addAbsoluteRoot(roots, root);
+      } else {
+        const nodeSession = await this.trySession(node.ref).catch(() => undefined);
+        if (nodeSession?.directory) addAbsoluteRoot(roots, nodeSession.directory);
+      }
+    }
+
+    for (const root of this.previewRoots) addAbsoluteRoot(roots, root);
+    const value = [...roots];
+    this.cacheRoots(ref, value);
+    return value;
+  }
+
+  /** Exact paths from write/edit/read tool parts. Cached for a minute. */
+  private async artifactPaths(ref: string): Promise<Set<string>> {
+    const cached = this.artifactCache.get(ref);
+    if (cached && this.now() - cached.at < FILE_ARTIFACT_TTL_MS) {
+      return cached.paths;
+    }
+
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    this.assertProviderAvailable(adapter.id);
+    const session = await this.requireSession(ref);
+
+    let messages: MessagePage["data"] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_ARTIFACT_PAGES; page += 1) {
+      const next = await adapter.getMessages(
+        ref,
+        {
+          limit: 200,
+          order: "desc",
+          ...(cursor ? { cursor } : {}),
+        },
+        operationSignal(this.registry, adapter.id, 20_000, 5_000),
+      );
+      messages = messages.concat(next.data);
+      cursor = next.cursor.next ?? undefined;
+      if (!cursor) break;
+    }
+
+    const paths = new Set(
+      artifactPathsFromMessages(messages, session.directory),
+    );
+    this.cacheArtifacts(ref, paths);
+    return paths;
+  }
+
+  /**
+   * Resolve a requested path to the provider root and relative path.
+   *
+   * A path under a known root uses that root. Anything else must exactly match
+   * a write/edit/read artifact; its parent directory becomes the root for that
+   * one read. Unknown absolute paths are refused.
+   */
+  private async resolveFileTarget(
+    ref: string,
+    path: string,
+  ): Promise<{
+    absolute: string;
+    root: string;
+    path: string;
+    exact: boolean;
+  }> {
+    const session = await this.requireSession(ref);
+    const absolute = resolveArtifactPath(session.directory, path);
+    if (!absolute) {
+      throw new ProviderError("invalid_request", "A file path is required");
+    }
+
+    const roots = await this.fileRoots(ref);
+    let matched: string | undefined;
+    for (const root of roots) {
+      if (absolute === root) continue;
+      if (
+        absolute.startsWith(`${root}/`) &&
+        (!matched || root.length > matched.length)
+      ) {
+        matched = root;
+      }
+    }
+    if (matched) {
+      return {
+        absolute,
+        root: matched,
+        path: absolute.slice(matched.length + 1),
+        exact: false,
+      };
+    }
+
+    const artifacts = await this.artifactPaths(ref).catch(
+      () => new Set<string>(),
+    );
+    if (!artifacts.has(absolute)) {
+      throw new ProviderError(
+        "invalid_request",
+        "The file is outside the session's allowed roots and recorded artifacts",
+      );
+    }
+    return {
+      absolute,
+      root: posix.dirname(absolute),
+      path: posix.basename(absolute),
+      exact: true,
+    };
+  }
+
+  /** The absolute path plus its provider root, for preview tickets. */
+  async fileTarget(
+    ref: string,
+    path: string,
+  ): Promise<{
+    absolute: string;
+    root: string;
+    path: string;
+    exact: boolean;
+  }> {
+    return this.resolveFileTarget(ref, path);
+  }
+
+  private cacheRoots(ref: string, roots: string[]): void {
+    if (this.rootCache.size >= MAX_FILE_ACCESS_ENTRIES) {
+      this.rootCache.clear();
+    }
+    this.rootCache.set(ref, { at: this.now(), roots });
+  }
+
+  private cacheArtifacts(ref: string, paths: Set<string>): void {
+    if (this.artifactCache.size >= MAX_FILE_ACCESS_ENTRIES) {
+      this.artifactCache.clear();
+    }
+    this.artifactCache.set(ref, { at: this.now(), paths });
+  }
+
   private async fileRequest(
     ref: string,
     path: string,
@@ -486,22 +673,13 @@ export class SessionService {
     }
     this.assertProviderAvailable(adapter.id);
 
-    let directory = this.sessions.get(ref)?.directory;
-    if (!directory && isAbsoluteSessionPath(path)) {
-      directory = (
-        await adapter.getSession(
-          ref,
-          operationSignal(this.registry, adapter.id, 15_000),
-        )
-      ).directory;
-    }
-
+    const target = await this.resolveFileTarget(ref, path);
     return {
       adapter: adapter as FileAdapter,
       input: {
         ref,
-        directory,
-        path: relativeSessionPath(path, directory),
+        directory: target.root,
+        path: target.path,
         ...(mediaMaxBytes(path) === undefined
           ? {}
           : { maxBytes: mediaMaxBytes(path) }),
@@ -1110,4 +1288,16 @@ function decodeCursor(cursor: string | undefined): number {
   } catch {
     throw badRequest("Invalid session cursor");
   }
+}
+
+function absoluteRoot(value: string): string | undefined {
+  const slashed = value.trim().replace(/\\/g, "/");
+  if (!slashed.startsWith("/")) return undefined;
+  const normalized = posix.normalize(slashed).replace(/\/+$/, "");
+  return normalized || "/";
+}
+
+function addAbsoluteRoot(roots: Set<string>, value: string): void {
+  const root = absoluteRoot(value);
+  if (root) roots.add(root);
 }

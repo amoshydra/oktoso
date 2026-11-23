@@ -142,6 +142,120 @@ describe("SessionService history", () => {
   });
 });
 
+describe("SessionService file roots", () => {
+  const session = makeSession({
+    ref: "test:ses_files",
+    providerID: "test",
+    title: "Files",
+    directory: "/home/me/project",
+  });
+  const messages = {
+    data: [
+      {
+        id: "msg_1",
+        sessionRef: session.ref,
+        role: "assistant" as const,
+        createdAt: 1,
+        parts: [
+          {
+            type: "tool" as const,
+            id: "tool_1",
+            name: "write",
+            status: "completed",
+            input: { path: "/tmp/records/proto.png" },
+          },
+        ],
+      },
+    ],
+    cursor: { next: null, previous: null },
+  };
+
+  function harness() {
+    const readFile = vi.fn(async () => ({
+      body: new Uint8Array([1]),
+      contentType: "image/png",
+    }));
+    const fileRoots = vi.fn(async () => [
+      "/home/me/project",
+      "/home/me/worktrees/one",
+    ]);
+    const adapter = {
+      id: "test",
+      capabilities: { files: true },
+      getSession: async () => ({ ...session }),
+      getMessages: async () => messages,
+      listSessions: async () => ({
+        data: [],
+        cursor: { next: null, previous: null },
+      }),
+      fileRoots,
+      readFile,
+    } as unknown as ProviderAdapter;
+    const service = new SessionService(makeRegistry([adapter]), logger, {
+      previewRoots: ["/tmp/opencode"],
+    });
+    return { service, readFile, fileRoots };
+  }
+
+  it("combines provider roots with configured roots", async () => {
+    const { service } = harness();
+    await expect(service.fileRoots(session.ref)).resolves.toEqual([
+      "/home/me/project",
+      "/home/me/worktrees/one",
+      "/tmp/opencode",
+    ]);
+  });
+
+  it("resolves a path under a project worktree", async () => {
+    const { service } = harness();
+    await expect(
+      service.fileTarget(session.ref, "/home/me/worktrees/one/plot.png"),
+    ).resolves.toMatchObject({
+      root: "/home/me/worktrees/one",
+      path: "plot.png",
+      exact: false,
+    });
+  });
+
+  it("resolves an exact recorded artifact outside every root", async () => {
+    const { service, readFile } = harness();
+    await expect(
+      service.fileTarget(session.ref, "/tmp/records/proto.png"),
+    ).resolves.toMatchObject({
+      root: "/tmp/records",
+      path: "proto.png",
+      exact: true,
+    });
+
+    await service.readFile(session.ref, "/tmp/records/proto.png");
+    expect(readFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        directory: "/tmp/records",
+        path: "proto.png",
+      }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("rejects an unrecorded path outside every root", async () => {
+    const { service } = harness();
+    await expect(
+      service.fileTarget(session.ref, "/etc/passwd"),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("keeps relative paths anchored to the session", async () => {
+    const { service } = harness();
+    await expect(
+      service.fileTarget(session.ref, "notes/plan.md"),
+    ).resolves.toMatchObject({
+      root: "/home/me/project",
+      path: "notes/plan.md",
+      exact: false,
+    });
+  });
+});
+
 describe("SessionService session cache", () => {
   it("drops a cached session when the provider returns not found", async () => {
     const session = makeSession({

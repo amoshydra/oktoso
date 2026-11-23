@@ -207,6 +207,8 @@ export interface ProviderAdapter {
     input: ProviderFileRequest,
     signal: AbortSignal,
   ): Promise<ProviderResource>;
+  /** Provider roots a session may preview, including project worktrees. */
+  fileRoots?(ref: string, signal: AbortSignal): Promise<string[]>;
   /** Streaming file path; falls back to `readFile` when absent. */
   openFile?(
     input: ProviderFileRequest,

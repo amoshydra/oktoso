@@ -1,4 +1,5 @@
 import { PREVIEW_EXTENSIONS } from "./file-preview";
+import { resolveArtifactPath } from "@amoshydra/oktoso-contracts";
 
 const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 const IMAGE_DATA = /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,/i;
@@ -14,19 +15,25 @@ export interface ResourceContext {
   sessionRef?: string;
   /** True when the provider exposes files in the session directory. */
   fileRead?: boolean;
+  /** Provider roots the session may preview (project/worktrees/config). */
+  previewRoots?: string[];
+  /** Exact absolute paths from write/edit/read tool parts. */
+  artifactPaths?: string[];
 }
 
 /**
  * Recognize a file mention that the session preview can open.
  *
- * Files inside the session directory qualify, either relative or absolute
- * under `directory` (agents write both). URL-like values, anything with
- * whitespace, escaping paths, and unknown extensions stay plain code so a
- * command or a domain name never turns into a broken preview.
+ * Files inside the session directory qualify, as do absolute paths under a
+ * provider root or exactly matching a recorded tool artifact. URL-like values,
+ * whitespace, escaping relative paths, and unknown extensions stay plain code
+ * so a command or a domain name never turns into a broken preview.
  */
 export function previewableFilePath(
   value: string | undefined,
   directory?: string,
+  previewRoots: readonly string[] = [],
+  artifactPaths: readonly string[] = [],
 ): string | undefined {
   const raw = value?.trim();
   if (!raw || /\s/.test(raw)) return undefined;
@@ -36,10 +43,23 @@ export function previewableFilePath(
   const root = directory?.trim().replace(/\/+$/, "");
   let path = (raw.split(/[?#]/, 1)[0] ?? raw).replace(/^\.\//, "");
   if (path.startsWith("/")) {
-    if (!root || !path.startsWith(`${root}/`)) return undefined;
-    path = path.slice(root.length + 1);
+    const resolved = resolveArtifactPath(undefined, path);
+    if (!resolved) return undefined;
+    const inSession =
+      Boolean(root) && (resolved === root || resolved.startsWith(`${root}/`));
+    if (!inSession) {
+      const inRoot = previewRoots.some((candidate) => {
+        const clean = candidate.replace(/\/+$/, "");
+        return resolved === clean || resolved.startsWith(`${clean}/`);
+      });
+      if (!inRoot && !artifactPaths.includes(resolved)) return undefined;
+      path = resolved;
+    } else {
+      path = resolved.slice((root as string).length + 1);
+    }
+  } else if (path.split(/[\\/]/).includes("..")) {
+    return undefined;
   }
-  if (path.split(/[\\/]/).includes("..")) return undefined;
 
   const name = path.split(/[\\/]/).at(-1) ?? path;
   const dot = name.lastIndexOf(".");
@@ -71,7 +91,12 @@ export function sessionFileTarget(
   context: ResourceContext,
 ): SessionFileTarget | undefined {
   if (!context.sessionRef || !context.fileRead) return undefined;
-  const path = previewableFilePath(value, context.directory);
+  const path = previewableFilePath(
+    value,
+    context.directory,
+    context.previewRoots,
+    context.artifactPaths,
+  );
   return path ? { ref: context.sessionRef, path } : undefined;
 }
 

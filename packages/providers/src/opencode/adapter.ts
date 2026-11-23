@@ -185,6 +185,16 @@ interface OpenCodeModel {
   variants?: Array<{ id: string }>;
 }
 
+interface OpenCodeProject {
+  id: string;
+  canonical?: string;
+  sandboxes?: string[];
+}
+
+interface OpenCodeWorktree {
+  directory?: string;
+}
+
 const openCodeCapabilities: ProviderCapabilities = {
   list: true,
   read: true,
@@ -219,6 +229,10 @@ export class OpenCodeAdapter implements ProviderAdapter {
   private readonly authorization: string;
   private readonly liveMessages = new Map<string, OpenCodeLiveMessage>();
   private readonly createdMessages = new Set<string>();
+  private readonly projectRootsCache = new Map<
+    string,
+    { at: number; roots: string[] }
+  >();
 
   constructor(options: OpenCodeAdapterOptions) {
     this.id = options.id;
@@ -972,6 +986,74 @@ export class OpenCodeAdapter implements ProviderAdapter {
    * with `location[directory]`, so the hub asks the provider instead of reading
    * the host disk itself.
    */
+  /**
+   * Roots this session may preview: the project canonical directory, its
+   * sandboxes, and every saved worktree. A session directory that sits outside
+   * all of them is not added, so a client-created session cannot widen previews
+   * merely by choosing a directory.
+   */
+  async fileRoots(ref: string, signal: AbortSignal): Promise<string[]> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<OpenCodeSessionResponse>(
+      `/api/session/${encodeURIComponent(nativeID)}`,
+      {},
+      signal,
+    );
+    const directory = asDirectoryRoot(response.data.location?.directory);
+    if (!directory) return [];
+    const projectID = response.data.projectID;
+    if (!projectID) return [directory];
+
+    let roots = await this.projectRoots(projectID, signal);
+    if (roots.length === 0) return [directory];
+    if (!roots.some((root) => isWithinRoot(directory, root))) {
+      await this.request(
+        "/api/worktree/refresh",
+        {},
+        signal,
+        "POST",
+        {},
+      ).catch(() => undefined);
+      this.projectRootsCache.delete(projectID);
+      roots = await this.projectRoots(projectID, signal);
+    }
+    return roots;
+  }
+
+  private async projectRoots(
+    projectID: string,
+    signal: AbortSignal,
+  ): Promise<string[]> {
+    const cached = this.projectRootsCache.get(projectID);
+    if (cached && Date.now() - cached.at < 60_000) return cached.roots;
+
+    const projects = await this.request<
+      OpenCodeProject[] | { data?: OpenCodeProject[] }
+    >("/api/project", {}, signal);
+    const list = Array.isArray(projects) ? projects : projects.data ?? [];
+    const project = list.find((item) => item.id === projectID);
+    const worktrees = await this.request<
+      OpenCodeWorktree[] | { data?: OpenCodeWorktree[] }
+    >("/api/worktree", { projectID }, signal);
+    const treeList = Array.isArray(worktrees) ? worktrees : worktrees.data ?? [];
+
+    const roots = new Set<string>();
+    const canonical = asDirectoryRoot(project?.canonical);
+    if (canonical) roots.add(canonical);
+    for (const sandbox of project?.sandboxes ?? []) {
+      const root = asDirectoryRoot(sandbox);
+      if (root) roots.add(root);
+    }
+    for (const tree of treeList) {
+      const root = asDirectoryRoot(tree.directory);
+      if (root) roots.add(root);
+    }
+    const value = [...roots];
+    if (this.projectRootsCache.size >= 50) this.projectRootsCache.clear();
+    this.projectRootsCache.set(projectID, { at: Date.now(), roots: value });
+    return value;
+  }
+
   async readFile(
     input: ProviderFileRequest,
     signal: AbortSignal,
@@ -1837,6 +1919,16 @@ function toLiveMessage(live: OpenCodeLiveMessage): Message {
       : {}),
     ...(live.error !== undefined ? { metadata: { error: live.error } } : {}),
   };
+}
+
+function asDirectoryRoot(value: string | undefined): string | undefined {
+  const slashed = value?.trim().replace(/\\/g, "/");
+  if (!slashed?.startsWith("/")) return undefined;
+  return slashed.replace(/\/+$/, "") || "/";
+}
+
+function isWithinRoot(value: string, root: string): boolean {
+  return value === root || value.startsWith(`${root}/`);
 }
 
 function roleFromInfo(info: Record<string, unknown>): Message["role"] | undefined {

@@ -673,6 +673,92 @@ describe("OpenCodeAdapter history", () => {
   });
 });
 
+async function projectRootsServer(directory: string): Promise<{
+  adapter: OpenCodeAdapter;
+  calls: RecordedCall[];
+}> {
+  const calls: RecordedCall[] = [];
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    calls.push({ method: request.method ?? "GET", path: url.pathname, body: undefined });
+    if (url.pathname === "/api/session/ses_test") {
+      json(response, 200, {
+        data: {
+          id: "ses_test",
+          title: "Test session",
+          projectID: "proj_1",
+          location: { directory },
+          time: { created: 1, updated: 2 },
+        },
+      });
+      return;
+    }
+    if (url.pathname === "/api/project") {
+      json(response, 200, [
+        {
+          id: "proj_1",
+          canonical: "/home/me/project",
+          sandboxes: ["/home/me/sandbox"],
+        },
+      ]);
+      return;
+    }
+    if (url.pathname === "/api/worktree") {
+      json(response, 200, [
+        { directory: "/home/me/worktrees/one" },
+        { directory: "/home/me/worktrees/two" },
+      ]);
+      return;
+    }
+    if (url.pathname === "/api/worktree/refresh") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return {
+    adapter: new OpenCodeAdapter({
+      id: "desktop-opencode",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      password: "test",
+    }),
+    calls,
+  };
+}
+
+describe("OpenCodeAdapter file roots", () => {
+  it("includes the project canonical, sandboxes, and worktrees", async () => {
+    const { adapter } = await projectRootsServer("/home/me/project");
+    const roots = await adapter.fileRoots(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    expect(roots.sort()).toEqual([
+      "/home/me/project",
+      "/home/me/sandbox",
+      "/home/me/worktrees/one",
+      "/home/me/worktrees/two",
+    ]);
+  });
+
+  it("does not add a session directory outside the project roots", async () => {
+    const { adapter, calls } = await projectRootsServer("/etc");
+    const roots = await adapter.fileRoots(
+      "desktop-opencode:ses_test",
+      AbortSignal.timeout(5_000),
+    );
+    expect(roots).not.toContain("/etc");
+    expect(
+      calls.some((call) => call.path === "/api/worktree/refresh"),
+    ).toBe(true);
+  });
+});
+
 async function promptServer(): Promise<{
   adapter: OpenCodeAdapter;
   calls: RecordedCall[];

@@ -215,6 +215,14 @@ export class HubClient {
     );
   }
 
+  /** Provider roots the session may preview: project/worktrees plus config. */
+  async fileRoots(ref: string): Promise<string[]> {
+    const response = await this.request<{ data: string[] }>(
+      `/api/v1/sessions/${encodeURIComponent(ref)}/files/roots`,
+    );
+    return response.data;
+  }
+
   /**
    * Short-lived URL for an HTML preview frame.
    *

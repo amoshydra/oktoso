@@ -30,6 +30,7 @@ import { FilePreview } from "./FilePreview";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
 import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
+import { artifactPathsFromMessages } from "@amoshydra/oktoso-contracts";
 import type { ResourceContext } from "./urls";
 
 export interface AssistantDockProps {
@@ -177,8 +178,16 @@ export function AssistantDock({
     }
     const ref = scope.sessionRef;
     let cancelled = false;
-    void Promise.all([client.session(ref), client.providers()])
-      .then(([session, providers]) => {
+    void Promise.all([
+      client.session(ref),
+      client.providers(),
+      client.fileRoots(ref).catch(() => []),
+      client.messages(ref, { limit: 200, order: "desc" }).catch(() => ({
+        data: [],
+        cursor: { next: null, previous: null },
+      })),
+    ])
+      .then(([session, providers, roots, page]) => {
         if (cancelled) return;
         const provider = providers.find((entry) => entry.id === session.providerID);
         setResource({
@@ -188,6 +197,8 @@ export function AssistantDock({
           directory: session.directory,
           sessionRef: session.ref,
           fileRead: Boolean(provider?.capabilities.files),
+          previewRoots: roots,
+          artifactPaths: artifactPathsFromMessages(page.data, session.directory),
         });
       })
       .catch(() => {

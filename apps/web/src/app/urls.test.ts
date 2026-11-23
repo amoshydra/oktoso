@@ -158,6 +158,47 @@ describe("previewableFilePath", () => {
     ).toBeUndefined();
   });
 
+  it("accepts absolute paths under a preview root or a recorded artifact", () => {
+    expect(
+      previewableFilePath(
+        "/tmp/opencode/shot.png",
+        "/home/me/project",
+        ["/tmp/opencode"],
+      ),
+    ).toBe("/tmp/opencode/shot.png");
+    expect(
+      previewableFilePath(
+        "/tmp/opencode-other/shot.png",
+        "/home/me/project",
+        ["/tmp/opencode"],
+      ),
+    ).toBeUndefined();
+    expect(
+      previewableFilePath(
+        "/tmp/opencode/shot.png",
+        "/home/me/project",
+        [],
+        ["/tmp/opencode/shot.png"],
+      ),
+    ).toBe("/tmp/opencode/shot.png");
+    expect(
+      previewableFilePath(
+        "/home/me/.ssh/config.json",
+        "/home/me/project",
+        [],
+        ["/home/me/.ssh/config.json"],
+      ),
+    ).toBe("/home/me/.ssh/config.json");
+    expect(
+      previewableFilePath(
+        "/home/me/.ssh/other.json",
+        "/home/me/project",
+        [],
+        ["/home/me/.ssh/config.json"],
+      ),
+    ).toBeUndefined();
+  });
+
   it("rejects commands, URLs, absolute paths, and binary types", () => {
     expect(previewableFilePath("pnpm run build")).toBeUndefined();
     expect(previewableFilePath("npm")).toBeUndefined();

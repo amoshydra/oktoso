@@ -3,6 +3,7 @@ export * from "./attention";
 export * from "./sessions";
 export * from "./drafts";
 export * from "./messages";
+export * from "./artifacts";
 export * from "./questions";
 export * from "./events";
 export * from "./health";
