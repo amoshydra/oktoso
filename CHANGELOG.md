@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.2.8](https://github.com/amoshydra/oktoso/compare/v0.2.7...v0.2.8) (2026-11-23)
+
+
+### Features
+
+* **assistant:** add read-only project and global scopes ([598e6ed](https://github.com/amoshydra/oktoso/commit/598e6ed58afeb251c41d10f180af47e2a3d44125))
+* **assistant:** ask a session read-only with one model call ([94b87c3](https://github.com/amoshydra/oktoso/commit/94b87c34b11a95704e7f7ed7b0ece61259d19f88))
+* **assistant:** ask one session, read-only, in a hub-owned thread ([dbc156f](https://github.com/amoshydra/oktoso/commit/dbc156fa0ee50ea7adc87cbe0b0286df4ed25250))
+* **assistant:** backfill the session as-of stamp for earlier turns ([c98002f](https://github.com/amoshydra/oktoso/commit/c98002fedc2a357484c7570b64e7116a82ceab6c))
+* **assistant:** expire stale actions and mark interrupted runs ([6dae1e7](https://github.com/amoshydra/oktoso/commit/6dae1e7c77ab1a15488fbf46a5d410031b3ce855))
+* **assistant:** find sessions and send to them from project and global ([6afb9c8](https://github.com/amoshydra/oktoso/commit/6afb9c8ff93f1a776a0371813691a026f2df785d))
+* **assistant:** give the prompt a goal, a work state, and its failures ([0613dc7](https://github.com/amoshydra/oktoso/commit/0613dc758826e6f0204f30f6c348120831cc9f40))
+* **assistant:** keep permission prompts in the inbox ([70d89e8](https://github.com/amoshydra/oktoso/commit/70d89e8ecf5b71b4a4a81d336182ab9f7bb342a5))
+* **assistant:** let the session answer read its own transcript ([385daaf](https://github.com/amoshydra/oktoso/commit/385daafb9e575102391cacade3c993072d3e3a9c))
+* **assistant:** make the agent endpoint a runtime setting ([9af3afb](https://github.com/amoshydra/oktoso/commit/9af3afba892b2fce6ef7699567578287f222f91c))
+* **assistant:** page cross-session search instead of cutting at ten ([58f78a7](https://github.com/amoshydra/oktoso/commit/58f78a75a1261eca66cdacd9ce31d11a1c2a9407))
+* **assistant:** page the transcript back to the start of a long session ([dd2b3a0](https://github.com/amoshydra/oktoso/commit/dd2b3a0adecbb9edb60c4f15e10c987843a1c082))
+* **assistant:** pick the model at the composer and show the work ([f978409](https://github.com/amoshydra/oktoso/commit/f9784093b894f2b6855a4200c55db810f98c08d7))
+* **assistant:** read across sessions from the overview thread ([b17c5c4](https://github.com/amoshydra/oktoso/commit/b17c5c4bd6da742b39f548414ed80bbd41c40a4f))
+* **assistant:** read older turns on demand instead of stopping at the cap ([276918d](https://github.com/amoshydra/oktoso/commit/276918d40f5fdf5317681584a274254fb27fb8bf))
+* **assistant:** render answers like a chat message ([2bd7ea5](https://github.com/amoshydra/oktoso/commit/2bd7ea5a76aaf48baa55696958c365dca3c93217))
+* **assistant:** require a human to confirm any write ([afd0342](https://github.com/amoshydra/oktoso/commit/afd03428681382f9d7b9237061816a9cfbfbb67a))
+* **assistant:** say how much of the session an answer read ([f7f6432](https://github.com/amoshydra/oktoso/commit/f7f643257610db1677fe3201adfcad12d4f2138e))
+* **assistant:** search every session from any thread ([4d79719](https://github.com/amoshydra/oktoso/commit/4d7971991367c84fd21a2cce1d6a658b903b0dce))
+* **assistant:** show when a turn happened and how old the session was ([1a4d837](https://github.com/amoshydra/oktoso/commit/1a4d8374be05f375d84c6a096747fc39b6654639))
+* **chat:** add last-turn undo and redo ([d9849ab](https://github.com/amoshydra/oktoso/commit/d9849ab87ddd89c6fa44cf852aa6298dea1576f7))
+* **chat:** add opt-in file restore and gate Open WebUI undo ([a4e9370](https://github.com/amoshydra/oktoso/commit/a4e9370e87c4da00f18e0597f1a2ba58703327ac))
+* **chat:** show a compaction while it is running ([2ec280d](https://github.com/amoshydra/oktoso/commit/2ec280da00882b82a6b73b4b1d79094748ec64ec))
+* **chat:** surface a failed compaction and offer retry ([1a0a373](https://github.com/amoshydra/oktoso/commit/1a0a3739dde502405947c7d689c28e201249485e))
+* **events:** let a wearable ask for a slower keepalive ([a0e2401](https://github.com/amoshydra/oktoso/commit/a0e2401b16c947b3bde34b74082dabbb77b15925))
+* **g2:** answer a batch question by question on the glass ([f7498b7](https://github.com/amoshydra/oktoso/commit/f7498b7b5f8e45787c4c4e0e6f3f7f5de3dc66ea))
+* **g2:** make the answer screen a complete response surface ([6411d28](https://github.com/amoshydra/oktoso/commit/6411d2886d2605a32dbe413b7bbf9834bc5c4917))
+* **g2:** number answers and mark actions with a chevron ([7c12923](https://github.com/amoshydra/oktoso/commit/7c12923f530c2e563584c928d3e0583aa2361999))
+* **g2:** review a single answer before sending ([393b073](https://github.com/amoshydra/oktoso/commit/393b073845548a9bcdc3344b7919aae63524a7cb))
+* **g2:** suggest answers per batch question ([cfc90ff](https://github.com/amoshydra/oktoso/commit/cfc90ffe0ee0a7f067ed78a624bab0ae57007043))
+* **media:** play videos in the preview sheet instead of downloading ([7d491ba](https://github.com/amoshydra/oktoso/commit/7d491ba8048e50bfa69e314b71f0e4db122ac58e))
+* **media:** stream file-part video through a preview ticket ([d629a98](https://github.com/amoshydra/oktoso/commit/d629a98f3d6358feef1215bf932325474d44fb85))
+* **search:** name the providers that could not answer ([29e6bbf](https://github.com/amoshydra/oktoso/commit/29e6bbfa8eefcb4952a970557e4f2d353a2cb4ee))
+* **settings:** seal provider keys at rest ([c7d9744](https://github.com/amoshydra/oktoso/commit/c7d9744fc1b9490633e3e37999c627c5644ac723))
+
+
+### Bug Fixes
+
+* **assistant:** bound the history read and show the compaction in the evidence line ([f09d3de](https://github.com/amoshydra/oktoso/commit/f09d3de62656caee8d377b667f27d5aad0a9cd12))
+* **assistant:** cap activity before the turn is stored ([7dc7315](https://github.com/amoshydra/oktoso/commit/7dc7315172924a2832f72264012b457ed6d6b71e))
+* **assistant:** give the session assistant the evidence, not a summary ([6c7e781](https://github.com/amoshydra/oktoso/commit/6c7e781f32e429c29344d8bed1e5d2712fedd66a))
+* **assistant:** keep the end of long messages and drop old turns first ([4dcd5c2](https://github.com/amoshydra/oktoso/commit/4dcd5c265d7a53b603aa886cde96e00c0a761b3f))
+* **assistant:** make a decision atomic and a cancel unconditional ([9cca439](https://github.com/amoshydra/oktoso/commit/9cca439ada74ac35bb59b5b323f80739b3c40234))
+* **assistant:** put activity before the answer and match the chat tiles ([297ef92](https://github.com/amoshydra/oktoso/commit/297ef92eee92dbc2d1917422d23700282df047b6))
+* **assistant:** redact tool output and skip unchanged history scans ([4ac5206](https://github.com/amoshydra/oktoso/commit/4ac52069bf7e3afd4eaab96aa1be2585aa41cd8b))
+* **assistant:** send the provider key to the model endpoint ([a1eb004](https://github.com/amoshydra/oktoso/commit/a1eb004e533d2c7dcdee5bc82fa589803f2da8dc))
+* **g2:** keep the chat's pending question live ([2153276](https://github.com/amoshydra/oktoso/commit/21532765ef8ead5c33780776b9e446fdd807fb98))
+* **g2:** name the batch handoff and drop redundant answer rows ([d8e0cb9](https://github.com/amoshydra/oktoso/commit/d8e0cb9569321f9f9956a44ba795877bdc3e33ec))
+* **g2:** only treat an exact free-answer sentinel as free text ([ebe6e63](https://github.com/amoshydra/oktoso/commit/ebe6e631147798185867fbdc3236a79df09cf960))
+* **media:** show and stream video attachments in messages ([82fb2e1](https://github.com/amoshydra/oktoso/commit/82fb2e1ccda5bf599d29dc369eb3dc8d5751ca77))
+* **opencode:** name the missing file when a project read 404s ([b16ca29](https://github.com/amoshydra/oktoso/commit/b16ca29e6f791f80b8809991458a80eb8fc42db2))
+* **settings:** accept nullable keys when sealing an update ([3904724](https://github.com/amoshydra/oktoso/commit/39047241ff6cd9b1a55ac6b57c32392339758ee4))
+* **web:** point the endpoint placeholder at a neutral OpenAI path ([a3a3efb](https://github.com/amoshydra/oktoso/commit/a3a3efb33d6212fe7e8c63c0f59d4c95c6512259))
+
+
+### Performance Improvements
+
+* **g2:** batch live updates and poll only as a fallback ([e77ae4e](https://github.com/amoshydra/oktoso/commit/e77ae4e509456bf67c1bbf157c7f1942362bf833))
+* **g2:** resume the event stream and back off polling when it drops ([0ee676e](https://github.com/amoshydra/oktoso/commit/0ee676e2d3508d31877cc7fe4eb1049f644d07a3))
+* **media:** stream provider files and forward seeks upstream ([da94289](https://github.com/amoshydra/oktoso/commit/da94289c16eee0e528eab9ce1ba41ad9adfb7c80))
+
 ## [0.2.7](https://github.com/amoshydra/oktoso/compare/v0.2.6...v0.2.7) (2026-11-19)
 
 
