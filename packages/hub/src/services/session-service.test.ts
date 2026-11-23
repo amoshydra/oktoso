@@ -36,6 +36,54 @@ function makeRegistry(adapters: ProviderAdapter[]): ProviderRegistry {
   } as unknown as ProviderRegistry;
 }
 
+
+describe("SessionService.compact", () => {
+  it("refuses to compact a running session", async () => {
+    const session = makeSession({
+      ref: "test:ses_running",
+      providerID: "test",
+      title: "Running",
+      status: "running",
+    });
+    const compactSession = vi.fn(async () => undefined);
+    const adapter = {
+      id: "test",
+      getSession: async () => ({ ...session }),
+      compactSession,
+    } as unknown as ProviderAdapter;
+    const service = new SessionService(makeRegistry([adapter]), logger);
+    await service.get(session.ref);
+
+    await expect(service.compact(session.ref)).rejects.toMatchObject({
+      code: "conflict",
+    });
+    expect(compactSession).not.toHaveBeenCalled();
+  });
+
+  it("queues a compaction for an idle session", async () => {
+    const session = makeSession({
+      ref: "test:ses_idle",
+      providerID: "test",
+      title: "Idle",
+      status: "idle",
+    });
+    const compactSession = vi.fn(async () => undefined);
+    const adapter = {
+      id: "test",
+      getSession: async () => ({ ...session }),
+      compactSession,
+    } as unknown as ProviderAdapter;
+    const service = new SessionService(makeRegistry([adapter]), logger);
+    await service.get(session.ref);
+
+    await service.compact(session.ref);
+    expect(compactSession).toHaveBeenCalledWith(
+      session.ref,
+      expect.any(AbortSignal),
+    );
+  });
+});
+
 describe("SessionService session cache", () => {
   it("drops a cached session when the provider returns not found", async () => {
     const session = makeSession({
