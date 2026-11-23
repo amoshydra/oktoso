@@ -58,7 +58,7 @@ import { ActivityTiles as ActivityGrid } from "./ActivityTiles";
 import { itemsFromChatSteps } from "./activity-model";
 import { AssistantDock } from "./AssistantDock";
 import { BrandMark } from "./BrandMark";
-import { pastedFiles } from "./clipboard";
+import { copyTextToClipboard, pastedFiles } from "./clipboard";
 import { downloadAttachment, saveBlob } from "./download";
 import { FilePreview } from "./FilePreview";
 import { trapTabKey } from "./focus";
@@ -9547,36 +9547,6 @@ function formatJson(value: unknown): string {
   }
 }
 
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (!text) return false;
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Fall through to the selection fallback for non-secure origins.
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  textarea.style.left = "0";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.focus({ preventScroll: true });
-  textarea.select();
-  textarea.setSelectionRange(0, text.length);
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textarea.remove();
-  }
-}
 
 function stopMediaStream(stream: MediaStream | null): void {
   stream?.getTracks().forEach((track) => track.stop());

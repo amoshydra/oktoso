@@ -242,7 +242,7 @@ The production chat now follows the design-v1 shell instead of the Phase 2 page-
 
 Verification: dark and light themes at 1440, 1024, 390, and 320px. No horizontal page overflow; code blocks and tables scroll inside their containers. The browser console is clean. Lighthouse accessibility is 100. Keyboard Escape and focus return were checked for the details overlay.
 
-Remaining: the desktop session sidebar from the prototype, message editing as a tree operation, per-code-block copy and syntax highlighting, Open WebUI attachment sending, a full session-family tree, and a final message-measure pass once the sidebar narrows the chat column.
+Remaining: the desktop session sidebar from the prototype, message editing as a tree operation, syntax highlighting, Open WebUI attachment sending, a full session-family tree, and a final message-measure pass once the sidebar narrows the chat column.
 
 ## Session selection picker (2026-11-02)
 
@@ -1737,7 +1737,28 @@ competing history buttons.
 - Verified through the adapter tests, the service tests, and a browser e2e that
   stages an undo, shows the file list, restores the files, and redoes the turn.
 
+## Code block copy (2026-11-24)
+
+- Every fenced code block gets a 28px header above the code: the language in
+  10px uppercase mono (`--muted`) and a quiet `Copy` action. The header is
+  `--surface-2` with a `--border-subtle` divider; the code panel keeps the
+  existing `--bg`, 8px radius, and horizontal scroll.
+- Copy copies the code text only, never the fences or the language label.
+  Success reads `Copied` in the existing success tone, and a polite live region
+  announces "Copied to clipboard"; failure reads `Copy failed` in the danger
+  tone. Both reset after two seconds.
+- The button reuses the existing `message-action` grammar (28px desktop, 44px
+  mobile); the header grows to 44px on mobile. No new type role, spacing step,
+  radius, or colour.
+- Mermaid source blocks use the same header; when the diagram renders, the
+  header and source disappear together. On failure the source stays with Copy
+  available.
+- Verified in the assistant e2e: the rendered answer's `sh` block shows the
+  header, Copy writes `pnpm test --filter auth` to the clipboard, and the label
+  and live region read `Copied` and `Copied to clipboard`.
+
 ## Media in messages (2026-11-22)
+
 
 - A video or audio `file` part uses the native player, capped at 720×480 on
   desktop and full width on mobile. The black video box is the player's own

@@ -295,6 +295,23 @@ describe("session assistant", () => {
     expect(await answer.locator("pre code").first().innerText()).toContain(
       "pnpm test --filter auth",
     );
+    await page!
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: BASE_URL,
+      });
+    const codeCopy = answer.locator(".code-block-copy").first();
+    await codeCopy.waitFor({ timeout: 5_000 });
+    expect(await codeCopy.innerText()).toBe("Copy");
+    await codeCopy.click();
+    await page!.waitForTimeout(100);
+    expect(await codeCopy.innerText()).toBe("Copied");
+    expect(
+      await answer.locator("[data-code-status]").first().innerText(),
+    ).toBe("Copied to clipboard");
+    expect(
+      await page!.evaluate(() => navigator.clipboard.readText()),
+    ).toContain("pnpm test --filter auth");
 
     const mention = answer.locator(
       '.file-mention[data-file-path="plots/chart.png"]',

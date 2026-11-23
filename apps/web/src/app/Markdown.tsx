@@ -5,6 +5,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
+import { copyTextToClipboard } from "./clipboard";
 import { downloadAttachment } from "./download";
 import { renderMarkdown } from "./markdown";
 import {
@@ -13,6 +14,8 @@ import {
   subscribeMermaidTheme,
 } from "./mermaid";
 import type { ResourceContext } from "./urls";
+
+const codeCopyTimers = new WeakMap<HTMLButtonElement, number>();
 
 export function Markdown(props: {
   text: string;
@@ -139,6 +142,35 @@ export function Markdown(props: {
       className="message-markdown"
       ref={containerRef}
       onClick={(event) => {
+        const copyButton = (event.target as HTMLElement).closest(
+          "button[data-code-copy]",
+        );
+        if (copyButton instanceof HTMLButtonElement) {
+          event.preventDefault();
+          const block = copyButton.closest(".code-block");
+          const code = block?.querySelector("pre code");
+          if (!code) return;
+          const previous = codeCopyTimers.get(copyButton);
+          if (previous) window.clearTimeout(previous);
+          const status = block?.querySelector("[data-code-status]");
+          void copyTextToClipboard(code.textContent ?? "").then((copied) => {
+            if (!copyButton.isConnected) return;
+            copyButton.textContent = copied ? "Copied" : "Copy failed";
+            copyButton.dataset.copied = copied ? "true" : "false";
+            if (status instanceof HTMLElement) {
+              status.textContent = copied ? "Copied to clipboard" : "Copy failed";
+            }
+            const timer = window.setTimeout(() => {
+              if (!copyButton.isConnected) return;
+              copyButton.textContent = "Copy";
+              delete copyButton.dataset.copied;
+              if (status instanceof HTMLElement) status.textContent = "";
+            }, 2_000);
+            codeCopyTimers.set(copyButton, timer);
+          });
+          return;
+        }
+
         const mention = (event.target as HTMLElement).closest(
           "button[data-file-path]",
         );

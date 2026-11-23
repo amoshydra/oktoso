@@ -69,6 +69,45 @@ export function renderMarkdown(
     }
   }
 
+  // Every fenced block gets a quiet header with its language and a Copy action.
+  // The button is handled by delegation in Markdown.tsx; it is added after
+  // sanitization so the sanitizer never sees a control it would strip.
+  const codeBlocks = [...template.content.querySelectorAll("pre")];
+  for (const pre of codeBlocks) {
+    const code = pre.querySelector("code");
+    if (!code) continue;
+    const language = [...code.classList]
+      .find((name) => name.startsWith("language-"))
+      ?.slice("language-".length);
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-block";
+    const head = document.createElement("div");
+    head.className = "code-block-head";
+    if (language) {
+      const label = document.createElement("span");
+      label.className = "code-block-lang";
+      label.textContent = language;
+      head.append(label);
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "code-block-copy message-action";
+    button.dataset.codeCopy = "";
+    button.setAttribute(
+      "aria-label",
+      language ? `Copy ${language} code` : "Copy code",
+    );
+    button.textContent = "Copy";
+    const status = document.createElement("span");
+    status.className = "sr-only";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.dataset.codeStatus = "";
+    head.append(button, status);
+    pre.before(wrapper);
+    wrapper.append(head, pre);
+  }
+
   // Mermaid fences become a source block plus an empty diagram target. The
   // client renders the SVG after markdown is in the document and keeps the
   // source visible when parsing fails.
@@ -80,6 +119,7 @@ export function renderMarkdown(
   for (const code of mermaidFences) {
     const pre = code.parentElement;
     if (!pre || pre.tagName !== "PRE") continue;
+    const source = pre.closest(".code-block") ?? pre;
     const block = document.createElement("div");
     block.className = "mermaid-block";
     const diagram = document.createElement("div");
@@ -88,8 +128,9 @@ export function renderMarkdown(
     hint.className = "mermaid-hint";
     hint.textContent = "Scroll to see the full diagram";
     pre.classList.add("mermaid-source");
-    pre.before(block);
-    block.append(diagram, hint, pre);
+    if (source !== pre) source.classList.add("mermaid-source-block");
+    source.before(block);
+    block.append(diagram, hint, source);
   }
 
   if (context?.fileRead && context.sessionRef) {
