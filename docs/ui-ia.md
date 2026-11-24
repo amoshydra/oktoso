@@ -836,6 +836,16 @@ Tap talk  Swipe scroll
 
 The hub does not care which gesture a client uses. The client maps gestures to the same attention actions.
 
+### Phone bridge
+
+The `/apps/even-g2/` webview is the phone companion, not a second desktop hub.
+
+- One header status (`Connected`, `Not connected`, or an error), one title, and a quiet version pill.
+- Unpaired: one **Connect this phone** card. A pairing link or code is primary; a hub token is a disclosure.
+- Connected: the pairing form collapses to `Connected · hub` with **Pair another**. The phone keyboard is the fallback surface.
+- The keyboard stays disabled with `Open a session on the glasses first` until a session is attached.
+- The symbol guide is user-facing; glasses preview, bridge statistics, and the reply audit sit under **Developer tools**.
+
 ## 17. VR adaptation
 
 ```text

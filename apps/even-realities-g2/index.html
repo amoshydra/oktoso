@@ -5,154 +5,331 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
     <title>Oktoso for Even G2</title>
     <style>
-      :root { color-scheme: dark; --ink: #f2f5f8; --muted: #98a2b3; --line: #2b3442; --panel: #121820; --bg: #080b10; --accent: #a9bdff; }
+      :root {
+        color-scheme: dark;
+        --ink: #f2f5f8;
+        --muted: #98a2b3;
+        --faint: #6f7a8a;
+        --line: #2b3442;
+        --line-strong: #3f4b5c;
+        --panel: #121820;
+        --surface-2: #1a2431;
+        --surface-3: #232f3f;
+        --bg: #080b10;
+        --accent: #a9bdff;
+        --on-accent: #080b10;
+        --good: #7ee2a8;
+        --bad: #ff9292;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 24px;
+        --space-6: 32px;
+        --radius-xs: 4px;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-pill: 999px;
+      }
       * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; }
-      body { padding: 20px; max-width: 640px; margin: 0 auto; }
-      h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.02em; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      body {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: var(--space-5) var(--space-4) var(--space-6);
+      }
+      h1 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -0.02em; }
+      h2 { margin: 0; font-size: 16px; line-height: 1.3; letter-spacing: -0.01em; }
+      h3 { margin: var(--space-4) 0 var(--space-1); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
       p { margin: 0; color: var(--muted); }
-      a { color: var(--accent); }
-      .brand { width: 36px; height: 36px; margin-bottom: 16px; }
-      .brand svg { display: block; }
-      .panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
-      .panel h2 { margin: 0 0 4px; font-size: 15px; }
-      .panel .hint { font-size: 12px; }
-      label { display: block; margin-top: 12px; font-size: 12px; color: var(--muted); }
-      input, textarea, select { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d131b; color: var(--ink); font: inherit; font-size: 16px; }
-      input[type="checkbox"] { width: auto; margin: 0 6px 0 0; }
-      fieldset { margin-top: 12px; padding: 8px 12px 12px; border: 1px solid var(--line); border-radius: 8px; }
-      fieldset label { margin-top: 6px; color: var(--ink); }
-      textarea { min-height: 72px; resize: vertical; }
-      button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #1a2431; color: var(--ink); font: inherit; font-size: 13px; }
-      button.primary { border-color: var(--accent); background: var(--accent); color: #080b10; font-weight: 600; }
-      button:disabled { opacity: .5; }
-      .row { display: flex; gap: 8px; align-items: center; }
-      .status { color: var(--accent); font-size: 12px; margin-top: 8px; min-height: 18px; }
-      .status.error { color: #ff9292; }
-      [hidden] { display: none !important; }
-      .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--muted); }
-      .composer { margin-top: 16px; }
-      .composer-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-      .composer-head strong { font-size: 12px; color: var(--muted); font-weight: 600; }
+      a { color: var(--accent); text-underline-offset: 2px; }
       code, pre { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-      pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 11px; line-height: 1.5; }
-      .glasses-preview { min-height: 150px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid #24452c; border-radius: 8px; background: #07130a; color: #71f28a; font-size: 11px; }
-      .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-      .preview-controls button { min-height: 36px; font-size: 12px; }
+
+      .bridge-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3);
+        margin-bottom: var(--space-3);
+      }
+      .brand { flex: none; width: 36px; height: 36px; }
+      .brand svg { display: block; }
+      .bridge-identity { min-width: 0; flex: 1 1 auto; }
+      .bridge-title-row { display: flex; align-items: center; gap: var(--space-2); }
+      .bridge-subtitle { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+      .version { flex: none; }
+      .connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        margin-left: auto;
+        padding: 0 var(--space-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-pill);
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .connection::before {
+        content: "";
+        flex: none;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--faint);
+      }
+      .connection[data-state="connected"] { color: var(--ink); border-color: var(--line-strong); }
+      .connection[data-state="connected"]::before { background: var(--good); }
+      .connection[data-state="error"] { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+      .connection[data-state="error"]::before { background: var(--bad); }
+
+      .lede { max-width: 48ch; margin-bottom: var(--space-4); font-size: 14px; }
+
+      .panel {
+        margin-top: var(--space-3);
+        padding: var(--space-4);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--panel);
+      }
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        justify-content: space-between;
+      }
+      .panel-head > :first-child { min-width: 0; }
+      .panel-head .hint { margin-top: var(--space-1); }
+      .panel-meta { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
+      .connected-panel { padding: var(--space-3) var(--space-4); }
+      .connected-panel .panel-head { align-items: center; }
+      .connected-panel .panel-head > :first-child { display: none; }
+      .connected-panel #pairing-summary { margin-left: 0; }
+      .panel .hint { color: var(--muted); font-size: 12px; }
+      .hint.strong { color: var(--faint); }
+      .hub-origin { margin-top: var(--space-1); }
+      .hub-origin code { color: var(--muted); font-size: 11px; }
+      .pair-scan-note { margin-top: var(--space-2); color: var(--faint); font-size: 11px; }
+
+      .pill {
+        display: inline-block;
+        padding: 2px var(--space-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-pill);
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.5;
+        white-space: nowrap;
+      }
+
+      label { display: block; margin-top: var(--space-3); color: var(--muted); font-size: 12px; }
+      input, textarea, select {
+        display: block;
+        width: 100%;
+        min-height: 44px;
+        margin-top: var(--space-1);
+        padding: 10px var(--space-3);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: #0d131b;
+        color: var(--ink);
+        font: inherit;
+        font-size: 16px;
+      }
+      input[type="checkbox"] { width: auto; min-height: 0; margin: 0 6px 0 0; }
+      fieldset { margin-top: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+      fieldset label { margin-top: 6px; color: var(--ink); }
+      textarea { min-height: 88px; resize: vertical; }
+      input:disabled, textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+      input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      button {
+        min-height: 44px;
+        padding: 8px 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--ink);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+      button.quiet { min-height: 44px; padding: 0 var(--space-2); border-color: transparent; background: transparent; color: var(--muted); font-size: 12px; }
+      button.quiet:hover { background: var(--surface-2); color: var(--ink); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+      .pairing-actions .primary { flex: 1 1 auto; }
+      .status { min-height: 18px; margin-top: var(--space-2); color: var(--accent); font-size: 12px; }
+      .status.error { color: var(--bad); }
+      [hidden] { display: none !important; }
+
+      details { margin-top: var(--space-3); }
+      details.panel summary { cursor: pointer; font-weight: 600; }
+      details.panel summary::marker { color: var(--muted); }
+      .token-fallback { margin-top: var(--space-4); border: 0; background: transparent; padding: 0; }
+      .token-fallback summary { min-height: 44px; padding: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+      .token-fallback[open] summary { color: var(--ink); }
+
+      .composer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+      .composer { margin-top: var(--space-3); }
+      .composer textarea { margin-top: var(--space-3); }
       #phone-question-text { white-space: pre-line; }
-      .question-choices { display: grid; gap: 8px; margin-top: 10px; }
-      .question-choices button { text-align: left; min-height: 44px; }
+      .question-choices { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+      .question-choices button { text-align: left; }
       .question-choices button:only-child { width: 100%; }
       .question-choices button[aria-pressed="true"] { border-color: var(--accent); background: #25314a; }
-      .scan-video { width: 100%; margin-top: 12px; border-radius: 8px; background: #000; aspect-ratio: 4 / 3; object-fit: cover; }
-      details.panel summary { cursor: pointer; font-weight: 600; }
-      .symbol-row { display: grid; grid-template-columns: 2.5em 1fr; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; }
-      .symbol-row .glyph { font-size: 16px; text-align: center; }
+      .scan-video { width: 100%; margin-top: var(--space-3); border-radius: var(--radius-sm); background: #000; aspect-ratio: 4 / 3; object-fit: cover; }
+      .symbol-row { display: grid; grid-template-columns: 2.5em 1fr; gap: var(--space-2); align-items: baseline; padding: 3px 0; font-size: 13px; }
+      .symbol-row .glyph { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 16px; text-align: center; }
       .symbol-row .meaning { color: var(--ink); }
-      .batch-question { padding-top: 14px; border-top: 1px solid var(--line); margin-top: 14px; }
+      .batch-question { padding-top: var(--space-3); border-top: 1px solid var(--line); margin-top: var(--space-3); }
       .batch-question:first-child { padding-top: 0; border-top: 0; margin-top: 0; }
-      .batch-question h3 { margin: 0; font-size: 14px; font-weight: 600; }
+      .batch-question h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
       .batch-question textarea { min-height: 56px; }
+
+      .developer { color: var(--muted); }
+      .developer summary { color: var(--muted); font-size: 12px; font-weight: 500; }
+      .developer[open] summary { color: var(--ink); }
+      .developer .hint { margin-top: var(--space-1); }
+      .glasses-preview {
+        min-height: 150px;
+        max-height: 320px;
+        overflow: auto;
+        margin: var(--space-1) 0 0;
+        padding: var(--space-3);
+        border: 1px solid #24452c;
+        border-radius: var(--radius-sm);
+        background: #07130a;
+        color: #71f28a;
+        white-space: pre-wrap;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: var(--space-2); }
+      .preview-controls button { min-height: 36px; font-size: 12px; }
+      .debug { max-height: 320px; margin: var(--space-1) 0 0; overflow: auto; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
+
+      @media (max-width: 360px) {
+        .bridge-head { align-items: flex-start; }
+        .connection { margin-left: 0; }
+        .panel-head { flex-direction: column; }
+        .panel-meta { align-self: flex-start; }
+      }
     </style>
   </head>
   <body>
-    <div class="brand" role="img" aria-label="Oktoso">
-      <svg width="36" height="36" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
-        <rect width="512" height="512" rx="116" fill="#a9bdff"/>
-        <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="#07080b" stroke-width="44" stroke-linejoin="round"/>
-        <circle cx="256" cy="256" r="44" fill="#07080b"/>
-      </svg>
-    </div>
-    <div class="composer-head">
-      <h1>Oktoso for Even G2</h1>
-      <span id="app-version" class="pill">v—</span>
-    </div>
-    <p>Phone setup and fallback keyboard. The G2 display is controlled by the app bridge. <a href="./audit.html">Reply audit</a>.</p>
+    <header class="bridge-head">
+      <div class="brand" role="img" aria-label="Oktoso">
+        <svg width="36" height="36" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+          <rect width="512" height="512" rx="116" fill="#a9bdff"/>
+          <path d="M 256 96 L 369 143 L 416 256 L 369 369 L 256 416 L 143 369 L 96 256 L 143 143 Z" fill="none" stroke="#07080b" stroke-width="44" stroke-linejoin="round"/>
+          <circle cx="256" cy="256" r="44" fill="#07080b"/>
+        </svg>
+      </div>
+      <div class="bridge-identity">
+        <div class="bridge-title-row">
+          <h1>Oktoso</h1>
+          <span id="app-version" class="pill version">v—</span>
+        </div>
+        <p class="bridge-subtitle">Even G2 bridge</p>
+      </div>
+      <span id="connection" class="connection" data-state="offline">Not connected</span>
+    </header>
+
+    <p class="lede">Connect this phone to your hub. Use it for setup, longer replies, and questions the glasses hand off.</p>
 
     <section class="panel" id="pairing-panel">
-      <div class="composer-head">
-        <h2>Phone pairing</h2>
+      <div class="panel-head">
+        <div>
+          <h2>Connect this phone</h2>
+          <p class="hint">Pairing keeps the glasses and this phone on the same hub.</p>
+        </div>
         <span id="pairing-summary" class="pill" hidden>Connected</span>
-        <button id="pairing-toggle" type="button" hidden>Pair another</button>
+        <button id="pairing-toggle" class="quiet" type="button" hidden>Pair another</button>
       </div>
       <div id="pairing-body">
-        <p class="hint">In the hub terminal, type <code>p</code> and press Enter. Then scan the QR code or paste the pairing link or code here.</p>
-        <p class="hint"><code id="hub-origin">same origin</code></p>
+        <p class="hint" style="margin-top: var(--space-3)">In the hub terminal, type <code>p</code> and press Enter. Then paste the pairing link or code here.</p>
+        <p class="hint hub-origin"><code id="hub-origin">same origin</code></p>
         <label for="pairing-code">Pairing link or code</label>
         <input id="pairing-code" type="text" placeholder="Paste the pairing link or code" autocomplete="off" autocapitalize="off" spellcheck="false" />
-        <div class="row" style="margin-top:12px">
+        <div class="actions pairing-actions">
           <button id="pair" class="primary" type="button">Pair this phone</button>
           <button id="pair-scan" type="button" hidden>Scan QR</button>
         </div>
         <video id="pair-video" class="scan-video" muted playsinline hidden></video>
-        <p id="pair-scan-note" class="hint" hidden style="margin-top:8px">QR scanning needs a camera-capable secure browser. Paste the pairing link or code instead.</p>
+        <p id="pair-scan-note" class="hint pair-scan-note" hidden>QR scanning needs a camera-capable secure browser. Paste the pairing link or code instead.</p>
         <div id="pairing-status" class="status" role="status"></div>
 
-        <p class="hint" style="margin-top:16px">Already have a hub token? Use it instead.</p>
-        <label for="hub-token">Hub token</label>
-        <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
-        <div class="row" style="margin-top:12px">
-          <button id="connect" type="button">Connect with token</button>
-          <span id="connection" class="pill">Not connected</span>
-        </div>
-        <div id="connection-status" class="status"></div>
+        <details class="token-fallback">
+          <summary>Use a hub token instead</summary>
+          <label for="hub-token">Hub token</label>
+          <input id="hub-token" type="password" placeholder="Paste owner or session token" autocomplete="off" spellcheck="false" />
+          <div class="actions">
+            <button id="connect" type="button">Connect with token</button>
+          </div>
+          <div id="connection-status" class="status"></div>
+        </details>
       </div>
     </section>
 
     <section id="phone-question-panel" class="panel" hidden>
       <div class="composer-head">
-        <h2>Question</h2>
-        <strong id="phone-question-session">No session open</strong>
+        <div>
+          <h2>Question</h2>
+          <p class="hint">Answer the question the glasses are showing.</p>
+        </div>
+        <strong id="phone-question-session" class="panel-meta">No session open</strong>
       </div>
-      <p id="phone-question-text" class="hint"></p>
+      <p id="phone-question-text" class="hint" style="margin-top: var(--space-3)"></p>
       <div id="phone-question-choices" class="question-choices"></div>
-      <button id="phone-batch-send" class="primary" type="button" hidden style="margin-top:10px">Send answers</button>
-      <button id="phone-question-type" type="button" style="margin-top:10px">Type a different answer…</button>
+      <button id="phone-batch-send" class="primary" type="button" hidden style="margin-top: var(--space-3)">Send answers</button>
+      <button id="phone-question-type" type="button" style="margin-top: var(--space-3)">Type a different answer…</button>
       <p id="phone-question-status" class="status"></p>
     </section>
 
     <section id="phone-form-panel" class="panel" hidden>
       <h2 id="phone-form-title">Answer</h2>
-      <p id="phone-form-summary" class="hint"></p>
+      <p id="phone-form-summary" class="hint" style="margin-top: var(--space-1)"></p>
       <div id="phone-form-fields"></div>
-      <div class="row" style="margin-top:12px">
+      <div class="actions">
         <button id="phone-form-submit" class="primary" type="button">Submit answer</button>
         <button id="phone-form-cancel" type="button">Cancel</button>
       </div>
       <div id="phone-form-status" class="status"></div>
     </section>
 
-    <section class="panel composer">
+    <section class="panel composer" id="phone-composer">
       <div class="composer-head">
-        <h2>Phone keyboard</h2>
-        <strong id="phone-session">No session open</strong>
+        <div>
+          <h2>Phone keyboard</h2>
+          <p class="hint">Use this when the glasses ask you to type a longer reply.</p>
+        </div>
+        <strong id="phone-session" class="panel-meta">No session open</strong>
       </div>
-      <p class="hint">Use this when the glasses ask you to type a longer reply.</p>
-      <textarea id="phone-text" placeholder="Type a reply…"></textarea>
-      <div class="row" style="margin-top:8px">
+      <textarea id="phone-text" placeholder="Open a session on the glasses first"></textarea>
+      <div class="actions">
         <button id="phone-send" class="primary" type="button" disabled>Send to session</button>
         <button id="phone-refresh" type="button">Refresh data</button>
       </div>
       <div id="phone-status" class="status"></div>
     </section>
 
-    <section class="panel">
-      <h2>Glasses preview</h2>
-      <p class="hint">The exact text/list content sent to the G2 containers.</p>
-      <pre id="glasses-preview" class="glasses-preview">(waiting for a screen)</pre>
-      <div id="preview-selection" class="hint">No list selection</div>
-      <div class="preview-controls">
-        <button id="sim-up" type="button">↑ Up</button>
-        <button id="sim-click" type="button">Select</button>
-        <button id="sim-double" type="button">Back</button>
-        <button id="sim-down" type="button">↓ Down</button>
-      </div>
-    </section>
-
     <details class="panel">
       <summary>Symbol guide</summary>
-      <p class="hint" style="margin-top:8px">The same guide is available on the glasses from Home → Symbols.</p>
-      <div style="margin-top:8px">
+      <p class="hint" style="margin-top: var(--space-2)">The same guide is available on the glasses from Home → Symbols.</p>
+      <div style="margin-top: var(--space-2)">
         <div class="symbol-row"><span class="glyph">●</span><span class="meaning">Unread</span></div>
         <div class="symbol-row"><span class="glyph">?</span><span class="meaning">Question</span></div>
         <div class="symbol-row"><span class="glyph">■</span><span class="meaning">Permission</span></div>
@@ -168,11 +345,22 @@
       </div>
     </details>
 
-    <section class="panel">
-      <h2>Glasses bridge</h2>
+    <details class="panel developer" id="developer-panel">
+      <summary>Developer tools</summary>
+      <p class="hint" style="margin-top: var(--space-1)">The exact text sent to the glasses, bridge diagnostics, and the <a href="./audit.html">reply audit</a>.</p>
+      <h3>Glasses preview</h3>
+      <pre id="glasses-preview" class="glasses-preview">(waiting for a screen)</pre>
+      <div id="preview-selection" class="hint" style="margin-top: var(--space-2)">No list selection</div>
+      <div class="preview-controls">
+        <button id="sim-up" type="button">↑ Up</button>
+        <button id="sim-click" type="button">Select</button>
+        <button id="sim-double" type="button">Back</button>
+        <button id="sim-down" type="button">↓ Down</button>
+      </div>
+      <h3>Glasses bridge</h3>
       <p id="bridge-status" class="hint">Waiting for Even Hub…</p>
-      <pre id="debug"></pre>
-    </section>
+      <pre id="debug" class="debug"></pre>
+    </details>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

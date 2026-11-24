@@ -417,6 +417,7 @@ const pairVideo = byId<HTMLVideoElement>("pair-video");
 const pairScanNote = byId<HTMLParagraphElement>("pair-scan-note");
 const pairingStatus = byId<HTMLDivElement>("pairing-status");
 const pairingBody = byId<HTMLDivElement>("pairing-body");
+const pairingPanel = byId<HTMLElement>("pairing-panel");
 const pairingSummary = byId<HTMLSpanElement>("pairing-summary");
 const pairingToggle = byId<HTMLButtonElement>("pairing-toggle");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
@@ -430,6 +431,12 @@ function log(message: string): void {
 
 function setConnection(label: string, error = false): void {
   connection.textContent = label;
+  connection.dataset.state =
+    label === "Connected" || label.startsWith("Connected ")
+      ? "connected"
+      : error
+        ? "error"
+        : "offline";
   connectionStatus.textContent = error ? label : "";
   connectionStatus.className = error ? "status error" : "status";
   if (label === "Connected") {
@@ -449,7 +456,9 @@ function setPairingCollapsed(collapsed: boolean): void {
   pairingBody.hidden = collapsed;
   pairingSummary.hidden = !collapsed;
   pairingToggle.hidden = !collapsed;
-  pairingSummary.textContent = `Connected · ${hubBaseURL() || "hub"}`;
+  pairingPanel.classList.toggle("connected-panel", collapsed);
+  pairingSummary.textContent = "Connected";
+  pairingSummary.title = hubBaseURL() || "hub";
 }
 
 function setPairingStatus(message: string, error = false): void {
@@ -874,6 +883,10 @@ function syncPhoneSession(): void {
       : "Send to session";
   phoneSend.disabled =
     !hasSession || !phoneText.value.trim() || state.answerBusy || state.messageBusy;
+  phoneText.disabled = !hasSession;
+  phoneText.placeholder = hasSession
+    ? "Type a reply…"
+    : "Open a session on the glasses first";
 }
 
 function updatePhoneState(): void {

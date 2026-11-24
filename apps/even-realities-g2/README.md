@@ -22,6 +22,23 @@ provider directly.
 Screenshot capture and framing are documented in
 [`docs/screenshot-procedure.md`](docs/screenshot-procedure.md).
 
+## Phone bridge
+
+The webview at `/apps/even-g2/` is the phone companion, not the glasses
+framebuffer. The bridge paints the G2 containers; this page handles setup,
+longer replies, and phone-side question forms.
+
+- One header status (`Connected`, `Not connected`, or an error) and one product
+  title. The app version is a quiet pill beside it.
+- Unpaired: a single **Connect this phone** card. The pairing link or code is
+  the primary path; a hub token is a disclosure underneath.
+- Connected: the pairing form collapses to a compact `Connected · hub` row with
+  **Pair another**. The phone keyboard becomes the main fallback.
+- The phone keyboard is disabled with `Open a session on the glasses first`
+  when no session is attached. It does not leave an empty enabled composer.
+- The symbol guide stays user-facing. Glasses preview, bridge statistics, and
+  the reply audit live under a collapsed **Developer tools** disclosure.
+
 ## What it does
 
 - **Pairing** — scan the hub's pairing QR, paste its link or code, or use a hub

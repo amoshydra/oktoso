@@ -1783,6 +1783,27 @@ competing history buttons.
   through the validated route. The hub unit tests cover relative paths, worktree
   roots, exact artifacts, and the configured root.
 
+## G2 phone bridge (2026-11-24)
+
+- The `/apps/even-g2/` webview is a setup and fallback surface, not the
+  glasses framebuffer. It now opens with one header: brand, `Oktoso`, version,
+  `Even G2 bridge`, and one connection pill with a semantic dot.
+- Unpaired: one **Connect this phone** card. The pairing link/code is primary;
+  the hub-token path is a disclosure below it. The pairing action is the only
+  full-width primary button on the surface.
+- Connected: the pairing card collapses to a compact `Connected` + **Pair
+  another** strip instead of squeezing the heading beside a long hub URL.
+- Phone keyboard: disabled with `Open a session on the glasses first` until a
+  session exists; no enabled empty composer.
+- Developer tools (glasses preview, bridge statistics, reply audit) are
+  collapsed. The symbol guide stays user-facing.
+- Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark
+  palette, Inter/IBM Plex Mono, 8px controls and 12px cards. No new visual
+  token.
+- Verified at 390 and 320px, unpaired and connected: no horizontal overflow,
+  no console errors after the expected unpaired `401`; the connected state
+  collapses the pairing form and keeps the keyboard disabled until a session.
+
 ## Media in messages (2026-11-22)
 
 
