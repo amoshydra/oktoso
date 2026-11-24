@@ -160,6 +160,17 @@ export function renderMarkdown(
       context ?? {},
       "link",
     );
+    if (resolved.sessionPath && context?.sessionRef) {
+      anchor.setAttribute("href", "#");
+      anchor.setAttribute("data-session-path", resolved.sessionPath);
+      anchor.setAttribute(
+        "data-session-name",
+        anchor.textContent?.trim() || "file",
+      );
+      anchor.removeAttribute("target");
+      anchor.removeAttribute("rel");
+      continue;
+    }
     if (!resolved.url) {
       anchor.removeAttribute("href");
       anchor.removeAttribute("target");
@@ -192,7 +203,10 @@ export function renderMarkdown(
   for (const media of template.content.querySelectorAll("video, audio")) {
     const raw = media.getAttribute("src") ?? undefined;
     const resolved = resolveSessionResource(raw, context ?? {}, "link");
-    if (isRelativeMediaPath(raw)) {
+    if (resolved.sessionPath) {
+      media.removeAttribute("src");
+      media.setAttribute("data-preview-path", resolved.sessionPath);
+    } else if (isRelativeMediaPath(raw)) {
       // A media element cannot carry the bearer token. Keep the session path
       // and let the component swap in a short-lived preview ticket, which the
       // preview route serves with byte ranges.
@@ -217,7 +231,10 @@ export function renderMarkdown(
   for (const source of template.content.querySelectorAll("source")) {
     const raw = source.getAttribute("src") ?? undefined;
     const resolved = resolveSessionResource(raw, context ?? {}, "link");
-    if (isRelativeMediaPath(raw)) {
+    if (resolved.sessionPath) {
+      source.removeAttribute("src");
+      source.setAttribute("data-preview-path", resolved.sessionPath);
+    } else if (isRelativeMediaPath(raw)) {
       source.removeAttribute("src");
       source.setAttribute("data-preview-path", raw);
     } else if (resolved.url) {
@@ -236,14 +253,16 @@ export function renderMarkdown(
       context ?? {},
       "image",
     );
-    if (!resolved.url) {
+    if (resolved.sessionPath) {
+      image.setAttribute("data-session-path", resolved.sessionPath);
+      image.setAttribute("src", TRANSPARENT_PIXEL);
+    } else if (!resolved.url) {
       const fallback = document.createElement("span");
       fallback.className = "message-image-missing";
       fallback.textContent = image.getAttribute("alt")?.trim() || "Image unavailable";
       image.replaceWith(fallback);
       continue;
-    }
-    if (resolved.attachment) {
+    } else if (resolved.attachment) {
       image.setAttribute("data-attachment-url", resolved.url);
       image.setAttribute("src", TRANSPARENT_PIXEL);
     } else {

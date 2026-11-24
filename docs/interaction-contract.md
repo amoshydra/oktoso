@@ -417,6 +417,10 @@ constraint, not a product toggle. The Settings screen explains the requirement.
 - The provider resolves the path with its own credentials. OpenCode uses
   `GET /api/fs/read/{path}?location[directory]={root}`. The hub never reads the
   provider's disk and the browser never learns the provider address.
+- Inline Markdown images, video, audio, and session-file links use the same
+  `/files` and preview-ticket paths, not a direct provider URL. A path outside
+  the roots/artifacts is never requested; the image keeps its missing
+  placeholder and the link stays plain.
 - The hub streams the provider body instead of buffering it, and forwards a
   single `bytes=` range. Seeking a video asks the provider for that slice
   rather than downloading the clip again. A provider that answers `206` is

@@ -1771,13 +1771,17 @@ competing history buttons.
 - Unknown absolute paths stay plain text or offer the provider fallback. A
   recorded artifact outside every root uses an exact-file preview ticket, so a
   generated HTML file renders without granting its sibling directory.
+- Inline Markdown images, video, audio, and session-file links use the same
+  validated route. Images load as authenticated blobs, never a provider URL;
+  unknown absolute images keep the existing missing-image placeholder.
 - No new visual token. The path gate is invisible until it succeeds; failures
   use the existing inline preview error.
 - Verified live: the session roots returned 10 OpenCode worktrees plus its
   project root; a recorded `/tmp` PNG returned `200` with its exact ticket, and
-  an unrecorded `/tmp` file plus `/etc/passwd` both returned `400`. The hub unit
-  tests cover relative paths, worktree roots, exact artifacts, and the
-  configured root.
+  an unrecorded `/tmp` file plus `/etc/passwd` both returned `400`. The assistant
+  e2e adds an inline Markdown image and verifies it resolves to a `blob:` URL
+  through the validated route. The hub unit tests cover relative paths, worktree
+  roots, exact artifacts, and the configured root.
 
 ## Media in messages (2026-11-22)
 

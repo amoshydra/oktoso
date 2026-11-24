@@ -81,18 +81,41 @@ describe("resolveSessionResource", () => {
     providerID: "desktop-opencode",
     providerType: "opencode",
     directory: "/home/me/project",
+    sessionRef: "desktop-opencode:ses_auth",
+    fileRead: true,
   };
 
-  it("maps OpenCode file links to the fs read endpoint", () => {
+  it("maps OpenCode file links to a validated session path", () => {
     const resolved = resolveSessionResource("docs/spec.md", context, "link");
-    expect(resolved.attachment).toBe(true);
-    expect(resolved.url).toBe(
-      "http://127.0.0.1:4096/api/fs/read/docs/spec.md?location%5Bdirectory%5D=%2Fhome%2Fme%2Fproject",
-    );
+    expect(resolved).toEqual({
+      attachment: true,
+      sessionPath: "docs/spec.md",
+    });
 
     const image = resolveSessionResource("docs/concepts/shelf.png", context, "image");
-    expect(image.attachment).toBe(true);
-    expect(image.url).toContain("/api/fs/read/docs/concepts/shelf.png");
+    expect(image).toEqual({
+      attachment: true,
+      sessionPath: "docs/concepts/shelf.png",
+    });
+  });
+
+  it("accepts an absolute path under a preview root", () => {
+    const rooted = {
+      ...context,
+      previewRoots: ["/tmp/opencode"],
+    };
+    expect(
+      resolveSessionResource("/tmp/opencode/shot.png", rooted, "image"),
+    ).toEqual({
+      attachment: true,
+      sessionPath: "/tmp/opencode/shot.png",
+    });
+    expect(
+      resolveSessionResource("/tmp/opencode-other/shot.png", rooted, "image"),
+    ).toEqual({ attachment: false });
+    expect(
+      resolveSessionResource("/etc/passwd", rooted, "image"),
+    ).toEqual({ attachment: false });
   });
 
   it("leaves OpenCode provider routes and absolute links alone", () => {

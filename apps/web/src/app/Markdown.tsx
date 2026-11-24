@@ -6,7 +6,7 @@ import {
 } from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
 import { copyTextToClipboard } from "./clipboard";
-import { downloadAttachment } from "./download";
+import { downloadAttachment, saveBlob } from "./download";
 import { renderMarkdown } from "./markdown";
 import {
   getMermaidTheme,
@@ -92,6 +92,41 @@ export function Markdown(props: {
 
   useEffect(() => {
     const container = containerRef.current;
+    const sessionRef = props.resource.sessionRef;
+    if (!container || !sessionRef) return;
+    let cancelled = false;
+    const created: string[] = [];
+    const images = Array.from(
+      container.querySelectorAll<HTMLImageElement>("img[data-session-path]"),
+    );
+    for (const image of images) {
+      const path = image.dataset.sessionPath;
+      if (!path) continue;
+      void props.client
+        .sessionFile(sessionRef, path)
+        .then((blob) => {
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          created.push(url);
+          image.src = url;
+          image.removeAttribute("data-session-path");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          const fallback = document.createElement("span");
+          fallback.className = "message-image-missing";
+          fallback.textContent = image.alt?.trim() || "Image unavailable";
+          image.replaceWith(fallback);
+        });
+    }
+    return () => {
+      cancelled = true;
+      for (const url of created) URL.revokeObjectURL(url);
+    };
+  }, [html, props.client, props.resource.sessionRef]);
+
+  useEffect(() => {
+    const container = containerRef.current;
     if (!container || !providerID) return;
     let cancelled = false;
     const created: string[] = [];
@@ -168,6 +203,26 @@ export function Markdown(props: {
             }, 2_000);
             codeCopyTimers.set(copyButton, timer);
           });
+          return;
+        }
+
+        const sessionAnchor = (event.target as HTMLElement).closest(
+          "a[data-session-path]",
+        );
+        if (sessionAnchor instanceof HTMLAnchorElement) {
+          event.preventDefault();
+          const path = sessionAnchor.dataset.sessionPath;
+          const sessionRef = props.resource.sessionRef;
+          if (!path || !sessionRef) return;
+          void props.client
+            .sessionFile(sessionRef, path)
+            .then((blob) =>
+              saveBlob(
+                blob,
+                sessionAnchor.dataset.sessionName ?? "file",
+              ),
+            )
+            .catch(() => undefined);
           return;
         }
 

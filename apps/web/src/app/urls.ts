@@ -71,7 +71,43 @@ export function previewableFilePath(
 
 export interface ResolvedResource {
   url?: string;
+  sessionPath?: string;
   attachment: boolean;
+}
+
+/**
+ * A session file path for Markdown media and links.
+ *
+ * Relative paths stay anchored to the session. Absolute paths are accepted
+ * only under a provider root or when they exactly match a recorded artifact;
+ * the hub revalidates the same rule before reading. This is intentionally
+ * separate from `previewableFilePath`, which also filters preview extensions.
+ */
+export function sessionPathForResource(
+  value: string | undefined,
+  context: ResourceContext,
+): string | undefined {
+  const raw = value?.trim();
+  if (!raw || raw.startsWith("#") || raw.startsWith("//")) return undefined;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return undefined;
+
+  const path = (raw.split(/[?#]/, 1)[0] ?? raw).replace(/^\.\//, "");
+  if (path.startsWith("/")) {
+    const absolute = resolveArtifactPath(undefined, path);
+    if (!absolute) return undefined;
+    const root = context.directory?.trim().replace(/\/+$/, "");
+    const inSession =
+      Boolean(root) && (absolute === root || absolute.startsWith(`${root}/`));
+    if (inSession) return absolute;
+    const inRoot = context.previewRoots?.some((candidate) => {
+      const clean = candidate.replace(/\/+$/, "");
+      return absolute === clean || absolute.startsWith(`${clean}/`);
+    });
+    if (inRoot || context.artifactPaths?.includes(absolute)) return absolute;
+    return undefined;
+  }
+  if (path.split(/[\\/]/).includes("..")) return undefined;
+  return path;
 }
 
 export interface SessionFileTarget {
@@ -124,12 +160,14 @@ export function resolveSessionResource(
 
   if (
     context.providerType === "opencode" &&
-    context.baseUrl &&
     context.directory &&
+    context.fileRead &&
     isOpenCodeFileReference(raw, kind)
   ) {
-    const url = openCodeFileURL(raw, context.baseUrl, context.directory);
-    if (url) return { url, attachment: true };
+    const sessionPath = sessionPathForResource(raw, context);
+    return sessionPath
+      ? { sessionPath, attachment: true }
+      : { attachment: false };
   }
 
   const url = resolveProviderUrl(raw, context.baseUrl, kind);
@@ -157,27 +195,6 @@ function isOpenCodeFileReference(raw: string, kind: "link" | "image"): boolean {
   if (kind === "image") return true;
   const path = raw.split(/[?#]/, 1)[0] ?? raw;
   return FILE_EXTENSION.test(path) || raw.startsWith("./") || raw.startsWith("../");
-}
-
-function openCodeFileURL(
-  raw: string,
-  baseUrl: string,
-  directory: string,
-): string | undefined {
-  const path = (raw.split(/[?#]/, 1)[0] ?? raw).replace(/^\/+/, "");
-  if (!path) return undefined;
-
-  try {
-    const encodedPath = path
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    const url = new URL(`/api/fs/read/${encodedPath}`, baseUrl);
-    url.searchParams.set("location[directory]", directory);
-    return url.toString();
-  } catch {
-    return undefined;
-  }
 }
 
 /**

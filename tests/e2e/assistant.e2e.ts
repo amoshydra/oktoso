@@ -31,6 +31,8 @@ const MARKDOWN_ANSWER = [
   "pnpm test --filter auth",
   "```",
   "",
+  "![chart](plots/chart.png)",
+  "",
   "See `plots/chart.png` for the race.",
 ].join("\n");
 
@@ -312,6 +314,19 @@ describe("session assistant", () => {
     expect(
       await page!.evaluate(() => navigator.clipboard.readText()),
     ).toContain("pnpm test --filter auth");
+
+    const inlineImage = answer.locator("img").first();
+    await inlineImage.waitFor({ timeout: 5_000 });
+    await page!.waitForFunction(
+      () => {
+        const image = document.querySelector(
+          ".assistant-turn.assistant .assistant-turn-text img",
+        );
+        return image instanceof HTMLImageElement && image.src.startsWith("blob:");
+      },
+      { timeout: 5_000 },
+    );
+    expect(await inlineImage.getAttribute("src")).toMatch(/^blob:/);
 
     const mention = answer.locator(
       '.file-mention[data-file-path="plots/chart.png"]',
