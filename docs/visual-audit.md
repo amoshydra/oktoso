@@ -1948,3 +1948,36 @@ competing history buttons.
 - Markdown `<video>` uses the same source resolution as `<img>`; a relative
   path is a proxy URL, never a path on the hub's own origin. Without that, the
   browser fetches the SPA's HTML and the element renders nothing.
+
+## Route revalidation (2026-11-25)
+
+- Overview usage, Inbox, Sessions, and Search keep their last successful data
+  per screen, not per history entry. A route return paints that data at once;
+  the network refresh happens behind it.
+- The only refresh cue is a 2px `--accent` indeterminate line on the bottom
+  edge of the topbar (54px desktop, 52px mobile). It overlays the existing 1px
+  border, changes no height, padding, or content, and cannot shift the title,
+  toolbar, or page. The line is `aria-hidden`; a visually hidden polite status
+  announces `Refreshing data`.
+- The line is reserved for a cached-data revalidation, including a manual
+  Refresh that has data to keep. The 15-second Inbox poll, live-event
+  refreshes, and Load more do not paint it, so ordinary background work never
+  animates the chrome.
+- Reduced motion replaces the sliding bar with a static full-width accent at
+  60% opacity. The accent is already the focus and active-state colour; this
+  introduces no token.
+- Cached empty panels read `Checking for requests…`, `Checking for sessions…`,
+  `Checking messages…`, or `Checking usage…` while the refresh runs. A cold
+  load keeps the existing `Loading…` copy. A failed refresh keeps the cached
+  list or report and shows the existing inline error or offline note; it never
+  falls through to a settled empty state.
+- No new type role, spacing step, radius, control, or component.
+- Verified in the chat e2e at the 1280px runner viewport: with the sessions
+  request held, the Sessions route paints the cached row and the topbar line
+  reports active; a cached empty Search reads `Checking for sessions…` and
+  settles only after the held request completes. Unit tests cover the stable
+  screen keys and timestamped empty entries.
+- Reviewed at 1440, 1024, 390, and 320px in both themes: the topbar held 54px
+  on desktop and 52px on mobile, the line stayed 2px at the bottom edge, the
+  document scroll width never exceeded the viewport, and the cached-empty Inbox
+  read `Checking for requests…` while its request was held.

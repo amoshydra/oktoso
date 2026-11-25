@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HubClient } from "@amoshydra/oktoso-client";
 import type { Session } from "@amoshydra/oktoso-contracts";
+import { useRouteDataKey } from "./history";
 import { compactNumber } from "./metrics";
+import { readRouteCache, writeRouteCache } from "./route-cache";
+import { useRevalidationIndicator } from "./revalidation";
 import { buildUsageReport, type UsageGroup } from "./usage";
 
 const GROUPS: Array<{ id: UsageGroup; label: string }> = [
@@ -29,16 +32,25 @@ function figures(tokens: number | null, cost: number | null) {
  * bounded walk never claims to be the whole history.
  */
 export function OverviewUsage(props: { client: HubClient }) {
+  const key = useRouteDataKey();
+  const [cached] = useState<Session[] | undefined>(() =>
+    readRouteCache<Session[]>(key, "overview-usage"),
+  );
   const [group, setGroup] = useState<UsageGroup>("provider");
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<Session[]>(() => cached ?? []);
+  const [loading, setLoading] = useState(!cached);
+  const [checking, setChecking] = useState(Boolean(cached));
+  const [settled, setSettled] = useState(Boolean(cached));
   const [error, setError] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  useRevalidationIndicator(checking);
 
   useEffect(() => {
     let cancelled = false;
+    if (cached) setChecking(true);
+    else setLoading(true);
+    setError(undefined);
     (async () => {
-      setLoading(true);
-      setError(undefined);
       try {
         const collected = new Map<string, Session>();
         let cursor: string | undefined;
@@ -51,7 +63,12 @@ export function OverviewUsage(props: { client: HubClient }) {
           cursor = result.cursor.next ?? undefined;
           if (!cursor || result.data.length === 0) break;
         }
-        if (!cancelled) setSessions([...collected.values()]);
+        if (!cancelled) {
+          const next = [...collected.values()];
+          setSessions(next);
+          setSettled(true);
+          writeRouteCache(key, "overview-usage", next);
+        }
       } catch (reason) {
         if (!cancelled) {
           setError(
@@ -59,13 +76,16 @@ export function OverviewUsage(props: { client: HubClient }) {
           );
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setChecking(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [props.client]);
+  }, [props.client, key, attempt]);
 
   const report = useMemo(
     () => buildUsageReport(sessions, group),
@@ -103,10 +123,22 @@ export function OverviewUsage(props: { client: HubClient }) {
         {error ? (
           <p className="form-note" role="alert">
             {error}
+            {settled ? " Showing the last report." : ""}
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              Retry
+            </button>
           </p>
-        ) : loading ? (
+        ) : null}
+
+        {loading && sessions.length === 0 ? (
           <div className="empty">Loading usage…</div>
-        ) : report.sessions === 0 ? (
+        ) : checking && sessions.length === 0 ? (
+          <div className="empty">Checking usage…</div>
+        ) : !settled ? null : report.sessions === 0 ? (
           <div className="empty">No sessions yet, so there is nothing to report.</div>
         ) : report.rows.length === 0 ? (
           <div className="empty">No sessions to summarise.</div>

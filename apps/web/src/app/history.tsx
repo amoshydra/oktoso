@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createID } from "./ids";
 import { DEFAULT_ROUTE, parseRoute, routeHref, type Route } from "./router";
+import { routeDataKey } from "./route-cache";
 import { saveActiveScrolls } from "./scroll-store";
 
 export type NavigationType = "initial" | "push" | "replace" | "pop";
@@ -158,6 +159,11 @@ function useHistory(): HistoryContextValue {
 
 export function useHistoryLocation(): HistoryLocation {
   return useHistory().location;
+}
+
+/** Stable route identity for data caches, unlike the per-entry history key. */
+export function useRouteDataKey(): string {
+  return routeDataKey(useHistory().location.route);
 }
 
 export function useNavigationType(): NavigationType {

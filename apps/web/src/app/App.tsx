@@ -80,6 +80,7 @@ import {
   useHistoryLocation,
   useNavigate,
   useNavigationType,
+  useRouteDataKey,
   type NavigateOptions,
 } from "./history";
 import {
@@ -90,7 +91,16 @@ import {
   type Route,
   type SearchScope,
 } from "./router";
-import { readRouteCache, writeRouteCache } from "./route-cache";
+import {
+  readRouteCache,
+  readRouteCacheEntry,
+  searchDataKey,
+  writeRouteCache,
+} from "./route-cache";
+import {
+  useRevalidationActive,
+  useRevalidationIndicator,
+} from "./revalidation";
 import { hasSavedScroll, useScrollRestoration } from "./scroll";
 import { NotificationSettingsPanel } from "./settings-notifications";
 import { AutomationSettingsPanel } from "./settings-automation";
@@ -270,6 +280,19 @@ function routeForView(view: View): Route {
     case "settings":
       return { name: "settings" };
   }
+}
+
+/** A 2px indeterminate line on the topbar: cached content stays in place. */
+function TopbarProgress() {
+  const active = useRevalidationActive();
+  return (
+    <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {active ? "Refreshing data" : ""}
+      </span>
+      <div className="topbar-progress" data-active={active} aria-hidden="true" />
+    </>
+  );
 }
 
 export function App() {
@@ -1063,6 +1086,7 @@ export function App() {
           <button className="btn small topbar-disconnect" type="button" onClick={signOut}>
             Disconnect
           </button>
+          <TopbarProgress />
         </header>
 
         <main className={`content ${chatOpen ? "chat-content" : ""}`} ref={contentRef}>
@@ -2086,19 +2110,28 @@ function InboxView(props: {
   onOpen: (ref: string) => void;
   onNewSession: () => void;
 }) {
-  const { key } = useHistoryLocation();
-  const [items, setItems] = useState<Attention[]>(
-    () => readRouteCache<Attention[]>(key, "inbox-items") ?? [],
+  const key = useRouteDataKey();
+  const cachedItems = useRef(
+    readRouteCache<Attention[]>(key, "inbox-items"),
   );
-  const [approvals, setApprovals] = useState<AutomationApproval[]>([]);
+  const cachedApprovals = useRef(
+    readRouteCache<AutomationApproval[]>(key, "inbox-approvals"),
+  );
+  const hydrated = cachedItems.current !== undefined;
+  const [items, setItems] = useState<Attention[]>(cachedItems.current ?? []);
+  const [approvals, setApprovals] = useState<AutomationApproval[]>(
+    cachedApprovals.current ?? [],
+  );
   const filter = ATTENTION_FILTERS.some(([value]) => value === props.filter)
     ? props.filter
     : "all";
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hydrated);
+  const [checking, setChecking] = useState(hydrated);
   const [busyID, setBusyID] = useState<string>();
   const [error, setError] = useState<string>();
   const [announcement, setAnnouncement] = useState("");
   const seenBlocking = useRef<Set<string> | null>(null);
+  useRevalidationIndicator(checking);
 
   /**
    * Announce only blocking work that arrives after the first successful load.
@@ -2132,9 +2165,10 @@ function InboxView(props: {
     );
   };
 
-  const load = async (silent = false) => {
-    if (!silent) setLoading(true);
-    setError(undefined);
+  const load = async (mode: "initial" | "revalidate" | "silent" = "initial") => {
+    if (mode === "initial") setLoading(true);
+    if (mode === "revalidate") setChecking(true);
+    if (mode !== "silent") setError(undefined);
     try {
       const [page, nextApprovals] = await Promise.all([
         props.client.attention(),
@@ -2142,21 +2176,25 @@ function InboxView(props: {
       ]);
       setItems(page.data);
       setApprovals(nextApprovals);
+      setError(undefined);
       announceNewBlocking(page.data, nextApprovals);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load attention");
     } finally {
-      if (!silent) setLoading(false);
+      if (mode === "initial") setLoading(false);
+      if (mode === "revalidate") setChecking(false);
     }
   };
 
   useEffect(() => {
+    if (loading || checking || error) return;
     writeRouteCache(key, "inbox-items", items);
-  }, [items, key]);
+    writeRouteCache(key, "inbox-approvals", approvals);
+  }, [approvals, checking, error, items, key, loading]);
 
   useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(true), 15_000);
+    void load(hydrated ? "revalidate" : "initial");
+    const timer = setInterval(() => void load("silent"), 15_000);
     return () => clearInterval(timer);
   }, [props.client]);
 
@@ -2170,7 +2208,7 @@ function InboxView(props: {
     )?.seq ?? 0;
   useEffect(() => {
     if (!liveSeq) return;
-    const timer = setTimeout(() => void load(true), 600);
+    const timer = setTimeout(() => void load("silent"), 600);
     return () => clearTimeout(timer);
   }, [liveSeq]);
 
@@ -2279,8 +2317,14 @@ function InboxView(props: {
           <button
             className="btn small"
             type="button"
-            disabled={loading}
-            onClick={() => void load()}
+            disabled={loading || checking}
+            onClick={() =>
+              void load(
+                hydrated || items.length > 0 || approvals.length > 0
+                  ? "revalidate"
+                  : "initial",
+              )
+            }
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
@@ -2296,6 +2340,8 @@ function InboxView(props: {
 
       {loading && items.length === 0 && approvals.length === 0 ? (
         <div className="empty">Loading attention…</div>
+      ) : checking && items.length === 0 && approvals.length === 0 ? (
+        <div className="empty">Checking for requests…</div>
       ) : visible.length === 0 && visibleApprovals.length === 0 ? (
         <div className="empty">Nothing needs you right now.</div>
       ) : (
@@ -2788,6 +2834,13 @@ function AttentionChoiceField(props: {
   );
 }
 
+interface SearchSnapshot {
+  sessions: Session[];
+  hits: SearchResult[];
+  warnings: SessionWarning[];
+  indexed: { enabled: boolean; ready: boolean };
+}
+
 function SearchView(props: {
   client: HubClient;
   providers: Provider[];
@@ -2798,31 +2851,162 @@ function SearchView(props: {
   onNavigate: (next: SearchState, options?: NavigateOptions) => void;
   onOpen: (ref: string) => void;
 }) {
-  const { key } = useHistoryLocation();
-  const [draft, setDraft] = useState(props.query);
-  const [sessions, setSessions] = useState<Session[]>(() =>
-    props.scope === "sessions"
-      ? readRouteCache<Session[]>(key, "search-results") ?? []
-      : [],
+  const key = useRouteDataKey();
+  const [cached] = useState<SearchSnapshot | undefined>(() =>
+    readRouteCache<SearchSnapshot>(key, "search"),
   );
-  const [hits, setHits] = useState<SearchResult[]>([]);
-  const [indexed, setIndexed] = useState({ enabled: true, ready: true });
-  const [loading, setLoading] = useState(false);
-  const [warnings, setWarnings] = useState<SessionWarning[]>([]);
+  const [draft, setDraft] = useState(props.query);
+  const [sessions, setSessions] = useState<Session[]>(
+    () => cached?.sessions ?? [],
+  );
+  const [hits, setHits] = useState<SearchResult[]>(() => cached?.hits ?? []);
+  const [indexed, setIndexed] = useState(
+    () => cached?.indexed ?? { enabled: true, ready: true },
+  );
+  const initialQuery = props.query.trim();
+  const initialHasRequest = props.scope === "messages"
+    ? initialQuery.length > 0
+    : initialQuery.length > 0 ||
+      props.provider !== "all" ||
+      props.status !== "all";
+  const [loading, setLoading] = useState(!cached && initialHasRequest);
+  const [checking, setChecking] = useState(Boolean(cached));
+  const [warnings, setWarnings] = useState<SessionWarning[]>(
+    () => cached?.warnings ?? [],
+  );
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef(0);
   const sentQuery = useRef(props.query);
   const { provider, status, scope } = props;
+  useRevalidationIndicator(checking);
 
   const trimmed = draft.trim();
   const hasFilters = provider !== "all" || status !== "all";
   const messages = scope === "messages";
 
   useEffect(() => {
-    if (scope === "sessions") writeRouteCache(key, "search-results", sessions);
-  }, [key, scope, sessions]);
+    const request = ++requestRef.current;
+    setError(undefined);
+
+    if (messages ? !trimmed : !trimmed && !hasFilters) {
+      setSessions([]);
+      setHits([]);
+      setWarnings([]);
+      setLoading(false);
+      setChecking(false);
+      return;
+    }
+
+    const requestKey = searchDataKey({
+      query: trimmed,
+      provider,
+      status,
+      scope,
+    });
+    const cachedPage = readRouteCache<SearchSnapshot>(requestKey, "search");
+    if (cachedPage) {
+      setSessions(cachedPage.sessions);
+      setHits(cachedPage.hits);
+      setWarnings(cachedPage.warnings);
+      setIndexed(cachedPage.indexed);
+      setLoading(false);
+      setChecking(true);
+    } else {
+      setLoading(true);
+      setChecking(false);
+    }
+
+    const timer = setTimeout(() => {
+      const done = (run: () => void) => {
+        if (request !== requestRef.current) return;
+        run();
+        setLoading(false);
+        setChecking(false);
+      };
+
+      if (messages) {
+        props.client
+          .search({
+            q: trimmed,
+            scope: "messages",
+            ...(provider !== "all" ? { provider } : {}),
+            ...(status !== "all" ? { status } : {}),
+            limit: 50,
+          })
+          .then((page) => {
+            const nextIndexed = { enabled: page.enabled, ready: page.ready };
+            done(() => {
+              setSessions([]);
+              setHits(page.data);
+              setWarnings([]);
+              setIndexed(nextIndexed);
+              writeRouteCache<SearchSnapshot>(requestKey, "search", {
+                sessions: [],
+                hits: page.data,
+                warnings: [],
+                indexed: nextIndexed,
+              });
+            });
+          })
+          .catch((reason: unknown) =>
+            done(() => {
+              if (!cachedPage) setHits([]);
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Unable to search messages",
+              );
+            }),
+          );
+        return;
+      }
+
+      props.client
+        .sessions({
+          ...(trimmed ? { q: trimmed } : {}),
+          ...(provider !== "all" ? { provider } : {}),
+          ...(status !== "all" ? { status } : {}),
+          limit: 100,
+        })
+        .then((page) => {
+          const nextWarnings = page.warnings ?? [];
+          done(() => {
+            setSessions(page.data);
+            setHits([]);
+            setWarnings(nextWarnings);
+            writeRouteCache<SearchSnapshot>(requestKey, "search", {
+              sessions: page.data,
+              hits: [],
+              warnings: nextWarnings,
+              indexed,
+            });
+          });
+        })
+        .catch((reason: unknown) =>
+          done(() => {
+            if (!cachedPage) setSessions([]);
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "Unable to search sessions",
+            );
+          }),
+        );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [
+    props.client,
+    messages,
+    trimmed,
+    provider,
+    status,
+    scope,
+    hasFilters,
+    attempt,
+  ]);
 
   useEffect(() => {
     if (props.query === sentQuery.current) return;
@@ -2871,92 +3055,6 @@ function SearchView(props: {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  useEffect(() => {
-    const request = ++requestRef.current;
-    setError(undefined);
-
-    if (messages ? !trimmed : !trimmed && !hasFilters) {
-      setSessions([]);
-      setHits([]);
-      setWarnings([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const timer = setTimeout(() => {
-      const done = (run: () => void) => {
-        if (request !== requestRef.current) return;
-        run();
-        setLoading(false);
-      };
-
-      if (messages) {
-        props.client
-          .search({
-            q: trimmed,
-            scope: "messages",
-            ...(provider !== "all" ? { provider } : {}),
-            ...(status !== "all" ? { status } : {}),
-            limit: 50,
-          })
-          .then((page) =>
-            done(() => {
-              setHits(page.data);
-              setWarnings([]);
-              setIndexed({ enabled: page.enabled, ready: page.ready });
-            }),
-          )
-          .catch((reason: unknown) =>
-            done(() => {
-              setHits([]);
-              setError(
-                reason instanceof Error
-                  ? reason.message
-                  : "Unable to search messages",
-              );
-            }),
-          );
-        return;
-      }
-
-      props.client
-        .sessions({
-          ...(trimmed ? { q: trimmed } : {}),
-          ...(provider !== "all" ? { provider } : {}),
-          ...(status !== "all" ? { status } : {}),
-          limit: 100,
-        })
-        .then((page) =>
-          done(() => {
-            setSessions(page.data);
-            setWarnings(page.warnings ?? []);
-          }),
-        )
-        .catch((reason: unknown) =>
-          done(() => {
-            setSessions([]);
-            setWarnings([]);
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "Unable to search sessions",
-            );
-          }),
-        );
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [
-    props.client,
-    messages,
-    trimmed,
-    provider,
-    status,
-    hasFilters,
-    attempt,
-  ]);
 
   const sessionCount = sessions.length;
   const messageCount = hits.length;
@@ -3082,11 +3180,17 @@ function SearchView(props: {
 
       {(messages ? !trimmed : !trimmed && !hasFilters) ? (
         <div className="empty">{emptyPrompt}</div>
-      ) : loading && (messages ? hits : sessions).length === 0 ? (
+      ) : (loading || checking) && (messages ? hits : sessions).length === 0 ? (
         <div className="empty">
-          {messages ? "Searching messages…" : "Searching sessions…"}
+          {checking && !loading
+            ? messages
+              ? "Checking messages…"
+              : "Checking for sessions…"
+            : messages
+              ? "Searching messages…"
+              : "Searching sessions…"}
         </div>
-      ) : !loading && (messages ? hits : sessions).length === 0 && !error ? (
+      ) : !loading && !checking && (messages ? hits : sessions).length === 0 && !error ? (
         messages && !indexed.enabled ? (
           <div className="empty">{emptyPrompt}</div>
         ) : messages && !indexed.ready ? (
@@ -3101,7 +3205,7 @@ function SearchView(props: {
           </div>
         )
       ) : messages && hits.length > 0 ? (
-        <section className="panel search-results-panel" aria-busy={loading}>
+        <section className="panel search-results-panel" aria-busy={loading || checking}>
           <div className="panel-head">
             <div>
               <h2>Results</h2>
@@ -3145,7 +3249,7 @@ function SearchView(props: {
           </ul>
         </section>
       ) : sessions.length > 0 ? (
-        <section className="panel search-results-panel" aria-busy={loading}>
+        <section className="panel search-results-panel" aria-busy={loading || checking}>
           <div className="panel-head">
             <div>
               <h2>Results</h2>
@@ -3467,28 +3571,34 @@ function SessionsView(props: {
   onCreated: (ref: string) => void;
   onOpen: (ref: string) => void;
 }) {
-  const { key } = useHistoryLocation();
-  const cached = useRef<
+  const key = useRouteDataKey();
+  const [cached] = useState<
     { sessions: Session[]; cursor: string | null; savedAt?: number } | undefined
-  >(
-    readRouteCache<{ sessions: Session[]; cursor: string | null }>(
-      key,
-      "sessions-list",
-    ) ?? readSessionsCache(),
-  );
+  >(() => {
+    const routeEntry = readRouteCacheEntry<{
+      sessions: Session[];
+      cursor: string | null;
+    }>(key, "sessions-list");
+    if (routeEntry) {
+      return { ...routeEntry.value, savedAt: routeEntry.savedAt };
+    }
+    return readSessionsCache();
+  });
   const [sessions, setSessions] = useState<Session[]>(
-    () => cached.current?.sessions ?? [],
+    () => cached?.sessions ?? [],
   );
   const [cursor, setCursor] = useState<string | null>(
-    () => cached.current?.cursor ?? null,
+    () => cached?.cursor ?? null,
   );
   const [syncedAt, setSyncedAt] = useState<number | undefined>(
-    cached.current?.savedAt,
+    cached?.savedAt,
   );
-  const [loading, setLoading] = useState(!cached.current);
+  const [loading, setLoading] = useState(!cached);
+  const [checking, setChecking] = useState(Boolean(cached));
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
   const [scope, setScope] = useState<"all" | "root" | "subagent">("all");
+  useRevalidationIndicator(checking);
   const tree = useMemo(() => buildSessionTree(sessions), [sessions]);
   const subagentSessions = useMemo(
     () =>
@@ -3552,10 +3662,14 @@ function SessionsView(props: {
     />
   );
 
-  const load = async (next?: string) => {
+  const load = async (
+    next?: string,
+    mode: "initial" | "revalidate" | "silent" = "initial",
+  ) => {
     if (next) setLoadingMore(true);
-    else setLoading(true);
-    setError(undefined);
+    else if (mode === "initial") setLoading(true);
+    else if (mode === "revalidate") setChecking(true);
+    if (mode !== "silent") setError(undefined);
     try {
       const page = await props.client.sessions({ limit: 50, cursor: next });
       setSessions((current) => {
@@ -3564,6 +3678,7 @@ function SessionsView(props: {
         return [...current, ...page.data.filter((session) => !seen.has(session.ref))];
       });
       setCursor(page.cursor.next);
+      setError(undefined);
       if (!next) {
         writeSessionsCache({ sessions: page.data, cursor: page.cursor.next });
         setSyncedAt(Date.now());
@@ -3571,14 +3686,14 @@ function SessionsView(props: {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load sessions");
     } finally {
-      setLoading(false);
+      if (!next) setLoading(false);
       setLoadingMore(false);
+      if (mode === "revalidate") setChecking(false);
     }
   };
 
   useEffect(() => {
-    if (readRouteCache(key, "sessions-list")) return;
-    void load();
+    void load(undefined, cached ? "revalidate" : "initial");
   }, [props.client, key]);
 
   const liveSeq =
@@ -3590,14 +3705,14 @@ function SessionsView(props: {
   useEffect(() => {
     if (liveSeq <= seenLiveSeq.current) return;
     seenLiveSeq.current = liveSeq;
-    const timer = setTimeout(() => void load(), 500);
+    const timer = setTimeout(() => void load(undefined, "silent"), 500);
     return () => clearTimeout(timer);
   }, [liveSeq]);
 
   useEffect(() => {
-    if (loading || error) return;
+    if (loading || loadingMore || checking || error) return;
     writeRouteCache(key, "sessions-list", { sessions, cursor });
-  }, [cursor, error, key, loading, sessions]);
+  }, [checking, cursor, error, key, loading, loadingMore, sessions]);
 
   return (
     <>
@@ -3610,8 +3725,13 @@ function SessionsView(props: {
           <button
             className="btn small"
             type="button"
-            disabled={loading}
-            onClick={() => void load()}
+            disabled={loading || checking}
+            onClick={() =>
+              void load(
+                undefined,
+                cached || sessions.length > 0 ? "revalidate" : "initial",
+              )
+            }
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
@@ -3683,6 +3803,8 @@ function SessionsView(props: {
         </div>
         {loading && sessions.length === 0 ? (
           <div className="empty">Loading sessions…</div>
+        ) : checking && sessions.length === 0 ? (
+          <div className="empty">Checking for sessions…</div>
         ) : sessions.length === 0 ? (
           <div className="empty">No sessions returned by the provider.</div>
         ) : scope === "all" ? (

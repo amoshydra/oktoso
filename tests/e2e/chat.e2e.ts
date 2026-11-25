@@ -1794,3 +1794,119 @@ describe("transcript loading", () => {
       .waitFor({ timeout: 10_000 });
   });
 });
+
+describe("route revalidation", () => {
+  it("shows the cached session list while refreshing in the background", async () => {
+    const sessionsButton = page!
+      .locator(".rail-nav")
+      .getByRole("button", { name: "Sessions" });
+    const firstRow = page!
+      .getByRole("button", { name: /Fix auth race in gateway/ })
+      .first();
+
+    await sessionsButton.click();
+    await firstRow.waitFor({ timeout: 10_000 });
+    await page!.waitForTimeout(150);
+
+    await page!.getByRole("button", { name: "Inbox" }).click();
+    await page!.locator(".inbox-tabs").waitFor({ timeout: 5_000 });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessionsRoute = "**/api/v1/sessions*";
+    await page!.route(sessionsRoute, async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() !== "GET" || url.pathname !== "/api/v1/sessions") {
+        await route.continue();
+        return;
+      }
+      await gate;
+      await route.continue();
+    });
+
+    await sessionsButton.click();
+    await firstRow.waitFor({ state: "visible", timeout: 2_000 });
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 2_000 },
+      )
+      .toBe("true");
+
+    release();
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 5_000 },
+      )
+      .toBe("false");
+    expect(await firstRow.isVisible()).toBe(true);
+    await page!.unroute(sessionsRoute);
+  });
+
+  it("reads a cached empty search as checking, not as settled", async () => {
+    const query = "no-such-query-in-the-e2e";
+    await page!.goto(
+      `${BASE_URL}/search?q=${encodeURIComponent(query)}&scope=sessions`,
+    );
+    await page!
+      .getByText(`No sessions match “${query}”.`)
+      .waitFor({ timeout: 10_000 });
+    await page!.waitForTimeout(150);
+
+    await page!
+      .locator(".rail-nav")
+      .getByRole("button", { name: "Sessions" })
+      .click();
+    await page!
+      .getByRole("button", { name: /Fix auth race in gateway/ })
+      .first()
+      .waitFor({ timeout: 10_000 });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessionsRoute = "**/api/v1/sessions*";
+    await page!.route(sessionsRoute, async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() !== "GET" || url.pathname !== "/api/v1/sessions") {
+        await route.continue();
+        return;
+      }
+      await gate;
+      await route.continue();
+    });
+
+    await page!.goBack();
+    await page!
+      .getByText("Checking for sessions…")
+      .waitFor({ timeout: 2_000 });
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 2_000 },
+      )
+      .toBe("true");
+
+    release();
+    await page!
+      .getByText(`No sessions match “${query}”.`)
+      .waitFor({ timeout: 5_000 });
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 5_000 },
+      )
+      .toBe("false");
+    await page!.unroute(sessionsRoute);
+  });
+});

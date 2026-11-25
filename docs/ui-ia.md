@@ -183,7 +183,7 @@ Every screen, session, overlay, and filter change that represents navigation is 
 - Day grouping follows each session's last update, never per-message usage; the note says so.
 - The panel head states how many sessions were counted, so a bounded client-side walk never claims to be the whole history.
 - Runtime status cards, the provider panel, the event stream, and diagnostics follow the report. There is no hero: the phase-0 runtime banner and its roadmap copy are gone, because it repeated the page title at 20px and made a claim that is no longer true.
-- States: no sessions, no reported usage (dashes plus the count note), loading, and an inline error inside the panel.
+- States: no sessions, no reported usage (dashes plus the count note), loading, revalidating cached usage, and an inline error inside the panel. A failed refresh keeps the last report and says so.
 
 ## 6. Inbox
 
@@ -230,11 +230,13 @@ The inbox is the default screen when something needs attention. It groups items 
 - Complex forms show an "Open form" action. The form page uses the provider's field schema.
 - Empty state: "Nothing needs you. Browse sessions or start a new chat."
 - The inbox refreshes through SSE. A manual refresh is available but not required.
+- The last successful items and approvals stay cached per screen. Returning to the Inbox renders them immediately while the background refresh runs; a cached empty list reads `Checking for requests…`, not the settled empty copy.
 
 ## 7. Sessions
 
 The sessions view is the full browsing surface.
 - The first page is cached in local storage after a successful load. When the hub is unreachable, the list renders that page and shows a quiet `Offline · showing the last synced list from <time>` line with Retry instead of an empty error. A cold load with no cache keeps the normal error state.
+- The screen also keeps its last loaded page in memory. Returning from another route renders that page immediately and refreshes it in the background; a cached empty page reads `Checking for sessions…` until the refresh settles.
 
 ```text
 ┌──────────────────────┬────────────────────────────────────────────┐
@@ -585,6 +587,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Messages searches the transcript cache through `GET /api/v1/search`. Provider and status filters apply. Results show the session title, provider, project, role, and the matching excerpt with the query highlighted in `<mark>`.
 - Message search needs the transcript cache: when it is off, the view says so and points at Settings → Local data. While the index catches up, the summary says so and an empty result explains it.
 - Both scopes keep the query, provider, and status in the URL. Typing replaces the history entry; changing a filter or the scope adds one.
+- Returning to a search route renders its last successful result set from the screen cache while the same query refreshes in the background. Cached empty results read `Checking for sessions…` or `Checking messages…` until the refresh settles.
 - Keyboard: `Cmd/Ctrl+K` opens search from any signed-in screen, Tab moves through filters and results, and Escape clears the query.
 
 ## 12. Settings
@@ -619,6 +622,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 Every screen needs these states:
 
 - **Loading:** skeletons for lists and the transcript. Do not block the whole app. The transcript skeleton is decorative, `aria-hidden`, and paired with one polite announcement; it never replaces optimistic or queued rows.
+- **Revalidating:** cached route data stays in place. A 2px accent line at the bottom of the topbar marks the background refresh, and a cached empty panel reads `Checking for …` until the request settles. A cold screen uses **Loading**, not the line.
 - **Empty:** a clear next action.
 - **Offline provider:** amber status chip, cached data labeled "last synced", retry action.
 - **Auth error:** red status chip with a direct path to provider settings.
