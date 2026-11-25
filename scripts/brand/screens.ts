@@ -38,7 +38,7 @@ async function capturePrototype(
     await page.waitForFunction(
       () =>
         document
-          .querySelector(".chat-session-title")
+          .querySelector(".topbar-title")
           ?.textContent?.includes("Fix auth race in gateway") === true,
     );
     await page.waitForFunction(() => {

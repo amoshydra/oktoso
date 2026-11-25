@@ -840,6 +840,36 @@ card in the place the tool ran.
   `apps/web/src/styles.css`, `apps/web/src/app/question-answer.test.ts`,
   `tests/e2e/chat.e2e.ts`. No new type role, spacing step, or radius.
 
+## Prototype resync (2026-11-25)
+
+The static prototype had drifted from the shipped shell. This pass brings it
+back to design-v1.50 without changing the product.
+
+- **Chat.** The transcript no longer repeats the session title; the topbar
+  remains the only `h1`. The composer placeholder is the static `Reply…`. A
+  fenced `sh` block demonstrates the 28px language/Copy header, and Copy
+  reports success on the button and in the live toast.
+- **Mobile composer.** Below 760px the selects and direct Undo are hidden; a
+  `build · model` context chip and a `⋯` toggle replace them. The sheet keeps
+  Undo, Attach, and Voice available as 44px rows, so Undo is no longer simply
+  missing.
+- **Overview.** The unrelated session-details column and session sidebar are
+  gone, the content field is 1320px, and the usage table becomes stacked rows
+  with `Sessions`/`Tokens`/`Cost` labels below 1100px instead of clipping the
+  cost column at 320px.
+- **Sessions.** The duplicate status pill is gone; the status dot remains and
+  the table has Session, Provider, Project, and Updated columns. New session is
+  an inline panel above the table, not a modal. On mobile the panel replaces
+  the session list and returns to it on close.
+- **Providers.** The machine address and version sit in `.provider-machine` and
+  are hidden at 480px and below, leaving the provider name without an orphaned
+  separator.
+- **Verification.** The prototype was reviewed at 1440, 1024, 390, and 320px in
+  both themes across overview, inbox, sessions, chat, details, providers,
+  settings, search, and the new-session panel: no horizontal overflow and no
+  console errors. The session and inbox screenshots were regenerated and the
+  brand manifest refreshed.
+
 ## Message delivery and queue (2026-11-15)
 
 Steer already lived in the composer as a send label. Queue added a second

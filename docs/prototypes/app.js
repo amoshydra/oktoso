@@ -166,7 +166,7 @@ const sessions = [
         time: now - 37 * minute,
       }),
       message('user', 'Continue with the failing test.', { time: now - 6 * minute }),
-      message('assistant', 'The failing test is in `auth.test.ts`. I am narrowing it to the double-refresh case first, then I will make rotation idempotent for the same token generation.', { time: now - 1 * minute, streaming: true }),
+      message('assistant', 'The failing test is in `auth.test.ts`. I am narrowing it to the double-refresh case first.\n\n```sh\npnpm test -- auth.test.ts\n```\n\nThen I will make rotation idempotent for the same token generation.', { time: now - 1 * minute, streaming: true }),
     ],
   },
   {
@@ -376,10 +376,11 @@ const state = {
   undoPromptOpen: false,
   filesRestored: false,
   restoreConfirmOpen: false,
+  composerMenuOpen: false,
+  newSessionOpen: false,
 };
 
 const app = document.getElementById('app');
-const modalBackdrop = document.getElementById('modal-backdrop');
 const toastEl = document.getElementById('toast');
 let toastTimer;
 
@@ -656,17 +657,17 @@ function renderOverview() {
                 .map(
                   (row) => `<tr>
                     <td>${esc(row.label)}</td>
-                    <td class="num">${row.sessions}</td>
-                    <td class="num">${row.tokensSeen ? compact(row.tokens) : '—'}</td>
-                    <td class="num">${row.costSeen ? `$${row.cost.toFixed(2)}` : '—'}</td>
+                    <td class="num" data-label="Sessions">${row.sessions}</td>
+                    <td class="num" data-label="Tokens">${row.tokensSeen ? compact(row.tokens) : '—'}</td>
+                    <td class="num" data-label="Cost">${row.costSeen ? `$${row.cost.toFixed(2)}` : '—'}</td>
                   </tr>`,
                 )
                 .join('')}
               <tr class="usage-total">
                 <td>Reported total</td>
-                <td class="num">${total.sessions}</td>
-                <td class="num">${total.tokensSeen ? compact(total.tokens) : '—'}</td>
-                <td class="num">${total.costSeen ? `$${total.cost.toFixed(2)}` : '—'}</td>
+                <td class="num" data-label="Sessions">${total.sessions}</td>
+                <td class="num" data-label="Tokens">${total.tokensSeen ? compact(total.tokens) : '—'}</td>
+                <td class="num" data-label="Cost">${total.costSeen ? `$${total.cost.toFixed(2)}` : '—'}</td>
               </tr>
             </tbody>
           </table>
@@ -794,12 +795,13 @@ function renderSessions() {
     ${topbar('Sessions', sub, `<button class="btn small" data-new-session>${icon('plus', 14)} New session</button>`)}
     <div class="content">
       <div class="page wide">
+        ${state.newSessionOpen ? renderNewSessionPanel() : ''}
         <div class="page-head">
           <p class="page-desc">Every session across your providers. Open one to read the transcript, reply, or inspect details.</p>
         </div>
         <div class="session-table">
           <div class="session-table-head">
-            <span>Session</span><span>Provider</span><span>Project</span><span>Status</span><span>Updated</span>
+            <span>Session</span><span>Provider</span><span>Project</span><span>Updated</span>
           </div>
           ${list
             .map((session) => {
@@ -815,7 +817,6 @@ function renderSessions() {
                   </div>
                   <span class="provider-badge ${providerClass(provider?.type || '')} hide-mobile"><i></i>${esc(providerLabel(provider))}</span>
                   <span class="project-label hide-mobile">${esc(session.project)}</span>
-                  <span class="status-chip ${esc(session.status)}"><i></i>${esc(session.status)}</span>
                   <span class="session-time">${relative(session.updated)}</span>
                 </div>`;
             })
@@ -827,10 +828,31 @@ function renderSessions() {
 }
 
 function messageBody(text) {
+  const pattern = /```([a-z0-9-]*)\n([\s\S]*?)```/gi;
+  const parts = [];
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(text))) {
+    const before = text.slice(last, match.index).trim();
+    if (before) parts.push(renderParagraphs(before));
+    parts.push(renderCodeBlock(match[1], match[2].replace(/\n$/, '')));
+    last = pattern.lastIndex;
+  }
+  const rest = text.slice(last).trim();
+  if (rest) parts.push(renderParagraphs(rest));
+  return parts.join('');
+}
+
+function renderParagraphs(text) {
   return text
     .split('\n\n')
     .map((paragraph) => `<p>${esc(paragraph).replace(/`([^`]+)`/g, '<code>$1</code>')}</p>`)
     .join('');
+}
+
+function renderCodeBlock(language, code) {
+  const label = (language || 'text').toUpperCase();
+  return `<div class="code-block"><div class="code-head"><span>${esc(label)}</span><button class="code-copy" type="button" data-copy-code="${encodeURIComponent(code)}">Copy</button></div><pre><code>${esc(code)}</code></pre></div>`;
 }
 
 function renderInlineAttention(item) {
@@ -932,7 +954,6 @@ function renderChat() {
       <div class="transcript" id="transcript">
         <div class="transcript-inner">
           <div class="chat-session-head">
-            <div class="chat-session-title">${esc(session.title)}</div>
             <div class="chat-session-meta">
               <span class="provider-badge ${providerClass(provider?.type || '')}"><i></i>${esc(providerLabel(provider))}</span>
               <span class="dot-sep">·</span><span>${esc(session.project)}</span>
@@ -941,7 +962,7 @@ function renderChat() {
               <span class="dot-sep">·</span><span class="status-chip ${esc(session.status)}"><i></i>${esc(session.status)}</span>
             </div>
           </div>
-          ${visibleMessages.map(renderMessage).join('')}
+          ${visibleMessages.length === 0 ? '<div class="empty">No messages yet. Send the first prompt below.</div>' : visibleMessages.map(renderMessage).join('')}
           ${renderInlineAttention(item)}
           ${session.status === 'error' && !item ? renderInlineAttention({ type: 'error', summary: 'The last run failed.', actions: [] }) : ''}
         </div>
@@ -972,14 +993,23 @@ function renderChat() {
           </div>
         ` : ''}
         <form class="composer" id="composer-form">
-          <textarea id="composer" placeholder="Reply to ${esc(session.title)}…" rows="1">${esc(undoPrompt)}</textarea>
+          <textarea id="composer" placeholder="Reply…" rows="1">${esc(undoPrompt)}</textarea>
+          ${state.composerMenuOpen ? `
+            <div class="composer-tools-menu" id="composer-tools-menu" role="group" aria-label="Composer actions">
+              ${!undoStaged ? `<button type="button" data-undo ${session.status === 'running' ? 'disabled' : ''}>Undo last turn</button>` : ''}
+              <button type="button" data-attach>Attach file</button>
+              <button type="button" data-composer-voice>Voice</button>
+            </div>
+          ` : ''}
           <div class="composer-bar">
             ${!undoStaged ? `<button class="composer-history-action composer-undo" type="button" aria-label="Undo last turn" title="${session.status === 'running' ? 'Undo waits for the current run to finish' : 'Undo the last turn'}" ${session.status === 'running' ? 'disabled' : ''} data-undo>Undo</button>` : ''}
-            <button class="icon-btn" type="button" title="Attach" aria-label="Attach" data-attach>${icon('attach', 15)}</button>
+            <button class="icon-btn composer-attach" type="button" title="Attach" aria-label="Attach" data-attach>${icon('attach', 15)}</button>
             <select class="composer-select" id="composer-agent" name="agent" aria-label="Agent"><option>${esc(session.agent)}</option></select>
             <select class="composer-select" id="composer-model" name="model" aria-label="Model"><option>${esc(session.model)}</option></select>
             <span class="spacer"></span>
-            <button class="icon-btn" type="button" title="Voice" aria-label="Voice">${icon('voice', 15)}</button>
+            <button class="composer-context-chip" type="button" data-composer-context><strong>${esc(session.agent)}</strong><span>· ${esc(session.model)}</span></button>
+            <button class="icon-btn composer-voice" type="button" title="Voice" aria-label="Voice">${icon('voice', 15)}</button>
+            <button class="icon-btn composer-tools-toggle" type="button" title="More composer actions" aria-label="More composer actions" aria-expanded="${state.composerMenuOpen}" aria-controls="composer-tools-menu" data-composer-more>${icon('more', 16)}</button>
             <button class="send-btn" type="submit" title="Send" aria-label="Send">${icon('send', 15)}</button>
           </div>
         </form>
@@ -1055,7 +1085,7 @@ function renderProviders() {
                     <div class="provider-mark ${providerClass(provider.type)}">${esc(provider.mark)}</div>
                     <div style="min-width:0">
                       <div class="provider-name">${esc(provider.name)}</div>
-                      <div class="provider-address">${esc(provider.label)} · ${esc(provider.baseUrl)} · v${esc(provider.version)}</div>
+                      <div class="provider-address">${esc(provider.label)}<span class="provider-machine"> · ${esc(provider.baseUrl)} · v${esc(provider.version)}</span></div>
                     </div>
                     <div class="provider-actions">
                       <span class="status-chip ${status}"><i></i>${provider.status === 'auth-error' ? 'Auth error' : provider.status}</span>
@@ -1185,7 +1215,7 @@ function renderDetailsPanel() {
 }
 
 function renderApp() {
-  app.className = `app view-${state.view}${state.detailsOpen ? ' details-open' : ''}${state.detailsClosed ? ' details-closed' : ''}`;
+  app.className = `app view-${state.view}${state.newSessionOpen ? ' new-session-open' : ''}${state.detailsOpen ? ' details-open' : ''}${state.detailsClosed ? ' details-closed' : ''}`;
   renderRail();
   renderBottomNav();
   renderSidebar();
@@ -1286,16 +1316,31 @@ function sendMessage(text) {
 }
 
 function openNewSession() {
+  state.newSessionOpen = true;
+  state.view = 'sessions';
+  state.detailsOpen = false;
+  renderApp();
+  requestAnimationFrame(() => document.getElementById('new-title')?.focus());
+}
+
+function closeNewSession() {
+  state.newSessionOpen = false;
+  renderApp();
+}
+
+function renderNewSessionPanel() {
   const online = providers.filter((provider) => provider.status === 'online');
-  modalBackdrop.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
-      <div class="modal-head">
-        <h2 id="new-session-title">New session</h2>
-        <div style="flex:1"></div>
-        <button class="icon-btn" data-close-modal aria-label="Close">${icon('close', 15)}</button>
+  return `
+    <section class="new-session-panel" id="new-session-panel" aria-labelledby="new-session-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="new-session-title">New session</h2>
+          <p>Create a session on a connected provider.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-new-session aria-label="Close">${icon('close', 15)}</button>
       </div>
       <form id="new-session-form">
-        <div class="modal-body">
+        <div class="new-session-grid">
           <div class="field">
             <label for="new-provider">Provider</label>
             <select id="new-provider">${online
@@ -1318,25 +1363,18 @@ function openNewSession() {
             <label for="new-model">Model</label>
             <input id="new-model" value="claude-sonnet" />
           </div>
-          <div class="field">
+          <div class="field span-2">
             <label for="new-prompt">First prompt</label>
             <textarea id="new-prompt" placeholder="Start by reading the auth middleware."></textarea>
           </div>
         </div>
-        <div class="modal-foot">
-          <button class="btn small" type="button" data-close-modal>Cancel</button>
+        <div class="form-actions">
+          <button class="btn small" type="button" data-close-new-session>Cancel</button>
           <button class="btn small primary" type="submit">Create session</button>
         </div>
       </form>
-    </div>
+    </section>
   `;
-  modalBackdrop.hidden = false;
-  document.getElementById('new-title').focus();
-}
-
-function closeModal() {
-  modalBackdrop.hidden = true;
-  modalBackdrop.innerHTML = '';
 }
 
 function createSessionFromForm() {
@@ -1374,7 +1412,7 @@ function createSessionFromForm() {
       },
     ],
   });
-  closeModal();
+  closeNewSession();
   state.selectedRef = ref;
   state.view = 'chat';
   renderApp();
@@ -1383,14 +1421,23 @@ function createSessionFromForm() {
 
 function copyText(text) {
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(() => toast('Copied')).catch(() => toast('Copy failed'));
-  } else {
-    toast('Copy unavailable');
+    return navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast('Copied');
+        return true;
+      })
+      .catch(() => {
+        toast('Copy failed');
+        return false;
+      });
   }
+  toast('Copy unavailable');
+  return Promise.resolve(false);
 }
 
 document.addEventListener('click', (event) => {
-  const target = event.target.closest('button, [data-session], [data-view], [data-provider-filter], [data-inbox-filter], [data-attention-action], [data-answer-option], [data-open-session], [data-open-details], [data-close-details], [data-theme-toggle], [data-check-provider], [data-add-provider], [data-open-provider], [data-copy-ref], [data-interrupt], [data-close-modal], [data-new-session], [data-more], [data-attach]');
+  const target = event.target.closest('button, [data-session], [data-view], [data-provider-filter], [data-inbox-filter], [data-attention-action], [data-answer-option], [data-open-session], [data-open-details], [data-close-details], [data-theme-toggle], [data-check-provider], [data-add-provider], [data-open-provider], [data-copy-ref], [data-interrupt], [data-close-new-session], [data-new-session], [data-more], [data-attach], [data-composer-more], [data-composer-context], [data-composer-voice], [data-copy-code]');
   if (!target) return;
 
   if (target.matches('[data-view]')) {
@@ -1479,12 +1526,36 @@ document.addEventListener('click', (event) => {
     toast('Session interrupted');
     return;
   }
-  if (target.matches('[data-close-modal]')) {
-    closeModal();
+  if (target.matches('[data-close-new-session]')) {
+    closeNewSession();
     return;
   }
   if (target.matches('[data-new-session]')) {
     openNewSession();
+    return;
+  }
+  if (target.matches('[data-composer-more]')) {
+    state.composerMenuOpen = !state.composerMenuOpen;
+    renderApp();
+    return;
+  }
+  if (target.matches('[data-composer-context]')) {
+    toast('Model & agent sheet');
+    return;
+  }
+  if (target.matches('[data-composer-voice]')) {
+    toast('Voice input is planned for a later milestone');
+    return;
+  }
+  if (target.matches('[data-copy-code]')) {
+    const code = decodeURIComponent(target.getAttribute('data-copy-code') || '');
+    void copyText(code).then((copied) => {
+      if (!copied) return;
+      target.textContent = 'Copied';
+      setTimeout(() => {
+        if (target.isConnected) target.textContent = 'Copy';
+      }, 2000);
+    });
     return;
   }
   if (target.matches('[data-more]')) {
@@ -1496,6 +1567,7 @@ document.addEventListener('click', (event) => {
     state.undoPromptOpen = false;
     state.filesRestored = false;
     state.restoreConfirmOpen = false;
+    state.composerMenuOpen = false;
     renderApp();
     requestAnimationFrame(() => {
       const textarea = document.getElementById('composer');
@@ -1542,6 +1614,8 @@ document.addEventListener('click', (event) => {
     return;
   }
   if (target.matches('[data-attach]')) {
+    state.composerMenuOpen = false;
+    renderApp();
     toast('Attachments are planned for a later milestone');
   }
 });
@@ -1594,8 +1668,8 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key === 'Escape') {
-    if (!modalBackdrop.hidden) {
-      closeModal();
+    if (state.newSessionOpen) {
+      closeNewSession();
       return;
     }
     if (state.detailsOpen) {
@@ -1615,10 +1689,6 @@ document.addEventListener('input', (event) => {
     event.target.style.height = 'auto';
     event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`;
   }
-});
-
-modalBackdrop.addEventListener('click', (event) => {
-  if (event.target === modalBackdrop) closeModal();
 });
 
 if (captureMode === 'inbox') {

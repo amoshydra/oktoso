@@ -7,9 +7,9 @@
     "timezone": "UTC"
   },
   "sources": {
-    "docs/prototypes/index.html": "e7e5f944c4f77530a293a26abd93d82653023f72289d3ed380af51f66ac5f480",
-    "docs/prototypes/app.js": "22b0434ec2c8a4a0df9ff2a8fe53effccb3978481c94a3f5a2e84be6487e6566",
-    "docs/prototypes/styles.css": "61de757db37b0cae0232202d20d32dc46cb67879d5622d11bd9ccc831424333d",
+    "docs/prototypes/index.html": "712a7ae09bea141e22a6540d49729868a4507f1177ba6d04b17a394e34f9c56d",
+    "docs/prototypes/app.js": "09e865908a78866e93ee0c48e57a71f3549053698b8064360144eb88c7219435",
+    "docs/prototypes/styles.css": "55cbdf908ffdf3ee6aaa508af34dc6e9e74d196bdf97ab72dde0e79087a6acd1",
     "docs/prototypes/fonts/ibm-plex-mono-latin-400-normal.woff2": "08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7",
     "docs/prototypes/fonts/ibm-plex-mono-latin-500-normal.woff2": "01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22",
     "docs/prototypes/fonts/ibm-plex-mono-latin-600-normal.woff2": "0d1f0b8d0722224e32e9f28261bdc86c79115be73444ae5eceb73976a1bcdf83",
@@ -24,17 +24,17 @@
   },
   "outputs": {
     "docs/screenshots/inbox.png": {
-      "sha256": "dde8e7e87c9b930759c24de40b2f6975b9a3a05d17d5eb27e80ff07990ecc19c",
+      "sha256": "5ddd16c8c9b91c98daa6c3787875c762444226e3e5b53fa22c5a2749e0ca5af9",
       "width": 1440,
       "height": 900
     },
     "docs/screenshots/session.png": {
-      "sha256": "3c2a994357360cffa70151374821ce2fafdaa3cd82cfe5561e74a342f1bfaa37",
+      "sha256": "35a0e1034e936c25f801b7ea9ab78183934f6c351b819ec5449e55a046924c13",
       "width": 1440,
       "height": 1100
     },
     "docs/brand/banner.png": {
-      "sha256": "44db470e3d0644746c0e14d7e694bb0cc2ee58ee47c2519c5303902beae4e14d",
+      "sha256": "5be97cea3df4fd9cb69342437a9fc45f74db6ef32212872ee5a0c07ff123cbf4",
       "width": 1600,
       "height": 560
     }
