@@ -227,7 +227,7 @@ The production chat now follows the design-v1 shell instead of the Phase 2 page-
 
 - The fixed topbar owns the session title as the page `h1`, the provider/status subline, the back action, and the details toggle. The duplicate 12px sticky header and the hero card were removed.
 - The transcript is its own scroll region. The composer is pinned below it, so replying no longer requires scrolling to the end.
-- A floating "Jump to latest" control appears when the reader is scrolled away from the bottom and reads "Input needed" when blocking attention is waiting below.
+- A "Jump to latest" pill sits in a reserved footer lane inside the transcript frame and reads "Input needed" when blocking attention is waiting below.
 - Details is a 300px column above 1320px, a right-side overlay from 761 to 1319px, and a bottom sheet at 760px and below. The overlay traps Tab, closes on Escape or the scrim, and restores focus.
 - Permission, approval, question, and error attention render inline at the end of the transcript. Permission actions and the question form were verified against the fake providers; resolving a request removes the card without a page reload.
 - Date separators group messages by day. Timestamps show the hour and minute instead of seconds. Role labels read `You` and `Agent`.
@@ -779,6 +779,32 @@ descriptions, and a custom answer; the select could only show three labels.
 - **Files.** `packages/contracts/src/attention.ts`,
   `packages/providers/src/opencode/adapter.ts`, `apps/web/src/app/App.tsx`
   (`AttentionChoiceField`), `apps/web/src/styles.css`.
+
+## Jump lane (2026-11-25)
+
+The jump pill used to be absolutely positioned over the transcript's
+bottom-right. At 320px it could cover a permission card's action row; at
+1440px it could cover inline media controls. It now has a reserved lane inside
+the transcript frame, below the scroll area and above the composer.
+
+- **Lane.** A 1px `--border-subtle` rule separates the scroll area from a
+  4px-padded footer. The pill is right-aligned with the 16px desktop / 12px
+  mobile gutter. Desktop uses the 32px pill; mobile uses the 44px target.
+- **Stability.** The lane is present whenever the transcript is scrollable, not
+  only while the pill is visible. The pill still fades and lifts with opacity
+  and transform, and when the reader is at the bottom it is inert,
+  `aria-hidden`, and removed from the tab order; the lane clears its top border
+  and stays in place. Scrolling therefore never moves the composer or reflows
+  the transcript.
+- **Space.** The panel's bottom padding drops from 48px to 16px because the
+  pill no longer needs to be kept clear of content. The lane takes 41px on
+  desktop and 53px on mobile from the scroll viewport; that is the deliberate
+  cost of never covering a message, media, or action row.
+- **Verified.** At 1440, 1024, 390, and 320px in both themes, the lane's top
+  edge meets the panel's bottom edge, the pill stays inside the lane, the
+  composer does not move between the pill states, and there is no horizontal
+  overflow. The chat e2e measures the geometry and the accessibility e2e keeps
+  the hidden pill out of the tab order.
 
 ## Answered questions in the transcript (2026-11-25)
 

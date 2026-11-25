@@ -4487,6 +4487,7 @@ function SessionDetail(props: {
   const restoreScroll = useRef(hasSavedScroll("transcript"));
   const [atBottom, setAtBottom] = useState(() => !restoreScroll.current);
   const [showJump, setShowJump] = useState(false);
+  const [scrollable, setScrollable] = useState(false);
   const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
   const attentionSignature = useMemo(
     () =>
@@ -4829,6 +4830,7 @@ function SessionDetail(props: {
     const atEnd = scroller.scrollTop >= max - 2;
     scroller.classList.toggle("has-above", overflows && !atTop);
     scroller.classList.toggle("has-below", overflows && !atEnd);
+    setScrollable(overflows);
     setShowJump(overflows && !atEnd);
     if (!stepPanelOpen) {
       setAtBottom(
@@ -6036,6 +6038,8 @@ function SessionDetail(props: {
     setAttentionBusyID(undefined);
     setAttentionError(undefined);
     setAtBottom(!restoreScroll.current);
+    setShowJump(false);
+    setScrollable(false);
     refreshLatest(true)
       .then(() => {
         if (!cancelled) {
@@ -6759,18 +6763,20 @@ function SessionDetail(props: {
                 </div>
               ) : null}
               </section>
-              <button
-                className="chat-jump-float"
-                type="button"
-                data-visible={showJump}
-                aria-hidden={showJump ? undefined : true}
-                tabIndex={showJump ? 0 : -1}
-                inert={!showJump}
-                onClick={jumpToLatest}
-              >
-                {hasBlockingAttention ? "Input needed" : "Jump to latest"}
-                <Icon name="arrow-down" size={14} />
-              </button>
+              <div className="chat-jump-band" data-visible={showJump} hidden={!scrollable}>
+                <button
+                  className="chat-jump-float"
+                  type="button"
+                  data-visible={showJump}
+                  aria-hidden={showJump ? undefined : true}
+                  tabIndex={showJump ? 0 : -1}
+                  inert={!showJump}
+                  onClick={jumpToLatest}
+                >
+                  {hasBlockingAttention ? "Input needed" : "Jump to latest"}
+                  <Icon name="arrow-down" size={14} />
+                </button>
+              </div>
             </div>
 
             {sendError ? (

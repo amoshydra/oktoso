@@ -782,6 +782,46 @@ describe("composer layout", () => {
       await options.evaluate((element) => element.scrollWidth - element.clientWidth),
     ).toBe(0);
   });
+
+  it("keeps the jump in its own band above the composer", async () => {
+    await openSession("Refactor session index");
+    const panel = page!.locator(".chat-panel");
+    await page!.locator(".chat-message").first().waitFor({ timeout: 5_000 });
+    await page!.waitForFunction(
+      () => {
+        const element = document.querySelector(".chat-panel");
+        return Boolean(element && element.scrollHeight > element.clientHeight + 8);
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
+    await panel.evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+
+    const jump = page!.locator(".chat-jump-float");
+    await expect
+      .poll(() => jump.getAttribute("data-visible"), { timeout: 5_000 })
+      .toBe("true");
+    // Let the opacity/translate transition settle before measuring.
+    await page!.waitForTimeout(250);
+    const geometry = await page!.evaluate(() => {
+      const panel = document.querySelector(".chat-panel")!.getBoundingClientRect();
+      const band = document.querySelector(".chat-jump-band")!.getBoundingClientRect();
+      const button = document.querySelector(".chat-jump-float")!.getBoundingClientRect();
+      return {
+        panelBottom: Math.round(panel.bottom),
+        bandTop: Math.round(band.top),
+        bandBottom: Math.round(band.bottom),
+        buttonTop: Math.round(button.top),
+        buttonBottom: Math.round(button.bottom),
+      };
+    });
+    expect(geometry.bandTop).toBeGreaterThanOrEqual(geometry.panelBottom - 1);
+    expect(geometry.buttonTop).toBeGreaterThanOrEqual(geometry.bandTop - 1);
+    expect(geometry.buttonBottom).toBeLessThanOrEqual(geometry.bandBottom + 1);
+  });
 });
 
 describe("answered questions", () => {
