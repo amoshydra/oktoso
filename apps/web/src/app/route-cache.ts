@@ -94,3 +94,8 @@ export function writeRouteCache<T>(
 ): void {
   writeRouteCacheEntry(key, name, value);
 }
+
+/** Drop all in-memory screen data, for example when the hub token changes. */
+export function clearRouteCache(): void {
+  entries.clear();
+}

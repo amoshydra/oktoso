@@ -92,6 +92,7 @@ import {
   type SearchScope,
 } from "./router";
 import {
+  clearRouteCache,
   readRouteCache,
   readRouteCacheEntry,
   searchDataKey,
@@ -117,6 +118,12 @@ import {
   writeSessionsCache,
 } from "./offline-cache";
 import {
+  clearTranscriptCache,
+  readTranscriptCache,
+  removeTranscriptCache,
+  writeTranscriptCache,
+} from "./transcript-cache";
+import {
   enqueueSend,
   isOnline,
   queuedMessages,
@@ -127,6 +134,7 @@ import {
 import { useSendQueue } from "./use-send-queue";
 import {
   createOptimisticMessage,
+  isOptimisticMessage,
   optimisticSend,
   updateOptimisticStatus,
 } from "./optimistic";
@@ -553,6 +561,8 @@ export function App() {
     signingOut.current = true;
     didRefresh.current = false;
     sessionStorage.removeItem(TOKEN_KEY);
+    clearRouteCache();
+    clearTranscriptCache();
     void new HubClient({}).signOut().catch(() => undefined);
     setToken("");
     setClient(null);
@@ -4611,11 +4621,24 @@ function SessionDetail(props: {
   const [session, setSession] = useState<Session | undefined>(() =>
     readSessionCache(props.sessionRef),
   );
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [cachedTranscript] = useState(() =>
+    readTranscriptCache(props.sessionRef),
+  );
+  const [messages, setMessages] = useState<Message[]>(() =>
+    cachedTranscript
+      ? [...cachedTranscript.messages, ...queuedMessages(props.sessionRef)]
+      : [],
+  );
   const [online, setOnline] = useState(() => isOnline());
-  const [olderCursor, setOlderCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [olderCursor, setOlderCursor] = useState<string | null>(() =>
+    cachedTranscript?.olderCursor ?? null,
+  );
+  const [loading, setLoading] = useState(
+    () => !cachedTranscript || !session,
+  );
+  const [checking, setChecking] = useState(Boolean(cachedTranscript));
   const [loadingOlder, setLoadingOlder] = useState(false);
+  useRevalidationIndicator(checking);
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
@@ -5241,6 +5264,7 @@ function SessionDetail(props: {
       ]);
       const latest = [...page.data].reverse();
       const stick = (forceBottom || nearBottom()) && !restoreScroll.current;
+      setError(undefined);
       setMessages((current) =>
         replace ? latest : mergeLatestPage(current, latest),
       );
@@ -6181,10 +6205,16 @@ function SessionDetail(props: {
     pendingScroll.current = undefined;
     restoreScroll.current = hasSavedScroll("transcript");
     autoRetried.current = false;
-    setSession(readSessionCache(props.sessionRef));
-    setMessages(queuedMessages(props.sessionRef));
-    setOlderCursor(null);
-    setLoading(true);
+    const cachedSession = readSessionCache(props.sessionRef);
+    setSession(cachedSession);
+    setMessages(
+      cachedTranscript
+        ? [...cachedTranscript.messages, ...queuedMessages(props.sessionRef)]
+        : queuedMessages(props.sessionRef),
+    );
+    setOlderCursor(cachedTranscript?.olderCursor ?? null);
+    setLoading(!cachedTranscript || !cachedSession);
+    setChecking(Boolean(cachedTranscript));
     setError(undefined);
     setSendError(undefined);
     setInlineAttention([]);
@@ -6203,6 +6233,7 @@ function SessionDetail(props: {
         if (cancelled) return;
         if ((reason as { status?: number } | undefined)?.status === 404) {
           removeSessionCache(props.sessionRef);
+          removeTranscriptCache(props.sessionRef);
           setSession(undefined);
           setMessages([]);
           props.onSessionChange(undefined);
@@ -6216,6 +6247,7 @@ function SessionDetail(props: {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
+          setChecking(false);
           restoreScroll.current = false;
         }
       });
@@ -6223,6 +6255,14 @@ function SessionDetail(props: {
       cancelled = true;
     };
   }, [props.client, props.sessionRef, refreshLatest]);
+
+  useEffect(() => {
+    if (loading || checking || error) return;
+    writeTranscriptCache(props.sessionRef, {
+      messages: messages.filter((message) => !isOptimisticMessage(message)),
+      olderCursor,
+    });
+  }, [checking, error, loading, messages, olderCursor, props.sessionRef]);
 
   /**
    * One automatic retry when a running session has not written its first
@@ -6707,7 +6747,7 @@ function SessionDetail(props: {
                 aria-label="Session transcript"
                 ref={transcriptRef}
                 tabIndex={0}
-                aria-busy={phase === "loading"}
+                aria-busy={phase === "loading" || checking}
               >
               {phase === "loading" ? (
                 <span className="sr-only" role="status" aria-live="polite">
@@ -6765,6 +6805,8 @@ function SessionDetail(props: {
                     {retryingTranscript ? "Retrying…" : "Retry"}
                   </button>
                 </div>
+              ) : phase === "empty" && checking ? (
+                <div className="empty">Checking for messages…</div>
               ) : phase === "empty" ? (
                 <div className="empty">
                   {sessionProvider?.capabilities.send === false

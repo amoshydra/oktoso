@@ -1619,11 +1619,7 @@ describe("transcript loading", () => {
     await page!.getByRole("button", { name: "Create session" }).click();
   }
 
-  it("shows a skeleton instead of the empty state while the transcript loads", async () => {
-    await openSession("Fix auth race in gateway");
-    await page!.locator(".chat-message").first().waitFor();
-    await backToSessions();
-
+  it("shows a skeleton instead of the empty state while a cold transcript loads", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -1634,7 +1630,7 @@ describe("transcript loading", () => {
       await handler.continue();
     });
 
-    await openSession("Fix auth race in gateway");
+    await openSession("Refactor session index");
     await page!.locator(".transcript-skeleton").first().waitFor({ timeout: 3_000 });
     expect(
       await page!.getByText("No messages yet. Send the first prompt below.").count(),
@@ -1653,11 +1649,57 @@ describe("transcript loading", () => {
     await page!.unroute(route);
   });
 
-  it("waits for a running session instead of claiming it is empty", async () => {
+  it("renders cached messages while refreshing the transcript", async () => {
     await openSession("Fix auth race in gateway");
-    await page!.locator(".chat-message").first().waitFor();
+    await page!
+      .getByText("Continue with the failing test.")
+      .first()
+      .waitFor({ timeout: 10_000 });
+    await page!.waitForTimeout(150);
     await backToSessions();
 
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const route = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(route, async (handler) => {
+      await gate;
+      await handler.continue();
+    });
+
+    await openSession("Fix auth race in gateway");
+    await page!
+      .getByText("Continue with the failing test.")
+      .first()
+      .waitFor({ timeout: 2_000 });
+    expect(await page!.locator(".transcript-skeleton").count()).toBe(0);
+    expect(await page!.locator(".chat-panel").getAttribute("aria-busy")).toBe(
+      "true",
+    );
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 2_000 },
+      )
+      .toBe("true");
+
+    release();
+    await expect
+      .poll(
+        () =>
+          page!.locator(".topbar-progress").getAttribute("data-active"),
+        { timeout: 10_000 },
+      )
+      .toBe("false");
+    await expect(
+      page!.locator(".chat-panel").getAttribute("aria-busy"),
+    ).resolves.toBe("false");
+    await page!.unroute(route);
+  });
+
+  it("waits for a running session instead of claiming it is empty", async () => {
     // Force the header to running; the fake's own busy window is too short to
     // rely on when the runner is slow.
     const sessionRoute = /\/api\/v1\/sessions\/[^/]+$/;
@@ -1685,7 +1727,7 @@ describe("transcript loading", () => {
       await handler.continue();
     });
 
-    await openSession("Fix auth race in gateway");
+    await openSession("Refactor session index");
     await page!.getByText(/The agent is running, but no messages/).waitFor({
       timeout: 10_000,
     });
@@ -1708,10 +1750,6 @@ describe("transcript loading", () => {
   });
 
   it("shows an error and Retry, never the empty state, when the load fails", async () => {
-    await openSession("Fix auth race in gateway");
-    await page!.locator(".chat-message").first().waitFor();
-    await backToSessions();
-
     let first = true;
     const route = /\/api\/v1\/sessions\/.+\/messages\?/;
     await page!.route(route, async (handler) => {
@@ -1727,7 +1765,7 @@ describe("transcript loading", () => {
       await handler.continue();
     });
 
-    await openSession("Fix auth race in gateway");
+    await openSession("Port hub to Rust");
     await page!.getByRole("alert").first().waitFor({ timeout: 5_000 });
     expect(
       await page!.getByText("No messages yet. Send the first prompt below.").count(),

@@ -1981,3 +1981,30 @@ competing history buttons.
   on desktop and 52px on mobile, the line stayed 2px at the bottom edge, the
   document scroll width never exceeded the viewport, and the cached-empty Inbox
   read `Checking for requests…` while its request was held.
+
+## Transcript revalidation (2026-11-25)
+
+- The chat transcript now follows the same route-data rule. Its last loaded
+  window is kept in memory per session, bounded to six sessions and the newest
+  300 messages per session. Reopening a session paints the window and refreshes
+  the newest page behind it, using the same topbar line and hidden status as
+  the other route screens.
+- The cold path is unchanged: a session with no cached window shows the
+  decorative skeleton, announces `Loading transcript…` once, and never shows
+  the empty state before the first successful read. A cached empty transcript
+  reads `Checking for messages…` while the refresh runs.
+- The panel is `aria-busy` during the cached refresh and clears it when the
+  refresh settles. Cached rows stay in place; the background refresh does not
+  replace them with a skeleton or reset the scroll position.
+- A failed refresh keeps the window and uses the existing alert. A 404 drops
+  the transcript cache with the session header. Optimistic and queued rows are
+  never cached, so a queued send re-appears from its local queue rather than a
+  stale transcript copy.
+- The cache is memory-only and cleared on sign-out; no transcript text is
+  written to localStorage. No new type role, spacing step, radius, control, or
+  component.
+- Verified in the chat e2e: a primed session reopened with the messages request
+  held shows the cached user row, no skeleton, an active topbar line, and
+  `aria-busy`; both settle after release. Cold skeleton, waiting, empty, and
+  error paths stay covered in the same suite. Unit tests cover the window,
+  cap, cursor re-anchoring, and LRU.
