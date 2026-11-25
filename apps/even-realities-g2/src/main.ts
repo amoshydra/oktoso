@@ -423,7 +423,12 @@ const pairingSummary = byId<HTMLSpanElement>("pairing-summary");
 const pairingToggle = byId<HTMLButtonElement>("pairing-toggle");
 const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
 const debug = byId<HTMLPreElement>("debug");
-const glassesPreview = byId<HTMLPreElement>("glasses-preview");
+const glassesPreview = byId<HTMLDivElement>("glasses-preview");
+const glassesPreviewHeader = byId<HTMLPreElement>("glass-preview-header");
+const glassesPreviewBody = byId<HTMLPreElement>("glass-preview-body");
+const glassesPreviewList = byId<HTMLDivElement>("glass-preview-list");
+const glassesPreviewFooter = byId<HTMLPreElement>("glass-preview-footer");
+const glassesControlStatus = byId<HTMLParagraphElement>("glasses-control-status");
 const previewSelection = byId<HTMLDivElement>("preview-selection");
 
 function log(message: string): void {
@@ -5152,16 +5157,70 @@ function setPreview(
   const signature = frameSignature(header, body, footer, listItems);
   if (signature === lastGlassSignature) return false;
   lastGlassSignature = signature;
-  glassesPreview.textContent = [header, "", body, "", footer].join("\n");
-  if (listItems) {
+  glassesPreviewHeader.textContent = header;
+  glassesPreviewBody.textContent = previewSummary(body, listItems);
+  glassesPreviewFooter.textContent = footer;
+  if (listItems && listItems.length > 0) {
     previewListItems = listItems;
     previewCursor = 0;
+    glassesPreview.classList.add("has-list");
+    glassesPreview.classList.remove("is-text");
     updatePreviewSelection();
   } else {
     previewListItems = undefined;
+    glassesPreview.classList.remove("has-list");
+    glassesPreview.classList.add("is-text");
+    glassesPreviewList.replaceChildren();
+    glassesPreviewList.hidden = true;
     previewSelection.textContent = "No list selection";
   }
   return true;
+}
+
+/** Keep a real summary, but drop list rows that the caller repeated in body. */
+function previewSummary(body: string, listItems?: string[]): string {
+  if (!listItems || listItems.length === 0) return body;
+  const listText = listItems.join("\n");
+  if (body === listText) return "";
+  if (body.endsWith(`\n${listText}`)) {
+    return body.slice(0, -(listText.length + 1));
+  }
+  return body;
+}
+
+function renderPreviewList(): void {
+  glassesPreviewList.replaceChildren();
+  if (!previewListItems || previewListItems.length === 0) {
+    glassesPreviewList.hidden = true;
+    return;
+  }
+  glassesPreviewList.hidden = false;
+  previewListItems.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `glass-preview-item${index === previewCursor ? " selected" : ""}`;
+    button.textContent = item;
+    button.dataset.previewIndex = String(index);
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", index === previewCursor ? "true" : "false");
+    button.addEventListener("click", () => {
+      previewCursor = index;
+      updatePreviewSelection();
+      pulse(12);
+      handleListClick(index);
+    });
+    glassesPreviewList.append(button);
+  });
+  const selected = glassesPreviewList.children[previewCursor];
+  if (selected instanceof HTMLElement) {
+    const top = selected.offsetTop;
+    const bottom = top + selected.offsetHeight;
+    if (top < glassesPreviewList.scrollTop) {
+      glassesPreviewList.scrollTop = top;
+    } else if (bottom > glassesPreviewList.scrollTop + glassesPreviewList.clientHeight) {
+      glassesPreviewList.scrollTop = bottom - glassesPreviewList.clientHeight;
+    }
+  }
 }
 
 function updatePreviewSelection(): void {
@@ -5174,9 +5233,19 @@ function updatePreviewSelection(): void {
     previewListItems.length - 1,
   );
   previewSelection.textContent = `Preview ${previewCursor + 1}/${previewListItems.length} · ${previewListItems[previewCursor]}`;
+  renderPreviewList();
+}
+
+function pulse(ms = 10): void {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    // Haptics are optional.
+  }
 }
 
 function simulate(action: "up" | "down" | "click" | "double"): void {
+  pulse(action === "double" ? 20 : action === "click" ? 12 : 8);
   if (action === "double") {
     back();
     return;
@@ -5300,6 +5369,11 @@ function setupPhone(): void {
   byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));
   byId<HTMLButtonElement>("sim-click").addEventListener("click", () => simulate("click"));
   byId<HTMLButtonElement>("sim-double").addEventListener("click", () => simulate("double"));
+  glassesPreview.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).closest(".glass-preview-item")) return;
+    if (previewListItems && previewListItems.length > 0) return;
+    simulate("click");
+  });
   syncPhoneSession();
 }
 
@@ -5418,11 +5492,14 @@ async function init(): Promise<void> {
     if (!result) {
       bridgeStatus.textContent =
         "No Even Hub bridge detected. Open the app through Even Hub or the simulator.";
+      glassesControlStatus.textContent =
+        "Glasses bridge unavailable. Open this page in Even Hub or the simulator.";
       log("Bridge not available");
       return;
     }
     bridge = result;
     bridgeStatus.textContent = "Connected to Even Hub bridge.";
+    glassesControlStatus.textContent = "Glasses bridge connected.";
     log("Bridge ready");
     await bridge.createStartUpPageContainer(
       new CreateStartUpPageContainer({
@@ -5460,6 +5537,7 @@ async function init(): Promise<void> {
     await restoreConnection();
   } catch (error) {
     bridgeStatus.textContent = `Bridge error: ${errorMessage(error)}`;
+    glassesControlStatus.textContent = "Glasses bridge error.";
     log(`Bridge error: ${errorMessage(error)}`);
   }
 }

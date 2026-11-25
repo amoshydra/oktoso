@@ -37,9 +37,12 @@ longer replies, and phone-side question forms.
 - The phone keyboard is disabled with `Open a session on the glasses first`
   when no session is attached. It does not leave an empty enabled composer,
   and it is named for screen readers.
-- A **Glasses control** panel below the phone keyboard shows the live screen
-  and Up / Down / Select / Back buttons, so the phone can stand in when the
-  ring isn't available. The buttons are 44px targets.
+- A **Glasses control** panel below the phone keyboard shows a fixed 2:1
+  mirror of the 576×288 screen, with its list and current selection. Tap a row
+  to open it; Up / Down / Select / Back remain for precision. The preview keeps
+  the app's 54-column wrapped lines and clips instead of reflowing, so content
+  changes never resize it. Actions pulse the phone where supported. The four
+  controls are 44px targets.
 - The symbol guide stays user-facing. Bridge diagnostics and the reply audit
   live under a collapsed **Developer tools** disclosure. Every disclosure row
   is a 44px target.

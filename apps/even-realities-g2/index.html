@@ -213,23 +213,97 @@
       .developer summary { color: var(--muted); font-size: 12px; font-weight: 500; }
       .developer[open] summary { color: var(--ink); }
       .developer .hint { margin-top: var(--space-1); }
+      .glasses-preview-frame {
+        container-type: inline-size;
+        margin-top: var(--space-2);
+      }
       .glasses-preview {
-        min-height: 150px;
-        max-height: 320px;
-        overflow: auto;
-        margin: var(--space-1) 0 0;
-        padding: var(--space-3);
+        display: grid;
+        grid-template-rows: 12.5% 70.833% 14.583%;
+        width: 100%;
+        aspect-ratio: 2 / 1;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
         border: 1px solid #24452c;
         border-radius: var(--radius-sm);
         background: #07130a;
         color: #71f28a;
-        white-space: pre-wrap;
-        font-size: 11px;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 9px;
+        font-size: clamp(7.5px, 2.9cqw, 10.5px);
         line-height: 1.5;
+        user-select: none;
+      }
+      .glass-preview-header,
+      .glass-preview-body,
+      .glass-preview-footer {
+        min-height: 0;
+        margin: 0;
+        padding: 2px 6px;
+        overflow: hidden;
+        white-space: pre;
+        font: inherit;
+      }
+      .glass-preview-main {
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+        padding: 0 6px;
+      }
+      .glass-preview-body {
+        flex: none;
+        padding: 0;
+      }
+      .glasses-preview.has-list .glass-preview-body {
+        max-height: 58%;
+      }
+      .glass-preview-list {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        flex-direction: column;
+        gap: 1px;
+        overflow-y: auto;
+        padding-bottom: 2px;
+      }
+      .glass-preview-list[hidden] {
+        display: none;
+      }
+      .glass-preview-item {
+        display: block;
+        width: 100%;
+        min-height: 24px;
+        padding: 1px 4px;
+        border: 0;
+        border-left: 2px solid transparent;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        white-space: pre;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .glass-preview-item.selected {
+        border-left-color: #d8ffe0;
+        background: rgb(113 242 138 / 12%);
+        color: #eaffef;
+      }
+      .glass-preview-item:hover {
+        background: rgb(113 242 138 / 8%);
+      }
+      .glasses-preview.is-text {
+        cursor: pointer;
+      }
+      .glasses-control #preview-selection {
+        min-height: 18px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
       .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2); }
       .preview-controls button { min-height: 36px; font-size: 12px; }
-      .glasses-control .glasses-preview { max-height: 220px; }
       .glasses-control .preview-controls { margin-top: var(--space-3); }
       .glasses-control .preview-controls button { min-height: 44px; font-size: 14px; }
       .debug { max-height: 320px; margin: var(--space-1) 0 0; overflow: auto; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
@@ -346,7 +420,17 @@
           <p class="hint">Use these when you don't have your ring.</p>
         </div>
       </div>
-      <pre id="glasses-preview" class="glasses-preview" aria-label="Glasses screen preview">(waiting for a screen)</pre>
+      <p id="glasses-control-status" class="hint" role="status">Waiting for the glasses bridge…</p>
+      <div class="glasses-preview-frame">
+        <div id="glasses-preview" class="glasses-preview" role="group" aria-label="Glasses screen preview">
+          <pre id="glass-preview-header" class="glass-preview-header"></pre>
+          <div class="glass-preview-main">
+            <pre id="glass-preview-body" class="glass-preview-body">(waiting for a screen)</pre>
+            <div id="glass-preview-list" class="glass-preview-list" role="listbox" aria-label="Glasses list" hidden></div>
+          </div>
+          <pre id="glass-preview-footer" class="glass-preview-footer"></pre>
+        </div>
+      </div>
       <div id="preview-selection" class="hint" style="margin-top: var(--space-2)">No list selection</div>
       <div class="preview-controls" role="group" aria-label="Glasses controls">
         <button id="sim-up" type="button">↑ Up</button>
@@ -354,7 +438,7 @@
         <button id="sim-click" type="button">Select</button>
         <button id="sim-double" type="button">Back</button>
       </div>
-      <p class="hint" style="margin-top: var(--space-2)">Up and Down move the list; Select opens; Back returns.</p>
+      <p class="hint" style="margin-top: var(--space-2)">Up and Down move the list; Select opens; Back returns. Tap a screen row to open it.</p>
     </section>
 
     <details class="panel">

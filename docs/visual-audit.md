@@ -1912,10 +1912,12 @@ competing history buttons.
 - Phone keyboard: disabled with `Open a session on the glasses first` until a
   session exists; no enabled empty composer. The textarea is named `Reply to
   the current session` for screen readers.
-- A **Glasses control** panel below the phone keyboard shows the live screen
-  and Up / Down / Select / Back buttons, with a hint that it is for when the
-  ring isn't available. The buttons are 44px targets and the preview caps at
-  220px.
+- A **Glasses control** panel below the phone keyboard shows a fixed 2:1
+  mirror of the 576×288 screen, the real list rows, and the current selection.
+  Tapping a row opens it; Up / Down / Select / Back are the 44px fallback. The
+  preview keeps the app's 54-column wrapped lines and clips instead of
+  reflowing, so content changes never change its height. The panel names the
+  glasses bridge status and pulses the phone on action where supported.
 - Developer tools (bridge diagnostics and the reply audit) are collapsed. The
   symbol guide stays user-facing. Every disclosure row is a 44px target.
 - Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark

@@ -306,6 +306,22 @@ describe("G2 hosted app", () => {
     expect(layout.previewInDeveloper).toBe(false);
     expect(layout.heights).toHaveLength(4);
     expect(layout.heights.every((height) => height >= 44)).toBe(true);
+    await expect(
+      current.locator("#glasses-control-status").innerText(),
+    ).resolves.toContain("connected");
+
+    const before = await current.locator("#glasses-preview").boundingBox();
+    expect(before).not.toBeNull();
+    expect(Math.abs(before!.width / before!.height - 2)).toBeLessThan(0.06);
+    await current
+      .locator("#glass-preview-list .glass-preview-item", {
+        hasText: "Recent sessions",
+      })
+      .click();
+    await previewMatches(/RECENT/);
+    const after = await current.locator("#glasses-preview").boundingBox();
+    expect(after).not.toBeNull();
+    expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
   });
 
   it("boots to Home and navigates through the empty Inbox", async () => {
