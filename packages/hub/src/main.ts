@@ -120,7 +120,7 @@ function printPairingPanel(
       ? pairingUrl(base, pairing.code)
       : "(no server URLs)";
     console.log(
-      `Pairing link (${pairing.profile}, expires ${formatExpiry(pairing.expiresAt)}): ${link}`,
+      `Pairing link (expires ${formatExpiry(pairing.expiresAt)}): ${link}`,
     );
     console.log("Run the pairing command again for another link.");
     return;
@@ -177,7 +177,6 @@ async function requestPairing(
   config: HubPairingConfig,
   override?: string,
   color = Boolean(process.stdout.isTTY && !process.env.NO_COLOR),
-  profile: "phone" | "g2" = "phone",
 ): Promise<void> {
   if (override) {
     const parsed = new URL(override);
@@ -191,11 +190,7 @@ async function requestPairing(
   try {
     response = await fetch(`${endpoint}/api/v1/auth/pair`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ profile }),
+      headers: { Authorization: `Bearer ${config.token}` },
       signal: AbortSignal.timeout(5_000),
     });
   } catch {
@@ -551,12 +546,7 @@ async function main(): Promise<void> {
       const pairingConfig = await loadPairingConfig(options.configPath);
       if (options.host) pairingConfig.host = options.host;
       if (options.port) pairingConfig.port = options.port;
-      await requestPairing(
-        pairingConfig,
-        options.url,
-        color,
-        options.pairProfile,
-      );
+      await requestPairing(pairingConfig, options.url, color);
       await logFile?.close();
       return;
     }

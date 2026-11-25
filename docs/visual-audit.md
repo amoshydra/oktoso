@@ -2041,10 +2041,9 @@ competing history buttons.
   client profile without admin; `g2` is sessions, inbox, search, approvals,
   read-only providers/settings, voice, and events. G2 cannot write provider
   credentials, settings, or automation configuration.
-- Pairing links carry a profile. The G2 app self-restricts to `g2` when it
-  exchanges a code, so a normal phone link is downgraded for the glasses. A G2
-  link cannot be upgraded. `oktoso pair --profile g2` creates an explicit G2
-  link. The pairing page names the profile.
+- Pairing links are generic. The G2 app self-restricts to `g2` when it
+  exchanges a code; a phone or browser defaults to `phone`. A G2 link cannot
+  be upgraded. There is no profile choice in the pairing command or page.
 - The assistant fallback explains that MCP token administration requires the
   owner token and the global Overview assistant. No new type role, spacing
   step, radius, control, or colour.

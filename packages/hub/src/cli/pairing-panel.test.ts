@@ -27,7 +27,6 @@ describe("terminal pairing panel", () => {
   it("builds a QR panel that fits 64 columns", () => {
     const pairing = {
       code: "abcdefghijklmnopqrstuv",
-      profile: "phone" as const,
       expiresAt: Date.now() + 5 * 60_000,
     };
     const lines = buildPairingPanel({

@@ -112,16 +112,10 @@ function pairingPage(input: {
   origin: string;
   expiresAt: number;
   paired: boolean;
-  profile: "phone" | "g2";
 }): string {
-  const profile =
-    input.profile === "g2"
-      ? "G2 (sessions, inbox, approvals; read-only providers/settings)"
-      : "Phone (sessions, inbox, providers, settings)";
   const body = input.paired
     ? `<h1>Already paired</h1>
     <p>This browser is already paired with <code>${input.origin}</code>.</p>
-    <p class="meta">Profile: ${profile}.</p>
     <p class="meta">This link expires at ${formatExpiry(input.expiresAt)}.</p>
     <p><a href="/">Open Oktoso</a></p>
     <form method="post">
@@ -130,7 +124,6 @@ function pairingPage(input: {
     <p class="hint">Pairing again replaces this browser's session cookie with a fresh 30-day session.</p>`
     : `<h1>Pair this device</h1>
     <p>This pairs the browser that opens it with <code>${input.origin}</code>.</p>
-    <p class="meta">Profile: ${profile}.</p>
     <p class="meta">This link pairs once and expires at ${formatExpiry(input.expiresAt)}.</p>
     <form method="post">
       <button type="submit">Pair this device</button>
@@ -184,7 +177,6 @@ export function registerPairRoutes(
         origin: hubOrigin(c),
         expiresAt: pairing.expiresAt,
         paired,
-        profile: pairing.profile,
       }),
     );
   });

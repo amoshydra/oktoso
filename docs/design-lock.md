@@ -1,12 +1,13 @@
-# Design Lock — v1.59
+# Design Lock — v1.60
 
 Status: **frozen**.
 
-- Version: `design-v1.59`
-- Parent: `design-v1.58`
+- Version: `design-v1.60`
+- Parent: `design-v1.59`
 - Date: 2026-11-26
-- Git tag: `design-v1.59`
+- Git tag: `design-v1.60`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.60 scope: pairing without a profile choice; the client declares its profile.
 - v1.59 scope: paired device profiles and the Access credential panel.
 - v1.58 scope: assistant-issued short-lived MCP tokens in the global chat.
 - v1.57 scope: stale-while-revalidate for the session transcript.
@@ -1331,6 +1332,18 @@ radius, or color token.
   administration needs the owner token and the global Overview assistant.
 - No new type role, spacing step, radius, control, or colour.
 
+## Pairing without a profile choice (2026-11-26)
+
+- `oktoso pair`, the hub terminal `p` action, and the `/pair/<code>` page no
+  longer ask for or display a device profile. Pairing is one action.
+- The pairing code is generic. The client declares its profile when it
+  exchanges the code: the G2 app requests `g2`; a phone or browser defaults to
+  `phone`. The owner API still accepts an optional profile for advanced
+  pre-restriction, but the normal CLI does not expose it.
+- A G2 code cannot be upgraded to `phone`; a phone code can be downgraded to
+  `g2`. The profile is visible after pairing in Settings → Access.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1377,3 +1390,5 @@ The `design-v1.57` transcript revision is covered by the chat e2e: a primed sess
 The `design-v1.58` assistant-token revision was verified live against a temporary hub with a scripted assistant: the global assistant created a read-only token, MCP `initialize` + `tools/list` exposed only the three scoped session-read tools, `sessions_list` returned only the allowed provider, a later “show me the token again” revealed the same secret by id, and revoking it made the next `/mcp` call return `401`. Unit tests cover issuance, expiry, reveal, revocation, redaction, owner-only tool exposure, and the create/reveal loop. The full gates pass at 960 unit tests and 82 e2e tests, including 12 G2 tests.
 
 The `design-v1.59` paired-profile revision was verified in the accessibility e2e at 1280px: the owner session shows `Owner`, `Scopes: All`, `Never`, and `Admin: Yes`; a freshly paired phone session shows `Phone`, a concrete expiry, and `Admin: No`. Hub tests cover legacy phone tokens, explicit G2 pairing, phone-to-G2 self-downgrade, and `403` for G2 provider/settings writes. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.
+
+The `design-v1.60` pairing simplification removes the profile choice from the CLI and pairing page. Normal pairing is `oktoso pair` or `p`; the G2 app declares `g2` when exchanging the code, and a phone/browser defaults to `phone`. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.
