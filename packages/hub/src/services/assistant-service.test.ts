@@ -10,6 +10,8 @@ import type {
 } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { AssistantService, renderContext } from "./assistant-service";
+import { createSecretBox } from "../lib/secret-box";
+import { McpTokenService } from "../mcp/tokens";
 import type { AttentionService } from "./attention-service";
 import type { SessionActions } from "./session-actions";
 import type { QuestionService } from "./question-service";
@@ -468,6 +470,7 @@ describe("AssistantService", () => {
     allowWrite = true,
     search?: unknown,
     sessions: Session[] = projectSessions,
+    mcpTokens?: McpTokenService,
   ) {
     return new AssistantService({
       store: new MemoryStateStore(),
@@ -483,6 +486,7 @@ describe("AssistantService", () => {
       attention: { list: async () => projectAttention } as unknown as AttentionService,
       questions: { get: async () => null } as unknown as QuestionService,
       ...(search ? { search: search as never } : {}),
+      ...(mcpTokens ? { mcpTokens } : {}),
       logger: logger(),
       settings: {
         enabled: true,
@@ -495,6 +499,142 @@ describe("AssistantService", () => {
       fetchImpl,
     });
   }
+
+  it("creates and reveals a token in the owner thread", async () => {
+    const tokens = new McpTokenService({
+      secretBox: createSecretBox("hub-token-long-enough"),
+    });
+    const bodies: Array<{
+      messages: Array<{ role: string; content: string | null }>;
+    }> = [];
+    let round = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as {
+        messages: Array<{ role: string; content: string | null }>;
+      };
+      bodies.push(body);
+      if (round === 0) {
+        round += 1;
+        return sseResponse(
+          toolCallStream("call_1", "create_mcp_token", {
+            ttlSeconds: 120,
+            providers: ["desktop-opencode"],
+          }),
+        );
+      }
+      if (round === 1) {
+        const tool = body.messages.filter((message) => message.role === "tool").at(-1);
+        const id = /id: (mcp_\S+)/.exec(tool?.content ?? "")?.[1];
+        const token = /okt_mcp_\S+/.exec(tool?.content ?? "")?.[0];
+        expect(id).toBeTruthy();
+        expect(token).toBeTruthy();
+        round += 1;
+        return sseResponse([
+          delta(
+            `Created ${id}.\n\n\`\`\`sh\nexport OKTOSO_MCP_TOKEN=${token}\n\`\`\``,
+          ),
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (round === 2) {
+        const history = body.messages
+          .map((message) => message.content ?? "")
+          .join("\n");
+        expect(history).not.toContain("okt_mcp_");
+        expect(history).toContain("[redacted mcp token");
+        const id = /\bmcp_[A-Za-z0-9_-]{8,}\b/.exec(history)?.[0];
+        expect(id).toBeTruthy();
+        round += 1;
+        return sseResponse(
+          toolCallStream("call_2", "reveal_mcp_token", { id }),
+        );
+      }
+      const tool = body.messages.filter((message) => message.role === "tool").at(-1);
+      expect(tool?.content).toContain("okt_mcp_");
+      round += 1;
+      return sseResponse([delta("Revealed."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(
+      fetchImpl,
+      true,
+      undefined,
+      projectSessions,
+      tokens,
+    );
+    const thread = await service.createThread({ scope: { kind: "global" } });
+
+    const created = await service.postMessage(
+      thread.id,
+      { text: "create a read-only token for this session" },
+      { owner: true },
+    );
+    const createdEvents: AssistantEvent[] = [];
+    service.subscribe(created.run.id, 0, (event) => createdEvents.push(event));
+    await waitFor(() => createdEvents.some((event) => event.type === "done"));
+    const [issued] = tokens.list();
+    expect(issued).toBeDefined();
+
+    const revealed = await service.postMessage(
+      thread.id,
+      { text: "show me the token again" },
+      { owner: true },
+    );
+    const revealedEvents: AssistantEvent[] = [];
+    service.subscribe(revealed.run.id, 0, (event) => revealedEvents.push(event));
+    await waitFor(() => revealedEvents.some((event) => event.type === "done"));
+    expect(tokens.list()).toHaveLength(1);
+    expect(bodies.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("offers MCP token tools only to the owner", async () => {
+    const tokens = new McpTokenService({
+      secretBox: createSecretBox("hub-token-long-enough"),
+    });
+    const seen: string[][] = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as {
+        tools?: Array<{ function?: { name?: string } }>;
+      };
+      seen.push(
+        (body.tools ?? [])
+          .map((tool) => tool.function?.name)
+          .filter((name): name is string => typeof name === "string"),
+      );
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = buildScoped(
+      fetchImpl,
+      true,
+      undefined,
+      projectSessions,
+      tokens,
+    );
+
+    const thread = await service.createThread({ scope: { kind: "global" } });
+    const ownerTurn = await service.postMessage(
+      thread.id,
+      { text: "create a read-only token for this session" },
+      { owner: true },
+    );
+    const ownerEvents: AssistantEvent[] = [];
+    service.subscribe(ownerTurn.run.id, 0, (event) => ownerEvents.push(event));
+    await waitFor(() => ownerEvents.some((event) => event.type === "done"));
+    expect(seen[0]).toContain("create_mcp_token");
+    expect(seen[0]).toContain("list_mcp_tokens");
+    expect(seen[0]).toContain("reveal_mcp_token");
+
+    const pairedThread = await service.createThread({ scope: { kind: "global" } });
+    const pairedTurn = await service.postMessage(
+      pairedThread.id,
+      { text: "create a token" },
+      { owner: false },
+    );
+    const pairedEvents: AssistantEvent[] = [];
+    service.subscribe(pairedTurn.run.id, 0, (event) => pairedEvents.push(event));
+    await waitFor(() => pairedEvents.some((event) => event.type === "done"));
+    expect(seen[1]).not.toContain("create_mcp_token");
+    expect(seen[1]).not.toContain("reveal_mcp_token");
+  });
 
   it("builds a project context from session metadata only", async () => {
     let body: {

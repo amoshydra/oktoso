@@ -512,6 +512,13 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   760px and below). Session and project threads stay in the dock. Its context is the inbox (the authoritative "needs
   me" list), running sessions, 24-hour errors, a project rollup, a 12-session
   index, and transcript search hits.
+- **MCP tokens.** In the global thread, an owner can ask the assistant to
+  create, list, or reveal a short-lived MCP token. The assistant prints the
+  token id, expiry, scope, and secret in a fenced block. Prior turns redact the
+  secret before the next model prompt; asking again calls the reveal tool by
+  id. Session and project threads do not offer this. Paired browser or device
+  sessions cannot mint or reveal tokens; sign in with the owner token to use
+  the flow.
 - **Finding across sessions.** Every scope can search all sessions by title,
   transcript, and metadata (project, directory, model, agent, ref). A hit is
   named with its session title and ref; the session scope says it cannot read

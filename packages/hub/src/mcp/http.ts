@@ -9,8 +9,9 @@ import type { HubConfig, McpTokenConfig } from "../config/schema";
 import type { AppEnv } from "../http/types";
 import type { Logger } from "../lib/logger";
 import { createMcpAudit, type McpAudit } from "./audit";
-import { withProviderPolicy } from "./policy";
+import { withProviderPolicy, withSessionPolicy } from "./policy";
 import { FixedWindowRateLimiter } from "./rate-limit";
+import type { McpTokenScope, McpTokenService } from "./tokens";
 import {
   createOktosoMcpServer,
   MCP_TOOL_NAMES,
@@ -25,7 +26,11 @@ const MAX_MCP_BODY_BYTES = 1024 * 1024;
 
 interface AuthenticatedClient {
   client: McpTokenConfig;
-  digest: Buffer;
+  digest?: Buffer;
+  tokenId: string;
+  maxSessions: number;
+  expiresAt?: number;
+  sessionRef?: string;
 }
 
 interface McpSession {
@@ -40,6 +45,7 @@ export interface McpRouteDependencies {
   api: McpHubApi;
   logger: Logger;
   version: string;
+  tokens?: McpTokenService;
   events?: {
     subscribe(listener: (event: HubEvent) => void): () => void;
   };
@@ -57,19 +63,41 @@ function digest(value: string): Buffer {
 function authenticate(
   header: string,
   clients: AuthenticatedClient[],
+  tokens?: McpTokenService,
 ): AuthenticatedClient | undefined {
   const match = /^Bearer\s+(.+)$/i.exec(header);
   if (!match) return undefined;
-  const presented = digest(match[1]!.trim());
+  const raw = match[1]!.trim();
+  const presented = digest(raw);
   for (const candidate of clients) {
     if (
+      candidate.digest &&
       presented.length === candidate.digest.length &&
       timingSafeEqual(presented, candidate.digest)
     ) {
       return candidate;
     }
   }
-  return undefined;
+  const scope = tokens?.authenticate(raw);
+  return scope ? dynamicClient(scope) : undefined;
+}
+
+function dynamicClient(scope: McpTokenScope): AuthenticatedClient {
+  return {
+    client: {
+      id: scope.id,
+      token: "",
+      allowWrite: scope.allowWrite,
+      ...(scope.providers ? { providers: scope.providers } : {}),
+      ...(scope.tools ? { tools: scope.tools } : {}),
+      rateLimit: scope.rateLimit,
+      timeoutMs: scope.timeoutMs,
+    },
+    tokenId: scope.id,
+    maxSessions: scope.maxSessions,
+    expiresAt: scope.expiresAt,
+    ...(scope.sessionRef ? { sessionRef: scope.sessionRef } : {}),
+  };
 }
 
 function requestOriginAllowed(
@@ -136,8 +164,8 @@ export function registerMcpRoutes(
     app.all(MCP_PATH, (c) => c.notFound());
     return undefined;
   }
-  if (mcp.tokens.length === 0) {
-    logger.warn("MCP is enabled but no tokens are configured");
+  if (mcp.tokens.length === 0 && !deps.tokens) {
+    logger.warn("MCP is enabled but no static or issued tokens are available");
     app.all(MCP_PATH, (c) => c.notFound());
     return undefined;
   }
@@ -158,7 +186,12 @@ export function registerMcpRoutes(
         });
       }
     }
-    return { client, digest: digest(client.token) };
+    return {
+      client,
+      digest: digest(client.token),
+      tokenId: client.id,
+      maxSessions: MAX_SESSIONS_PER_CLIENT,
+    };
   });
 
   const audit: McpAudit = mcp.audit.enabled
@@ -181,12 +214,12 @@ export function registerMcpRoutes(
     }
   }
 
-  async function makeRoom(clientId: string): Promise<void> {
+  async function makeRoom(clientId: string, maxSessions = MAX_SESSIONS_PER_CLIENT): Promise<void> {
     const now = Date.now();
     const own = [...sessions.entries()]
       .filter(([, session]) => session.clientId === clientId)
       .sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt);
-    while (own.length >= MAX_SESSIONS_PER_CLIENT) {
+    while (own.length >= maxSessions) {
       const [id, session] = own.shift()!;
       sessions.delete(id);
       await session.server.close().catch(() => undefined);
@@ -220,6 +253,7 @@ export function registerMcpRoutes(
     const authenticated = authenticate(
       c.req.header("authorization") ?? "",
       clients,
+      deps.tokens,
     );
     if (!authenticated) {
       c.header("WWW-Authenticate", "Bearer");
@@ -341,7 +375,7 @@ export function registerMcpRoutes(
       );
     }
 
-    await makeRoom(client.id);
+    await makeRoom(client.id, authenticated.maxSessions);
 
     let session: McpSession | undefined;
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -364,7 +398,10 @@ export function registerMcpRoutes(
       });
     };
     const server = createOktosoMcpServer({
-      api: withProviderPolicy(deps.api, client.providers),
+      api: withSessionPolicy(
+        withProviderPolicy(deps.api, client.providers),
+        authenticated.sessionRef,
+      ),
       version: deps.version,
       allowWrite: client.allowWrite,
       ...(client.tools ? { tools: client.tools } : {}),

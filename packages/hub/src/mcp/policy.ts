@@ -143,6 +143,89 @@ export function withProviderPolicy(
   };
 }
 
+export function withSessionPolicy(
+  api: McpHubApi,
+  sessionRef?: string,
+): McpHubApi {
+  if (!sessionRef) return api;
+  const assert = (ref: string): void => {
+    if (ref !== sessionRef) {
+      throw new Error(`Session access is not allowed for this token: ${ref}`);
+    }
+  };
+  return {
+    providers: () => api.providers(),
+    checkProvider: (id) => api.checkProvider(id),
+    async sessions(query = {}) {
+      const page = await api.sessions(query);
+      return { ...page, data: page.data.filter((session) => session.ref === sessionRef) };
+    },
+    session: (ref) => {
+      assert(ref);
+      return api.session(ref);
+    },
+    messages: (ref, query) => {
+      assert(ref);
+      return api.messages(ref, query);
+    },
+    question: (ref) => {
+      assert(ref);
+      return api.question(ref);
+    },
+    async attention(query = {}) {
+      const page = await api.attention({ ...query, sessionRef });
+      return {
+        ...page,
+        data: page.data.filter((item) => item.sessionRef === sessionRef),
+      };
+    },
+    sendMessage: (ref, input, options) => {
+      assert(ref);
+      return api.sendMessage(ref, input, options);
+    },
+    createSession: async () => {
+      throw new Error("A session-scoped token cannot create sessions");
+    },
+    interrupt: (ref) => {
+      assert(ref);
+      return api.interrupt(ref);
+    },
+    markRead: (ref) => {
+      assert(ref);
+      return api.markRead(ref);
+    },
+    async actOnAttention(id, action, input) {
+      const page = await api.attention({ sessionRef });
+      const item = page.data.find((candidate) => candidate.id === id);
+      if (!item) throw new Error(`Attention item not found: ${id}`);
+      assert(item.sessionRef);
+      return api.actOnAttention(id, action, input);
+    },
+    automation: async () => {
+      throw new Error("A session-scoped token cannot read automation");
+    },
+    automationRuns: async () => {
+      throw new Error("A session-scoped token cannot read automation");
+    },
+    approvals: async () =>
+      (await api.approvals()).filter(
+        (approval) => approval.sessionRef === sessionRef,
+      ),
+    setAutomation: async () => {
+      throw new Error("A session-scoped token cannot change automation");
+    },
+    setWatcherPaused: async () => {
+      throw new Error("A session-scoped token cannot change automation");
+    },
+    async actOnApproval(id, action) {
+      const approval = (await api.approvals()).find((item) => item.id === id);
+      if (!approval) throw new Error(`Approval not found: ${id}`);
+      assert(approval.sessionRef);
+      return api.actOnApproval(id, action);
+    },
+  };
+}
+
 function filterSessions(
   page: SessionPage,
   allowed: Set<string>,

@@ -65,7 +65,11 @@ export function registerAssistantRoutes(
     if (!parsed.success) {
       throw badRequest("Invalid message input", { issues: parsed.error.issues });
     }
-    const result = await assistant.postMessage(c.req.param("id"), parsed.data);
+    const result = await assistant.postMessage(
+      c.req.param("id"),
+      parsed.data,
+      { owner: c.get("auth")?.kind === "owner" },
+    );
     return c.json({ data: result }, 202);
   });
 

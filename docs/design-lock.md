@@ -1,12 +1,13 @@
-# Design Lock — v1.57
+# Design Lock — v1.58
 
 Status: **frozen**.
 
-- Version: `design-v1.57`
-- Parent: `design-v1.56`
-- Date: 2026-11-25
-- Git tag: `design-v1.57`
+- Version: `design-v1.58`
+- Parent: `design-v1.57`
+- Date: 2026-11-26
+- Git tag: `design-v1.58`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.58 scope: assistant-issued short-lived MCP tokens in the global chat.
 - v1.57 scope: stale-while-revalidate for the session transcript.
 - v1.56 scope: stale-while-revalidate route data and the topbar revalidation line.
 - v1.55 scope: G2 preview gestures, full-screen control, and the phone list mirror.
@@ -1285,6 +1286,26 @@ radius, or color token.
   cache and the transcript cache.
 - No new type role, spacing step, radius, control, or colour.
 
+## Assistant-issued MCP tokens (2026-11-26)
+
+- The global **Overview assistant** can create, list, and reveal short-lived
+  MCP tokens for an external agent when the thread is used by the owner. The
+  session and project assistants do not offer these tools.
+- The assistant action card and final answer print the token id, expiry, scope,
+  and secret in a fenced block. The token is read-only by default, scoped to
+  the narrowest provider/tool/session the request names, and limited to one MCP
+  session.
+- The token may be revealed again by id before expiry. Prior assistant turns
+  redact the secret before the next model prompt, so the model cannot repeat it
+  from memory; it calls `reveal_mcp_token` when the owner asks again.
+- Expiry is checked on every MCP request. An expired or revoked token returns
+  `401` even if its MCP session is still open. The hub stores the plaintext
+  encrypted only until expiry; a hub restart invalidates issued tokens.
+- The chat shows plain text/code blocks and existing tool-step labels
+  (`Created MCP token`, `Revealed MCP token`). There is no new card, type role,
+  spacing step, radius, or colour.
+- The static prototype stays unchanged. The assistant chat is the reference.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1327,3 +1348,5 @@ dialog: it listed the index for a named session, read a tool output and quoted i
 The `design-v1.56` route-data revision is covered by the chat e2e: with the sessions request held, returning to Sessions still renders the cached row while the topbar line is active; returning to a cached empty Search reads `Checking for sessions…`, then settles after the request completes. The unit tests cover the screen-stable cache keys and timestamped empty entries. The indicator was reviewed at 1440, 1024, 390, and 320px in both themes: the topbar measured 54px on desktop and 52px on mobile, the line stayed 2px at its bottom edge, the document never exceeded the viewport width, and the cached-empty Inbox read `Checking for requests…` while the request was held. The full gates pass at 945 unit tests and 81 e2e tests, including 12 G2 tests.
 
 The `design-v1.57` transcript revision is covered by the chat e2e: a primed session reopened with the messages request held paints the cached user row, no skeleton, the topbar line active, and the transcript `aria-busy`; after release both settle. Cold sessions still cover the skeleton, waiting, empty, and error paths. The cache unit tests cover the window, the 300-message cap, cursor re-anchoring, and the six-session LRU. The full gates pass at 949 unit tests and 82 e2e tests, including 12 G2 tests.
+
+The `design-v1.58` assistant-token revision was verified live against a temporary hub with a scripted assistant: the global assistant created a read-only token, MCP `initialize` + `tools/list` exposed only the three scoped session-read tools, `sessions_list` returned only the allowed provider, a later “show me the token again” revealed the same secret by id, and revoking it made the next `/mcp` call return `401`. Unit tests cover issuance, expiry, reveal, revocation, redaction, owner-only tool exposure, and the create/reveal loop. The full gates pass at 960 unit tests and 82 e2e tests, including 12 G2 tests.

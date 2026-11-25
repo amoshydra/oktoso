@@ -2008,3 +2008,26 @@ competing history buttons.
   `aria-busy`; both settle after release. Cold skeleton, waiting, empty, and
   error paths stay covered in the same suite. Unit tests cover the window,
   cap, cursor re-anchoring, and LRU.
+
+## Assistant-issued MCP tokens (2026-11-26)
+
+- The global assistant can issue a short-lived MCP token on explicit owner
+  request. It appears as ordinary chat text and a fenced shell block, with the
+  token id, expiry, provider/tool scope, and the secret. No new card or control
+  is introduced.
+- The assistant’s tool steps read `Created MCP token` and `Revealed MCP token`,
+  matching the existing tool-step grammar. The secret is never in a transcript
+  list, log, or audit record.
+- Prior turns redact the secret before the next model prompt while keeping the
+  token id. The owner can ask again; the assistant calls `reveal_mcp_token` and
+  prints the same token until expiry. An expired token produces a plain
+  “expired, create a new one” response.
+- Tokens are read-only by default, provider/tool scoped, limited to one MCP
+  session, and checked on every request. The visual surface adds no type role,
+  spacing step, radius, or colour.
+- Verified live against a temporary hub with a scripted assistant: the global
+  assistant created a read-only token, MCP `initialize` + `tools/list` exposed
+  only the three scoped read tools, `sessions_list` returned only the allowed
+  provider, a later “show me the token again” revealed the same secret by id,
+  and revoking it made the next `/mcp` call return `401`. The token service and
+  HTTP route tests also cover expiry and the one-session limit.

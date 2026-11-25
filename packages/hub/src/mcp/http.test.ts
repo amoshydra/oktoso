@@ -15,8 +15,10 @@ import type {
 import { zHubConfig } from "../config/schema";
 import type { AppEnv } from "../http/types";
 import { createLogger } from "../lib/logger";
+import { createSecretBox } from "../lib/secret-box";
 import { registerMcpRoutes, type McpRouteHandle } from "./http";
 import type { McpHubApi } from "./server";
+import { McpTokenService } from "./tokens";
 
 const logger = createLogger({ level: "silent" });
 const roots: string[] = [];
@@ -61,6 +63,7 @@ function createApi() {
 
 async function harness(options: {
   tokens: Array<Record<string, unknown>>;
+  issued?: McpTokenService;
   audit?: boolean;
   events?: { subscribe(listener: (event: HubEvent) => void): () => void };
 }) {
@@ -84,6 +87,7 @@ async function harness(options: {
     api,
     logger,
     version: "test",
+    ...(options.issued ? { tokens: options.issued } : {}),
     ...(options.events ? { events: options.events } : {}),
   })!;
   handles.push(handle);
@@ -168,6 +172,65 @@ afterEach(async () => {
 });
 
 describe("hosted MCP route", () => {
+  it("accepts an issued token and rejects it after expiry", async () => {
+    let now = 1_000_000;
+    const issued = new McpTokenService({
+      secretBox: createSecretBox("hub-token-long-enough"),
+      now: () => now,
+    });
+    const issuedToken = issued.issue({
+      ttlSeconds: 60,
+      tools: ["sessions_list", "sessions_messages"],
+    });
+    const { app } = await harness({ tokens: [], issued });
+    const sessionId = await initialize(app, issuedToken.token);
+
+    const active = await call(app, issuedToken.token, sessionId, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+      params: {},
+    });
+    expect(active.status).toBe(200);
+
+    now += 60_000;
+    const expired = await call(app, issuedToken.token, sessionId, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/list",
+      params: {},
+    });
+    expect(expired.status).toBe(401);
+  });
+
+  it("keeps only one MCP session for an issued token", async () => {
+    const issued = new McpTokenService({
+      secretBox: createSecretBox("hub-token-long-enough"),
+    });
+    const token = issued.issue({ ttlSeconds: 60, maxSessions: 1 });
+    const { app } = await harness({ tokens: [], issued });
+
+    const first = await initialize(app, token.token);
+    const second = await initialize(app, token.token);
+    expect(second).not.toBe(first);
+
+    const firstGone = await call(app, token.token, first, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+      params: {},
+    });
+    expect(firstGone.status).toBe(404);
+
+    const secondActive = await call(app, token.token, second, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/list",
+      params: {},
+    });
+    expect(secondActive.status).toBe(200);
+  });
+
   it("rejects missing auth, disallowed origins, and unknown sessions", async () => {
     const { app } = await harness({
       tokens: [{ id: "reader", token: "reader-token-long-enough" }],

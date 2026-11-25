@@ -105,10 +105,81 @@ Check the connection:
 opencode mcp list
 ```
 
+## Short-lived issued tokens
+
+The owner can issue a short-lived MCP credential without editing the config or
+restarting the hub. Static `mcp.tokens` entries are still supported, but they
+are no longer required to enable `/mcp`.
+
+Create, list, reveal, and revoke are owner-only:
+
+```http
+POST   /api/v1/mcp/tokens
+GET    /api/v1/mcp/tokens
+POST   /api/v1/mcp/tokens/{id}/reveal
+DELETE /api/v1/mcp/tokens/{id}
+```
+
+A create request accepts:
+
+```json
+{
+  "ttlSeconds": 900,
+  "providers": ["desktop-opencode"],
+  "tools": ["sessions_list", "sessions_get", "sessions_messages"],
+  "sessionRef": "desktop-opencode:ses_a",
+  "allowWrite": false,
+  "maxSessions": 1
+}
+```
+
+The response contains the plaintext once:
+
+```json
+{
+  "data": {
+    "id": "mcp_...",
+    "token": "okt_mcp_...",
+    "expiresAt": 1795608000000,
+    "providers": ["desktop-opencode"],
+    "tools": ["sessions_list", "sessions_get", "sessions_messages"],
+    "allowWrite": false,
+    "maxSessions": 1
+  }
+}
+```
+
+Issued tokens are:
+
+- **short-lived**: 60 seconds to 60 minutes, default 15 minutes;
+- **scoped**: provider, tool, optional `sessionRef`, rate, timeout, and write;
+- **read-only by default**;
+- **one MCP session by default**, so the credential cannot open a second
+  session within its TTL;
+- **checked on every request**, not only at MCP initialize. An expired or
+  revoked token returns `401`, even if the MCP session is still open;
+- **encrypted at rest** with the owner-token-derived key, so the owner can
+  reveal the same token later until it expires;
+- **in-memory only**: a hub restart invalidates issued tokens.
+
+### Issuing from assistant chat
+
+The global **Overview assistant** can create, list, and reveal issued tokens
+when the request comes from the owner. The model never receives old token
+copies: prior turns are redacted before the next prompt, while the token id and
+expiry remain. The owner can ask "show me the token again" and the assistant
+calls `reveal_mcp_token` by id.
+
+The assistant can only offer these tools to an owner-authenticated session.
+Paired browser or device sessions can use the assistant but cannot mint or
+reveal tokens. Sign in with the owner token (not a paired session token) when
+you want to issue one from chat.
+
 ## Hosted `/mcp`
 
 The hub can host the same tool surface over MCP Streamable HTTP. Enable it in
-the hub config and add at least one client token:
+the hub config. Static tokens are optional; you can add one, or issue
+short-lived tokens through the owner API or assistant chat:
 
 ```jsonc
 {

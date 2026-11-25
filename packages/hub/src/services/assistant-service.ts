@@ -35,6 +35,8 @@ import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
 import type { SessionService } from "./session-service";
 import type { SearchService } from "./search-service";
+import { redactMcpTokens, type IssuedMcpToken, type McpTokenService } from "../mcp/tokens";
+import { z } from "zod";
 
 const MAX_TURNS = 200;
 const MAX_THREADS = 40;
@@ -133,6 +135,8 @@ export interface AssistantServiceOptions {
   questions: QuestionService;
   /** Optional: transcript search over the cache, used by project/global. */
   search?: SearchService;
+  /** Short-lived MCP credentials the owner can issue from the global chat. */
+  mcpTokens?: McpTokenService;
   logger: Logger;
   /** A getter so a settings save applies to the next run without a restart. */
   settings: AssistantAgentSettings | (() => AssistantAgentSettings);
@@ -546,6 +550,7 @@ export class AssistantService {
   async postMessage(
     threadId: string,
     input: AssistantMessageInput,
+    options: { owner?: boolean } = {},
   ): Promise<AssistantRunAccepted> {
     this.assertReady();
     await this.expireStaleActions();
@@ -564,7 +569,7 @@ export class AssistantService {
     }
     this.starting.add(threadId);
     try {
-      return await this.startRun(threadId, input, key);
+      return await this.startRun(threadId, input, key, options.owner === true);
     } finally {
       this.starting.delete(threadId);
     }
@@ -574,6 +579,7 @@ export class AssistantService {
     threadId: string,
     input: AssistantMessageInput,
     key?: string,
+    owner = false,
   ): Promise<AssistantRunAccepted> {
     const thread = this.findThread(threadId);
     const locked = thread.turns.find(
@@ -628,7 +634,7 @@ export class AssistantService {
     this.runs.set(run.id, record);
     this.pruneRuns();
 
-    void this.execute(record, current.scope, turn.text);
+    void this.execute(record, current.scope, turn.text, owner);
 
     const accepted: AssistantRunAccepted = {
       run,
@@ -879,6 +885,7 @@ export class AssistantService {
     record: RunRecord,
     scope: AssistantScope,
     question: string,
+    owner: boolean,
   ): Promise<void> {
     const { logger } = this.options;
     const thread = this.findThread(record.run.threadId);
@@ -901,20 +908,26 @@ export class AssistantService {
         }
       | undefined;
     try {
-      built = await this.buildContext(scope, question, sink, model);
+      built = await this.buildContext(scope, question, sink, model, owner);
       const canPropose = this.writesEnabled();
       const history = thread.turns
         .slice(0, -1)
         .slice(-6)
-        .map((turn) => `${turn.role.toUpperCase()}: ${turn.text.slice(0, 400)}`);
+        .map(
+          (turn) =>
+            `${turn.role.toUpperCase()}: ${redactMcpTokens(turn.text).slice(0, 400)}`,
+        );
       const tools = built.tools;
+      const tokenAdmin =
+        owner && scope.kind === "global" && Boolean(this.options.mcpTokens);
       const prompt = renderPrompt(
-        built.text,
+        redactMcpTokens(built.text),
         question,
         history,
         canPropose,
         scope,
         Boolean(tools),
+        tokenAdmin,
       );
       const actionTools: ChatToolDefinition[] = canPropose
         ? [{ type: "function", function: ACTION_TOOL }]
@@ -2299,6 +2312,7 @@ export class AssistantService {
     question: string,
     steps: StepSink,
     model: string,
+    owner: boolean,
   ): Promise<{
     text: string;
     context: AssistantContext;
@@ -2310,7 +2324,9 @@ export class AssistantService {
     if (scope.kind === "project") {
       return this.buildProjectContext(scope.project, question, steps);
     }
-    if (scope.kind === "global") return this.buildGlobalContext(question, steps);
+    if (scope.kind === "global") {
+      return this.buildGlobalContext(question, steps, owner);
+    }
 
     const sessionRef = scope.sessionRef;
     const { sessions, attention, questions } = this.options;
@@ -2481,6 +2497,7 @@ export class AssistantService {
   private async buildGlobalContext(
     question: string,
     steps: StepSink,
+    owner: boolean,
   ): Promise<{
     text: string;
     context: AssistantContext;
@@ -2568,7 +2585,189 @@ export class AssistantService {
           this.now(),
       },
       targets,
-      tools: this.crossSessionTools(page.data),
+      tools: owner && this.options.mcpTokens
+        ? this.withTokenTools(this.crossSessionTools(page.data))
+        : this.crossSessionTools(page.data),
+    };
+  }
+
+  /**
+   * Global-only token administration tools. The owner can create a short-lived
+   * read-only credential and reveal it again before it expires. The model sees
+   * the secret only in the turn where it creates or reveals it; history is
+   * redacted before the next prompt.
+   */
+  private withTokenTools(base: AssistantTools): AssistantTools {
+    const tokens = this.options.mcpTokens;
+    if (!tokens) return base;
+    const definitions: ChatToolDefinition[] = [
+      ...base.definitions,
+      {
+        type: "function",
+        function: {
+          name: "create_mcp_token",
+          description:
+            "Create a short-lived, read-only MCP token for an external agent. Use only when the owner explicitly asks. Provide the narrowest provider, tools, sessionRef, and TTL that satisfy the request.",
+          parameters: {
+            type: "object",
+            properties: {
+              ttlSeconds: {
+                type: "integer",
+                minimum: 60,
+                maximum: 3600,
+                description: "Lifetime in seconds; default 900 (15 minutes).",
+              },
+              providers: {
+                type: "array",
+                items: { type: "string" },
+                description: "Provider IDs the token may access.",
+              },
+              tools: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "MCP tool allowlist; defaults to the read-only session tools.",
+              },
+              sessionRef: {
+                type: "string",
+                description:
+                  "Optional target session; a bound token may only read or act on that session.",
+              },
+              maxSessions: {
+                type: "integer",
+                minimum: 1,
+                maximum: 5,
+                description: "MCP sessions this token may open; default 1.",
+              },
+            },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "list_mcp_tokens",
+          description:
+            "List active short-lived MCP tokens with their id, scope, and expiry. Never returns the secret.",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "reveal_mcp_token",
+          description:
+            "Reveal an active short-lived MCP token by id. Use only when the owner explicitly asks to see it again.",
+          parameters: {
+            type: "object",
+            properties: { id: { type: "string" } },
+            required: ["id"],
+          },
+        },
+      },
+    ];
+    return {
+      definitions,
+      byName: (name) => definitions.some((entry) => entry.function.name === name),
+      run: async (name, argumentsJson) => {
+        if (name === "create_mcp_token") {
+          let args: unknown;
+          try {
+            args = JSON.parse(argumentsJson || "{}");
+          } catch {
+            return { output: "Invalid token arguments.", label: "Create MCP token" };
+          }
+          const parsed = zCreateMcpTokenTool.safeParse(args);
+          if (!parsed.success) {
+            return {
+              output: `Invalid token scope: ${parsed.error.issues
+                .map((issue) => issue.message)
+                .join("; ")}`,
+              label: "Create MCP token",
+            };
+          }
+          let providers = parsed.data.providers;
+          if (
+            parsed.data.sessionRef &&
+            (!providers || providers.length === 0)
+          ) {
+            try {
+              const session = await this.options.sessions.get(
+                parsed.data.sessionRef,
+              );
+              providers = [session.providerID];
+            } catch {
+              // The token service will still issue the token; the caller can
+              // correct the provider list.
+            }
+          }
+          try {
+            const issued = tokens.issue({
+              ttlSeconds: parsed.data.ttlSeconds,
+              providers,
+              tools:
+                parsed.data.tools && parsed.data.tools.length > 0
+                  ? parsed.data.tools
+                  : ASSISTANT_TOKEN_TOOLS,
+              sessionRef: parsed.data.sessionRef,
+              maxSessions: parsed.data.maxSessions,
+              allowWrite: false,
+              createdBy: "assistant",
+            });
+            return {
+              output: renderIssuedToken(issued),
+              label: "Created MCP token",
+              detail: `${issued.id} · expires ${new Date(issued.expiresAt).toISOString()}`,
+              metrics: {
+                expiresAt: issued.expiresAt,
+                providers: issued.providers?.length ?? 0,
+                tools: issued.tools?.length ?? 0,
+              },
+            };
+          } catch (error) {
+            return {
+              output: error instanceof Error ? error.message : String(error),
+              label: "Create MCP token",
+            };
+          }
+        }
+        if (name === "list_mcp_tokens") {
+          const data = tokens.list();
+          return {
+            output: JSON.stringify({ data }, null, 2),
+            label: "Listed MCP tokens",
+            detail: `${data.length} active`,
+            metrics: { tokens: data.length },
+          };
+        }
+        if (name === "reveal_mcp_token") {
+          let args: unknown;
+          try {
+            args = JSON.parse(argumentsJson || "{}");
+          } catch {
+            return { output: "A token id is required.", label: "Reveal MCP token" };
+          }
+          const parsed = zRevealMcpTokenTool.safeParse(args);
+          if (!parsed.success) {
+            return { output: "A token id is required.", label: "Reveal MCP token" };
+          }
+          const issued = tokens.reveal(parsed.data.id);
+          if (!issued) {
+            return {
+              output:
+                "MCP token not found or expired. Create a new one if the owner still needs access.",
+              label: "Reveal MCP token",
+            };
+          }
+          return {
+            output: renderIssuedToken(issued),
+            label: "Revealed MCP token",
+            detail: issued.id,
+            metrics: { expiresAt: issued.expiresAt },
+          };
+        }
+        return base.run(name, argumentsJson);
+      },
     };
   }
 
@@ -3161,6 +3360,48 @@ ACTIONS
 - For send, put the exact message in text. For answer, use the question and choice ids from PENDING QUESTION. For interrupt, no payload.
 - If the user is only asking a question, do not call the tool.`;
 
+const TOKEN_RULES = `
+TOKENS
+- You can create, list, and reveal short-lived MCP tokens only when the owner explicitly asks.
+- Tokens are read-only and provider/tool scoped. Never invent a broader scope than the user asked for.
+- Always print the token id, expiry, and scope with the token, and put the token in a fenced code block.
+- Never send a token to another session or include it in a summary.
+- If the user asks to see a token again, call list_mcp_tokens when the id is unknown, then reveal_mcp_token. The token cannot be recalled from your memory because old copies are redacted.
+- If a token is expired, say so and offer a new one.`;
+
+const ASSISTANT_TOKEN_TOOLS = [
+  "providers_list",
+  "sessions_list",
+  "sessions_get",
+  "sessions_messages",
+];
+
+const zCreateMcpTokenTool = z.object({
+  ttlSeconds: z.number().int().min(60).max(3_600).optional(),
+  providers: z.array(z.string().min(1)).max(20).optional(),
+  tools: z.array(z.string().min(1)).max(50).optional(),
+  sessionRef: z.string().min(1).optional(),
+  maxSessions: z.number().int().min(1).max(5).optional(),
+});
+
+const zRevealMcpTokenTool = z.object({ id: z.string().min(1) });
+
+function renderIssuedToken(issued: IssuedMcpToken): string {
+  return [
+    `id: ${issued.id}`,
+    `MCP token (${issued.allowWrite ? "write" : "read-only"}).`,
+    `expires: ${new Date(issued.expiresAt).toISOString()}`,
+    issued.providers?.length
+      ? `providers: ${issued.providers.join(", ")}`
+      : "providers: all",
+    issued.tools?.length ? `tools: ${issued.tools.join(", ")}` : "tools: default",
+    issued.sessionRef ? `session: ${issued.sessionRef}` : undefined,
+    `token: ${issued.token}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function renderPrompt(
   context: string,
   question: string,
@@ -3168,6 +3409,7 @@ function renderPrompt(
   canWrite: boolean,
   scope: AssistantScope,
   tools = false,
+  tokenAdmin = false,
 ): AssistantPrompt {
   const exchange = history.length
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
@@ -3175,6 +3417,9 @@ function renderPrompt(
   let system = SYSTEM_PROMPT;
   if (tools) {
     system += `\n${scope.kind === "session" ? TOOL_RULES : CROSS_TOOL_RULES}`;
+  }
+  if (tokenAdmin) {
+    system += `\n${TOKEN_RULES}`;
   }
   if (canWrite) {
     system += `\n${scope.kind === "session" ? ACTION_RULES : TARGET_ACTION_RULES}`;

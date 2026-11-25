@@ -76,13 +76,6 @@ export const zMcpConfig = z
       .default({ enabled: true }),
   })
   .superRefine((value, ctx) => {
-    if (value.enabled && value.tokens.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "mcp.enabled requires at least one token",
-        path: ["tokens"],
-      });
-    }
     const ids = new Set<string>();
     const secrets = new Set<string>();
     value.tokens.forEach((token, index) => {

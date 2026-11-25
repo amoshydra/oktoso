@@ -214,15 +214,15 @@ describe("loadConfig", () => {
     }
   });
 
-  it("rejects MCP enabled without tokens", async () => {
+  it("allows MCP enabled without static tokens for issued tokens", async () => {
     const { root, filePath } = await writeConfig({
       token: "this-is-a-long-dev-token",
       mcp: { enabled: true },
     });
     try {
-      await expect(loadConfig(filePath, {})).rejects.toThrow(
-        /mcp\.enabled requires at least one token/,
-      );
+      const config = await loadConfig(filePath, {});
+      expect(config.mcp.enabled).toBe(true);
+      expect(config.mcp.tokens).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

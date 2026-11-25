@@ -57,8 +57,10 @@ import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerAutomationRoutes } from "./http/routes/automation";
 import { registerAssistantRoutes } from "./http/routes/assistant";
+import { registerMcpTokenRoutes } from "./http/routes/mcp-tokens";
 import { registerMcpRoutes } from "./mcp/http";
 import { createServiceMcpApi } from "./mcp/api";
+import type { McpTokenService } from "./mcp/tokens";
 import { SessionActions } from "./services/session-actions";
 
 export interface AppDependencies {
@@ -86,6 +88,8 @@ export interface AppDependencies {
   actions?: SessionActions;
   automation?: AutomationService;
   assistant?: AssistantService;
+  /** Short-lived MCP credentials; absent when MCP is disabled. */
+  mcpTokens?: McpTokenService;
   logger: Logger;
   startedAt?: number;
   webRoot?: string;
@@ -176,6 +180,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   if (deps.assistant) {
     registerAssistantRoutes(app, deps.assistant);
   }
+  if (deps.mcpTokens) {
+    registerMcpTokenRoutes(app, deps.mcpTokens);
+  }
   registerEventRoutes(app, deps.eventBus);
   registerMcpRoutes(app, {
     config: deps.config,
@@ -187,6 +194,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
       actions,
       automation: deps.automation,
     }),
+    ...(deps.mcpTokens ? { tokens: deps.mcpTokens } : {}),
     logger: deps.logger,
     version: VERSION,
     events: deps.eventBus,

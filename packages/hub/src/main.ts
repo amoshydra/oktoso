@@ -56,6 +56,7 @@ import { DraftService } from "./services/draft-service";
 import { AttachmentStore } from "./services/attachment-store";
 import { AssistantSettingsService } from "./services/assistant-settings";
 import { createSecretBox } from "./lib/secret-box";
+import { McpTokenService } from "./mcp/tokens";
 import { ReplyService } from "./services/reply-service";
 import { ReplyFeedbackStore } from "./services/reply-feedback-store";
 import { TranscriptionService } from "./services/transcription-service";
@@ -669,11 +670,12 @@ async function main(): Promise<void> {
       eventBus,
       logger,
     );
-    const assistantSettings = new AssistantSettingsService(
-      store,
-      createSecretBox(config.token),
-    );
+    const secretBox = createSecretBox(config.token);
+    const assistantSettings = new AssistantSettingsService(store, secretBox);
     await assistantSettings.migrate();
+    const mcpTokens = config.mcp.enabled
+      ? new McpTokenService({ secretBox })
+      : undefined;
     // First boot with the new settings store: show the config-file endpoint in
     // Settings instead of an empty form. Later saves are runtime-owned.
     await assistantSettings.seedAgent({
@@ -708,6 +710,7 @@ async function main(): Promise<void> {
       attention,
       questions,
       search,
+      ...(mcpTokens ? { mcpTokens } : {}),
       logger,
       audit: (entry) =>
         appendFile(assistantAudit, `${JSON.stringify(entry)}\n`, {
@@ -827,6 +830,7 @@ async function main(): Promise<void> {
       actions,
       automation,
       assistant,
+      ...(mcpTokens ? { mcpTokens } : {}),
       logger,
       startedAt,
       webRoot: configuredWebRoot,
