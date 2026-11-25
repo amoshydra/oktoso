@@ -846,7 +846,8 @@ The `/apps/even-g2/` webview is the phone companion, not a second desktop hub.
 - Unpaired: one **Connect this phone** card. A pairing link or code is primary; a hub token is a disclosure.
 - Connected: the pairing form collapses to `Connected · <host>` with **Pair another**. The phone keyboard is the fallback surface.
 - The keyboard stays disabled with `Open a session on the glasses first` until a session is attached, and it is named for screen readers.
-- The symbol guide is user-facing; glasses preview, bridge statistics, and the reply audit sit under **Developer tools**. Every disclosure row is a 44px target.
+- A **Glasses control** panel below the phone keyboard shows the live screen and Up / Down / Select / Back buttons as a fallback when the ring isn't available; the buttons are 44px targets.
+- The symbol guide is user-facing; bridge diagnostics and the reply audit sit under **Developer tools**. Every disclosure row is a 44px target.
 - The page keeps browser zoom. Control borders meet 3:1 and body text meets 4.5:1 against the dark surface.
 
 ## 17. VR adaptation

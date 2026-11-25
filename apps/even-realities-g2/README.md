@@ -37,9 +37,12 @@ longer replies, and phone-side question forms.
 - The phone keyboard is disabled with `Open a session on the glasses first`
   when no session is attached. It does not leave an empty enabled composer,
   and it is named for screen readers.
-- The symbol guide stays user-facing. Glasses preview, bridge statistics, and
-  the reply audit live under a collapsed **Developer tools** disclosure. Every
-  disclosure row is a 44px target.
+- A **Glasses control** panel below the phone keyboard shows the live screen
+  and Up / Down / Select / Back buttons, so the phone can stand in when the
+  ring isn't available. The buttons are 44px targets.
+- The symbol guide stays user-facing. Bridge diagnostics and the reply audit
+  live under a collapsed **Developer tools** disclosure. Every disclosure row
+  is a 44px target.
 - The bridge keeps browser zoom and uses control borders at 3:1 and text at
   4.5:1 or better against the dark surface.
 

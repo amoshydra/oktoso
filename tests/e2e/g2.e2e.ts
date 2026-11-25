@@ -275,6 +275,39 @@ async function openAncientSession(title: RegExp): Promise<void> {
 }
 
 describe("G2 hosted app", () => {
+  it("keeps the glasses control below the phone keyboard", async () => {
+    const current = requirePage();
+    const control = current.locator("#glasses-control");
+    await expect(control.isVisible()).resolves.toBe(true);
+    const layout = await current.evaluate(() => {
+      const composer = document.querySelector("#phone-composer");
+      const panel = document.querySelector("#glasses-control");
+      const developer = document.querySelector("#developer-panel");
+      const preview = document.querySelector("#glasses-preview");
+      const buttons = [
+        ...document.querySelectorAll(
+          "#glasses-control .preview-controls button",
+        ),
+      ];
+      return {
+        belowComposer: Boolean(
+          composer &&
+            panel &&
+            composer.compareDocumentPosition(panel) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+        previewInDeveloper: Boolean(
+          developer && preview && developer.contains(preview),
+        ),
+        heights: buttons.map((button) => button.getBoundingClientRect().height),
+      };
+    });
+    expect(layout.belowComposer).toBe(true);
+    expect(layout.previewInDeveloper).toBe(false);
+    expect(layout.heights).toHaveLength(4);
+    expect(layout.heights.every((height) => height >= 44)).toBe(true);
+  });
+
   it("boots to Home and navigates through the empty Inbox", async () => {
     const home = await preview();
     expect(home).toContain("Inbox");

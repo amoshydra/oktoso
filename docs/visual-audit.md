@@ -1912,9 +1912,12 @@ competing history buttons.
 - Phone keyboard: disabled with `Open a session on the glasses first` until a
   session exists; no enabled empty composer. The textarea is named `Reply to
   the current session` for screen readers.
-- Developer tools (glasses preview, bridge statistics, reply audit) are
-  collapsed. The symbol guide stays user-facing. Every disclosure row is a
-  44px target.
+- A **Glasses control** panel below the phone keyboard shows the live screen
+  and Up / Down / Select / Back buttons, with a hint that it is for when the
+  ring isn't available. The buttons are 44px targets and the preview caps at
+  220px.
+- Developer tools (bridge diagnostics and the reply audit) are collapsed. The
+  symbol guide stays user-facing. Every disclosure row is a 44px target.
 - Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark
   palette, Inter/IBM Plex Mono, 8px controls and 12px cards.
 - Accessibility: browser zoom is enabled again. Controls use the strong border
@@ -1924,7 +1927,7 @@ competing history buttons.
 - Verified at 390 and 320px, unpaired and connected: no horizontal overflow,
   no console errors after the expected unpaired `401`; the connected state
   collapses the pairing form to the host strip and keeps the keyboard disabled
-  until a session. The G2 e2e passes 10 tests.
+  until a session. The G2 e2e passes 11 tests.
 
 ## Media in messages (2026-11-22)
 

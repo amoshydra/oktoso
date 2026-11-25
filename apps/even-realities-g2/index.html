@@ -229,6 +229,9 @@
       }
       .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2); }
       .preview-controls button { min-height: 36px; font-size: 12px; }
+      .glasses-control .glasses-preview { max-height: 220px; }
+      .glasses-control .preview-controls { margin-top: var(--space-3); }
+      .glasses-control .preview-controls button { min-height: 44px; font-size: 14px; }
       .debug { max-height: 320px; margin: var(--space-1) 0 0; overflow: auto; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
 
       @media (max-width: 360px) {
@@ -336,6 +339,24 @@
       <div id="phone-status" class="status"></div>
     </section>
 
+    <section class="panel glasses-control" id="glasses-control">
+      <div class="panel-head">
+        <div>
+          <h2>Glasses control</h2>
+          <p class="hint">Use these when you don't have your ring.</p>
+        </div>
+      </div>
+      <pre id="glasses-preview" class="glasses-preview" aria-label="Glasses screen preview">(waiting for a screen)</pre>
+      <div id="preview-selection" class="hint" style="margin-top: var(--space-2)">No list selection</div>
+      <div class="preview-controls" role="group" aria-label="Glasses controls">
+        <button id="sim-up" type="button">↑ Up</button>
+        <button id="sim-down" type="button">↓ Down</button>
+        <button id="sim-click" type="button">Select</button>
+        <button id="sim-double" type="button">Back</button>
+      </div>
+      <p class="hint" style="margin-top: var(--space-2)">Up and Down move the list; Select opens; Back returns.</p>
+    </section>
+
     <details class="panel">
       <summary>Symbol guide</summary>
       <p class="hint" style="margin-top: var(--space-2)">The same guide is available on the glasses from Home → Symbols.</p>
@@ -357,16 +378,7 @@
 
     <details class="panel developer" id="developer-panel">
       <summary>Developer tools</summary>
-      <p class="hint" style="margin-top: var(--space-1)">The exact text sent to the glasses, bridge diagnostics, and the <a href="./audit.html">reply audit</a>.</p>
-      <h3>Glasses preview</h3>
-      <pre id="glasses-preview" class="glasses-preview">(waiting for a screen)</pre>
-      <div id="preview-selection" class="hint" style="margin-top: var(--space-2)">No list selection</div>
-      <div class="preview-controls">
-        <button id="sim-up" type="button">↑ Up</button>
-        <button id="sim-click" type="button">Select</button>
-        <button id="sim-double" type="button">Back</button>
-        <button id="sim-down" type="button">↓ Down</button>
-      </div>
+      <p class="hint" style="margin-top: var(--space-1)">Bridge diagnostics and the <a href="./audit.html">reply audit</a>.</p>
       <h3>Glasses bridge</h3>
       <p id="bridge-status" class="hint">Waiting for Even Hub…</p>
       <pre id="debug" class="debug"></pre>
