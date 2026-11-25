@@ -390,12 +390,23 @@ describe("accessible names", () => {
     await openSession("Refactor session index");
 
     const panel = current.locator(".chat-panel");
+    await current.locator(".chat-message").first().waitFor({ timeout: 5_000 });
+    await current.waitForFunction(
+      () => {
+        const element = document.querySelector(".chat-panel");
+        return Boolean(element && element.scrollHeight > element.clientHeight + 8);
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
     await panel.evaluate((element) => {
       element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
     });
-    await current.waitForTimeout(400);
 
     const jump = current.locator(".chat-jump-float");
+    await expect
+      .poll(() => jump.getAttribute("data-visible"), { timeout: 5_000 })
+      .toBe("true");
     await expect(jump.getAttribute("aria-hidden")).resolves.toBeNull();
     // The visible text stays the accessible name.
     await expect(jump.evaluate((element) => element.textContent?.trim())).resolves.toMatch(
@@ -405,7 +416,9 @@ describe("accessible names", () => {
     await panel.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await current.waitForTimeout(400);
+    await expect
+      .poll(() => jump.getAttribute("data-visible"), { timeout: 5_000 })
+      .toBe("false");
     await expect(jump.getAttribute("aria-hidden")).resolves.toBe("true");
     await expect(jump.getAttribute("tabindex")).resolves.toBe("-1");
   });

@@ -409,6 +409,7 @@ const phoneBatchSend = byId<HTMLButtonElement>("phone-batch-send");
 const phoneQuestionType = byId<HTMLButtonElement>("phone-question-type");
 const phoneQuestionStatus = byId<HTMLDivElement>("phone-question-status");
 const connection = byId<HTMLSpanElement>("connection");
+const lede = byId<HTMLParagraphElement>("bridge-lede");
 const connectionStatus = byId<HTMLDivElement>("connection-status");
 const pairingCodeInput = byId<HTMLInputElement>("pairing-code");
 const pairButton = byId<HTMLButtonElement>("pair");
@@ -430,13 +431,12 @@ function log(message: string): void {
 }
 
 function setConnection(label: string, error = false): void {
+  const connected = label === "Connected" || label.startsWith("Connected ");
   connection.textContent = label;
-  connection.dataset.state =
-    label === "Connected" || label.startsWith("Connected ")
-      ? "connected"
-      : error
-        ? "error"
-        : "offline";
+  connection.dataset.state = connected ? "connected" : error ? "error" : "offline";
+  lede.textContent = connected
+    ? "This phone is connected. Use it for longer replies and the questions the glasses hand off."
+    : "Connect this phone to your hub. Use it for setup, longer replies, and questions the glasses hand off.";
   connectionStatus.textContent = error ? label : "";
   connectionStatus.className = error ? "status error" : "status";
   if (label === "Connected") {
@@ -457,7 +457,7 @@ function setPairingCollapsed(collapsed: boolean): void {
   pairingSummary.hidden = !collapsed;
   pairingToggle.hidden = !collapsed;
   pairingPanel.classList.toggle("connected-panel", collapsed);
-  pairingSummary.textContent = "Connected";
+  pairingSummary.textContent = `Connected · ${hubHostLabel()}`;
   pairingSummary.title = hubBaseURL() || "hub";
 }
 
@@ -1246,6 +1246,16 @@ const buildHubURL = (import.meta.env.VITE_HUB_URL ?? "").replace(/\/+$/, "");
 function hubBaseURL(): string {
   if (buildHubURL) return buildHubURL;
   return window.location.origin === "null" ? "" : window.location.origin;
+}
+
+function hubHostLabel(): string {
+  const base = hubBaseURL();
+  if (!base) return "hub";
+  try {
+    return new URL(base).host || "hub";
+  } catch {
+    return "hub";
+  }
 }
 
 async function refreshStoredSession(

@@ -758,6 +758,32 @@ describe("chat undo and redo", () => {
   });
 });
 
+describe("composer layout", () => {
+  it("keeps every selection visible at 1440", async () => {
+    await page!.setViewportSize({ width: 1440, height: 900 });
+    await openSession("Fix auth race in gateway");
+    const reasoning = page!.getByLabel("Reasoning", { exact: true });
+    await reasoning.waitFor({ state: "visible", timeout: 5_000 });
+    await page!.getByRole("button", { name: "Undo last turn" }).waitFor({
+      state: "visible",
+      timeout: 5_000,
+    });
+    const options = page!.locator(".composer-options");
+    const boxes = await options.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [...element.querySelectorAll("select")].map((select) => {
+        const box = select.getBoundingClientRect();
+        return box.left >= bounds.left - 1 && box.right <= bounds.right + 1;
+      });
+    });
+    expect(boxes.length).toBeGreaterThan(0);
+    expect(boxes.every(Boolean)).toBe(true);
+    expect(
+      await options.evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBe(0);
+  });
+});
+
 describe("session search", () => {
   it("finds a provider archive session that is not in the recent list", async () => {
     if (!page) throw new Error("The E2E page is not ready");

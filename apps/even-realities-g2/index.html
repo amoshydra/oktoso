@@ -2,16 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Oktoso for Even G2</title>
     <style>
       :root {
         color-scheme: dark;
         --ink: #f2f5f8;
-        --muted: #98a2b3;
-        --faint: #6f7a8a;
+        --muted: #aab4c3;
+        --faint: #8b95a5;
         --line: #2b3442;
-        --line-strong: #3f4b5c;
+        --line-strong: #5f6878;
         --panel: #121820;
         --surface-2: #1a2431;
         --surface-3: #232f3f;
@@ -64,12 +64,12 @@
       .brand svg { display: block; }
       .bridge-identity { min-width: 0; flex: 1 1 auto; }
       .bridge-title-row { display: flex; align-items: center; gap: var(--space-2); }
-      .bridge-subtitle { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+      .bridge-subtitle { margin: var(--space-1) 0 0; color: var(--muted); font-size: 12px; }
       .version { flex: none; }
       .connection {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--space-2);
         min-height: 28px;
         margin-left: auto;
         padding: 0 var(--space-2);
@@ -111,9 +111,14 @@
       .panel-head .hint { margin-top: var(--space-1); }
       .panel-meta { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
       .connected-panel { padding: var(--space-3) var(--space-4); }
-      .connected-panel .panel-head { align-items: center; }
+      .connected-panel .panel-head { align-items: center; flex-wrap: wrap; }
       .connected-panel .panel-head > :first-child { display: none; }
-      .connected-panel #pairing-summary { margin-left: 0; }
+      .connected-panel #pairing-summary {
+        min-width: 0;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .panel .hint { color: var(--muted); font-size: 12px; }
       .hint.strong { color: var(--faint); }
       .hub-origin { margin-top: var(--space-1); }
@@ -137,8 +142,8 @@
         width: 100%;
         min-height: 44px;
         margin-top: var(--space-1);
-        padding: 10px var(--space-3);
-        border: 1px solid var(--line);
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--line-strong);
         border-radius: var(--radius-sm);
         background: #0d131b;
         color: var(--ink);
@@ -147,7 +152,7 @@
       }
       input[type="checkbox"] { width: auto; min-height: 0; margin: 0 6px 0 0; }
       fieldset { margin-top: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); }
-      fieldset label { margin-top: 6px; color: var(--ink); }
+      fieldset label { margin-top: var(--space-1); color: var(--ink); }
       textarea { min-height: 88px; resize: vertical; }
       input:disabled, textarea:disabled { opacity: 0.55; cursor: not-allowed; }
       input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
@@ -157,12 +162,12 @@
       button {
         min-height: 44px;
         padding: 8px 14px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--line-strong);
         border-radius: var(--radius-sm);
         background: var(--surface-2);
         color: var(--ink);
         font: inherit;
-        font-size: 13px;
+        font-size: 12px;
         cursor: pointer;
       }
       button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
@@ -176,7 +181,12 @@
       [hidden] { display: none !important; }
 
       details { margin-top: var(--space-3); }
-      details.panel summary { cursor: pointer; font-weight: 600; }
+      details.panel summary {
+        min-height: 44px;
+        padding: var(--space-3) 0;
+        cursor: pointer;
+        font-weight: 600;
+      }
       details.panel summary::marker { color: var(--muted); }
       .token-fallback { margin-top: var(--space-4); border: 0; background: transparent; padding: 0; }
       .token-fallback summary { min-height: 44px; padding: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
@@ -191,7 +201,7 @@
       .question-choices button:only-child { width: 100%; }
       .question-choices button[aria-pressed="true"] { border-color: var(--accent); background: #25314a; }
       .scan-video { width: 100%; margin-top: var(--space-3); border-radius: var(--radius-sm); background: #000; aspect-ratio: 4 / 3; object-fit: cover; }
-      .symbol-row { display: grid; grid-template-columns: 2.5em 1fr; gap: var(--space-2); align-items: baseline; padding: 3px 0; font-size: 13px; }
+      .symbol-row { display: grid; grid-template-columns: 2.5em 1fr; gap: var(--space-2); align-items: baseline; padding: var(--space-1) 0; font-size: 13px; }
       .symbol-row .glyph { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 16px; text-align: center; }
       .symbol-row .meaning { color: var(--ink); }
       .batch-question { padding-top: var(--space-3); border-top: 1px solid var(--line); margin-top: var(--space-3); }
@@ -217,7 +227,7 @@
         font-size: 11px;
         line-height: 1.5;
       }
-      .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: var(--space-2); }
+      .preview-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2); }
       .preview-controls button { min-height: 36px; font-size: 12px; }
       .debug { max-height: 320px; margin: var(--space-1) 0 0; overflow: auto; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
 
@@ -248,7 +258,7 @@
       <span id="connection" class="connection" data-state="offline">Not connected</span>
     </header>
 
-    <p class="lede">Connect this phone to your hub. Use it for setup, longer replies, and questions the glasses hand off.</p>
+    <p id="bridge-lede" class="lede">Connect this phone to your hub. Use it for setup, longer replies, and questions the glasses hand off.</p>
 
     <section class="panel" id="pairing-panel">
       <div class="panel-head">
@@ -318,7 +328,7 @@
         </div>
         <strong id="phone-session" class="panel-meta">No session open</strong>
       </div>
-      <textarea id="phone-text" placeholder="Open a session on the glasses first"></textarea>
+      <textarea id="phone-text" aria-label="Reply to the current session" placeholder="Open a session on the glasses first"></textarea>
       <div class="actions">
         <button id="phone-send" class="primary" type="button" disabled>Send to session</button>
         <button id="phone-refresh" type="button">Refresh data</button>

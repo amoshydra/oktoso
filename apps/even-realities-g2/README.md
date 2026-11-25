@@ -32,12 +32,16 @@ longer replies, and phone-side question forms.
   title. The app version is a quiet pill beside it.
 - Unpaired: a single **Connect this phone** card. The pairing link or code is
   the primary path; a hub token is a disclosure underneath.
-- Connected: the pairing form collapses to a compact `Connected · hub` row with
-  **Pair another**. The phone keyboard becomes the main fallback.
+- Connected: the pairing form collapses to a compact `Connected · <host>` row
+  with **Pair another**. The phone keyboard becomes the main fallback.
 - The phone keyboard is disabled with `Open a session on the glasses first`
-  when no session is attached. It does not leave an empty enabled composer.
+  when no session is attached. It does not leave an empty enabled composer,
+  and it is named for screen readers.
 - The symbol guide stays user-facing. Glasses preview, bridge statistics, and
-  the reply audit live under a collapsed **Developer tools** disclosure.
+  the reply audit live under a collapsed **Developer tools** disclosure. Every
+  disclosure row is a 44px target.
+- The bridge keeps browser zoom and uses control borders at 3:1 and text at
+  4.5:1 or better against the dark surface.
 
 ## What it does
 

@@ -2956,8 +2956,7 @@
 }
 
 .composer-hint {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
   margin-left: auto;
   overflow: hidden;
   color: var(--faint);
@@ -2974,16 +2973,11 @@
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-3);
   padding: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.composer-options::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .composer-option {
@@ -5592,10 +5586,6 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 
   .composer-suggest-dismiss {
     min-width: 44px;
-  }
-
-  .composer-options::-webkit-scrollbar {
-    display: none;
   }
 
   .composer-option {

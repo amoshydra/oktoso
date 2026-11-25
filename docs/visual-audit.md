@@ -254,7 +254,7 @@ The composer now exposes the provider’s session selection instead of leaving m
 - OpenCode uses its dedicated `/api/session/{id}/agent` and `/api/session/{id}/model` routes. Model variants are sent as `Model.Ref.variant`.
 - Open WebUI updates the chat’s `models` array; it has no agent or variant selector.
 - The picker is disabled while the agent is running. A failed change restores the previous values and shows an inline error.
-- The picker lives in the composer bar. Field labels are visible at desktop widths and hidden at 1100px and below; the mobile selects use the 12px compact control role with zero horizontal padding, while text entry stays at 16px to avoid browser zoom. Send collapses to a 32px icon button below 760px so Agent, Model, Reasoning, and Send share one row at 390px and 320px without horizontal overflow.
+- The picker lives in the composer bar. Field labels are visible at desktop widths and hidden at 1100px and below; the mobile selects use the 12px compact control role with zero horizontal padding, while text entry stays at 16px to avoid browser zoom. Send collapses to a 32px icon button below 760px so Agent, Model, Reasoning, and Send share one row at 390px and 320px without horizontal overflow. When desktop Undo and the hint leave too little width, the options group wraps internally instead of clipping the last select behind a hidden scroller.
 
 Verified at 1440, 1024, 390, and 320px in dark and light themes. Changing reasoning from `max` to `high` updated the session to `commandcode/claude-sonnet#high`; changing the agent to `plan` updated the document header. Open WebUI showed a model-only picker. The contract now includes `ModelVariant` and `SessionSelectionInput`; the OpenAPI document is regenerated.
 
@@ -268,7 +268,7 @@ The remaining Phase 0 page chrome was removed from the product screens so the to
 - The rail and mobile bottom navigation use the shared 16/18px line-icon set instead of lettermarks. Back, theme, close, branch, and disclosure controls use the same set instead of text glyphs. The attention badge is 10px/700, not 9px/800.
 - Desktop controls are 32px high (`btn small`, chips, icon buttons); quiet message actions remain 28px. Mobile controls keep the 44px target, except the 32px composer send that keeps its expanded hit area.
 - The Settings assistant cards pin their footer actions to the card bottom, so Save/Load models align across the two-column row.
-- The wide composer keeps its agent/model/reasoning picker on one row. The composer hint is nowrap with ellipsis instead of wrapping the action bar.
+- The wide composer keeps every selection readable: Agent/Model/Reasoning wrap inside the options group when the Undo action and hint would otherwise clip them. The hint keeps its full width; its idle copy is the short `Ctrl/⌘ Enter`.
 
 Verification: 1440, 1024, 390, and 320px in dark and light. No horizontal overflow; the console is clean apart from the existing `apple-mobile-web-app-capable` deprecation warning.
 
@@ -1791,18 +1791,25 @@ competing history buttons.
 - Unpaired: one **Connect this phone** card. The pairing link/code is primary;
   the hub-token path is a disclosure below it. The pairing action is the only
   full-width primary button on the surface.
-- Connected: the pairing card collapses to a compact `Connected` + **Pair
-  another** strip instead of squeezing the heading beside a long hub URL.
+- Connected: the pairing card collapses to a compact `Connected · <host>` strip
+  with **Pair another** instead of squeezing the heading beside a long hub URL.
+  The host truncates with an ellipsis and the full origin stays in the title.
 - Phone keyboard: disabled with `Open a session on the glasses first` until a
-  session exists; no enabled empty composer.
+  session exists; no enabled empty composer. The textarea is named `Reply to
+  the current session` for screen readers.
 - Developer tools (glasses preview, bridge statistics, reply audit) are
-  collapsed. The symbol guide stays user-facing.
+  collapsed. The symbol guide stays user-facing. Every disclosure row is a
+  44px target.
 - Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark
-  palette, Inter/IBM Plex Mono, 8px controls and 12px cards. No new visual
-  token.
+  palette, Inter/IBM Plex Mono, 8px controls and 12px cards.
+- Accessibility: browser zoom is enabled again. Controls use the strong border
+  `#5f6878` (3.18:1 against the panel), faint notes use `#8b95a5` (5.9:1), and
+  muted copy uses `#aab4c3` (8.5:1), meeting the 3:1 control and 4.5:1 text
+  floors.
 - Verified at 390 and 320px, unpaired and connected: no horizontal overflow,
   no console errors after the expected unpaired `401`; the connected state
-  collapses the pairing form and keeps the keyboard disabled until a session.
+  collapses the pairing form to the host strip and keeps the keyboard disabled
+  until a session. The G2 e2e passes 10 tests.
 
 ## Media in messages (2026-11-22)
 

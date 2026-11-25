@@ -4398,7 +4398,7 @@ function draftStatusLabel(status: DraftStatus): string {
   if (status === "saving") return "Saving draft…";
   if (status === "saved") return "Draft saved";
   if (status === "error") return "Draft not saved";
-  return "Ctrl/⌘ Enter to send";
+  return "Ctrl/⌘ Enter";
 }
 
 function promptFailure(reason: unknown): string {
