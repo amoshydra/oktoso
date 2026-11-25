@@ -111,6 +111,10 @@ The owner can issue a short-lived MCP credential without editing the config or
 restarting the hub. Static `mcp.tokens` entries are still supported, but they
 are no longer required to enable `/mcp`.
 
+Paired sessions are separate from MCP tokens. They carry a device profile:
+`phone` is the full client without admin, and `g2` is the restricted glasses
+profile. Neither can issue or reveal MCP tokens; that remains owner-only.
+
 Create, list, reveal, and revoke are owner-only:
 
 ```http

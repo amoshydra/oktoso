@@ -1766,12 +1766,13 @@ describe("transcript loading", () => {
     });
 
     await openSession("Port hub to Rust");
-    await page!.getByRole("alert").first().waitFor({ timeout: 5_000 });
+    const alert = page!.getByRole("alert").first();
+    await alert.waitFor({ timeout: 5_000 });
     expect(
       await page!.getByText("No messages yet. Send the first prompt below.").count(),
     ).toBe(0);
 
-    await page!.getByRole("button", { name: "Retry", exact: true }).click();
+    await alert.getByRole("button", { name: "Retry", exact: true }).click();
     await page!.locator(".chat-message").first().waitFor({ timeout: 10_000 });
     await page!.unroute(route);
   });

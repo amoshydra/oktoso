@@ -168,6 +168,80 @@ afterEach(async () => {
   page = undefined;
 });
 
+describe("access credential", () => {
+  async function accessPanel() {
+    const current = requirePage();
+    await current.goto(`${BASE_URL}/settings`);
+    const panel = current.locator(".panel").filter({
+      has: current.getByRole("heading", { name: "Access" }),
+    });
+    await panel.waitFor({ timeout: 5_000 });
+    return panel;
+  }
+
+  it("shows the owner credential and its permanence", async () => {
+    const panel = await accessPanel();
+    await panel.getByText("Owner", { exact: true }).waitFor();
+    await panel.getByText("Never", { exact: true }).waitFor();
+    await panel
+      .getByText(/Pairing links, metrics, and MCP tokens require it/)
+      .waitFor();
+  });
+
+  it("shows a paired session and its expiry", async () => {
+    const current = requirePage();
+    const pair = await current.request.post(`${BASE_URL}/api/v1/auth/pair`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(pair.ok()).toBe(true);
+    const { code } = (await pair.json()) as { code: string };
+    const connect = await current.request.post(
+      `${BASE_URL}/api/v1/auth/connect`,
+      { data: { code } },
+    );
+    expect(connect.ok()).toBe(true);
+    const { token } = (await connect.json()) as { token: string };
+
+    if (!browser) throw new Error("The accessibility E2E browser is not ready");
+    const paired = await browser.newPage();
+    try {
+      await paired.addInitScript((next) => {
+        sessionStorage.setItem("oktoso-token", next);
+      }, token);
+      await paired.goto(`${BASE_URL}/settings`);
+      const panel = paired.locator(".panel").filter({
+        has: paired.getByRole("heading", { name: "Access" }),
+      });
+      await panel.getByText("Phone", { exact: true }).waitFor({ timeout: 5_000 });
+      await panel
+        .getByText(/No pairing, metrics, or MCP-token administration/)
+        .waitFor({ timeout: 5_000 });
+      await expect(panel.innerText()).resolves.not.toContain("Never");
+    } finally {
+      await paired.close();
+    }
+  });
+
+  it("keeps the Access panel inside narrow widths", async () => {
+    const current = requirePage();
+    for (const width of [390, 320]) {
+      await current.setViewportSize({ width, height: 844 });
+      await current.goto(`${BASE_URL}/settings`);
+      const panel = current.locator(".panel").filter({
+        has: current.getByRole("heading", { name: "Access" }),
+      });
+      await panel.waitFor({ timeout: 5_000 });
+      const overflow = await current.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      const box = await panel.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    }
+  });
+});
+
 describe("landmarks and headings", () => {
   it("renders exactly one h1 on every main view", async () => {
     const current = requirePage();

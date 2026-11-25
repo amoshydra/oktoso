@@ -1,12 +1,13 @@
-# Design Lock — v1.58
+# Design Lock — v1.59
 
 Status: **frozen**.
 
-- Version: `design-v1.58`
-- Parent: `design-v1.57`
+- Version: `design-v1.59`
+- Parent: `design-v1.58`
 - Date: 2026-11-26
-- Git tag: `design-v1.58`
+- Git tag: `design-v1.59`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.59 scope: paired device profiles and the Access credential panel.
 - v1.58 scope: assistant-issued short-lived MCP tokens in the global chat.
 - v1.57 scope: stale-while-revalidate for the session transcript.
 - v1.56 scope: stale-while-revalidate route data and the topbar revalidation line.
@@ -1306,6 +1307,30 @@ radius, or color token.
   spacing step, radius, or colour.
 - The static prototype stays unchanged. The assistant chat is the reference.
 
+## Paired device profiles and Access panel (2026-11-26)
+
+- Paired sessions carry a device profile instead of a single full-access
+  role. `phone` is the normal browser/phone profile: sessions, inbox, search,
+  providers, settings, assistant, automation, notifications, local data, voice,
+  and events. `g2` is the glasses profile: sessions, inbox, search, approvals,
+  read-only providers/settings, voice, and events.
+- Neither paired profile can create pairing links, read metrics, or
+  create/reveal MCP tokens; those remain owner-only. `g2` cannot write provider
+  credentials, settings, or automation configuration.
+- Pairing links carry a profile. The G2 app requests `g2` when exchanging the
+  code, so a standard phone link is downgraded for the glasses. A G2 link
+  cannot be upgraded to `phone`. `oktoso pair --profile g2` creates an
+  explicit G2 link.
+- Settings gains an **Access** panel using the existing panel and detail grid:
+  credential (Owner, Phone, or G2), scopes, expiry, and an Admin yes/no row.
+  The note explains what the profile can do. Disconnect remains the single
+  quiet action.
+- Owner credentials show `Scopes: All`, `Expires: Never`, `Admin: Yes`.
+  Paired sessions show a concrete expiry and `Admin: No`.
+- The assistant tells a non-owner or non-global thread that MCP token
+  administration needs the owner token and the global Overview assistant.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1350,3 +1375,5 @@ The `design-v1.56` route-data revision is covered by the chat e2e: with the sess
 The `design-v1.57` transcript revision is covered by the chat e2e: a primed session reopened with the messages request held paints the cached user row, no skeleton, the topbar line active, and the transcript `aria-busy`; after release both settle. Cold sessions still cover the skeleton, waiting, empty, and error paths. The cache unit tests cover the window, the 300-message cap, cursor re-anchoring, and the six-session LRU. The full gates pass at 949 unit tests and 82 e2e tests, including 12 G2 tests.
 
 The `design-v1.58` assistant-token revision was verified live against a temporary hub with a scripted assistant: the global assistant created a read-only token, MCP `initialize` + `tools/list` exposed only the three scoped session-read tools, `sessions_list` returned only the allowed provider, a later “show me the token again” revealed the same secret by id, and revoking it made the next `/mcp` call return `401`. Unit tests cover issuance, expiry, reveal, revocation, redaction, owner-only tool exposure, and the create/reveal loop. The full gates pass at 960 unit tests and 82 e2e tests, including 12 G2 tests.
+
+The `design-v1.59` paired-profile revision was verified in the accessibility e2e at 1280px: the owner session shows `Owner`, `Scopes: All`, `Never`, and `Admin: Yes`; a freshly paired phone session shows `Phone`, a concrete expiry, and `Admin: No`. Hub tests cover legacy phone tokens, explicit G2 pairing, phone-to-G2 self-downgrade, and `403` for G2 provider/settings writes. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.

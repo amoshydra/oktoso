@@ -1,9 +1,16 @@
 import { randomBytes } from "node:crypto";
+import type { SessionProfile } from "./profiles";
 import { PAIRING_TTL_SECONDS } from "./session";
 
 export interface PairingCode {
   code: string;
   expiresAt: number;
+  profile: SessionProfile;
+}
+
+interface PairingRecord {
+  expiresAt: number;
+  profile: SessionProfile;
 }
 
 export interface PairingServiceOptions {
@@ -17,7 +24,7 @@ export interface PairingServiceOptions {
  * The fixed TTL means insertion order is also expiry order.
  */
 export class PairingService {
-  private readonly codes = new Map<string, number>();
+  private readonly codes = new Map<string, PairingRecord>();
   private readonly ttlMs: number;
   private readonly capacity: number;
   private readonly now: () => number;
@@ -28,7 +35,7 @@ export class PairingService {
     this.now = options.now ?? Date.now;
   }
 
-  issue(): PairingCode {
+  issue(profile: SessionProfile = "phone"): PairingCode {
     const now = this.now();
     this.prune(now);
 
@@ -40,27 +47,27 @@ export class PairingService {
 
     const code = randomBytes(16).toString("base64url");
     const expiresAt = now + this.ttlMs;
-    this.codes.set(code, expiresAt);
-    return { code, expiresAt };
+    this.codes.set(code, { expiresAt, profile });
+    return { code, expiresAt, profile };
   }
 
   consume(code: string): PairingCode | undefined {
-    const expiresAt = this.codes.get(code);
-    if (expiresAt === undefined) return undefined;
+    const record = this.codes.get(code);
+    if (record === undefined) return undefined;
 
     // Consume even an expired code so a replay cannot succeed later.
     this.codes.delete(code);
-    if (expiresAt <= this.now()) return undefined;
+    if (record.expiresAt <= this.now()) return undefined;
 
-    return { code, expiresAt };
+    return { code, expiresAt: record.expiresAt, profile: record.profile };
   }
 
   /** Read a code without consuming it, for a confirmation page. */
   inspect(code: string): PairingCode | undefined {
-    const expiresAt = this.codes.get(code);
-    if (expiresAt === undefined) return undefined;
-    if (expiresAt <= this.now()) return undefined;
-    return { code, expiresAt };
+    const record = this.codes.get(code);
+    if (record === undefined) return undefined;
+    if (record.expiresAt <= this.now()) return undefined;
+    return { code, expiresAt: record.expiresAt, profile: record.profile };
   }
 
   get size(): number {
@@ -68,8 +75,8 @@ export class PairingService {
   }
 
   private prune(now: number): void {
-    for (const [code, expiresAt] of this.codes) {
-      if (expiresAt > now) break;
+    for (const [code, record] of this.codes) {
+      if (record.expiresAt > now) break;
       this.codes.delete(code);
     }
   }

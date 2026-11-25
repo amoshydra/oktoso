@@ -2031,3 +2031,26 @@ competing history buttons.
   provider, a later “show me the token again” revealed the same secret by id,
   and revoking it made the next `/mcp` call return `401`. The token service and
   HTTP route tests also cover expiry and the one-session limit.
+
+## Paired device profiles and Access panel (2026-11-26)
+
+- Settings gains an **Access** panel built from the existing panel head and
+  detail grid. It shows credential (`Owner`, `Phone`, or `G2`), scopes, expiry,
+  and Admin (`Yes`/`No`). Owner shows `Scopes: All`, `Expires: Never`.
+- Paired sessions carry a profile in the signed token. `phone` is the full
+  client profile without admin; `g2` is sessions, inbox, search, approvals,
+  read-only providers/settings, voice, and events. G2 cannot write provider
+  credentials, settings, or automation configuration.
+- Pairing links carry a profile. The G2 app self-restricts to `g2` when it
+  exchanges a code, so a normal phone link is downgraded for the glasses. A G2
+  link cannot be upgraded. `oktoso pair --profile g2` creates an explicit G2
+  link. The pairing page names the profile.
+- The assistant fallback explains that MCP token administration requires the
+  owner token and the global Overview assistant. No new type role, spacing
+  step, radius, control, or colour.
+- Verified in the accessibility e2e at 1280px: the owner session shows
+  `Owner`/`Never`/`Admin: Yes`; a freshly paired phone session shows
+  `Phone`/an expiry/`Admin: No`; the G2 profile API test gets `403` for
+  provider and settings writes. The Access panel was also checked at 390 and
+  320px with no document or panel overflow. The hub unit tests cover scope
+  enforcement, legacy phone tokens, G2 pairing, and self-downgrade.

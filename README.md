@@ -168,6 +168,13 @@ Use `--url https://hub.example.com` when the hub is behind a proxy. The CLI auth
 
 Paired browsers use the 30-day HttpOnly session cookie and do not store the token in JavaScript. The session refreshes automatically while the browser is active; an idle browser re-pairs after expiry. API clients can call `POST /api/v1/auth/refresh` with their session token. Packaged apps loaded from another origin can still paste the owner or session token. Rotate `HUB_TOKEN` to revoke every paired session.
 
+Pairing links carry a device profile. The normal phone/browser link uses
+`phone`; the G2 app requests `g2` when it exchanges the code, so it cannot edit
+providers, settings, or admin credentials even if the link was issued as
+`phone`. Use `oktoso pair --profile g2` for an explicit G2-only link. Settings
+→ Access shows the current credential, profile, scopes, expiry, and whether
+admin actions are available.
+
 Opening a pairing page does not consume the code, so chat link previews are safe. Pressing **Pair this device** consumes it. After five minutes, the page shows an expired message telling you to press `p` in the hub terminal; if that browser is already paired, it goes straight to the app.
 
 ## MCP for agents

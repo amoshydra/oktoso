@@ -33,6 +33,7 @@ import type { AppEnv } from "./http/types";
 import { AppError } from "./domain/errors";
 import { AuthService } from "./auth/service";
 import { bearerAuth } from "./http/middleware/auth";
+import { apiScopeGuard } from "./http/middleware/scopes";
 import { requestContext } from "./http/middleware/request";
 import { requestLimits, securityHeaders } from "./http/middleware/security";
 import { registerHealthRoutes } from "./http/routes/health";
@@ -131,6 +132,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   }
 
   app.use("/api/v1/*", bearerAuth(auth));
+  app.use("/api/v1/*", apiScopeGuard());
   // Metrics name providers and counts, so they need the owner credential too.
   app.use("/metrics", bearerAuth(auth));
 

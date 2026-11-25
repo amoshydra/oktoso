@@ -12,12 +12,17 @@ export const zHealth = z.object({
 
 export const zAuthKind = z.enum(["owner", "session"]);
 
+export const zPairedProfile = z.enum(["phone", "g2"]);
+export const zAuthProfile = z.enum(["owner", "phone", "g2"]);
+
 export const zAuthCheck = z.object({
   ok: z.boolean(),
   version: z.string(),
   auth: z
     .object({
       kind: zAuthKind,
+      profile: zAuthProfile.optional(),
+      scopes: z.array(z.string()).optional(),
       expiresAt: z
         .number()
         .int()
@@ -29,6 +34,7 @@ export const zAuthCheck = z.object({
 
 export const zPairingCode = z.object({
   code: z.string().min(1),
+  profile: zPairedProfile,
   expiresIn: z
     .number()
     .int()
@@ -42,6 +48,7 @@ export const zPairingCode = z.object({
 
 export const zPairingSession = z.object({
   token: z.string().min(1),
+  profile: zPairedProfile.optional(),
   expiresAt: z
     .number()
     .int()
@@ -50,10 +57,14 @@ export const zPairingSession = z.object({
 
 export const zPairingExchange = z.object({
   code: z.string().min(1).describe("Single-use pairing code"),
+  profile: zPairedProfile
+    .optional()
+    .describe("Optional self-restriction; a client may downgrade phone to g2"),
 });
 
 export const zSessionRefresh = z.object({
   token: z.string().min(1),
+  profile: zPairedProfile.optional(),
   expiresAt: z
     .number()
     .int()

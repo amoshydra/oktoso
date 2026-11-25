@@ -591,10 +591,15 @@ describe("AssistantService", () => {
       secretBox: createSecretBox("hub-token-long-enough"),
     });
     const seen: string[][] = [];
+    const prompts: string[] = [];
     const fetchImpl = (async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body)) as {
+        messages?: Array<{ role?: string; content?: string }>;
         tools?: Array<{ function?: { name?: string } }>;
       };
+      prompts.push(
+        body.messages?.find((message) => message.role === "system")?.content ?? "",
+      );
       seen.push(
         (body.tools ?? [])
           .map((tool) => tool.function?.name)
@@ -622,6 +627,7 @@ describe("AssistantService", () => {
     expect(seen[0]).toContain("create_mcp_token");
     expect(seen[0]).toContain("list_mcp_tokens");
     expect(seen[0]).toContain("reveal_mcp_token");
+    expect(prompts[0]).toContain("You can create, list, and reveal");
 
     const pairedThread = await service.createThread({ scope: { kind: "global" } });
     const pairedTurn = await service.postMessage(
@@ -634,6 +640,21 @@ describe("AssistantService", () => {
     await waitFor(() => pairedEvents.some((event) => event.type === "done"));
     expect(seen[1]).not.toContain("create_mcp_token");
     expect(seen[1]).not.toContain("reveal_mcp_token");
+    expect(prompts[1]).toContain("MCP token administration is unavailable");
+
+    const sessionThread = await service.createThread({
+      scope: { kind: "session", sessionRef: "desktop-opencode:ses_a" },
+    });
+    const sessionTurn = await service.postMessage(
+      sessionThread.id,
+      { text: "create a token" },
+      { owner: true },
+    );
+    const sessionEvents: AssistantEvent[] = [];
+    service.subscribe(sessionTurn.run.id, 0, (event) => sessionEvents.push(event));
+    await waitFor(() => sessionEvents.some((event) => event.type === "done"));
+    expect(seen[2]).not.toContain("create_mcp_token");
+    expect(prompts[2]).toContain("MCP token administration is unavailable");
   });
 
   it("builds a project context from session metadata only", async () => {

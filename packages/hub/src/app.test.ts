@@ -616,12 +616,14 @@ describe("hub app", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(pair.status).toBe(200);
-    const { code, expiresIn } = (await pair.json()) as {
+    const { code, expiresIn, profile } = (await pair.json()) as {
       code: string;
       expiresIn: number;
+      profile: string;
     };
     expect(code).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(expiresIn).toBe(300);
+    expect(profile).toBe("phone");
 
     const connect = await app.request("/api/v1/auth/connect", {
       method: "POST",
@@ -636,14 +638,16 @@ describe("hub app", () => {
       token: string;
       expiresAt: number;
     };
-    expect(session).toMatch(/^\d+\.[A-Za-z0-9_-]+$/);
+    expect(session).toMatch(/^v2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(expiresAt).toBeGreaterThan(Date.now());
 
     const check = await app.request("/api/v1/auth/check", {
       headers: { Authorization: `Bearer ${session}` },
     });
     expect(check.status).toBe(200);
-    expect(await check.json()).toMatchObject({ auth: { kind: "session" } });
+    expect(await check.json()).toMatchObject({
+      auth: { kind: "session", profile: "phone" },
+    });
 
     const replay = await app.request("/api/v1/auth/connect", {
       method: "POST",
@@ -891,6 +895,134 @@ describe("hub app", () => {
     expect(response.headers.get("location")).toBe("/");
   });
 
+  it("limits G2 sessions to the G2 profile scopes", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const g2 = auth.mintSession("g2").token;
+
+    const sessions = await app.request("/api/v1/sessions", {
+      headers: { Authorization: `Bearer ${g2}` },
+    });
+    expect(sessions.status).toBe(200);
+
+    const providers = await app.request("/api/v1/providers", {
+      headers: { Authorization: `Bearer ${g2}` },
+    });
+    expect(providers.status).toBe(200);
+
+    const providerWrite = await app.request("/api/v1/providers", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${g2}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(providerWrite.status).toBe(403);
+
+    const settings = await app.request("/api/v1/settings/assistant", {
+      headers: { Authorization: `Bearer ${g2}` },
+    });
+    expect(settings.status).toBe(200);
+
+    const settingsWrite = await app.request("/api/v1/settings/assistant", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${g2}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(settingsWrite.status).toBe(403);
+
+    const metrics = await app.request("/metrics", {
+      headers: { Authorization: `Bearer ${g2}` },
+    });
+    expect(metrics.status).toBe(403);
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${g2}` },
+    });
+    expect(pair.status).toBe(403);
+  });
+
+  it("issues a G2 pairing code and scopes the session", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ profile: "g2" }),
+    });
+    expect(pair.status).toBe(200);
+    const { code, profile } = (await pair.json()) as {
+      code: string;
+      profile: string;
+    };
+    expect(profile).toBe("g2");
+
+    const connect = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    expect(connect.status).toBe(200);
+    const { token: session } = (await connect.json()) as { token: string };
+
+    const check = await app.request("/api/v1/auth/check", {
+      headers: { Authorization: `Bearer ${session}` },
+    });
+    expect(check.status).toBe(200);
+    const body = (await check.json()) as {
+      auth: { kind: string; profile?: string; scopes?: string[] };
+    };
+    expect(body.auth).toMatchObject({ kind: "session", profile: "g2" });
+    expect(body.auth.scopes).not.toContain("providers.write");
+    expect(body.auth.scopes).not.toContain("settings.write");
+
+    const providerWrite = await app.request("/api/v1/providers", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(providerWrite.status).toBe(403);
+  });
+
+  it("lets a client downgrade a phone code to the G2 profile", async () => {
+    const auth = new AuthService(token);
+    const { app } = await createTestApp({ auth });
+    const pair = await app.request("/api/v1/auth/pair", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { code } = (await pair.json()) as { code: string };
+    const connect = await app.request("/api/v1/auth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, profile: "g2" }),
+    });
+    expect(connect.status).toBe(200);
+    const { token: session, profile } = (await connect.json()) as {
+      token: string;
+      profile: string;
+    };
+    expect(profile).toBe("g2");
+    const check = await app.request("/api/v1/auth/check", {
+      headers: { Authorization: `Bearer ${session}` },
+    });
+    expect(await check.json()).toMatchObject({
+      auth: { kind: "session", profile: "g2" },
+    });
+  });
+
   it("refreshes a session token on demand", async () => {
     let now = Date.now();
     const auth = new AuthService(token, { now: () => now });
@@ -907,7 +1039,7 @@ describe("hub app", () => {
       token: string;
       expiresAt: number;
     };
-    expect(refreshed.token).toMatch(/^\d+\.[A-Za-z0-9_-]+$/);
+    expect(refreshed.token).toMatch(/^v2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(refreshed.expiresAt).toBeGreaterThan(session.expiresAt);
 
     const owner = await app.request("/api/v1/auth/refresh", {

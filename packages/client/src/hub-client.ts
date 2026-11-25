@@ -114,14 +114,20 @@ export class HubClient {
     return this.request<AuthCheck>("/api/v1/auth/check");
   }
 
-  async pair(): Promise<PairingCode> {
-    return this.request<PairingCode>("/api/v1/auth/pair", { method: "POST" });
+  async pair(profile?: "phone" | "g2"): Promise<PairingCode> {
+    return this.request<PairingCode>("/api/v1/auth/pair", {
+      method: "POST",
+      ...(profile ? { body: { profile } } : {}),
+    });
   }
 
-  async connect(code: string): Promise<PairingSession> {
+  async connect(
+    code: string,
+    profile?: "phone" | "g2",
+  ): Promise<PairingSession> {
     return this.request<PairingSession>("/api/v1/auth/connect", {
       method: "POST",
-      body: { code },
+      body: { code, ...(profile ? { profile } : {}) },
     });
   }
 

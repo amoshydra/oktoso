@@ -8,10 +8,20 @@ import {
   type SessionInfo,
   type SessionToken,
 } from "./session";
+import {
+  scopesForProfile,
+  type AuthScope,
+  type SessionProfile,
+} from "./profiles";
 
 export type AuthIdentity =
   | { kind: "owner" }
-  | { kind: "session"; expiresAt: number };
+  | {
+      kind: "session";
+      expiresAt: number;
+      profile: SessionProfile;
+      scopes: AuthScope[];
+    };
 
 export interface AuthServiceOptions {
   now?: () => number;
@@ -55,12 +65,26 @@ export class AuthService {
     return this.now();
   }
 
-  mintSession(): SessionToken {
-    return mintSessionToken(this.ownerToken, this.now(), this.sessionTtlSeconds);
+  mintSession(profile: SessionProfile = "phone"): SessionToken {
+    return mintSessionToken(
+      this.ownerToken,
+      this.now(),
+      this.sessionTtlSeconds,
+      profile,
+    );
   }
 
   verifySession(token: string): SessionInfo | undefined {
     return verifySessionToken(token, this.ownerToken, this.now());
+  }
+
+  identityForSession(info: SessionInfo): AuthIdentity {
+    return {
+      kind: "session",
+      expiresAt: info.expiresAt,
+      profile: info.profile,
+      scopes: scopesForProfile(info.profile),
+    };
   }
 
   shouldRefresh(expiresAt: number): boolean {
@@ -71,11 +95,11 @@ export class AuthService {
     return this.pairings.inspect(code);
   }
 
-  issuePairing(): PairingCode {
-    return this.pairings.issue();
+  issuePairing(profile: SessionProfile = "phone"): PairingCode {
+    return this.pairings.issue(profile);
   }
 
-  consumePairing(code: string): boolean {
-    return this.pairings.consume(code) !== undefined;
+  consumePairing(code: string): SessionProfile | undefined {
+    return this.pairings.consume(code)?.profile;
   }
 }

@@ -600,6 +600,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 
 ## 12. Settings
 
+- **Access** is a panel in the top settings grid: credential (`Owner`, `Phone`, or `G2`), scopes, expiry, and an Admin yes/no row, with the existing Disconnect action. The note names what the profile can do. Owner shows `Scopes: All`, `Expires: Never`, `Admin: Yes`; paired sessions show a concrete expiry and `Admin: No`.
+- Pairing links carry a profile. The normal phone/browser link is `phone`. The G2 app requests `g2` when exchanging the code, so a standard link is downgraded for the glasses; a G2 link cannot be upgraded. `oktoso pair --profile g2` creates an explicit G2 link. G2 cannot edit providers, settings, or automation configuration.
 - **Assistant agent** is the first assistant panel: enable, allow confirmed
   writes, base URL, model, context messages, timeout, and a masked API key.
   `Load models` fills the model datalist; `Test connection` checks the unsaved

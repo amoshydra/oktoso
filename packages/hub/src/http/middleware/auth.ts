@@ -28,7 +28,7 @@ function fromBearer(header: string, auth: AuthService): AuthIdentity | undefined
 
   if (auth.isOwner(token)) return { kind: "owner" };
   const session = auth.verifySession(token);
-  return session ? { kind: "session", expiresAt: session.expiresAt } : undefined;
+  return session ? auth.identityForSession(session) : undefined;
 }
 
 export function bearerAuth(auth: AuthService): MiddlewareHandler<AppEnv> {
@@ -55,14 +55,11 @@ export function bearerAuth(auth: AuthService): MiddlewareHandler<AppEnv> {
           // token replaces the cookie; the old token stays valid until its
           // original expiry because sessions are stateless.
           if (auth.shouldRefresh(session.expiresAt)) {
-            const refreshed = auth.mintSession();
+            const refreshed = auth.mintSession(session.profile);
             setHubSessionCookie(c, refreshed.token);
-            identity = {
-              kind: "session",
-              expiresAt: refreshed.expiresAt,
-            };
+            identity = auth.identityForSession(refreshed);
           } else {
-            identity = { kind: "session", expiresAt: session.expiresAt };
+            identity = auth.identityForSession(session);
           }
         }
       }

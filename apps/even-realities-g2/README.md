@@ -292,9 +292,17 @@ On the phone surface:
 2. Press **Pair this phone**.
 3. The app exchanges the code for a session token and stores it locally.
 
-A browser paired through `/pair/<code>` uses the HttpOnly session cookie instead.
-A token can be pasted as a fallback when the app is loaded from another origin.
-The owner token is never included in the G2 package.
+The app requests the `g2` profile when it exchanges the code, so a standard
+pairing link is downgraded to the restricted G2 session: sessions, inbox,
+approvals, read-only providers/settings, voice, and events. It cannot edit
+providers, settings, or admin credentials. Re-pair an existing G2 once to
+replace a legacy phone-profile session. To issue a G2-only link explicitly,
+run `oktoso pair --profile g2`.
+
+A browser paired through `/pair/<code>` uses the HttpOnly session cookie instead
+and keeps the `phone` profile. A token can be pasted as a fallback when the app
+is loaded from another origin. The owner token is never included in the G2
+package.
 
 ## Input grammar
 

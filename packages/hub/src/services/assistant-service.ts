@@ -918,8 +918,10 @@ export class AssistantService {
             `${turn.role.toUpperCase()}: ${redactMcpTokens(turn.text).slice(0, 400)}`,
         );
       const tools = built.tools;
+      const tokenAvailable = Boolean(this.options.mcpTokens);
       const tokenAdmin =
-        owner && scope.kind === "global" && Boolean(this.options.mcpTokens);
+        owner && scope.kind === "global" && tokenAvailable;
+      const tokenDenied = tokenAvailable && !tokenAdmin;
       const prompt = renderPrompt(
         redactMcpTokens(built.text),
         question,
@@ -928,6 +930,7 @@ export class AssistantService {
         scope,
         Boolean(tools),
         tokenAdmin,
+        tokenDenied,
       );
       const actionTools: ChatToolDefinition[] = canPropose
         ? [{ type: "function", function: ACTION_TOOL }]
@@ -3369,6 +3372,11 @@ TOKENS
 - If the user asks to see a token again, call list_mcp_tokens when the id is unknown, then reveal_mcp_token. The token cannot be recalled from your memory because old copies are redacted.
 - If a token is expired, say so and offer a new one.`;
 
+const TOKEN_DENIED_RULES = `
+TOKENS
+- MCP token administration is unavailable in this thread. Only an owner-authenticated global Overview thread can create, list, or reveal short-lived MCP tokens.
+- If the user asks for an MCP token, say that they need to sign in with the owner token and use the Overview assistant. Do not imply that a token was created.`;
+
 const ASSISTANT_TOKEN_TOOLS = [
   "providers_list",
   "sessions_list",
@@ -3410,6 +3418,7 @@ function renderPrompt(
   scope: AssistantScope,
   tools = false,
   tokenAdmin = false,
+  tokenDenied = false,
 ): AssistantPrompt {
   const exchange = history.length
     ? `\n\n---\nEARLIER IN THIS THREAD\n${history.join("\n---\n")}`
@@ -3420,6 +3429,9 @@ function renderPrompt(
   }
   if (tokenAdmin) {
     system += `\n${TOKEN_RULES}`;
+  }
+  if (tokenDenied) {
+    system += `\n${TOKEN_DENIED_RULES}`;
   }
   if (canWrite) {
     system += `\n${scope.kind === "session" ? ACTION_RULES : TARGET_ACTION_RULES}`;

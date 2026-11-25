@@ -23,6 +23,7 @@ import type {
   Attachment,
   Attention,
   AttentionType,
+  AuthCheck,
   AutomationApproval,
   BranchPoint,
   Diagnostics,
@@ -267,6 +268,25 @@ function viewForRoute(route: Route): View {
   }
 }
 
+function credentialLabel(identity: AuthCheck["auth"]): string {
+  if (identity?.kind === "owner") return "Owner";
+  if (identity?.profile === "g2") return "G2";
+  if (identity?.profile === "phone") return "Phone";
+  if (identity?.kind === "session") return "Paired session";
+  return "Unavailable";
+}
+
+function credentialScopes(identity: AuthCheck["auth"]): string {
+  if (identity?.kind === "owner") return "All";
+  if (identity?.profile === "g2") {
+    return "Sessions · Inbox · Search · Providers (read) · Settings (read) · Approvals · Voice · Events";
+  }
+  if (identity?.profile === "phone" || identity?.kind === "session") {
+    return "Sessions · Inbox · Search · Providers · Settings · Assistant · Automation · Notifications · Local data · Voice · Events";
+  }
+  return "Unknown";
+}
+
 function routeForView(view: View): Route {
   switch (view) {
     case "foundation":
@@ -320,6 +340,7 @@ export function App() {
   );
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [auth, setAuth] = useState<AuthState>("checking");
+  const [authIdentity, setAuthIdentity] = useState<AuthCheck["auth"]>();
   const [client, setClient] = useState<HubClient | null>(null);
   const [health, setHealth] = useState<Health>();
   const [diagnostics, setDiagnostics] = useState<Diagnostics>();
@@ -567,6 +588,7 @@ export function App() {
     setToken("");
     setClient(null);
     setAuth("signed-out");
+    setAuthIdentity(undefined);
     setHealth(undefined);
     setDiagnostics(undefined);
     setProviders([]);
@@ -646,6 +668,7 @@ export function App() {
       .authCheck()
       .then(async (check) => {
         if (cancelled) return;
+        if (check.auth) setAuthIdentity(check.auth);
 
         // A pasted session token is not refreshed by the cookie middleware.
         // Rotate it here when it is close to expiry; owner tokens do not expire.
@@ -770,7 +793,8 @@ export function App() {
     didRefresh.current = false;
     const hub = new HubClient({ token: nextToken });
     try {
-      await hub.authCheck();
+      const check = await hub.authCheck();
+      if (check.auth) setAuthIdentity(check.auth);
       sessionStorage.setItem(TOKEN_KEY, nextToken);
       setClient(hub);
       setToken(nextToken);
@@ -1287,13 +1311,50 @@ export function App() {
                   <article className="panel">
                     <div className="panel-head">
                       <div>
-                        <h2>Session</h2>
-                        <p>A paired browser uses an HttpOnly cookie. The owner token stays in this tab.</p>
+                        <h2>Access</h2>
+                        <p>How this browser is authenticated.</p>
                       </div>
+                      <button className="btn small" type="button" onClick={signOut}>
+                        Disconnect
+                      </button>
                     </div>
-                    <button className="btn small" type="button" onClick={signOut}>
-                      Disconnect
-                    </button>
+                    <div className="details-grid">
+                      <Detail
+                        label="Credential"
+                        value={credentialLabel(authIdentity)}
+                        mono={false}
+                      />
+                      <Detail
+                        label="Scopes"
+                        value={credentialScopes(authIdentity)}
+                        mono={false}
+                      />
+                      <Detail
+                        label="Expires"
+                        value={
+                          authIdentity?.kind === "owner"
+                            ? "Never"
+                            : authIdentity?.kind === "session" &&
+                                authIdentity.expiresAt
+                              ? new Date(authIdentity.expiresAt).toLocaleString()
+                              : "Unknown"
+                        }
+                      />
+                      <Detail
+                        label="Admin"
+                        value={authIdentity?.kind === "owner" ? "Yes" : "No"}
+                        mono={false}
+                      />
+                    </div>
+                    <p className="form-note">
+                      {authIdentity?.kind === "owner"
+                        ? "Owner credential. Pairing links, metrics, and MCP tokens require it. Use a paired session for everyday browsing."
+                        : authIdentity?.profile === "g2"
+                          ? "G2 profile. Sessions, inbox, approvals, and read-only provider/settings access. No provider edits, pairing, metrics, or MCP-token administration."
+                          : authIdentity?.kind === "session"
+                            ? "Phone profile. Sessions, inbox, providers, settings, and automation. No pairing, metrics, or MCP-token administration. Refreshes automatically before expiry."
+                            : "The hub did not return the credential type. Reconnect to check."}
+                    </p>
                   </article>
                   <article className="panel">
                     <div className="panel-head">
@@ -1302,7 +1363,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.41 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.59 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />

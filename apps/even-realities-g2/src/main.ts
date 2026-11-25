@@ -1447,7 +1447,7 @@ async function pairWithCode(raw: string): Promise<void> {
   setPairingStatus("Pairing…");
   try {
     const hub = new HubClient({ baseUrl: hubBaseURL() });
-    const session = await hub.connect(code);
+    const session = await hub.connect(code, "g2");
     pairingCodeInput.value = "";
     if (await connectWithToken(session.token)) {
       setPairingStatus("Paired. This phone can close setup.");

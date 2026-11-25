@@ -2,6 +2,7 @@ import type { LogRecord } from "../lib/logger";
 
 export interface PairingLinkInfo {
   code: string;
+  profile: "phone" | "g2";
   expiresAt: number;
 }
 

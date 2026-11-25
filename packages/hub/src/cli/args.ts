@@ -22,6 +22,7 @@ export interface CliOptions {
   verbose: boolean;
   noColor: boolean;
   allowWrite: boolean;
+  pairProfile: "phone" | "g2";
   logFile?: string;
   logDir?: string;
   out?: string;
@@ -66,6 +67,7 @@ export function parseArgs(
   let verbose = false;
   let noColor = Boolean(env.NO_COLOR);
   let allowWrite = false;
+  let pairProfile: "phone" | "g2" = "phone";
   let logFile: string | undefined;
   let logDir = env.HUB_LOG_DIR;
   let noLogFile = false;
@@ -187,6 +189,15 @@ export function parseArgs(
       case "--allow-write":
         allowWrite = true;
         break;
+      case "--profile": {
+        const read = readValue(argv, index, arg);
+        if (read.value !== "phone" && read.value !== "g2") {
+          throw new Error("--profile must be phone or g2");
+        }
+        pairProfile = read.value;
+        index = read.next;
+        break;
+      }
       case "--log-file": {
         const read = readValue(argv, index, arg);
         logFile = read.value;
@@ -233,6 +244,7 @@ export function parseArgs(
     verbose,
     noColor,
     allowWrite,
+    pairProfile,
     logFile,
     logDir,
     noLogFile,
@@ -251,7 +263,7 @@ export function usage(version: string): string {
 
 Usage:
   oktoso [options]
-  oktoso pair [--url <url>] [--config <path>]
+  oktoso pair [--profile phone|g2] [--url <url>] [--config <path>]
   oktoso status [--config <path>]
   oktoso mcp [--allow-write] [--url <url>] [--config <path>]
   oktoso automation status|pause|resume [--watcher <id>] [--url <url>] [--config <path>]
@@ -273,6 +285,7 @@ Options:
   --no-log-file      Disable the persistent log file
   --url <url>        Base URL for pairing links or the MCP hub endpoint
   --allow-write      Enable write tools in the MCP server (read-only by default)
+  --profile <name>   Pairing profile: phone (default) or g2
   --id <id>          Template to start (template start only)
   --out <dir>        Backup destination (default: ./oktoso-backup-<timestamp>)
   --from <dir>       Backup to restore from
