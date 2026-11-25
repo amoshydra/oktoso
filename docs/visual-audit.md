@@ -870,6 +870,31 @@ back to design-v1.50 without changing the product.
   console errors. The session and inbox screenshots were regenerated and the
   brand manifest refreshed.
 
+## P2 polish (2026-11-25)
+
+- **Fieldset.** `.attention-field` now resets `border`, `margin`, and `padding`
+  to zero. The native groove border around question options is gone; the 10px
+  uppercase legend remains the field title and the option rows keep their own
+  borders. The accessibility e2e measures a zero-width, `none` border and zero
+  padding/margin.
+- **Inline media.** Markdown `<video>` is block-level, full width up to 720px,
+  and capped at 480px high with the 8px control radius; Markdown `<audio>` is
+  full width up to 480px. Both get the 8px vertical rhythm. The chat e2e injects
+  a relative video and confirms it stays inside the 320px message column.
+- **Undo.** The banner's `Show prompt` action is hidden while the draft already
+  equals the restored prompt, so it does not offer text that is already on
+  screen; a prompt with attachments still exposes it. The mobile composer menu
+  carries the disabled reason as visible 10px helper text. The file-restore
+  confirmation is a plain group (no modal alertdialog semantics), cancels on
+  Escape, and returns focus to the `Restore files` button that opened it.
+- **Inbox New session.** The Inbox toolbar now has the same page-level
+  **New session** action as Sessions. It opens the inline panel on
+  `/sessions?new=1`; the Inbox no longer lacks a creation path at 390px. The
+  mobile IA now says page-level action, not floating button.
+- **Files.** `apps/web/src/app/App.tsx`, `apps/web/src/styles.css`,
+  `tests/e2e/chat.e2e.ts`, `tests/e2e/accessibility.e2e.ts`,
+  `docs/ui-ia.md`. No new type role, spacing step, radius, or colour.
+
 ## Message delivery and queue (2026-11-15)
 
 Steer already lived in the composer as a send label. Queue added a second

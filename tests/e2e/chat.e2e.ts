@@ -681,6 +681,15 @@ describe("chat undo and redo", () => {
     expect(await banner.textContent()).toContain("1 file changed, not restored");
     expect(await prompt.inputValue()).toBe(undoneText);
     await userMessage.waitFor({ state: "hidden", timeout: 5_000 });
+    expect(await banner.getByRole("button", { name: "Show prompt" }).count()).toBe(0);
+    await prompt.fill(`${undoneText} edited`);
+    await banner.getByRole("button", { name: "Show prompt" }).waitFor({ timeout: 5_000 });
+    await prompt.fill(undoneText);
+    await expect
+      .poll(() => banner.getByRole("button", { name: "Show prompt" }).count(), {
+        timeout: 5_000,
+      })
+      .toBe(0);
 
     await banner.getByRole("button", { name: "Show files" }).click();
     expect(await banner.textContent()).toContain("src/auth.ts");
@@ -692,6 +701,19 @@ describe("chat undo and redo", () => {
     expect(await confirm.textContent()).toContain(
       "Current edits to these paths may be overwritten.",
     );
+    await page!.keyboard.press("Escape");
+    await confirm.waitFor({ state: "hidden", timeout: 5_000 });
+    await expect
+      .poll(
+        () =>
+          page!.evaluate(() =>
+            document.activeElement?.textContent?.trim() ?? "",
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe("Restore files");
+    await banner.getByRole("button", { name: "Restore files" }).click();
+    await confirm.waitFor({ state: "visible", timeout: 5_000 });
     await confirm.getByRole("button", { name: "Restore files" }).click();
     await confirm.waitFor({ state: "hidden", timeout: 5_000 });
     expect(await banner.textContent()).toContain("1 file restored");
@@ -727,6 +749,37 @@ describe("chat undo and redo", () => {
     );
     expect(overflow).toBe(0);
     await banner.getByRole("button", { name: "Redo" }).click();
+  });
+
+  it("explains why Undo is disabled in the mobile composer menu", async () => {
+    await page!.setViewportSize({ width: 390, height: 844 });
+    const sessionRoute = /\/api\/v1\/sessions\/[^/]+$/;
+    await page!.route(sessionRoute, async (handler) => {
+      const response = await handler.fetch();
+      const body = (await response.json()) as Record<string, unknown>;
+      body.status = "running";
+      await handler.fulfill({ response, json: body });
+    });
+    try {
+      await openSession("Fix auth race in gateway");
+      await page!
+        .getByRole("button", { name: "Interrupt the running agent" })
+        .waitFor({ timeout: 5_000 });
+      await page!
+        .getByRole("button", { name: "More composer actions" })
+        .click();
+      const undo = page!
+        .locator(".composer-tools-menu")
+        .getByRole("button", { name: "Undo last turn" });
+      expect(await undo.isDisabled()).toBe(true);
+      await expect
+        .poll(() => page!.locator(".composer-tools-note").innerText(), {
+          timeout: 5_000,
+        })
+        .toContain("Undo waits for the current run");
+    } finally {
+      await page!.unroute(sessionRoute);
+    }
   });
 
   it("sending while staged accepts the undo", async () => {
@@ -895,6 +948,72 @@ describe("answered questions", () => {
       expect(multiple).toContain("Sign the commit?");
       expect(multiple).toContain("No");
       expect(multiple).toContain("Yes");
+    } finally {
+      await page!.unroute(messagesRoute);
+    }
+  });
+});
+
+describe("inbox new session", () => {
+  it("opens the inline panel from the mobile inbox", async () => {
+    await page!.setViewportSize({ width: 390, height: 844 });
+    await page!.getByRole("button", { name: "Inbox" }).click();
+    const toolbar = page!.locator(".inbox-toolbar");
+    await toolbar.waitFor({ timeout: 5_000 });
+    await toolbar.getByRole("button", { name: "New session" }).click();
+    await page!
+      .getByRole("heading", { name: "New session" })
+      .waitFor({ timeout: 5_000 });
+    expect(await page!.locator(".new-session-panel").count()).toBe(1);
+    expect(
+      await page!.evaluate(() => `${location.pathname}${location.search}`),
+    ).toBe("/sessions?new=1");
+  });
+});
+
+describe("inline markdown media", () => {
+  it("caps a Markdown video to the message column", async () => {
+    await page!.setViewportSize({ width: 320, height: 720 });
+    const messagesRoute = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(messagesRoute, async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const body = (await response.json()) as { data: unknown[] };
+      body.data.unshift({
+        id: "msg_e2e_markdown_video",
+        sessionRef: "desktop-opencode:ses_auth",
+        role: "assistant",
+        createdAt: Date.now(),
+        parts: [
+          {
+            type: "text",
+            text: 'Inline clip:\n\n<video controls src="clips/race.mp4"></video>',
+          },
+        ],
+      });
+      await route.fulfill({ response, json: body });
+    });
+    try {
+      await openSession("Fix auth race in gateway");
+      const video = page!.locator(".message-markdown video").last();
+      await video.waitFor({ timeout: 5_000 });
+      const metrics = await video.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          display: style.display,
+          maxWidth: style.maxWidth,
+          width: element.getBoundingClientRect().width,
+        };
+      });
+      const panelWidth = await page!
+        .locator(".chat-panel")
+        .evaluate((element) => element.getBoundingClientRect().width);
+      expect(metrics.display).toBe("block");
+      expect(metrics.maxWidth).toBe("720px");
+      expect(metrics.width).toBeLessThanOrEqual(panelWidth);
     } finally {
       await page!.unroute(messagesRoute);
     }

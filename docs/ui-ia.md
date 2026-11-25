@@ -114,7 +114,7 @@ Every screen, session, overlay, and filter change that represents navigation is 
 - Sessions is the home list.
 - Chat opens as a full-screen route.
 - Details and filters open as bottom sheets.
-- New session is a floating action button on Sessions and Inbox.
+- New session is a page-level action on Sessions and Inbox; it opens the inline panel.
 - Providers live inside Settings on mobile.
 
 ### Glasses
@@ -220,7 +220,8 @@ The inbox is the default screen when something needs attention. It groups items 
 ### Inbox rules
 
 - Blocking items always come first.
-- At 420px and below the filter chips take the full toolbar width and wrap; Refresh moves to its own right-aligned row under them. Above that, the tabs and Refresh share one row.
+- At 420px and below the filter chips take the full toolbar width and wrap; Refresh and New session move to their own right-aligned row under them. Above that, the tabs and actions share one row.
+- New session is a page-level action in the Inbox toolbar; it opens the inline panel on Sessions. The same action sits in the Sessions toolbar.
 - Filter chips expose `aria-pressed` for the active filter. Their accessible name includes the count (`Approvals, 2 items`), so the count is never a visual-only cue.
 - At 1200px and above, cards form a two-column grid inside each group. Each card keeps its own height (`align-items: start`); a blocking card is no wider than any other card and is distinguished by its amber edge, not by spanning the grid.
 - Each card shows type, provider, session title, age, a one-line summary, and actions.

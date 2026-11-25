@@ -1151,6 +1151,9 @@ export function App() {
                   navigate({ name: "inbox", filter })
                 }
                 onOpen={openSession}
+                onNewSession={() =>
+                  navigate({ name: "sessions", newSession: true })
+                }
               />
             ) : view === "sessions" ? (
               selectedSessionRef ? (
@@ -2081,6 +2084,7 @@ function InboxView(props: {
   filter: string;
   onFilterChange: (filter: string) => void;
   onOpen: (ref: string) => void;
+  onNewSession: () => void;
 }) {
   const { key } = useHistoryLocation();
   const [items, setItems] = useState<Attention[]>(
@@ -2271,14 +2275,23 @@ function InboxView(props: {
             );
           })}
         </div>
-        <button
-          className="btn small"
-          type="button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+        <div className="inbox-toolbar-actions">
+          <button
+            className="btn small"
+            type="button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            onClick={props.onNewSession}
+          >
+            New session
+          </button>
+        </div>
       </div>
 
       {loading && items.length === 0 && approvals.length === 0 ? (
@@ -4550,6 +4563,24 @@ function SessionDetail(props: {
   const [historyPromptOpen, setHistoryPromptOpen] = useState(false);
   const [historyConfirmOpen, setHistoryConfirmOpen] = useState(false);
   const [historyRestoring, setHistoryRestoring] = useState(false);
+  const historyRestoreRef = useRef<HTMLButtonElement | null>(null);
+
+  const cancelHistoryConfirm = useCallback(() => {
+    setHistoryConfirmOpen(false);
+    requestAnimationFrame(() => historyRestoreRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!historyConfirmOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelHistoryConfirm();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [historyConfirmOpen, cancelHistoryConfirm]);
   const [branchBusy, setBranchBusy] = useState<string>();
   const [retryBusy, setRetryBusy] = useState<string>();
   const [continueBusy, setContinueBusy] = useState<string>();
@@ -6208,6 +6239,13 @@ function SessionDetail(props: {
   const undoAvailable = Boolean(
     historySupported && history?.canUndo && !history?.staged,
   );
+  const undoDisabledReason = running
+    ? "Undo waits for the current run to finish"
+    : sending
+      ? "Undo waits for the send to finish"
+      : historyBusy === "undo"
+        ? "Undoing the last turn"
+        : undefined;
   const stagedHistory = history?.staged;
   const stagedFiles = stagedHistory?.files ?? [];
   const hasComposerTools =
@@ -6970,6 +7008,7 @@ function SessionDetail(props: {
                       stagedFiles.length > 0 &&
                       !stagedHistory.filesRestored ? (
                         <button
+                          ref={historyRestoreRef}
                           className="composer-history-action danger"
                           type="button"
                           disabled={historyRestoring || running}
@@ -6978,7 +7017,9 @@ function SessionDetail(props: {
                           Restore files
                         </button>
                       ) : null}
-                      {history?.prompt ? (
+                      {history?.prompt &&
+                      (history.prompt.text !== draft ||
+                        history.prompt.attachments.length > 0) ? (
                         <button
                           className="composer-history-action"
                           type="button"
@@ -7003,7 +7044,7 @@ function SessionDetail(props: {
                   {historyConfirmOpen ? (
                     <div
                       className="composer-history-confirm"
-                      role="alertdialog"
+                      role="group"
                       aria-label="Restore files"
                     >
                       <p>
@@ -7019,7 +7060,7 @@ function SessionDetail(props: {
                           type="button"
                           autoFocus
                           disabled={historyRestoring}
-                          onClick={() => setHistoryConfirmOpen(false)}
+                          onClick={cancelHistoryConfirm}
                         >
                           Cancel
                         </button>
@@ -7241,9 +7282,8 @@ function SessionDetail(props: {
                       type="button"
                       aria-label="Undo last turn"
                       title={
-                        running
-                          ? "Undo waits for the current run to finish"
-                          : "Undo the last turn and return its prompt"
+                        undoDisabledReason ??
+                        "Undo the last turn and return its prompt"
                       }
                       disabled={
                         running || sending || historyBusy === "undo"
@@ -7369,17 +7409,25 @@ function SessionDetail(props: {
                             aria-label="Composer tools"
                           >
                             {undoAvailable ? (
-                              <button
-                                type="button"
-                                disabled={
-                                  running || sending || historyBusy === "undo"
-                                }
-                                onClick={() => void undoLastTurn()}
-                              >
-                                {historyBusy === "undo"
-                                  ? "Undoing…"
-                                  : "Undo last turn"}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  title={undoDisabledReason}
+                                  disabled={
+                                    running || sending || historyBusy === "undo"
+                                  }
+                                  onClick={() => void undoLastTurn()}
+                                >
+                                  {historyBusy === "undo"
+                                    ? "Undoing…"
+                                    : "Undo last turn"}
+                                </button>
+                                {undoDisabledReason ? (
+                                  <span className="composer-tools-note">
+                                    {undoDisabledReason}
+                                  </span>
+                                ) : null}
+                              </>
                             ) : null}
                             {running && canSteer && canQueue ? (
                               <button

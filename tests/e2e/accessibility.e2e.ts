@@ -430,6 +430,30 @@ describe("accessible names", () => {
   });
 });
 
+describe("question fields", () => {
+  it("removes the native fieldset frame from choice fields", async () => {
+    const current = requirePage();
+    await current.goto(`${BASE_URL}/inbox`);
+    const fieldset = current.locator("fieldset.attention-choice-field").first();
+    await fieldset.waitFor({ timeout: 5_000 });
+    const style = await fieldset.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        borderWidth: computed.borderTopWidth,
+        borderStyle: computed.borderTopStyle,
+        padding: computed.paddingTop,
+        margin: computed.marginTop,
+      };
+    });
+    expect(style).toEqual({
+      borderWidth: "0px",
+      borderStyle: "none",
+      padding: "0px",
+      margin: "0px",
+    });
+  });
+});
+
 describe("login QR overlay", () => {
   it("focuses Cancel, traps Tab, closes on Escape, and returns focus to the opener", async () => {
     if (!browser) throw new Error("The accessibility E2E browser is not ready");
