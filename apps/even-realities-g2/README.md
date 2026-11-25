@@ -39,10 +39,14 @@ longer replies, and phone-side question forms.
   and it is named for screen readers.
 - A **Glasses control** panel below the phone keyboard shows a fixed 2:1
   mirror of the 576×288 screen, with its list and current selection. Tap a row
-  to open it; Up / Down / Select / Back remain for precision. The preview keeps
-  the app's 54-column wrapped lines and clips instead of reflowing, so content
-  changes never resize it. Actions pulse the phone where supported. The four
-  controls are 44px targets.
+  to open it; swipe up or down; double-tap to go back. Up / Down / Select / Back
+  remain for precision. Using Up/Down on the phone or glasses switches the
+  glasses list to a text mirror with a `›` marker; **Use glasses list** returns
+  to the native list, because the SDK's native list selection is host-owned.
+  Expand opens the same panel full-screen; Close or Escape returns. The preview
+  keeps the app's 54-column wrapped lines and clips instead of reflowing, so
+  content changes never resize it. Actions pulse the phone where supported. The
+  four controls are 44px targets.
 - The symbol guide stays user-facing. Bridge diagnostics and the reply audit
   live under a collapsed **Developer tools** disclosure. Every disclosure row
   is a 44px target.

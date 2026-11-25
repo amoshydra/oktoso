@@ -1914,10 +1914,15 @@ competing history buttons.
   the current session` for screen readers.
 - A **Glasses control** panel below the phone keyboard shows a fixed 2:1
   mirror of the 576×288 screen, the real list rows, and the current selection.
-  Tapping a row opens it; Up / Down / Select / Back are the 44px fallback. The
-  preview keeps the app's 54-column wrapped lines and clips instead of
-  reflowing, so content changes never change its height. The panel names the
-  glasses bridge status and pulses the phone on action where supported.
+  Tapping a row opens it; swiping up or down moves; double-tapping goes back.
+  Up / Down / Select / Back are the 44px fallback. Up/Down on the phone or
+  glasses switches the glasses list to a text mirror with a `›` marker; **Use
+  glasses list** returns to the native list, because the SDK's native list
+  selection is host-owned. Expand opens the same panel full-screen; Close or
+  Escape returns. The preview keeps the app's 54-column wrapped lines and clips
+  instead of reflowing, so content changes never change its height. The panel
+  names the glasses bridge status and pulses the phone on action where
+  supported.
 - Developer tools (bridge diagnostics and the reply audit) are collapsed. The
   symbol guide stays user-facing. Every disclosure row is a 44px target.
 - Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark

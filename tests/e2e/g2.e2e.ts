@@ -322,6 +322,105 @@ describe("G2 hosted app", () => {
     const after = await current.locator("#glasses-preview").boundingBox();
     expect(after).not.toBeNull();
     expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
+
+    const box = await current.locator("#glasses-preview").boundingBox();
+    expect(box).not.toBeNull();
+    await current.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await current.mouse.down();
+    await current.mouse.move(
+      box!.x + box!.width / 2,
+      box!.y + box!.height / 2 - 40,
+      { steps: 4 },
+    );
+    await current.mouse.up();
+    await expect
+      .poll(() => current.locator("#preview-selection").innerText(), {
+        timeout: 5_000,
+      })
+      .toContain("2/");
+    const mirrored = await lastPage();
+    const mirroredText = (mirrored.textObject ?? [])
+      .map((text: { content?: string }) => text.content ?? "")
+      .join("\n");
+    expect(mirroredText).toContain("›");
+    expect(mirrored.listObject?.length ?? 0).toBe(0);
+
+    await current.locator("#glass-preview-header").dblclick();
+    await previewMatches(/OKTOSO/);
+
+    await current
+      .getByRole("button", { name: "Use glasses list" })
+      .click();
+    await current.waitForTimeout(200);
+    const nativeHome = await lastPage();
+    expect(nativeHome.listObject?.length ?? 0).toBeGreaterThan(0);
+
+    await current
+      .getByRole("button", { name: "Expand glasses preview" })
+      .click();
+    await expect(
+      current
+        .locator("#glasses-control")
+        .evaluate((element) => element.classList.contains("is-expanded")),
+    ).resolves.toBe(true);
+    await expect(
+      current
+        .locator("body")
+        .evaluate((element) => element.classList.contains("glasses-expanded")),
+    ).resolves.toBe(true);
+    await current
+      .getByRole("button", { name: "Close expanded preview" })
+      .click();
+    await expect(
+      current
+        .locator("#glasses-control")
+        .evaluate((element) => element.classList.contains("is-expanded")),
+    ).resolves.toBe(false);
+
+    await current
+      .getByRole("button", { name: "Expand glasses preview" })
+      .click();
+    await current.keyboard.press("Escape");
+    await expect(
+      current
+        .locator("#glasses-control")
+        .evaluate((element) => element.classList.contains("is-expanded")),
+    ).resolves.toBe(false);
+  });
+
+  it("follows list scroll events from the glasses", async () => {
+    await expect
+      .poll(() => requirePage().locator("#preview-selection").innerText(), {
+        timeout: 5_000,
+      })
+      .toContain("1/");
+    await send({
+      listEvent: {
+        eventType: 2,
+        currentSelectItemIndex: 1,
+      },
+    });
+    await expect
+      .poll(() => requirePage().locator("#preview-selection").innerText(), {
+        timeout: 5_000,
+      })
+      .toContain("2/");
+    await send({
+      sysEvent: {
+        eventType: 2,
+      },
+    });
+    await expect
+      .poll(() => requirePage().locator("#preview-selection").innerText(), {
+        timeout: 5_000,
+      })
+      .toContain("3/");
+    const mirrored = await lastPage();
+    const mirroredText = (mirrored.textObject ?? [])
+      .map((text: { content?: string }) => text.content ?? "")
+      .join("\n");
+    expect(mirroredText).toContain("›");
+    expect(mirrored.listObject?.length ?? 0).toBe(0);
   });
 
   it("boots to Home and navigates through the empty Inbox", async () => {

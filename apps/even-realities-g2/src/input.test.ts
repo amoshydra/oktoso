@@ -57,6 +57,20 @@ describe("glass input", () => {
           currentSelectItemIndex: 1,
         },
       }),
-    ).toEqual({ type: "scroll", direction: 1 });
+    ).toEqual({ type: "list-scroll", direction: 1, index: 1 });
+    expect(
+      glassInput({
+        listEvent: {
+          eventType: OsEventTypeList.SCROLL_TOP_EVENT,
+        },
+      }),
+    ).toEqual({ type: "list-scroll", direction: -1 });
+    expect(
+      glassInput({
+        listEvent: {
+          eventType: OsEventTypeList.DOUBLE_CLICK_EVENT,
+        },
+      }),
+    ).toEqual({ type: "back" });
   });
 });

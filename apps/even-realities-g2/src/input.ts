@@ -3,6 +3,7 @@ import { OsEventTypeList } from "@evenrealities/even_hub_sdk";
 export type GlassInput =
   | { type: "back" }
   | { type: "scroll"; direction: -1 | 1 }
+  | { type: "list-scroll"; direction: -1 | 1; index?: number }
   | { type: "list-click"; index: number }
   | { type: "text-click" };
 
@@ -22,22 +23,38 @@ export function glassInput(event: any): GlassInput | undefined {
   if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
     return { type: "back" };
   }
+
+  if (event?.listEvent) {
+    const type = event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT;
+    const index = event.listEvent.currentSelectItemIndex;
+    if (type === OsEventTypeList.CLICK_EVENT) {
+      return {
+        type: "list-click",
+        index: typeof index === "number" ? index : 0,
+      };
+    }
+    if (type === OsEventTypeList.SCROLL_TOP_EVENT) {
+      return {
+        type: "list-scroll",
+        direction: -1,
+        ...(typeof index === "number" ? { index } : {}),
+      };
+    }
+    if (type === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
+      return {
+        type: "list-scroll",
+        direction: 1,
+        ...(typeof index === "number" ? { index } : {}),
+      };
+    }
+    return undefined;
+  }
+
   if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) {
     return { type: "scroll", direction: -1 };
   }
   if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
     return { type: "scroll", direction: 1 };
-  }
-
-  if (event?.listEvent) {
-    const type = event.listEvent.eventType ?? OsEventTypeList.CLICK_EVENT;
-    if (type === OsEventTypeList.CLICK_EVENT) {
-      return {
-        type: "list-click",
-        index: event.listEvent.currentSelectItemIndex ?? 0,
-      };
-    }
-    return undefined;
   }
 
   if (event?.sysEvent) {

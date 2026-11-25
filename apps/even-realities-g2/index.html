@@ -231,7 +231,7 @@
         color: #71f28a;
         font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 9px;
-        font-size: clamp(7.5px, 2.9cqw, 10.5px);
+        font-size: clamp(7.5px, 2.9cqw, 21px);
         line-height: 1.5;
         user-select: none;
       }
@@ -306,6 +306,52 @@
       .preview-controls button { min-height: 36px; font-size: 12px; }
       .glasses-control .preview-controls { margin-top: var(--space-3); }
       .glasses-control .preview-controls button { min-height: 44px; font-size: 14px; }
+      .glasses-preview,
+      .glasses-preview * {
+        touch-action: none;
+        user-select: none;
+      }
+      .glasses-preview {
+        cursor: grab;
+      }
+      .glasses-preview:active {
+        cursor: grabbing;
+      }
+      .glasses-control.is-expanded {
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+        margin: 0;
+        padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
+        border: 0;
+        border-radius: 0;
+        background: var(--bg);
+        overflow-y: auto;
+      }
+      .glasses-control.is-expanded .panel-head,
+      .glasses-control.is-expanded #glasses-control-status,
+      .glasses-control.is-expanded .glasses-preview-frame,
+      .glasses-control.is-expanded #preview-selection,
+      .glasses-control.is-expanded #glasses-native,
+      .glasses-control.is-expanded .preview-controls,
+      .glasses-control.is-expanded .glasses-control-hint {
+        width: 100%;
+        max-width: 720px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .glasses-control.is-expanded .panel-head {
+        margin-bottom: var(--space-3);
+      }
+      .glasses-control.is-expanded #preview-selection {
+        margin-top: var(--space-2);
+      }
+      .glasses-control.is-expanded .preview-controls {
+        margin-top: var(--space-3);
+      }
+      body.glasses-expanded {
+        overflow: hidden;
+      }
       .debug { max-height: 320px; margin: var(--space-1) 0 0; overflow: auto; color: var(--faint); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
 
       @media (max-width: 360px) {
@@ -419,6 +465,7 @@
           <h2>Glasses control</h2>
           <p class="hint">Use these when you don't have your ring.</p>
         </div>
+        <button id="glasses-expand" class="quiet" type="button" aria-label="Expand glasses preview" aria-expanded="false">Expand</button>
       </div>
       <p id="glasses-control-status" class="hint" role="status">Waiting for the glasses bridge…</p>
       <div class="glasses-preview-frame">
@@ -432,13 +479,14 @@
         </div>
       </div>
       <div id="preview-selection" class="hint" style="margin-top: var(--space-2)">No list selection</div>
+      <button id="glasses-native" class="btn small" type="button" hidden style="margin-top: var(--space-2)">Use glasses list</button>
       <div class="preview-controls" role="group" aria-label="Glasses controls">
         <button id="sim-up" type="button">↑ Up</button>
         <button id="sim-down" type="button">↓ Down</button>
         <button id="sim-click" type="button">Select</button>
         <button id="sim-double" type="button">Back</button>
       </div>
-      <p class="hint" style="margin-top: var(--space-2)">Up and Down move the list; Select opens; Back returns. Tap a screen row to open it.</p>
+      <p id="glasses-control-hint" class="hint glasses-control-hint" style="margin-top: var(--space-2)">Tap a row to open it; swipe up or down; double-tap to go back. The buttons work too.</p>
     </section>
 
     <details class="panel">

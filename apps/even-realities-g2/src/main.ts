@@ -344,6 +344,17 @@ let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
+let previewHeaderText = "";
+let previewBodyText = "";
+let previewFooterText = "";
+let phoneListMode = false;
+let previewTapTimer: number | undefined;
+let lastPreviewTapAt = 0;
+let lastPreviewTapX = 0;
+let lastPreviewTapY = 0;
+let suppressPreviewClickUntil = 0;
+let previewGesture: { x: number; y: number; pointerId: number } | undefined;
+let glassesExpanded = false;
 let lastGlassSignature = "";
 /** What the chat containers currently hold; unchanged ones skip the BLE write. */
 let lastChatBody = "";
@@ -429,6 +440,10 @@ const glassesPreviewBody = byId<HTMLPreElement>("glass-preview-body");
 const glassesPreviewList = byId<HTMLDivElement>("glass-preview-list");
 const glassesPreviewFooter = byId<HTMLPreElement>("glass-preview-footer");
 const glassesControlStatus = byId<HTMLParagraphElement>("glasses-control-status");
+const glassesControlPanel = byId<HTMLElement>("glasses-control");
+const glassesExpand = byId<HTMLButtonElement>("glasses-expand");
+const glassesNative = byId<HTMLButtonElement>("glasses-native");
+const glassesControlHint = byId<HTMLParagraphElement>("glasses-control-hint");
 const previewSelection = byId<HTMLDivElement>("preview-selection");
 
 function log(message: string): void {
@@ -4610,11 +4625,46 @@ async function processEvents(): Promise<void> {
     if (input?.type === "back") {
       back();
     } else if (input?.type === "scroll") {
-      if (state.screen === "chat") scrollChat(input.direction);
+      if (state.screen === "chat") {
+        scrollChat(input.direction);
+      } else if (previewListItems && previewListItems.length > 0) {
+        previewCursor = Math.min(
+          Math.max(0, previewCursor + input.direction),
+          previewListItems.length - 1,
+        );
+        updatePreviewSelection();
+        if (!phoneListMode) {
+          phoneListMode = true;
+          updatePhoneListModeUi();
+        }
+        refreshPhoneListPage();
+      }
+    } else if (input?.type === "list-scroll") {
+      if (previewListItems && previewListItems.length > 0) {
+        previewCursor = Math.min(
+          Math.max(
+            0,
+            input.index ?? previewCursor + input.direction,
+          ),
+          previewListItems.length - 1,
+        );
+        updatePreviewSelection();
+        if (!phoneListMode) {
+          phoneListMode = true;
+          updatePhoneListModeUi();
+        }
+        refreshPhoneListPage();
+      } else if (state.screen === "chat") {
+        scrollChat(input.direction);
+      }
     } else if (input?.type === "list-click") {
       handleListClick(input.index);
     } else if (input?.type === "text-click") {
-      handleTextClick();
+      if (phoneListMode && previewListItems && previewListItems.length > 0) {
+        handleListClick(previewCursor);
+      } else {
+        handleTextClick();
+      }
     }
   } finally {
     inputCount += 1;
@@ -5157,6 +5207,9 @@ function setPreview(
   const signature = frameSignature(header, body, footer, listItems);
   if (signature === lastGlassSignature) return false;
   lastGlassSignature = signature;
+  previewHeaderText = header;
+  previewBodyText = body;
+  previewFooterText = footer;
   glassesPreviewHeader.textContent = header;
   glassesPreviewBody.textContent = previewSummary(body, listItems);
   glassesPreviewFooter.textContent = footer;
@@ -5188,6 +5241,46 @@ function previewSummary(body: string, listItems?: string[]): string {
   return body;
 }
 
+/**
+ * A text mirror for the phone controller.
+ *
+ * The host owns the native list selection, so the phone cannot move its border
+ * through the SDK. A text page with a marker is app-owned: the phone, the
+ * glasses surface, and the ring all move the same selection. The native list
+ * returns through "Use glasses list".
+ */
+function phoneListPage(): RebuildPageContainer | undefined {
+  if (!previewListItems || previewListItems.length === 0) return undefined;
+  const summary = previewSummary(previewBodyText, previewListItems);
+  const summaryLines = summary ? summary.split("\n").length : 0;
+  const visible = Math.max(3, 7 - summaryLines);
+  const total = previewListItems.length;
+  let start = Math.max(0, previewCursor - Math.floor(visible / 2));
+  if (start + visible > total) start = Math.max(0, total - visible);
+  const rows = previewListItems
+    .slice(start, start + visible)
+    .map((item, offset) => {
+      const marker = start + offset === previewCursor ? "›" : " ";
+      return `${marker} ${clampLine(item, 52)}`;
+    });
+  const body = [summary, ...rows].filter((line) => line.length > 0).join("\n");
+  if (!body) return undefined;
+  return textPage(body, previewFooterText, previewHeaderText);
+}
+
+function refreshPhoneListPage(): void {
+  if (!bridge || !phoneListMode) return;
+  const page = phoneListPage();
+  if (page) void showPage(page);
+}
+
+function updatePhoneListModeUi(): void {
+  glassesNative.hidden = !phoneListMode;
+  glassesControlHint.textContent = phoneListMode
+    ? "Phone selection is mirrored on the glasses. Use glasses list to return."
+    : "Tap a row to open it; swipe up or down; double-tap to go back. The buttons work too.";
+}
+
 function renderPreviewList(): void {
   glassesPreviewList.replaceChildren();
   if (!previewListItems || previewListItems.length === 0) {
@@ -5203,12 +5296,6 @@ function renderPreviewList(): void {
     button.dataset.previewIndex = String(index);
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", index === previewCursor ? "true" : "false");
-    button.addEventListener("click", () => {
-      previewCursor = index;
-      updatePreviewSelection();
-      pulse(12);
-      handleListClick(index);
-    });
     glassesPreviewList.append(button);
   });
   const selected = glassesPreviewList.children[previewCursor];
@@ -5221,6 +5308,103 @@ function renderPreviewList(): void {
       glassesPreviewList.scrollTop = bottom - glassesPreviewList.clientHeight;
     }
   }
+}
+
+function handlePreviewClick(event: MouseEvent): void {
+  if (Date.now() < suppressPreviewClickUntil) return;
+  const target = event.target as HTMLElement;
+  const row = target.closest(".glass-preview-item") as HTMLElement | null;
+  const index = row ? Number(row.dataset.previewIndex) : -1;
+  const now = Date.now();
+  const double =
+    now - lastPreviewTapAt < 280 &&
+    Math.abs(event.clientX - lastPreviewTapX) < 18 &&
+    Math.abs(event.clientY - lastPreviewTapY) < 18;
+  if (double) {
+    lastPreviewTapAt = 0;
+    if (previewTapTimer) {
+      window.clearTimeout(previewTapTimer);
+      previewTapTimer = undefined;
+    }
+    simulate("double");
+    return;
+  }
+  lastPreviewTapAt = now;
+  lastPreviewTapX = event.clientX;
+  lastPreviewTapY = event.clientY;
+  if (previewTapTimer) window.clearTimeout(previewTapTimer);
+  previewTapTimer = window.setTimeout(() => {
+    previewTapTimer = undefined;
+    lastPreviewTapAt = 0;
+    if (index >= 0) {
+      previewCursor = index;
+      updatePreviewSelection();
+      pulse(12);
+      handleListClick(index);
+    } else if (!previewListItems || previewListItems.length === 0) {
+      simulate("click");
+    }
+  }, 260);
+}
+
+function beginPreviewGesture(event: PointerEvent): void {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  suppressPreviewClickUntil = 0;
+  previewGesture = {
+    x: event.clientX,
+    y: event.clientY,
+    pointerId: event.pointerId,
+  };
+}
+
+function endPreviewGesture(event: PointerEvent): void {
+  if (!previewGesture || previewGesture.pointerId !== event.pointerId) return;
+  const { x, y } = previewGesture;
+  previewGesture = undefined;
+  const dx = event.clientX - x;
+  const dy = event.clientY - y;
+  if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+  suppressPreviewClickUntil = Date.now() + 450;
+  if (previewTapTimer) {
+    window.clearTimeout(previewTapTimer);
+    previewTapTimer = undefined;
+  }
+  lastPreviewTapAt = 0;
+  if (Math.abs(dy) >= 24 && Math.abs(dy) > Math.abs(dx)) {
+    simulate(dy < 0 ? "down" : "up");
+  }
+}
+
+function cancelPreviewGesture(): void {
+  previewGesture = undefined;
+}
+
+function toggleGlassesExpanded(expand = !glassesExpanded): void {
+  glassesExpanded = expand;
+  glassesControlPanel.classList.toggle("is-expanded", expand);
+  document.body.classList.toggle("glasses-expanded", expand);
+  glassesExpand.textContent = expand ? "Close" : "Expand";
+  glassesExpand.setAttribute(
+    "aria-label",
+    expand ? "Close expanded preview" : "Expand glasses preview",
+  );
+  glassesExpand.setAttribute("aria-expanded", String(expand));
+  for (const element of Array.from(document.body.children)) {
+    if (
+      !(element instanceof HTMLElement) ||
+      element === glassesControlPanel ||
+      element.tagName === "SCRIPT"
+    ) {
+      continue;
+    }
+    element.inert = expand;
+  }
+  if (previewTapTimer) {
+    window.clearTimeout(previewTapTimer);
+    previewTapTimer = undefined;
+  }
+  lastPreviewTapAt = 0;
+  requestAnimationFrame(() => glassesExpand.focus());
 }
 
 function updatePreviewSelection(): void {
@@ -5245,6 +5429,11 @@ function pulse(ms = 10): void {
 }
 
 function simulate(action: "up" | "down" | "click" | "double"): void {
+  if (previewTapTimer) {
+    window.clearTimeout(previewTapTimer);
+    previewTapTimer = undefined;
+  }
+  lastPreviewTapAt = 0;
   pulse(action === "double" ? 20 : action === "click" ? 12 : 8);
   if (action === "double") {
     back();
@@ -5271,6 +5460,11 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
       previewListItems.length - 1,
     );
     updatePreviewSelection();
+    if (!phoneListMode) {
+      phoneListMode = true;
+      updatePhoneListModeUi();
+    }
+    refreshPhoneListPage();
     return;
   }
   handleListClick(previewCursor);
@@ -5297,6 +5491,10 @@ function menuObjectForScreen(): MenuContainerProperty | undefined {
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
+  if (phoneListMode && page.listObject && page.listObject.length > 0) {
+    const mirrored = phoneListPage();
+    if (mirrored) page = mirrored;
+  }
   // The menu is declared with the page: every rebuild must carry it forward or
   // the OS drops the app's items.
   const menu = menuObjectForScreen();
@@ -5369,10 +5567,23 @@ function setupPhone(): void {
   byId<HTMLButtonElement>("sim-down").addEventListener("click", () => simulate("down"));
   byId<HTMLButtonElement>("sim-click").addEventListener("click", () => simulate("click"));
   byId<HTMLButtonElement>("sim-double").addEventListener("click", () => simulate("double"));
-  glassesPreview.addEventListener("click", (event) => {
-    if ((event.target as HTMLElement).closest(".glass-preview-item")) return;
-    if (previewListItems && previewListItems.length > 0) return;
-    simulate("click");
+  glassesPreview.addEventListener("click", handlePreviewClick);
+  glassesPreview.addEventListener("pointerdown", beginPreviewGesture);
+  glassesPreview.addEventListener("pointerup", endPreviewGesture);
+  glassesPreview.addEventListener("pointercancel", cancelPreviewGesture);
+  glassesExpand.addEventListener("click", () => toggleGlassesExpanded());
+  glassesNative.addEventListener("click", () => {
+    phoneListMode = false;
+    updatePhoneListModeUi();
+    lastGlassSignature = "";
+    render();
+  });
+  updatePhoneListModeUi();
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && glassesExpanded) {
+      event.preventDefault();
+      toggleGlassesExpanded(false);
+    }
   });
   syncPhoneSession();
 }
