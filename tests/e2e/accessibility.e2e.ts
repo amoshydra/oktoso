@@ -400,7 +400,12 @@ describe("accessible names", () => {
       { timeout: 5_000 },
     );
     await panel.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await panel.evaluate((element) => {
       element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
 
     const jump = current.locator(".chat-jump-float");
@@ -415,6 +420,7 @@ describe("accessible names", () => {
 
     await panel.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
     await expect
       .poll(() => jump.getAttribute("data-visible"), { timeout: 5_000 })

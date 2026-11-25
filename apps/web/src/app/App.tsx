@@ -158,6 +158,10 @@ import {
   type StepKind,
   type StepStatus,
 } from "./activity";
+import {
+  answeredQuestions,
+  type AnsweredQuestionPart,
+} from "./question-answer";
 
 const TOKEN_KEY = "oktoso-token";
 const THEME_KEY = "oktoso-theme";
@@ -2528,6 +2532,56 @@ function AttentionCard(props: {
         ) : null}
       </div>
     </article>
+  );
+}
+
+function QuestionAnswerCard(props: { answered: AnsweredQuestionPart }) {
+  const { answered } = props;
+  const multiple = answered.questions.length > 1;
+  return (
+    <section
+      className="question-answer"
+      aria-label={multiple ? "Answered questions" : "Answered question"}
+    >
+      <div className="question-answer-top">
+        <span className="type-badge question">Question</span>
+        <span className="question-answer-state">Answered</span>
+        {answered.completedAt !== undefined ? (
+          <time
+            dateTime={new Date(answered.completedAt).toISOString()}
+            title={formatDateTime(answered.completedAt)}
+          >
+            {formatTime(answered.completedAt)}
+          </time>
+        ) : null}
+      </div>
+      <div className="question-answer-items">
+        {answered.questions.map((question, index) => (
+          <div className="question-answer-item" key={`${question.question}:${index}`}>
+            {question.header && question.header !== question.question ? (
+              <div className="question-answer-header">{question.header}</div>
+            ) : null}
+            <p className="question-answer-prompt">{question.question}</p>
+            <div className="question-answer-response">
+              <span className="question-answer-label">
+                {question.answers.length > 1 ? "Selected" : "Answer"}
+              </span>
+              {question.answers.length === 0 ? (
+                <p className="question-answer-value empty">No answer recorded</p>
+              ) : question.answers.length === 1 ? (
+                <p className="question-answer-value">{question.answers[0]}</p>
+              ) : (
+                <ul className="question-answer-values">
+                  {question.answers.map((answer, answerIndex) => (
+                    <li key={`${answer}:${answerIndex}`}>{answer}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -7620,9 +7674,14 @@ function isActivityMessage(message: Message): boolean {
     message.role === "assistant" &&
     !message.metadata?.error &&
     message.parts.length > 0 &&
-    message.parts.every(
-      (part) => part.type === "reasoning" || part.type === "tool" || part.type === "unknown",
-    )
+    message.parts.every((part) => {
+      if (part.type === "tool" && answeredQuestions(part)) return false;
+      return (
+        part.type === "reasoning" ||
+        part.type === "tool" ||
+        part.type === "unknown"
+      );
+    })
   );
 }
 
@@ -9161,8 +9220,11 @@ function MessagePartView(props: {
   onPreviewFile?: (path: string) => void;
 }) {
   const part = props.part;
+  if (part.type === "tool") {
+    const answered = answeredQuestions(part);
+    return answered ? <QuestionAnswerCard answered={answered} /> : null;
+  }
   if (
-    part.type === "tool" ||
     part.type === "reasoning" ||
     part.type === "compaction" ||
     part.type === "shell"

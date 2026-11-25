@@ -4884,6 +4884,102 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   outline-offset: 2px;
 }
 
+.question-answer {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.question-answer-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.question-answer-state {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.question-answer-top time {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.question-answer-item + .question-answer-item {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.question-answer-header {
+  margin-bottom: var(--space-1);
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.question-answer-prompt {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.question-answer-response {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.question-answer-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.question-answer-value {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question-answer-value.empty {
+  color: var(--muted);
+}
+
+.question-answer-values {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .question-answer {
+    padding: var(--space-3);
+  }
+}
+
 .chat-inline-note {
   display: flex;
   flex-wrap: wrap;

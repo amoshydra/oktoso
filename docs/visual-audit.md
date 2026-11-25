@@ -780,6 +780,40 @@ descriptions, and a custom answer; the select could only show three labels.
   `packages/providers/src/opencode/adapter.ts`, `apps/web/src/app/App.tsx`
   (`AttentionChoiceField`), `apps/web/src/styles.css`.
 
+## Answered questions in the transcript (2026-11-25)
+
+Provider question tools keep the selected answer on the tool call
+(`metadata.answers`), but the transcript grouped that call into the collapsed
+Agent activity block. Once the inline attention card resolved, the answer was
+no longer visible. The completed `question` tool now renders as a read-only
+card in the place the tool ran.
+
+- **Grammar.** The card is a 1px `--border` surface with a 2px accent inset and
+  the 12px card radius. The top row carries the existing `Question` badge,
+  `Answered` at 11px muted, and the answer time at 11px faint with tabular
+  figures. The provider's short header is 10px uppercase; the prompt is
+  14px/500. The answer sits in a `surface-2` inset under a 10px `ANSWER` or
+  `SELECTED` label.
+- **Single and multiple.** One answer is a single line with `pre-wrap`. A
+  multi-select answer is a bulleted list. A tool call with several questions
+  separates them with a 1px `--border-subtle` rule; each keeps its own header,
+  prompt, and answer. A question with no recorded answer reads `No answer
+  recorded` rather than showing an empty inset.
+- **Placement.** The card stays in provider part order, after the assistant
+  text that introduced the question and before the next activity run. It is
+  not appended to the end of the transcript and is not interactive. Pending
+  questions still use the inline form; other tools still use the activity
+  block.
+- **Source.** `apps/web/src/app/question-answer.ts` normalizes `questions`
+  arrays, a single `question` object, nested or flat answer arrays, and
+  multi-select answers. `messageSegments` and `isActivityMessage` treat only an
+  answered question as content, so a question-only message is not swallowed by
+  the activity group.
+- **Files.** `apps/web/src/app/question-answer.ts`,
+  `apps/web/src/app/activity.ts`, `apps/web/src/app/App.tsx`,
+  `apps/web/src/styles.css`, `apps/web/src/app/question-answer.test.ts`,
+  `tests/e2e/chat.e2e.ts`. No new type role, spacing step, or radius.
+
 ## Message delivery and queue (2026-11-15)
 
 Steer already lived in the composer as a send label. Queue added a second

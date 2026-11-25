@@ -10,6 +10,7 @@ import {
   formatLines,
 } from "./metrics";
 import { toolOutputText } from "./tool-images";
+import { answeredQuestions } from "./question-answer";
 
 export type StepKind =
   | "think"
@@ -174,7 +175,11 @@ export function messageSegments(parts: MessagePart[]): MessageSegment[] {
   const segments: MessageSegment[] = [];
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index]!;
-    const stepPart = part.type === "tool" || part.type === "reasoning";
+    // An answered question is a visible record, not a collapsed tool step.
+    const answeredQuestion =
+      part.type === "tool" && answeredQuestions(part) !== undefined;
+    const stepPart =
+      (part.type === "tool" && !answeredQuestion) || part.type === "reasoning";
     const last = segments.at(-1);
     if (stepPart) {
       if (last?.kind === "steps") last.parts.push(part);

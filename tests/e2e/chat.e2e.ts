@@ -784,6 +784,83 @@ describe("composer layout", () => {
   });
 });
 
+describe("answered questions", () => {
+  it("renders single and multiple answers outside the activity", async () => {
+    const now = Date.now();
+    const messagesRoute = /\/api\/v1\/sessions\/.+\/messages\?/;
+    await page!.route(messagesRoute, async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const body = (await response.json()) as { data: unknown[] };
+      body.data.unshift({
+        id: "msg_e2e_answered_questions",
+        sessionRef: "desktop-opencode:ses_auth",
+        role: "assistant",
+        createdAt: now,
+        completedAt: now,
+        parts: [
+          {
+            type: "tool",
+            id: "call_e2e_single_question",
+            name: "question",
+            status: "completed",
+            input: {
+              questions: [
+                {
+                  header: "Scope",
+                  question: "Which changes should I keep?",
+                },
+              ],
+            },
+            metadata: { answers: [["Composer", "G2 bridge"]] },
+            startedAt: now - 2_000,
+            completedAt: now - 1_000,
+          },
+          {
+            type: "tool",
+            id: "call_e2e_multiple_question",
+            name: "question",
+            status: "completed",
+            input: {
+              questions: [
+                { header: "Files", question: "Restore the changed files?" },
+                { header: "Commit", question: "Sign the commit?" },
+              ],
+            },
+            metadata: { answers: [["No"], ["Yes"]] },
+            startedAt: now - 1_000,
+            completedAt: now,
+          },
+        ],
+      });
+      await route.fulfill({ response, json: body });
+    });
+
+    try {
+      await openSession("Fix auth race in gateway");
+      const cards = page!.locator(".question-answer");
+      await cards.nth(1).waitFor({ state: "visible", timeout: 5_000 });
+      expect(await cards.count()).toBe(2);
+
+      const single = await cards.nth(0).innerText();
+      expect(single).toContain("Which changes should I keep?");
+      expect(single).toContain("Composer");
+      expect(single).toContain("G2 bridge");
+
+      const multiple = await cards.nth(1).innerText();
+      expect(multiple).toContain("Restore the changed files?");
+      expect(multiple).toContain("Sign the commit?");
+      expect(multiple).toContain("No");
+      expect(multiple).toContain("Yes");
+    } finally {
+      await page!.unroute(messagesRoute);
+    }
+  });
+});
+
 describe("session search", () => {
   it("finds a provider archive session that is not in the recent list", async () => {
     if (!page) throw new Error("The E2E page is not ready");
