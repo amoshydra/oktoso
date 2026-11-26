@@ -1946,11 +1946,12 @@ competing history buttons.
   Up / Down / Select / Back are the 44px fallback. Up/Down on the phone or
   glasses switches the glasses list to a text mirror with a `›` marker; **Use
   glasses list** returns to the native list, because the SDK's native list
-  selection is host-owned. Expand opens the same panel full-screen; Close or
-  Escape returns. The preview keeps the app's 54-column wrapped lines and clips
-  instead of reflowing, so content changes never change its height. The panel
-  names the glasses bridge status and pulses the phone on action where
-  supported.
+  selection is host-owned. The mirror window stays fixed while the marker
+  moves; it shifts one row only when the marker crosses the top or bottom edge.
+  Expand opens the same panel full-screen; Close or Escape returns. The preview
+  keeps the app's 54-column wrapped lines and clips instead of reflowing, so
+  content changes never change its height. The panel names the glasses bridge
+  status and pulses the phone on action where supported.
 - Developer tools (bridge diagnostics and the reply audit) are collapsed. The
   symbol guide stays user-facing. Every disclosure row is a 44px target.
 - Spacing uses the 4/8/12/16/24 scale; the surface reuses the existing dark
@@ -1962,7 +1963,7 @@ competing history buttons.
 - Verified at 390 and 320px, unpaired and connected: no horizontal overflow,
   no console errors after the expected unpaired `401`; the connected state
   collapses the pairing form to the host strip and keeps the keyboard disabled
-  until a session. The G2 e2e passes 11 tests.
+  until a session. The G2 e2e passes 13 tests.
 
 ## Media in messages (2026-11-22)
 

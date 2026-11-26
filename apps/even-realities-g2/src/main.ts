@@ -64,6 +64,7 @@ import {
   type SuggestionTarget,
 } from "./answer-model";
 import { glassInput, type GlassInput } from "./input";
+import { phoneListWindow } from "./phone-list";
 import { LiveBatcher } from "./live-batch";
 import {
   hasPendingQuestionTool,
@@ -344,6 +345,7 @@ let eventQueue: any[] = [];
 let eventBusy = false;
 let previewListItems: string[] | undefined;
 let previewCursor = 0;
+let phoneListStart = 0;
 let previewHeaderText = "";
 let previewBodyText = "";
 let previewFooterText = "";
@@ -5216,6 +5218,7 @@ function setPreview(
   if (listItems && listItems.length > 0) {
     previewListItems = listItems;
     previewCursor = 0;
+    phoneListStart = 0;
     glassesPreview.classList.add("has-list");
     glassesPreview.classList.remove("is-text");
     updatePreviewSelection();
@@ -5255,8 +5258,13 @@ function phoneListPage(): RebuildPageContainer | undefined {
   const summaryLines = summary ? summary.split("\n").length : 0;
   const visible = Math.max(3, 7 - summaryLines);
   const total = previewListItems.length;
-  let start = Math.max(0, previewCursor - Math.floor(visible / 2));
-  if (start + visible > total) start = Math.max(0, total - visible);
+  phoneListStart = phoneListWindow(
+    previewCursor,
+    total,
+    visible,
+    phoneListStart,
+  );
+  const start = phoneListStart;
   const rows = previewListItems
     .slice(start, start + visible)
     .map((item, offset) => {

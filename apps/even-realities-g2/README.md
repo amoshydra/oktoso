@@ -43,6 +43,8 @@ longer replies, and phone-side question forms.
   remain for precision. Using Up/Down on the phone or glasses switches the
   glasses list to a text mirror with a `›` marker; **Use glasses list** returns
   to the native list, because the SDK's native list selection is host-owned.
+  The mirror window stays fixed while the marker moves; it shifts one row only
+  when the marker crosses the top or bottom edge.
   Expand opens the same panel full-screen; Close or Escape returns. The preview
   keeps the app's 54-column wrapped lines and clips instead of reflowing, so
   content changes never resize it. Actions pulse the phone where supported. The

@@ -423,6 +423,39 @@ describe("G2 hosted app", () => {
     expect(mirrored.listObject?.length ?? 0).toBe(0);
   });
 
+  it("keeps the mirrored list window fixed while the cursor moves", async () => {
+    const current = requirePage();
+    await listTap(1);
+    await previewMatches(/RECENT/);
+    await doubleTap();
+    await previewMatches(/Inbox/);
+    const labels = await listLabels();
+    const symbols = labels.findIndex((label) => /Symbols/.test(label));
+    if (symbols < 0) {
+      throw new Error(`No Symbols row: ${labels.join(" | ")}`);
+    }
+    await listTap(symbols);
+    await previewMatches(/SYMBOLS/);
+
+    const firstBodyLine = async (): Promise<string> => {
+      const page = await lastPage();
+      const body = (page.textObject ?? []).find(
+        (text: { containerName?: string }) => text.containerName === "body",
+      );
+      return String(body?.content ?? "").split("\n")[0] ?? "";
+    };
+
+    await current.locator("#sim-down").click();
+    await current.waitForTimeout(250);
+    const baseline = await firstBodyLine();
+    expect(baseline.length).toBeGreaterThan(0);
+    for (let step = 0; step < 3; step += 1) {
+      await current.locator("#sim-down").click();
+      await current.waitForTimeout(120);
+    }
+    expect(await firstBodyLine()).toBe(baseline);
+  });
+
   it("boots to Home and navigates through the empty Inbox", async () => {
     const home = await preview();
     expect(home).toContain("Inbox");
