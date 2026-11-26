@@ -451,6 +451,14 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - The composer offers four suggested questions before the first turn. While a
   run streams, the primary action becomes **Stop**. The footer always reads
   `Read-only · no writes`.
+- The composer keeps a draft per scope (global, project, or session). Reopening
+  the dock or returning after a reload restores it; a successful ask clears it,
+  and a failed submit keeps the text so the reader can retry. The footer's meta
+  row reports `Saving draft…`, `Draft saved`, or `Draft not saved` in the
+  existing 11px hint role.
+- The editable message on a `send` or `handoff` action card is also a draft,
+  keyed by the action. It restores after a reload while the action is pending and clears
+  after Send or Cancel succeeds.
 - The hub reports what it read and which model answered as **agent activity**,
   directly above the answer; the action card is the only write surface.
 - The answer renders like a chat message, through the same Markdown renderer:

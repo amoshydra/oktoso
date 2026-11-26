@@ -2211,3 +2211,25 @@ competing history buttons.
   horizontal overflow; the divider and pill stay inside the transcript frame.
   The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2
   tests.
+
+## Assistant composer and action drafts (2026-11-26)
+
+- The assistant composer now keeps one draft per scope (global, project, or
+  session). Reopening the dock or returning after a reload restores the typed
+  question; a successful ask clears it, and a failed submit keeps the text so
+  the reader can retry instead of retyping.
+- The editable `send` or `handoff` message on an action card keeps a draft per
+  action. It
+  restores after a reload while the action is pending and clears after Send or
+  Cancel succeeds.
+- Both surfaces report `Saving draft…`, `Draft saved`, and `Draft not saved`
+  through the existing 11px hint role. The composer meta row wraps at narrow
+  widths. No new card, type role, spacing step, radius, or colour is added.
+- Drafts reuse the existing session-draft endpoint with namespaced keys, so
+  Settings → Local data counts, clears, and retains them with the other slots.
+- Verified in the assistant e2e at 1280px: the Overview composer draft is
+  restored after a reload, and an edited action message is restored after a
+  reload and sent as edited. The composer meta row and the action card were
+  reviewed at 1440, 1024, 390, and 320px in both themes: the meta row wraps at
+  narrow widths, every status line stays inside the dialog, and the document
+  never exceeds the viewport width. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests.

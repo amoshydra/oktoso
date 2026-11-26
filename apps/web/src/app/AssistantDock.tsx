@@ -31,6 +31,10 @@ import { FilePreview } from "./FilePreview";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
 import { dayLabel, timeLabel, turnMetaParts } from "./assistant-meta";
+import {
+  draftSlotStatusText,
+  useDraftSlot,
+} from "./use-draft-slot";
 import { artifactPathsFromMessages } from "@amoshydra/oktoso-contracts";
 import type { ResourceContext } from "./urls";
 
@@ -108,6 +112,21 @@ export function AssistantDock({
   const logRef = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const modelWrap = useRef<HTMLDivElement>(null);
+
+  const composerDraftKey =
+    scope.kind === "global"
+      ? "draft:assistant:global"
+      : scope.kind === "project"
+        ? `draft:assistant:project:${scope.project}`
+        : `draft:assistant:session:${scope.sessionRef}`;
+  const composerDraft = useDraftSlot({
+    client,
+    key: composerDraftKey,
+    onLoad: (text) => {
+      if (text) setInput(text);
+    },
+  });
+  const composerDraftStatus = draftSlotStatusText(composerDraft.status);
 
   const canWriteHere = canWrite;
 
@@ -265,13 +284,14 @@ export function AssistantDock({
         return;
       }
       setError(undefined);
-      setInput("");
       setStreamText("");
       setLiveSteps([]);
       try {
         const accepted = await client.sendAssistantMessage(thread.thread.id, {
           text: question,
         });
+        setInput("");
+        void composerDraft.clear();
         setTurns((current) => addTurn(current, accepted.turn));
         setRunId(accepted.run.id);
         const controller = new AbortController();
@@ -310,7 +330,7 @@ export function AssistantDock({
         setRunId(undefined);
       }
     },
-    [busy, client, pending, resync, runId, thread],
+    [busy, client, composerDraft, pending, resync, runId, thread],
   );
 
   const stop = useCallback(async () => {
@@ -334,8 +354,8 @@ export function AssistantDock({
       text?: string,
       reason?: string,
       evidence?: string,
-    ) => {
-      if (!thread) return;
+    ): Promise<boolean> => {
+      if (!thread) return false;
       try {
         const updated = await client.decideAssistantAction(
           thread.thread.id,
@@ -350,9 +370,11 @@ export function AssistantDock({
         setTurns((current) =>
           current.map((entry) => (entry.id === updated.id ? updated : entry)),
         );
+        return true;
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "The action failed");
         void resync();
+        return false;
       }
     },
     [client, resync, thread],
@@ -509,7 +531,12 @@ export function AssistantDock({
                   />
                 ) : null}
                 {turn.action ? (
-                  <ActionCard turn={turn} canWrite={canWriteHere} onDecide={decide} />
+                  <ActionCard
+                    turn={turn}
+                    client={client}
+                    canWrite={canWriteHere}
+                    onDecide={decide}
+                  />
                 ) : null}
               </article>
             </Fragment>
@@ -576,7 +603,10 @@ export function AssistantDock({
                   ? "Decide the action above first…"
                   : "Ask about this session…"
             }
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              setInput(event.target.value);
+              composerDraft.save(event.target.value);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -660,6 +690,11 @@ export function AssistantDock({
               </div>
             ) : null}
           </div>
+          {composerDraftStatus ? (
+            <span className="assistant-draft-note" role="status">
+              {composerDraftStatus}
+            </span>
+          ) : null}
           <span className="assistant-readonly">
             {canWriteHere ? "Writes need your confirmation" : "Read-only · no writes"}
           </span>
@@ -887,10 +922,12 @@ function AssistantSources(props: {
 
 function ActionCard({
   turn,
+  client,
   canWrite,
   onDecide,
 }: {
   turn: AssistantTurn;
+  client: HubClient;
   canWrite: boolean;
   onDecide: (
     turn: AssistantTurn,
@@ -898,16 +935,28 @@ function ActionCard({
     text?: string,
     reason?: string,
     evidence?: string,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 }) {
   const action = turn.action;
   const [text, setText] = useState(action?.text ?? "");
   const [reason, setReason] = useState(action?.reason ?? "");
   const [evidence, setEvidence] = useState(action?.evidence ?? "");
   const [saving, setSaving] = useState(false);
+  const pending = action?.status === "pending";
+  const editable = Boolean(
+    action && pending && (action.kind === "send" || action.kind === "handoff"),
+  );
+  const actionDraft = useDraftSlot({
+    client,
+    key: editable && action ? `draft:assistant-action:${action.id}` : undefined,
+    enabled: editable,
+    onLoad: (saved) => {
+      if (saved) setText(saved);
+    },
+  });
+  const actionDraftStatus = draftSlotStatusText(actionDraft.status);
   if (!action) return null;
 
-  const pending = action.status === "pending";
   const working = action.status === "deciding";
   const targetMeta = [
     action.targetProject,
@@ -919,7 +968,7 @@ function ActionCard({
   const decide = async (decision: "confirm" | "cancel") => {
     setSaving(true);
     try {
-      await onDecide(
+      const saved = await onDecide(
         turn,
         decision,
         decision === "confirm" ? text : undefined,
@@ -928,6 +977,7 @@ function ActionCard({
           ? evidence
           : undefined,
       );
+      if (saved) await actionDraft.clear();
     } finally {
       setSaving(false);
     }
@@ -987,7 +1037,10 @@ function ActionCard({
               value={text}
               rows={3}
               maxLength={4_000}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => {
+                setText(event.target.value);
+                actionDraft.save(event.target.value);
+              }}
             />
             {action.kind === "handoff" ? (
               <>
@@ -1020,6 +1073,11 @@ function ActionCard({
                   onChange={(event) => setEvidence(event.target.value)}
                 />
               </>
+            ) : null}
+            {actionDraftStatus ? (
+              <p className="assistant-draft-note" role="status">
+                {actionDraftStatus}
+              </p>
             ) : null}
           </>
         ) : (

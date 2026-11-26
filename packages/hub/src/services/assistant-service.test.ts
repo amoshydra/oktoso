@@ -1401,6 +1401,59 @@ describe("AssistantService", () => {
     expect(turn?.action?.error).toContain("sessions in this context");
   });
 
+  it("retries a transient model failure before reporting an answer", async () => {
+    let attempts = 0;
+    const { service } = build((async () => {
+      attempts += 1;
+      if (attempts === 1) return new Response("{}", { status: 503 });
+      return sseResponse([delta("Recovered."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "why?" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    expect(attempts).toBe(2);
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.text).toBe("Recovered.");
+    expect(turn?.error).toBeUndefined();
+  });
+
+  it("does not replay a failed empty assistant turn in the next prompt", async () => {
+    const bodies: string[] = [];
+    let attempts = 0;
+    const { service } = build((async (_url: string, init: RequestInit) => {
+      bodies.push(String(init.body));
+      attempts += 1;
+      if (attempts <= 2) return new Response("{}", { status: 500 });
+      return sseResponse([delta("Second answer."), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+
+    const first = await service.postMessage(thread.id, { text: "first question" });
+    const firstEvents: AssistantEvent[] = [];
+    service.subscribe(first.run.id, 0, (event) => firstEvents.push(event));
+    await waitFor(() => firstEvents.some((event) => event.type === "error"));
+
+    const second = await service.postMessage(thread.id, { text: "second question" });
+    const secondEvents: AssistantEvent[] = [];
+    service.subscribe(second.run.id, 0, (event) => secondEvents.push(event));
+    await waitFor(() => secondEvents.some((event) => event.type === "done"));
+
+    const body = JSON.parse(bodies[2]!) as {
+      messages: Array<{ role: string; content: string | null }>;
+    };
+    const prompt = body.messages.map((message) => message.content ?? "").join("\n");
+    expect(prompt).toContain("USER: first question");
+    expect(prompt).toContain("QUESTION\nsecond question");
+    expect(prompt).not.toContain("ASSISTANT: \n");
+  });
+
   it("turns a model 5xx into an actionable message", async () => {
     const service = buildScoped((async () =>
       new Response("{}", { status: 500 })) as unknown as typeof fetch);

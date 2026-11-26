@@ -520,9 +520,29 @@ describe("session assistant", () => {
       "E2E confirmed reply",
     );
 
-    await card.locator(".assistant-action-buttons .btn.primary").click();
-    await card.locator(".assistant-action-state").waitFor({ timeout: 10_000 });
-    expect(await card.locator(".assistant-action-state").innerText()).toBe("SENT");
+    // The action text is a draft too: edit it, reload, and reopen the dock.
+    await card.locator(".assistant-action-text").fill("E2E edited reply");
+    await page!
+      .locator(".assistant-draft-note", { hasText: "Draft saved" })
+      .waitFor({ timeout: 5_000 });
+    await page!.reload();
+    await page!.getByRole("button", { name: "Ask", exact: true }).waitFor();
+    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    const restoredCard = page!.locator(".assistant-action").last();
+    await restoredCard.waitFor({ timeout: 10_000 });
+    await expect
+      .poll(() => restoredCard.locator(".assistant-action-text").inputValue(), {
+        timeout: 5_000,
+      })
+      .toBe("E2E edited reply");
+
+    await restoredCard.locator(".assistant-action-buttons .btn.primary").click();
+    await restoredCard
+      .locator(".assistant-action-state")
+      .waitFor({ timeout: 10_000 });
+    expect(await restoredCard.locator(".assistant-action-state").innerText()).toBe(
+      "SENT",
+    );
 
     // The provider transcript now has the message, not just the dock.
     await page!.reload();
@@ -662,6 +682,39 @@ describe("session assistant", () => {
     );
     await expect(sentCard.innerText()).resolves.toContain(
       "Evidence: E2E edited evidence",
+    );
+  });
+
+  it("keeps the overview composer draft across a reload", async () => {
+    const key = "draft:assistant:global";
+    const text = `Overview draft ${Date.now()}`;
+    await page!.goto(BASE_URL);
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    const input = page!.locator("#assistant-input");
+    await input.waitFor({ timeout: 10_000 });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await input.isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await input.fill(text);
+    await page!
+      .locator(".assistant-draft-note", { hasText: "Draft saved" })
+      .waitFor({ timeout: 5_000 });
+
+    await page!.reload();
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .waitFor({ timeout: 10_000 });
+    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    const restored = page!.locator("#assistant-input");
+    await restored.waitFor({ timeout: 10_000 });
+    await expect.poll(() => restored.inputValue(), { timeout: 5_000 }).toBe(text);
+
+    await page!.request.delete(
+      `${BASE_URL}/api/v1/sessions/${encodeURIComponent(key)}/draft`,
+      { headers: { Authorization: `Bearer ${TOKEN}` } },
     );
   });
 });

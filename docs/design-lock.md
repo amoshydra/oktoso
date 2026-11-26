@@ -1,12 +1,13 @@
-# Design Lock — v1.72
+# Design Lock — v1.73
 
 Status: **frozen**.
 
-- Version: `design-v1.72`
-- Parent: `design-v1.71`
+- Version: `design-v1.73`
+- Parent: `design-v1.72`
 - Date: 2026-11-26
-- Git tag: `design-v1.72`
+- Git tag: `design-v1.73`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.73 scope: assistant composer and action-card drafts.
 - v1.72 scope: the floating jump pill and stable chat scrolling.
 - v1.71 scope: message deep links, assistant message references, and fork-from-message.
 - v1.70 scope: handoff provenance, evidence, compact receipts, and long-card disclosure.
@@ -1559,6 +1560,22 @@ radius, or color token.
   spacing step, radius, control, or colour is added.
 - This supersedes the v1.50 reserved jump lane.
 
+## Assistant composer and action drafts (2026-11-26)
+
+- The assistant composer keeps one draft per scope: global, project, or
+  session. Reopening the dock or returning after a reload restores the typed
+  question. A successful ask clears it; a failed submit keeps both the text and
+  the draft so the reader can retry.
+- The action card's `send` or `handoff` message keeps one draft per action.
+  It restores after a reload while the action is still pending, and clears
+  after Send or Cancel succeeds.
+- Both surfaces use the existing 11px hint role for `Saving draft…`,
+  `Draft saved`, and `Draft not saved`. The composer meta row may wrap at
+  narrow widths; no new type role, spacing step, radius, control, or colour is
+  introduced.
+- Drafts reuse the existing session-draft endpoint with namespaced keys
+  (`draft:assistant:<scope>`, `draft:assistant-action:<actionID>`), so the
+  existing local-data count, clear, and retention cover them.
 
 ## Change policy
 
@@ -1632,3 +1649,5 @@ The `design-v1.70` handoff-quality revision makes agent-facing MCP proposals rec
 The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, paged lookup, message/activity focus, a focus bar with `Fork from here`, message-linked search hits, and a **Referenced messages** list on assistant answers. The chat e2e opens a cached message search hit at the message, focuses the row or activity group, and forks from the bar; the assistant e2e cites a matching message and opens it. Router tests cover the message parameter and href round trip. The full gates pass at 986 unit tests and 92 e2e tests, including 12 G2 tests.
 
 The `design-v1.72` floating-jump revision moves the pill back over the transcript and keeps its 1px divider and a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, the divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.
+
+The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests.

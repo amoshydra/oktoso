@@ -93,6 +93,9 @@ const MAX_DEEP_CHARS = 32_000_000;
 const MAX_DEEP_MS = 5_000;
 const HISTORY_SCAN_LIMIT = 100;
 const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
+/** One retry for a cold or transient model, never after partial text. */
+const MODEL_ATTEMPTS = 2;
+const MODEL_RETRY_DELAY_MS = 750;
 
 /**
  * Model settings for the hub agent. Falls back to the reply endpoint/model when
@@ -966,6 +969,9 @@ export class AssistantService {
       const canPropose = this.writesEnabled();
       const history = thread.turns
         .slice(0, -1)
+        // A failed attempt leaves an empty assistant turn. Replaying it tells
+        // the next model nothing and wastes the small history window.
+        .filter((turn) => turn.text.trim().length > 0 && !turn.error)
         .slice(-6)
         .map(
           (turn) =>
@@ -1016,7 +1022,7 @@ export class AssistantService {
         const available = !tools || finalRound
           ? actionTools
           : [...tools.definitions, ...actionTools];
-        const result = await this.chatRound(
+        const result = await this.chatRoundWithRetry(
           conversation,
           record,
           available,
@@ -1184,6 +1190,52 @@ export class AssistantService {
   }
 
   /**
+   * One model round with a single retry for a cold or transient gateway.
+   *
+   * A retry is safe only before any text reached the reader: replaying a
+   * half-streamed answer would duplicate it. User stops never retry.
+   */
+  private async chatRoundWithRetry(
+    messages: ChatMessage[],
+    record: RunRecord,
+    tools: ChatToolDefinition[] | undefined,
+    onDelta: (delta: string) => void,
+    model: string,
+  ): Promise<{
+    usage?: AssistantTurn["usage"];
+    calls: ToolCall[];
+    text: string;
+  }> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < MODEL_ATTEMPTS; attempt += 1) {
+      let emitted = false;
+      try {
+        return await this.chatRound(
+          messages,
+          record,
+          tools,
+          (delta) => {
+            emitted = true;
+            onDelta(delta);
+          },
+          model,
+        );
+      } catch (error) {
+        lastError = error;
+        const canRetry =
+          attempt < MODEL_ATTEMPTS - 1 &&
+          !emitted &&
+          !record.controller.signal.aborted &&
+          isRetryableModelError(error);
+        if (!canRetry) throw error;
+        await new Promise((resolve) => setTimeout(resolve, MODEL_RETRY_DELAY_MS));
+        if (record.controller.signal.aborted) throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  /**
    * One streamed model round.
    *
    * It returns every tool call, not just the first: a round may ask for
@@ -1229,12 +1281,11 @@ export class AssistantService {
     );
 
     if (!response.ok) {
-      if (response.status >= 500) {
-        throw new Error(
-          "The assistant model is unavailable right now — it may still be loading or the GPU is busy. Try again.",
-        );
-      }
-      throw new Error(`The model returned HTTP ${response.status}`);
+      const message =
+        response.status >= 500
+          ? "The assistant model is unavailable right now — it may still be loading or the GPU is busy. Try again."
+          : `The model returned HTTP ${response.status}`;
+      throw new ModelHttpError(message, response.status);
     }
     if (!response.body) throw new Error("The model returned no response body");
 
@@ -4715,6 +4766,27 @@ function hashPayload(action: AssistantAction): string | undefined {
     answers: action.answers ?? [],
   });
   return createHash("sha256").update(payload).digest("hex");
+}
+
+class ModelHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ModelHttpError";
+  }
+}
+
+function isRetryableModelError(error: unknown): boolean {
+  if (error instanceof ModelHttpError) {
+    return error.status >= 500 || error.status === 408 || error.status === 429;
+  }
+  if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError") return false;
+  if (error.name === "TimeoutError") return true;
+  // Node wraps a dropped connection in TypeError("fetch failed").
+  return error instanceof TypeError;
 }
 
 function describeError(error: unknown): string {

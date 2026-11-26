@@ -6598,6 +6598,12 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   text-transform: uppercase;
 }
 
+.assistant-draft-note {
+  color: var(--faint);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
 .assistant-composer {
   display: flex;
   align-items: flex-end;
@@ -7131,6 +7137,7 @@ html[data-theme="light"] .agent-activity [data-kind="tool"] { --kind: #8a6a2f; }
 
 .assistant-composer-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
