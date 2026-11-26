@@ -961,8 +961,8 @@ describe("composer layout", () => {
         panel.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom,
       );
     });
-    expect(gap).toBeGreaterThanOrEqual(0);
-    expect(gap).toBeLessThan(48);
+    expect(gap).toBeGreaterThanOrEqual(8);
+    expect(gap).toBeLessThan(16);
     await composer.fill("");
   });
 });

@@ -2211,10 +2211,10 @@ competing history buttons.
   the scroll area gains the full lane height back. A short surface fade keeps
   the pill legible while the transcript scrolls underneath; the full-width
   divider was removed in v1.75.
-- The pill hides at the true bottom, so the newest message sits flush with the
-  composer and is not covered; while scrolled up, the pill floats over the
-  content. No extra bottom padding is added, so initial render has no
-  message-to-composer gap and no divider is drawn at the bottom.
+- The pill hides at the true bottom, so the newest message keeps its 8px inset
+  above the frame and is not covered; while scrolled up, the pill floats over
+  the content. No jump-specific padding is added, so initial render has no
+  extra message-to-composer gap and no divider is drawn at the bottom.
 - The near-bottom follow threshold drops from 240px to 80px. New pages and
   streaming updates no longer pull the reader back to the bottom after a small
   upward scroll.
@@ -2233,6 +2233,18 @@ competing history buttons.
   stays inside the transcript frame and no full-width divider is drawn.
   The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2
   tests.
+
+## Transcript bottom inset (2026-11-27)
+
+- The scroll panel's bottom inset drops from 16px to 8px. Top and side insets
+  stay 16px on desktop and 12px on mobile; this is the transcript's own inset,
+  not the jump overlay.
+- The last message and its action row keep one spacing step above the frame;
+  the measured panel-bottom gap is 9px including the 1px frame. The jump pill
+  is still hidden at the true bottom.
+- Verified in the chat e2e: the bottom-pinned gap is at least 8px and below
+  16px. Reviewed at 1440, 1024, 390, and 320px in both themes: no horizontal
+  overflow and no clipped action row. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
 ## Assistant composer and action drafts (2026-11-26)
 

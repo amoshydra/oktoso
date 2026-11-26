@@ -2385,7 +2385,7 @@
   overflow-anchor: none;
   overscroll-behavior: contain;
   padding: var(--space-4);
-  padding-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
   --fade-top: 0px;
   --fade-bottom: 0px;
   -webkit-mask-image: linear-gradient(
@@ -5856,7 +5856,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 
   .chat-panel {
     padding: var(--space-3);
-    padding-bottom: var(--space-4);
+    padding-bottom: var(--space-2);
   }
 
   .chat-doc-head .chat-meta .status-chip {

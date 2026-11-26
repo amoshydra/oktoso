@@ -1,12 +1,13 @@
-# Design Lock — v1.75
+# Design Lock — v1.76
 
 Status: **frozen**.
 
-- Version: `design-v1.75`
-- Parent: `design-v1.74`
+- Version: `design-v1.76`
+- Parent: `design-v1.75`
 - Date: 2026-11-27
-- Git tag: `design-v1.75`
+- Git tag: `design-v1.76`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.76 scope: the 8px transcript bottom inset.
 - v1.75 scope: remove the full-width divider above the jump pill.
 - v1.74 scope: assistant back history and session/lineage search scope.
 - v1.73 scope: assistant composer and action-card drafts.
@@ -1572,6 +1573,16 @@ radius, or color token.
   bar when one is present.
 - No new type role, spacing step, radius, control, or colour.
 
+## Transcript bottom inset (2026-11-27)
+
+- The scroll panel's bottom inset drops from 16px to 8px. Top and side insets
+  stay 16px on desktop and 12px on mobile; this is the transcript's own inset,
+  not the jump overlay.
+- The last message and its action row keep one spacing step of breathing room
+  above the frame. The jump pill remains hidden at the true bottom.
+- The change uses the existing `--space-2` step and adds no token, control, or
+  colour.
+
 ## Assistant composer and action drafts (2026-11-26)
 
 - The assistant composer keeps one draft per scope: global, project, or
@@ -1679,6 +1690,8 @@ The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, 
 The `design-v1.72` floating-jump revision moves the pill back over the transcript with a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, no top divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.
 
 The `design-v1.75` divider-removal revision deletes the full-width rule above the jump pill; the pill and fade remain, and the chat e2e asserts the band has no top border. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
+
+The `design-v1.76` bottom-inset revision reduces the transcript's own bottom padding from 16px to 8px; the measured panel-bottom gap is 9px including the frame. The chat e2e asserts the bottom-pinned gap is at least 8px and below 16px. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 list-mirror follow-up (2026-11-27) keeps the mirror window fixed while the cursor moves; unit coverage spans the window edges and the G2 e2e checks the first visible row across four down presses. The full gates pass at 993 unit tests and 95 e2e tests, including 13 G2 tests.
 
