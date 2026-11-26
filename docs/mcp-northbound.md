@@ -329,7 +329,9 @@ and paused watcher IDs are filtered the same way.
 session, creates a pending card in that chat, and returns the handoff metadata.
 The owner edits, approves, or cancels the card there; only approval calls the
 normal send path, with a stable handoff idempotency key. The tool is available
-without `--allow-write` because it cannot message the target directly.
+without `--allow-write` because it cannot message the target directly. The
+source chat keeps sent handoffs as read-only receipts rendered from hub state;
+the hub never injects them into the provider transcript.
 
 ## Controller policy
 

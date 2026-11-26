@@ -1,12 +1,13 @@
-# Design Lock — v1.62
+# Design Lock — v1.63
 
 Status: **frozen**.
 
-- Version: `design-v1.62`
-- Parent: `design-v1.61`
+- Version: `design-v1.63`
+- Parent: `design-v1.62`
 - Date: 2026-11-26
-- Git tag: `design-v1.62`
+- Git tag: `design-v1.63`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.63 scope: sent handoff receipts in the source transcript.
 - v1.62 scope: the handoff card moves into the transcript.
 - v1.61 scope: cross-session handoff proposals in the source chat.
 - v1.60 scope: pairing without a profile choice; the client declares its profile.
@@ -1375,6 +1376,20 @@ radius, or color token.
   textarea remain.
 - No new type role, spacing step, radius, control, or colour.
 
+## Sent handoff receipts (2026-11-26)
+
+- A sent handoff stays in the source transcript as a read-only receipt. It
+  keeps the `Handoff` badge, target title, project/provider and ref, reason,
+  and the message as prose rather than an editable textarea. The status reads
+  `Sent` in the success colour, the left rule turns success, and a tabular
+  timestamp reads `Sent <date and time>`. There are no Send or Cancel actions.
+- The transcript keeps the newest five sent receipts per session, plus every
+  pending, failed, or sending proposal. Receipts are ordered with the other
+  handoff cards by creation time. Pending and failed cards stay editable.
+- The provider transcript remains provider-owned. A hub handoff is rendered
+  from hub state and is not injected into the provider message list.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1426,4 +1441,6 @@ The `design-v1.60` pairing simplification removes the profile choice from the CL
 
 The `design-v1.61` handoff proposal was verified in the chat e2e at 1280px: an owner-created handoff appears in the source chat with the target title and editable message, and Send removes the card. Unit tests cover proposal, caller resolution, approval/idempotency, failed retry, cancel, and the one-send path. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.
 
-The `design-v1.62` placement revision keeps the same handoff card but moves it inside the transcript after messages and attention cards. The chat e2e asserts the card is inside `.chat-panel`, shows the target title and editable message, and Send removes it. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.
+The `design-v1.62` placement revision keeps the same handoff card but moves it inside the transcript after messages and attention cards. The chat e2e asserts the card is inside `.chat-panel`, shows the target title and editable message, and that version removed the card on Send.
+
+The `design-v1.63` sent-receipt revision keeps the card after approval as a read-only record: the message becomes prose, the status reads `Sent` with a timestamp, and the Send/Cancel actions are gone. The chat e2e sends a handoff, asserts the receipt remains inside `.chat-panel` with the message and without actions, reloads, and asserts the receipt is still there. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.

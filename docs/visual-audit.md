@@ -2063,11 +2063,15 @@ competing history buttons.
   message, and `Send handoff` / `Cancel`.
 - The message is a textarea at the body role; on mobile it is 16px and the
   actions are 44px. Failed sends keep the card with a danger error line and
-  `Retry handoff`; sending disables both actions. A sent card disappears and a
-  polite hidden status names the target.
+  `Retry handoff`; sending disables both actions. A sent card stays as a
+  read-only receipt: the message becomes prose, the status reads `Sent` in the
+  success colour, the left rule turns success, and `Sent <date and time>` uses
+  tabular figures. Send and Cancel are removed. The transcript keeps the newest
+  five sent receipts per session plus every open proposal.
 - The card uses the existing border, surface, radius, and button grammar. It
   adds no type role, spacing step, radius, or colour.
 - Verified in the chat e2e at 1280px: an owner-created handoff appears in the
-  source chat with the target title and editable message, and Send removes the
-  card. Unit tests cover proposal, caller resolution, approval/idempotency,
-  failed retry, cancel, and the one-send path.
+  source chat with the target title and editable message; Send turns it into a
+  read-only receipt inside `.chat-panel` with no textarea and no Send action;
+  a reload keeps the receipt. Unit tests cover proposal, caller resolution,
+  approval/idempotency, failed retry, cancel, and the one-send path.

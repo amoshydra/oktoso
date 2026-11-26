@@ -1859,9 +1859,29 @@ describe("handoff", () => {
     );
 
     await card.getByRole("button", { name: "Send handoff" }).click();
-    await expect
-      .poll(() => page!.locator(".handoff-card").count(), { timeout: 10_000 })
-      .toBe(0);
+    const receipt = page!.locator(
+      '.chat-panel .handoff-card[data-status="sent"]',
+    );
+    await receipt.waitFor({ state: "visible", timeout: 10_000 });
+    await expect(receipt.innerText()).resolves.toContain("Sent");
+    await expect(receipt.innerText()).resolves.toContain(
+      "Implement the THREED_LAUNCH_OPTIONS follow-up.",
+    );
+    expect(await receipt.locator(".handoff-message").count()).toBe(0);
+    expect(
+      await receipt.getByRole("button", { name: "Send handoff" }).count(),
+    ).toBe(0);
+
+    await page!.reload();
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
+    await page!
+      .locator('.chat-panel .handoff-card[data-status="sent"]')
+      .waitFor({ state: "visible", timeout: 10_000 });
+    await expect(
+      page!
+        .locator('.chat-panel .handoff-card[data-status="sent"]')
+        .innerText(),
+    ).resolves.toContain("Implement the THREED_LAUNCH_OPTIONS follow-up.");
   });
 });
 

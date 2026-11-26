@@ -2426,6 +2426,10 @@
   box-shadow: var(--shadow-sm);
 }
 
+.handoff-card[data-status="sent"] {
+  border-left-color: var(--success);
+}
+
 .handoff-target-title {
   display: block;
   margin: var(--space-1) 0;
@@ -2445,6 +2449,10 @@
 
 .handoff-status.failed {
   color: var(--danger);
+}
+
+.handoff-status.sent {
+  color: var(--success);
 }
 
 .handoff-meta {
@@ -2472,6 +2480,22 @@
 .handoff-message:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.handoff-message-read {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.handoff-sent-time {
+  margin: var(--space-2) 0 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .handoff-reason {

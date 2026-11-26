@@ -1364,7 +1364,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.62 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.63 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4676,30 +4676,41 @@ function HandoffCard(props: {
 }) {
   const { handoff } = props;
   const failed = handoff.status === "failed";
+  const sent = handoff.status === "sent";
+  const sending = handoff.status === "sending";
   return (
     <section
       className="handoff-card"
       data-status={handoff.status}
-      aria-label={`Handoff to ${handoff.targetTitle}`}
+      aria-label={
+        sent
+          ? `Handoff to ${handoff.targetTitle}, sent`
+          : `Handoff to ${handoff.targetTitle}`
+      }
     >
       <div className="attention-top">
         <span className="type-badge handoff">Handoff</span>
         <span className="attention-provider">From this session</span>
         <span className={`handoff-status ${handoff.status}`}>
-          {failed ? "Failed" : "Pending"}
+          {sent ? "Sent" : failed ? "Failed" : sending ? "Sending" : "Pending"}
         </span>
       </div>
       <div className="handoff-target-title">To {handoff.targetTitle}</div>
       <p className="handoff-meta">
         {handoff.targetProject ?? handoff.targetProviderID} · {handoff.targetRef}
       </p>
-      <textarea
-        className="handoff-message"
-        value={props.draft}
-        rows={3}
-        aria-label={`Handoff message to ${handoff.targetTitle}`}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
-      />
+      {sent ? (
+        <p className="handoff-message-read">{handoff.message}</p>
+      ) : (
+        <textarea
+          className="handoff-message"
+          value={props.draft}
+          rows={3}
+          aria-label={`Handoff message to ${handoff.targetTitle}`}
+          disabled={sending}
+          onChange={(event) => props.onChange(event.currentTarget.value)}
+        />
+      )}
       {handoff.reason ? (
         <p className="handoff-reason">Why: {handoff.reason}</p>
       ) : null}
@@ -4708,24 +4719,36 @@ function HandoffCard(props: {
           {handoff.error}
         </p>
       ) : null}
-      <div className="handoff-actions">
-        <button
-          className="btn primary small"
-          type="button"
-          disabled={props.busy || props.draft.trim().length === 0}
-          onClick={props.onSend}
-        >
-          {props.busy ? "Sending…" : failed ? "Retry handoff" : "Send handoff"}
-        </button>
-        <button
-          className="btn small"
-          type="button"
-          disabled={props.busy}
-          onClick={props.onCancel}
-        >
-          Cancel
-        </button>
-      </div>
+      {sent ? (
+        <p className="handoff-sent-time">
+          Sent {formatDateTime(handoff.sentAt ?? handoff.updatedAt)}
+        </p>
+      ) : (
+        <div className="handoff-actions">
+          <button
+            className="btn primary small"
+            type="button"
+            disabled={
+              props.busy || sending || props.draft.trim().length === 0
+            }
+            onClick={props.onSend}
+          >
+            {props.busy || sending
+              ? "Sending…"
+              : failed
+                ? "Retry handoff"
+                : "Send handoff"}
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            disabled={props.busy || sending}
+            onClick={props.onCancel}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -4980,14 +5003,25 @@ function SessionDetail(props: {
     const list = await props.client.handoffs({
       sourceRef: props.sessionRef,
     });
-    const active = list.filter(
+    const open = list.filter(
       (handoff) =>
-        handoff.status === "pending" || handoff.status === "failed",
+        handoff.status === "pending" ||
+        handoff.status === "failed" ||
+        handoff.status === "sending",
     );
-    setHandoffs(active);
+    // Keep the newest sent receipts so the transcript retains a record
+    // without accumulating every handoff this session ever made.
+    const sent = list
+      .filter((handoff) => handoff.status === "sent")
+      .slice(0, 5);
+    const visible = [...open, ...sent].sort(
+      (left, right) => left.createdAt - right.createdAt,
+    );
+    setHandoffs(visible);
     setHandoffDrafts((current) => {
       const next: Record<string, string> = {};
-      for (const handoff of active) {
+      for (const handoff of visible) {
+        if (handoff.status === "sent") continue;
         next[handoff.id] = current[handoff.id] ?? handoff.message;
       }
       return next;
@@ -5025,7 +5059,7 @@ function SessionDetail(props: {
       const next = await props.client.approveHandoff(handoff.id, message);
       if (next.status === "sent") {
         setHandoffs((current) =>
-          current.filter((entry) => entry.id !== handoff.id),
+          current.map((entry) => (entry.id === next.id ? next : entry)),
         );
         setHandoffNotice(`Handoff sent to ${next.targetTitle}.`);
       } else {
