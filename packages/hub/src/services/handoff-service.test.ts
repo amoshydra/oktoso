@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Session } from "@amoshydra/oktoso-contracts";
+import type {
+  HubEvent,
+  Message,
+  Session,
+} from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import type { EventBus } from "./event-bus";
 import { HandoffService } from "./handoff-service";
@@ -38,7 +42,37 @@ function setup(
 ) {
   const store = new MemoryStateStore();
   const send = vi.fn(async () => sendResult);
-  const publish = vi.fn(async () => ({}) as never);
+  const listeners = new Set<(event: HubEvent) => void>();
+  const publish = vi.fn(
+    async (
+      type: HubEvent["type"],
+      data: unknown,
+      options: { sessionRef?: string } = {},
+    ) => {
+      const event: HubEvent = {
+        seq: 1,
+        type,
+        data,
+        at: 1_000,
+        ...(options.sessionRef ? { sessionRef: options.sessionRef } : {}),
+      };
+      for (const listener of listeners) listener(event);
+      return event;
+    },
+  );
+  const emitMessage = (
+    message: Message,
+    type: "created" | "updated" = "created",
+  ) => {
+    const event: HubEvent = {
+      seq: 2,
+      type: type === "created" ? "message.created" : "message.updated",
+      data: { message },
+      at: 1_000,
+      sessionRef: message.sessionRef,
+    };
+    for (const listener of listeners) listener(event);
+  };
   const queueSynthetic = vi.fn(
     async (_ref: string, _input: Record<string, unknown>) => {
       if (queueResult instanceof Error) throw queueResult;
@@ -61,11 +95,25 @@ function setup(
     store,
     sessions,
     actions: { send } as unknown as SessionActions,
-    events: { publish } as unknown as EventBus,
+    events: {
+      publish,
+      subscribe: (listener: (event: HubEvent) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    } as unknown as EventBus,
     now: () => 1_000,
     idFactory: () => "hnd_test",
   });
-  return { service, store, send, publish, queueSynthetic };
+  return { service, store, send, publish, queueSynthetic, emitMessage };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  throw new Error("timed out waiting for the handoff state");
 }
 
 describe("HandoffService", () => {
@@ -231,5 +279,94 @@ describe("HandoffService", () => {
     expect(cancelled.status).toBe("cancelled");
     await expect(service.approve("hnd_test")).rejects.toThrow(/cancelled/);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("aborts a pending proposal when the source receives a user message", async () => {
+    const { service, emitMessage } = setup();
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial proposal.",
+    });
+    emitMessage(
+      {
+        id: "msg_user",
+        sessionRef: source.ref,
+        role: "user",
+        createdAt: 1_001,
+        parts: [{ type: "text", text: "new direction" }],
+      },
+      "updated",
+    );
+    await waitFor(
+      () =>
+        service.list({ sourceRef: source.ref })[0]?.status === "cancelled",
+    );
+    expect(service.list({ sourceRef: source.ref })).toHaveLength(1);
+  });
+
+  it("does not abort for an update to an older user message", async () => {
+    const { service, emitMessage } = setup();
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial proposal.",
+    });
+    emitMessage(
+      {
+        id: "msg_old",
+        sessionRef: source.ref,
+        role: "user",
+        createdAt: 999,
+        parts: [{ type: "text", text: "old message" }],
+      },
+      "updated",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(service.list({ sourceRef: source.ref })[0]?.status).toBe("pending");
+  });
+
+  it("does not abort a proposal for another session or an assistant message", async () => {
+    const { service, emitMessage } = setup();
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+    });
+    emitMessage({
+      id: "msg_assistant",
+      sessionRef: source.ref,
+      role: "assistant",
+      createdAt: 1_001,
+      parts: [{ type: "text", text: "working on it" }],
+    });
+    emitMessage({
+      id: "msg_other",
+      sessionRef: "desktop-opencode:ses_other",
+      role: "user",
+      createdAt: 1_002,
+      parts: [{ type: "text", text: "elsewhere" }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(service.list({ sourceRef: source.ref })[0]?.status).toBe("pending");
+  });
+
+  it("leaves a sent handoff alone when the source receives a user message", async () => {
+    const { service, emitMessage } = setup();
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+    });
+    await service.approve("hnd_test");
+    emitMessage({
+      id: "msg_user",
+      sessionRef: source.ref,
+      role: "user",
+      createdAt: 1_001,
+      parts: [{ type: "text", text: "new direction" }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(service.list({ sourceRef: source.ref })[0]?.status).toBe("sent");
   });
 });

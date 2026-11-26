@@ -1,12 +1,13 @@
-# Design Lock — v1.67
+# Design Lock — v1.68
 
 Status: **frozen**.
 
-- Version: `design-v1.67`
-- Parent: `design-v1.66`
+- Version: `design-v1.68`
+- Parent: `design-v1.67`
 - Date: 2026-11-26
-- Git tag: `design-v1.67`
+- Git tag: `design-v1.68`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.68 scope: pending handoffs abort when the source session gets a new user message.
 - v1.67 scope: handoff receipts in transcript time order.
 - v1.66 scope: the assistant handoff action.
 - v1.65 scope: provider-visible handoff receipts.
@@ -1467,6 +1468,21 @@ radius, or color token.
   chat transcript.
 - No new type role, spacing step, radius, control, or colour.
 
+## Pending handoffs abort on a new user message (2026-11-26)
+
+- When a source session receives a new user message, every pending handoff
+  proposal from that session is cancelled. The card leaves the transcript
+  instead of lingering as a stale action. This applies whether the message came
+  from the hub, the OpenCode TUI, the assistant, or automation; the hub watches
+  provider message events.
+- A user-message update only aborts proposals created at or before that
+  message. An update to an older user message does not cancel a fresh proposal.
+  This covers providers that re-emit the existing user message instead of
+  sending a create event.
+- Failed handoffs stay for explicit Retry; a handoff that is already sending is
+  left alone. Sent receipts are unaffected.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1529,3 +1545,5 @@ The `design-v1.65` provider-receipt revision queues an OpenCode v2 synthetic not
 The `design-v1.66` assistant-handoff revision adds `handoff` as a fourth assistant action. The action card shows the source and target, keeps the instruction and optional reason editable, sends after one confirmation, and reports `Sent`, the queued receipt, and a link to the source session. The assistant e2e edits the instruction and reason, sends, asserts the receipt line and the fake provider's synthetic inbox item, and finds the edited sent card in the source chat. Unit tests cover the proposal, edited text/reason, send, receipt result, and self-handoff rejection. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.
 
 The `design-v1.67` ordering revision merges sent handoff receipts into the transcript at their sent time and rebuilds date separators around the combined timeline. Pending, failed, and sending cards stay at the end as actionable cards. The chat e2e sends a prompt after the receipt and asserts the receipt precedes the later message, proving it is ordered by time rather than appended to the bottom. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.
+
+The `design-v1.68` abort revision cancels pending handoffs when the source session receives a new user message, so a stale action does not remain at the bottom. User-message updates only abort proposals created at or before that message; older updates, other sessions, assistant messages, and sent handoffs are left alone. The chat e2e creates a pending proposal, sends a prompt, and asserts the card disappears and the handoff becomes `cancelled`. Unit tests cover the abort path, older-message updates, other-session messages, and sent-handoff safety. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.

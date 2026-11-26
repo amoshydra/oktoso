@@ -1928,6 +1928,51 @@ describe("handoff", () => {
     }, "After the handoff");
     expect(ordered).toBe(true);
   });
+
+  it("aborts a pending handoff when the source gets a new message", async () => {
+    const created = await page!.request.post(`${BASE_URL}/api/v1/handoffs`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      data: {
+        sourceRef: "desktop-opencode:ses_auth",
+        targetRef: "desktop-opencode:ses_index",
+        message: "This proposal should be aborted.",
+        reason: "Abort path.",
+      },
+    });
+    expect(created.ok()).toBe(true);
+    const body = (await created.json()) as { data: { id: string } };
+
+    await openSession("Fix auth race in gateway");
+    const pending = page!.locator(
+      '.chat-panel .handoff-card[data-status="pending"]',
+    );
+    await pending.waitFor({ state: "visible", timeout: 5_000 });
+
+    await sendPrompt("Moving on");
+    await expect
+      .poll(() => pending.count(), { timeout: 10_000 })
+      .toBe(0);
+    await expect
+      .poll(
+        async () => {
+          const response = await page!.request.get(
+            `${BASE_URL}/api/v1/handoffs?sourceRef=${encodeURIComponent("desktop-opencode:ses_auth")}`,
+            { headers: { Authorization: `Bearer ${TOKEN}` } },
+          );
+          if (!response.ok()) return undefined;
+          const list = (await response.json()) as {
+            data?: Array<{ id: string; status: string }>;
+          };
+          return list.data?.find((handoff) => handoff.id === body.data.id)
+            ?.status;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe("cancelled");
+    await page!
+      .locator(".chat-message.user", { hasText: "Moving on" })
+      .waitFor({ timeout: 10_000 });
+  });
 });
 
 describe("route revalidation", () => {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type {
   Handoff,
   HandoffStatus,
+  Message,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import { badRequest, conflict, notFound, notImplemented } from "../domain/errors";
@@ -86,6 +87,28 @@ export class HandoffService {
   constructor(private readonly options: HandoffServiceOptions) {
     this.now = options.now ?? Date.now;
     this.idFactory = options.idFactory ?? (() => `hnd_${randomUUID()}`);
+    options.events.subscribe((event) => {
+      if (
+        event.type !== "message.created" &&
+        event.type !== "message.updated"
+      ) {
+        return;
+      }
+      const message = (event.data as { message?: Message } | undefined)?.message;
+      if (!message || message.role !== "user") return;
+      const sourceRef = event.sessionRef ?? message.sessionRef;
+      if (!sourceRef) return;
+      // A new user message means the conversation moved on. Pending proposals
+      // are stale; abort them instead of leaving an action at the bottom.
+      // Updates to an older user message must not abort a newer proposal, so
+      // an update only cancels proposals created at or before that message.
+      void this.cancelPendingForSource(
+        sourceRef,
+        event.type === "message.updated"
+          ? { createdBefore: message.createdAt }
+          : {},
+      ).catch(() => undefined);
+    });
   }
 
   async propose(input: ProposeHandoffInput): Promise<Handoff> {
@@ -175,6 +198,34 @@ export class HandoffService {
     });
     await this.publish("handoff.updated", handoff);
     return handoff;
+  }
+
+  /**
+   * Abort open proposals for a source session.
+   *
+   * Called when the session receives a new user message: the conversation has
+   * moved on, so a pending card must not remain as a stale action. Failed
+   * handoffs are left alone because they are already a record with an explicit
+   * Retry path; sending is never in flight here.
+   */
+  async cancelPendingForSource(
+    sourceRef: string,
+    options: { createdBefore?: number } = {},
+  ): Promise<Handoff[]> {
+    const pending = this.list({ sourceRef, status: "pending" }).filter(
+      (handoff) =>
+        options.createdBefore === undefined ||
+        handoff.createdAt <= options.createdBefore,
+    );
+    const cancelled: Handoff[] = [];
+    for (const handoff of pending) {
+      try {
+        cancelled.push(await this.cancel(handoff.id));
+      } catch {
+        // A concurrent decision may have moved it; leave that outcome alone.
+      }
+    }
+    return cancelled;
   }
 
   async approve(id: string, message?: string): Promise<Handoff> {

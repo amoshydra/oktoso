@@ -2099,6 +2099,10 @@ competing history buttons.
   merged into the timeline at their sent time; the hub rebuilds date separators
   around them. Pending, failed, and sending cards stay at the end as actionable
   cards.
+- A pending proposal is aborted when the source session receives a new user
+  message; its card leaves the transcript rather than lingering as a stale
+  action. A failed proposal stays for explicit Retry, and a sending handoff is
+  left alone. Sent receipts are unaffected.
 - When the provider accepted a synthetic receipt, the sent card adds a second
   faint line: `Session receipt queued for its next turn.` The line uses the
   existing 11px hint role and tabular figures. The OpenCode v2 receipt is in the
@@ -2112,9 +2116,12 @@ competing history buttons.
   the card reports the queued session receipt; the fake provider's source inbox
   contains a synthetic item; a reload keeps the receipt. A prompt sent after the
   receipt appears below it, proving the receipt is ordered by time rather than
-  appended to the bottom. Unit tests cover proposal, caller resolution,
+  appended to the bottom. A second e2e creates a pending proposal, sends a
+  prompt, and asserts the card disappears and the handoff status becomes
+  `cancelled`. Unit tests cover proposal, caller resolution,
   approval/idempotency, failed retry, cancel, the one-send path, receipt
-  queueing, receipt failure, and backfill idempotency.
+  queueing, receipt failure, and backfill idempotency, plus user-message abort,
+  older-message updates, other-session messages, and sent-handoff safety.
 
 ## Question and edit/fork drafts (2026-11-26)
 
