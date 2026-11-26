@@ -1289,6 +1289,7 @@ describe("AssistantService", () => {
         targetRef: target.ref,
         text: "Continue the fix in the other session.",
         reason: "The work moved.",
+        evidence: "turn 12",
         summary: "Hand off the fix?",
       })) as unknown as typeof fetch;
     const service = new AssistantService({
@@ -1334,12 +1335,14 @@ describe("AssistantService", () => {
       targetRef: target.ref,
       targetTitle: target.title,
       reason: "The work moved.",
+      evidence: "turn 12",
     });
 
     await service.decide(thread.id, event.turn.id, {
       decision: "confirm",
       text: "Edited handoff instruction.",
       reason: "Edited reason.",
+      evidence: "edited evidence",
     });
     expect(proposed).toEqual([
       {
@@ -1347,6 +1350,7 @@ describe("AssistantService", () => {
         targetRef: target.ref,
         message: "Edited handoff instruction.",
         reason: "Edited reason.",
+        evidence: "edited evidence",
       },
     ]);
     expect(approved).toEqual(["hnd_test"]);

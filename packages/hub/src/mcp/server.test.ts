@@ -7,6 +7,7 @@ import type {
   AttentionPage,
   AutomationApproval,
   AutomationView,
+  Handoff,
   HubEvent,
   MessagePage,
   Provider,
@@ -195,6 +196,39 @@ describe("Oktoso MCP server", () => {
         limit: 5,
       });
       expect(toolText(result)).toContain("Fix the auth race");
+    } finally {
+      await close();
+    }
+  });
+
+  it("proposes a handoff with agent provenance and evidence", async () => {
+    const api = fakeApi({
+      proposeHandoff: vi.fn(async () => ({ id: "hnd_1" }) as Handoff),
+    });
+    const { client, close } = await connect(api);
+    try {
+      const result = await client.callTool({
+        name: "handoff_propose",
+        arguments: {
+          sourceRef: "opencode:ses_abc",
+          targetRef: "opencode:ses_target",
+          message: "Fix the queue leak",
+          reason: "It blocks every later request",
+          evidence: "queue entry 90",
+        },
+      });
+      expect(result.isError).toBeUndefined();
+      expect(api.proposeHandoff).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceRef: "opencode:ses_abc",
+          targetRef: "opencode:ses_target",
+          message: "Fix the queue leak",
+          reason: "It blocks every later request",
+          evidence: "queue entry 90",
+          createdBy: "agent",
+          createdByRef: "opencode:ses_abc",
+        }),
+      );
     } finally {
       await close();
     }

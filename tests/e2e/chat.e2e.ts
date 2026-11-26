@@ -1843,6 +1843,7 @@ describe("handoff", () => {
         targetRef: "desktop-opencode:ses_index",
         message: "Implement the THREED_LAUNCH_OPTIONS follow-up.",
         reason: "Handoff from the GPU Orchestrator session.",
+        evidence: "queue entry 90",
       },
     });
     expect(created.ok()).toBe(true);
@@ -1853,6 +1854,9 @@ describe("handoff", () => {
     expect(await page!.locator(".chat-panel .handoff-card").count()).toBe(1);
     await expect(card.innerText()).resolves.toContain(
       "Refactor session index",
+    );
+    await expect(card.innerText()).resolves.toContain(
+      "Evidence: queue entry 90",
     );
     await expect(card.locator(".handoff-message").inputValue()).resolves.toBe(
       "Implement the THREED_LAUNCH_OPTIONS follow-up.",
@@ -1898,6 +1902,28 @@ describe("handoff", () => {
       )
       .toBe(true);
 
+    const inboxResponse = await page!.request.get(
+      `${providers[0]!.url}/api/session/ses_auth/inbox`,
+    );
+    const inbox = (await inboxResponse.json()) as {
+      data?: Array<{
+        type?: string;
+        payload?: {
+          text?: string;
+          metadata?: { message?: string };
+        };
+      }>;
+    };
+    const syntheticReceipt = inbox.data?.find(
+      (item) => item.type === "synthetic",
+    );
+    expect(syntheticReceipt?.payload?.text).not.toContain(
+      "Implement the THREED_LAUNCH_OPTIONS follow-up.",
+    );
+    expect(syntheticReceipt?.payload?.metadata?.message).toContain(
+      "Implement the THREED_LAUNCH_OPTIONS follow-up.",
+    );
+
     await page!.reload();
     await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
     await page!
@@ -1927,6 +1953,50 @@ describe("handoff", () => {
       );
     }, "After the handoff");
     expect(ordered).toBe(true);
+  });
+
+  it("collapses and expands a long sent handoff message", async () => {
+    const longMessage = `Long handoff. ${"detail ".repeat(150)}END-OF-HANDOFF`;
+    const created = await page!.request.post(`${BASE_URL}/api/v1/handoffs`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      data: {
+        sourceRef: "desktop-opencode:ses_auth",
+        targetRef: "desktop-opencode:ses_index",
+        message: longMessage,
+        reason: "Long message.",
+        evidence: "long evidence",
+      },
+    });
+    expect(created.ok()).toBe(true);
+
+    await openSession("Fix auth race in gateway");
+    const pending = page!
+      .locator('.chat-panel .handoff-card[data-status="pending"]')
+      .last();
+    await pending.waitFor({ state: "visible", timeout: 5_000 });
+    await expect(pending.innerText()).resolves.toContain(
+      "Evidence: long evidence",
+    );
+    await pending.getByRole("button", { name: "Send handoff" }).click();
+
+    const sent = page!
+      .locator('.chat-panel .handoff-card[data-status="sent"]', {
+        hasText: "long evidence",
+      })
+      .last();
+    await sent.waitFor({ state: "visible", timeout: 10_000 });
+    await expect(
+      sent.locator(".handoff-message-read.clamped").count(),
+    ).resolves.toBe(1);
+    const toggle = sent.getByRole("button", { name: "Show full message" });
+    await toggle.click();
+    await expect(
+      sent.locator(".handoff-message-read.clamped").count(),
+    ).resolves.toBe(0);
+    await expect(
+      sent.getByRole("button", { name: "Show less" }).count(),
+    ).resolves.toBe(1);
+    await expect(sent.innerText()).resolves.toContain("END-OF-HANDOFF");
   });
 
   it("aborts a pending handoff when the source gets a new message", async () => {

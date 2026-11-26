@@ -92,6 +92,7 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
                               targetRef: "desktop-opencode:ses_index",
                               text: "E2E handoff instruction",
                               reason: "E2E handoff",
+                              evidence: "E2E evidence",
                               summary: "Hand off the fix?",
                             }),
                           },
@@ -507,12 +508,18 @@ describe("session assistant", () => {
     expect(await card.locator(".assistant-action-reason").inputValue()).toBe(
       "E2E handoff",
     );
+    expect(await card.locator(".assistant-action-evidence").inputValue()).toBe(
+      "E2E evidence",
+    );
     await card
       .locator(".assistant-action-text")
       .fill("E2E edited handoff instruction");
     await card
       .locator(".assistant-action-reason")
       .fill("E2E edited reason");
+    await card
+      .locator(".assistant-action-evidence")
+      .fill("E2E edited evidence");
 
     await card.getByRole("button", { name: "Send handoff" }).click();
     await card.locator(".assistant-action-state").waitFor({ timeout: 10_000 });
@@ -561,6 +568,9 @@ describe("session assistant", () => {
     );
     await expect(sentCard.innerText()).resolves.toContain(
       "Why: E2E edited reason",
+    );
+    await expect(sentCard.innerText()).resolves.toContain(
+      "Evidence: E2E edited evidence",
     );
   });
 });

@@ -406,6 +406,8 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - While OpenCode runs and the provider supports both deliveries, one quiet **Queue** action sits beside Send on desktop and in the `⋯` menu on mobile. It applies to the current draft and queues it for the next idle boundary; it never changes what Send does, so there is no delivery mode to check. The action is absent when the provider cannot steer.
 - Queued messages render as a one-line summary above the composer: `Queued · N · first message…`, with a chevron that expands the list. `Send now`, shown only while the turn is running, promotes an item to steer delivery; Remove cancels it. A delivered item leaves the summary and arrives through the transcript. The count is announced when it changes.
 - A pending cross-session handoff appears at the end of the transcript as one action card per proposal, in the same card grammar as an inline question: a `Handoff` type badge, target title, project/provider and ref, editable message, reason, `Send handoff`, and `Cancel`. The agent proposes; the owner reviews and sends. Failed cards keep the message editable and show the error with `Retry handoff`; sending disables both actions. A pending proposal is aborted when the source session receives a new user message, and its card leaves the transcript; a failed proposal stays for explicit Retry. A quiet `Pending handoff cancelled because the session moved on.` notice appears at the bottom with a Dismiss action and clears itself after six seconds. A sent card stays as a read-only receipt: the message becomes prose, the status reads `Sent` in the success colour with a tabular timestamp, and Send/Cancel disappear while a polite status announces the target. Sent receipts are placed in the transcript at their sent time, with date separators rebuilt around them; pending, failed, and sending proposals stay at the end as actionable cards. When the source provider supports synthetic notices, the sent card also reads `Session receipt queued for its next turn.` The receipt enters the provider inbox without starting a turn and becomes a provider-visible synthetic notice on the next run. The transcript keeps the newest five sent receipts plus every open proposal. It scrolls to a new card when the user is at the bottom. Buttons are 44px on mobile and the textarea is 16px there.
+- A handoff can carry an optional compact `Evidence` reference (queue entry, log line, commit, or run ID), shown as an 11px faint line on the card. Agent-facing MCP proposals are recorded as `agent`-authored; REST/API and assistant-action proposals are `owner`-authored. The source synthetic receipt is compact: target, time, evidence, and “No action is required.” The full message and metadata stay in the hub and the provider message metadata.
+- Sent handoff messages longer than 800 characters clamp to six lines with a `Show full message` / `Show less` disclosure. The full text remains available; only the visual height changes.
 - Open WebUI has no queue or steer path: Send is disabled while a response is active, the hint reads `Agent running · interrupt to send`, and the Interrupt action sits beside it. No Queue action or queue summary renders.
 - `Suggest` is a quiet composer action when the reply model is configured. It fetches on demand and shows four to six model suggestions as wrapping chips above the textarea, labelled `Suggested`. Each chip carries a role tag where it helps: `Alt`, `Next`, `Check`, `More`, or `Ask`; the primary answer has none. Selecting a chip inserts the text into the draft (append when a draft already exists) and focuses the composer. It never sends. The hub still classifies the moment, but `wait` and `done` also get suggestions: a running or finished turn is still a conversation, so the row never shows a `No reply needed` notice. Loading reads `Reading session…`; a failed or empty result reads `No grounded suggestions. Try again or check the reply model.` with `Retry`. The row is dismissible. No chips render until the user asks; the visible idle session may warm the hub cache in the background.
 - Mobile suggestion chips and their dismiss/retry controls use 44px targets; chips wrap above the textarea without horizontal overflow.
@@ -467,13 +469,13 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
 - A **handoff action card** names the source and destination sessions, shows
   the destination project/provider/ref metadata, and keeps the instruction and
-  optional `Why` editable. The hub resolves both sessions before the card is
-  shown; a missing target or a self-handoff is a failed proposal with the
-  reason. `Send handoff` confirms and sends in one step, then the card reads
-  `Sent`, adds `Session receipt queued for its next turn.` when the source
-  provider accepted the synthetic receipt, and links to the source session.
-  The source chat keeps the sent handoff card. One action at a time still
-  applies.
+  optional `Why` and `Evidence` fields editable. The hub resolves both sessions
+  before the card is shown; a missing target or a self-handoff is a failed
+  proposal with the reason. `Send handoff` confirms and sends in one step, then
+  the card reads `Sent`, adds `Session receipt queued for its next turn.` when
+  the source provider accepted the synthetic receipt, and links to the source
+  session. The source chat keeps the sent handoff card. One action at a time
+  still applies.
 - A pending action expires after 24 hours: the card reads `Expired`, keeps its
   payload, and loses its buttons. A thread is never evicted while an action is
   pending.

@@ -329,13 +329,19 @@ export function AssistantDock({
       decision: "confirm" | "cancel",
       text?: string,
       reason?: string,
+      evidence?: string,
     ) => {
       if (!thread) return;
       try {
         const updated = await client.decideAssistantAction(
           thread.thread.id,
           turn.id,
-          { decision, ...(text ? { text } : {}), ...(reason !== undefined ? { reason } : {}) },
+          {
+            decision,
+            ...(text ? { text } : {}),
+            ...(reason !== undefined ? { reason } : {}),
+            ...(evidence !== undefined ? { evidence } : {}),
+          },
         );
         setTurns((current) =>
           current.map((entry) => (entry.id === updated.id ? updated : entry)),
@@ -831,11 +837,13 @@ function ActionCard({
     decision: "confirm" | "cancel",
     text?: string,
     reason?: string,
+    evidence?: string,
   ) => Promise<void>;
 }) {
   const action = turn.action;
   const [text, setText] = useState(action?.text ?? "");
   const [reason, setReason] = useState(action?.reason ?? "");
+  const [evidence, setEvidence] = useState(action?.evidence ?? "");
   const [saving, setSaving] = useState(false);
   if (!action) return null;
 
@@ -856,6 +864,9 @@ function ActionCard({
         decision,
         decision === "confirm" ? text : undefined,
         decision === "confirm" && action.kind === "handoff" ? reason : undefined,
+        decision === "confirm" && action.kind === "handoff"
+          ? evidence
+          : undefined,
       );
     } finally {
       setSaving(false);
@@ -934,6 +945,20 @@ function ActionCard({
                   placeholder="Why this handoff?"
                   onChange={(event) => setReason(event.target.value)}
                 />
+                <label
+                  className="assistant-action-field-label"
+                  htmlFor={`evidence-${action.id}`}
+                >
+                  Evidence (optional)
+                </label>
+                <input
+                  id={`evidence-${action.id}`}
+                  className="assistant-action-evidence"
+                  value={evidence}
+                  maxLength={500}
+                  placeholder="Queue entry, log line, commit…"
+                  onChange={(event) => setEvidence(event.target.value)}
+                />
               </>
             ) : null}
           </>
@@ -943,6 +968,11 @@ function ActionCard({
             {action.kind === "handoff" && action.reason ? (
               <p className="assistant-action-reason-value">
                 Why: {action.reason}
+              </p>
+            ) : null}
+            {action.kind === "handoff" && action.evidence ? (
+              <p className="assistant-action-reason-value">
+                Evidence: {action.evidence}
               </p>
             ) : null}
           </>

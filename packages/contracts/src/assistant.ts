@@ -99,6 +99,8 @@ export const zAssistantAction = z.object({
   targetProviderID: z.string().optional(),
   /** `handoff`: optional reason shown on the sent card. */
   reason: z.string().optional(),
+  /** `handoff`: compact evidence reference shown on the card. */
+  evidence: z.string().optional(),
   /** `handoff`: the created handoff, for audit and the source link. */
   handoffID: z.string().optional(),
   /** `handoff`: set when the source session accepted a synthetic receipt. */
@@ -262,6 +264,8 @@ export const zAssistantActionDecision = z.object({
   text: z.string().trim().min(1).max(4_000).optional(),
   /** `handoff` only: a human edit of the optional reason. */
   reason: z.string().trim().max(500).optional(),
+  /** `handoff` only: a human edit of the compact evidence reference. */
+  evidence: z.string().trim().max(500).optional(),
 });
 
 export const zAssistantThreadUpdate = z.object({

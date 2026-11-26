@@ -172,6 +172,7 @@ describe("HandoffService", () => {
       sourceRef: source.ref,
       targetRef: target.ref,
       message: "Initial.",
+      evidence: "queue entry 90",
     });
     const sent = await service.approve("hnd_test", "Final instruction.");
     expect(send).toHaveBeenCalledWith(
@@ -186,19 +187,39 @@ describe("HandoffService", () => {
       source.ref,
       expect.objectContaining({
         description: "Handoff sent to 3D Kitchen",
-        text: expect.stringContaining("Final instruction."),
+        text: expect.stringContaining("Evidence: queue entry 90"),
         metadata: expect.objectContaining({
           handoffID: "hnd_test",
           targetRef: target.ref,
+          message: "Final instruction.",
+          evidence: "queue entry 90",
         }),
       }),
     );
-    expect(queueSynthetic.mock.calls[0]?.[1].id).toMatch(/^msg_handoff_/);
+    const receipt = queueSynthetic.mock.calls[0]?.[1] as {
+      text?: string;
+      id?: string;
+    };
+    expect(receipt.text).not.toContain("Final instruction.");
+    expect(receipt.id).toMatch(/^msg_handoff_/);
     expect(publish).toHaveBeenLastCalledWith(
       "handoff.updated",
       { handoff: sent },
       { sessionRef: source.ref },
     );
+  });
+
+  it("records agent provenance when the transport supplies it", async () => {
+    const { service } = setup();
+    const handoff = await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+      createdBy: "agent",
+      createdByRef: source.ref,
+    });
+    expect(handoff.createdBy).toBe("agent");
+    expect(handoff.createdByRef).toBe(source.ref);
   });
 
   it("keeps a sent handoff when the receipt cannot be queued", async () => {

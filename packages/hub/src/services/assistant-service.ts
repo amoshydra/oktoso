@@ -697,6 +697,7 @@ export class AssistantService {
 
     const text = input.text?.trim();
     const reason = input.reason?.trim();
+    const evidence = input.evidence?.trim();
     // Reserve the action first: two devices can otherwise both pass the
     // pending check and one can report Cancelled for a message that was sent.
     const reserved = await this.transition(threadId, turnId, "deciding", (action) => ({
@@ -706,6 +707,9 @@ export class AssistantService {
         : {}),
       ...(reason !== undefined && action.kind === "handoff"
         ? { reason: reason || undefined }
+        : {}),
+      ...(evidence !== undefined && action.kind === "handoff"
+        ? { evidence: evidence || undefined }
         : {}),
     }));
     const action = reserved.action!;
@@ -831,6 +835,7 @@ export class AssistantService {
           targetRef: action.targetRef,
           message: text,
           ...(action.reason ? { reason: action.reason } : {}),
+          ...(action.evidence ? { evidence: action.evidence } : {}),
         });
         const sent = await handoffs.approve(handoff.id);
         if (sent.status !== "sent") {
@@ -1398,6 +1403,7 @@ export class AssistantService {
       sessionRef?: unknown;
       targetRef?: unknown;
       reason?: unknown;
+      evidence?: unknown;
     };
     try {
       args = JSON.parse(call.arguments) as typeof args;
@@ -1445,6 +1451,10 @@ export class AssistantService {
       const reason =
         typeof args.reason === "string"
           ? args.reason.trim().slice(0, 500) || undefined
+          : undefined;
+      const evidence =
+        typeof args.evidence === "string"
+          ? args.evidence.trim().slice(0, 500) || undefined
           : undefined;
       if (!text) {
         return {
@@ -1525,6 +1535,7 @@ export class AssistantService {
         ...(target.project ? { targetProject: target.project } : {}),
         text: text.slice(0, 4_000),
         ...(reason ? { reason } : {}),
+        ...(evidence ? { evidence } : {}),
       };
     }
 
@@ -3493,7 +3504,7 @@ const TARGET_ACTION_RULES = `
 ACTIONS
 - This thread can propose one message to a session listed in SESSIONS, SEARCH, or TARGET SESSION. Put the exact message in text and the session's ref in sessionRef.
 - This thread can also draft a cross-session handoff. Put the source session's ref in sessionRef and the destination's ref in targetRef. The source is where the sent card and receipt are recorded; the destination receives the instruction.
-- For a handoff, put the exact instruction in text and an optional short why in reason.
+- For a handoff, put the exact instruction in text, an optional short why in reason, and a compact evidence reference (queue entry, log line, commit, or run ID) in evidence.
 - If the user has not named a source or destination session, ask for it; never invent a session ref.
 - Before proposing, write one short line naming both the source and the target for a handoff, or the target for a message.
 - Never claim it was sent; the user confirms it.
@@ -3504,7 +3515,7 @@ ACTIONS
 - Before proposing anything, write one short line saying what you propose.
 - The user can ask you to send a message to this session, answer its pending question, or stop a running turn.
 - The user can ask you to draft a handoff from this session to another session. Put the destination's ref in targetRef. This session is always the source.
-- For a handoff, put the exact instruction in text and an optional short why in reason.
+- For a handoff, put the exact instruction in text, an optional short why in reason, and a compact evidence reference (queue entry, log line, commit, or run ID) in evidence.
 - If the user has not named a destination session, ask for it; never invent a session ref.
 - Do not do it yourself and never claim it happened. Call propose_session_action with exactly one action. The user confirms it in the thread; until then nothing is sent.
 - For send, put the exact message in text. For answer, use the question and choice ids from PENDING QUESTION. For interrupt, no payload.
@@ -4534,6 +4545,11 @@ const ACTION_TOOL = {
       reason: {
         type: "string",
         description: "handoff only: an optional short reason for the handoff",
+      },
+      evidence: {
+        type: "string",
+        description:
+          "handoff only: a compact evidence reference (queue entry, log line, commit, or run ID)",
       },
       answers: {
         type: "array",

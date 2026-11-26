@@ -1,12 +1,13 @@
-# Design Lock — v1.69
+# Design Lock — v1.70
 
 Status: **frozen**.
 
-- Version: `design-v1.69`
-- Parent: `design-v1.68`
+- Version: `design-v1.70`
+- Parent: `design-v1.69`
 - Date: 2026-11-26
-- Git tag: `design-v1.69`
+- Git tag: `design-v1.70`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.70 scope: handoff provenance, evidence, compact receipts, and long-card disclosure.
 - v1.69 scope: the handoff cancellation notice.
 - v1.68 scope: pending handoffs abort when the source session gets a new user message.
 - v1.67 scope: handoff receipts in transcript time order.
@@ -1497,6 +1498,24 @@ radius, or color token.
 - The cancel reason is hub metadata (`manual` or `session-advanced`) and does
   not add a type role, spacing step, radius, control, or colour.
 
+## Handoff provenance, evidence, and compact receipts (2026-11-26)
+
+- A handoff may carry a compact `evidence` reference: a queue entry, log line,
+  commit, or run ID. The transcript card and the assistant action card show it
+  as an 11px faint `Evidence:` line. The assistant handoff card exposes an
+  editable `Evidence (optional)` field beside `Why`.
+- Agent-facing MCP calls record `createdBy: "agent"` and a caller ref; REST/API
+  and assistant-action calls record `owner`. The visible card still says `From
+  this session`; provenance is audit metadata, not another badge.
+- The synthetic source receipt is compact: target, time, evidence, and “No
+  action is required.” The full message, reason, evidence, title, and time stay
+  in the provider message metadata for audit and future rehydration. The source
+  agent no longer re-reads the whole instruction in its context.
+- Sent handoff messages longer than 800 characters clamp to six lines with a
+  `Show full message` / `Show less` disclosure. The full text remains in the
+  card; only the visual height changes.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1563,3 +1582,5 @@ The `design-v1.67` ordering revision merges sent handoff receipts into the trans
 The `design-v1.68` abort revision cancels pending handoffs when the source session receives a new user message, so a stale action does not remain at the bottom. User-message updates only abort proposals created at or before that message; older updates, other sessions, assistant messages, and sent handoffs are left alone. The chat e2e creates a pending proposal, sends a prompt, and asserts the card disappears and the handoff becomes `cancelled`. Unit tests cover the abort path, older-message updates, other-session messages, and sent-handoff safety. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.
 
 The `design-v1.69` cancellation-notice revision explains the disappearance with a quiet inline notice: `Pending handoff cancelled because the session moved on.` for a new user message, or `Handoff cancelled.` for a manual cancel. The notice is dismissible, clears after six seconds, and is announced politely. The chat e2e asserts the notice appears and can be dismissed. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.
+
+The `design-v1.70` handoff-quality revision makes agent-facing MCP proposals record `createdBy: "agent"` and a caller ref, adds an optional compact evidence reference to the handoff card and assistant action, makes the source synthetic receipt compact while keeping the full message and metadata in the provider message, and clamps long sent handoff cards to six lines with a `Show full message` / `Show less` disclosure. The chat e2e asserts the compact source receipt and its full metadata, the evidence line, and the long-card disclosure; the assistant e2e edits the evidence field and finds it on the source card. Unit tests cover agent provenance and the compact receipt. The full gates pass at 985 unit tests and 91 e2e tests, including 12 G2 tests.

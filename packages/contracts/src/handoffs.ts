@@ -24,10 +24,14 @@ export const zHandoff = z.object({
   sentAt: z.number().int().nonnegative().optional(),
   /** Set when the hub queued a provider-visible receipt for the next turn. */
   receiptQueuedAt: z.number().int().nonnegative().optional(),
+  /** Compact evidence reference: queue entry ID, log line, commit, or run. */
+  evidence: z.string().max(500).optional(),
   /** Why the proposal was cancelled; absent for older records. */
   cancelReason: z.enum(["manual", "session-advanced"]).optional(),
   error: z.string().optional(),
   createdBy: z.string().optional(),
+  /** The caller session ref when the proposal came from an agent. */
+  createdByRef: z.string().optional(),
   sentMessageID: z.string().optional(),
 });
 
@@ -38,6 +42,10 @@ export const zHandoffCreate = z.object({
   targetRef: z.string().min(1),
   message: z.string().min(1).max(8_000),
   reason: z.string().max(500).optional(),
+  evidence: z.string().trim().max(500).optional(),
+  /** Internal provenance hint from the MCP bridge; defaults to owner. */
+  createdBy: z.enum(["agent", "owner"]).optional(),
+  createdByRef: z.string().min(1).optional(),
 });
 
 export const zHandoffUpdate = z.object({

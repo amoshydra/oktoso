@@ -304,7 +304,7 @@ Read-only:
 | `questions_get` | Pending question with choices and risk |
 | `automation_list` | Watchers, start templates, dry-run/pause state, recent runs, approvals, and allowed shapes; `runs`/`approvals` default to 10 and cap at 50, `shapes` defaults to 20 and caps at 100 |
 | `approvals_list` | Actions the automation policy escalated to a human; `limit` defaults to 20 and caps at 100 |
-| `handoff_propose` | Propose a cross-session handoff; creates a pending card in the source chat and never sends immediately |
+| `handoff_propose` | Propose a cross-session handoff; creates a pending card in the source chat, records agent provenance, accepts an optional evidence reference, and never sends immediately |
 
 Write (`--allow-write`):
 
@@ -329,13 +329,20 @@ and paused watcher IDs are filtered the same way.
 session, creates a pending card in that chat, and returns the handoff metadata.
 The owner edits, approves, or cancels the card there; only approval calls the
 normal send path, with a stable handoff idempotency key. The tool is available
-without `--allow-write` because it cannot message the target directly. The
-source chat keeps sent handoffs as read-only receipts rendered from hub state;
-the hub never injects them into the provider transcript as a user message. On
-OpenCode v2, sending also queues a synthetic receipt in the source session with
-`resume:false`; it starts no turn and appears as a provider notice on the
-session's next run. A failed queue does not fail the send, and
-`POST /api/v1/handoffs/:id/receipt` retries it.
+without `--allow-write` because it cannot message the target directly. This is
+the cross-session message path; `sessions_send` is only needed for a direct
+write-scoped send and is not required for a handoff.
+
+Agent-facing MCP calls record `createdBy: "agent"` and a caller ref; REST, API,
+and assistant-action proposals record `owner`. Pass a compact evidence reference
+(queue entry, log line, commit, or run ID) in `evidence`. The source chat keeps
+sent handoffs as read-only receipts rendered from hub state; the hub never
+injects them into the provider transcript as a user message. On OpenCode v2,
+sending also queues a synthetic receipt in the source session with
+`resume:false`; the model-visible text is compact (target, time, evidence, no
+action required), while the full instruction, reason, evidence, target title,
+and time stay in the synthetic message metadata. A failed queue does not fail
+the send, and `POST /api/v1/handoffs/:id/receipt` retries it.
 
 ## Controller policy
 

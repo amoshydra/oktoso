@@ -2113,21 +2113,36 @@ competing history buttons.
   existing 11px hint role and tabular figures. The OpenCode v2 receipt is in the
   inbox with `resume:false`; it does not start a turn and becomes a synthetic
   transcript notice on the next run.
+- A handoff may carry a compact `Evidence` reference. The card renders it as an
+  11px faint `Evidence:` line; the assistant handoff card adds an editable
+  `Evidence (optional)` field beside `Why`. This is a reference, not a second
+  body.
+- Agent-facing MCP proposals record `createdBy: "agent"` and a caller ref; REST,
+  API, and assistant-action proposals record `owner`. The visible card still
+  says `From this session`; provenance stays audit metadata rather than another
+  badge.
+- The source synthetic receipt is compact: target, time, evidence, and “No
+  action is required.” The full message, reason, evidence, target title, and
+  time stay in the provider message metadata; the source agent does not
+  re-read the whole instruction in its context.
+- Sent handoff messages over 800 characters clamp to six lines with a `Show
+  full message` / `Show less` disclosure. The full text remains in the DOM and
+  the hub record; only the visual height changes. The toggle is a quiet text
+  action and keeps a 44px target on mobile.
 - The card uses the existing border, surface, radius, and button grammar. It
   adds no type role, spacing step, radius, or colour.
-- Verified in the chat e2e at 1280px: an owner-created handoff appears in the
-  source chat with the target title and editable message; Send turns it into a
-  read-only receipt inside `.chat-panel` with no textarea and no Send action;
-  the card reports the queued session receipt; the fake provider's source inbox
-  contains a synthetic item; a reload keeps the receipt. A prompt sent after the
-  receipt appears below it, proving the receipt is ordered by time rather than
-  appended to the bottom. A second e2e creates a pending proposal, sends a
+- Verified in the chat e2e at 1280px: an owner-created handoff with evidence
+  appears in the source chat; Send turns it into a read-only receipt inside
+  `.chat-panel`; the synthetic source item is compact while its metadata holds
+  the full message; a prompt sent after the receipt appears below it; a long
+  message clamps and expands. A second e2e creates a pending proposal, sends a
   prompt, asserts the card disappears, the cancellation notice appears and can
-  be dismissed, and the handoff status becomes `cancelled`. Unit tests cover
-  proposal, caller resolution, approval/idempotency, failed retry, cancel, the
-  one-send path, receipt queueing, receipt failure, and backfill idempotency,
-  plus user-message abort, older-message updates, other-session messages, and
-  sent-handoff safety.
+  be dismissed, and the handoff status becomes `cancelled`. The assistant e2e
+  edits the evidence field and finds it on the source card. Unit tests cover
+  proposal, caller resolution, agent provenance, approval/idempotency, failed
+  retry, cancel, the one-send path, compact receipt metadata, receipt queueing,
+  receipt failure, and backfill idempotency, plus user-message abort,
+  older-message updates, other-session messages, and sent-handoff safety.
 
 ## Question and edit/fork drafts (2026-11-26)
 

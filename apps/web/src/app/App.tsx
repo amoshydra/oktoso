@@ -1368,7 +1368,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.69 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.70 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4761,9 +4761,11 @@ function HandoffCard(props: {
   onCancel: () => void;
 }) {
   const { handoff } = props;
+  const [expanded, setExpanded] = useState(false);
   const failed = handoff.status === "failed";
   const sent = handoff.status === "sent";
   const sending = handoff.status === "sending";
+  const longMessage = sent && handoff.message.length > 800;
   return (
     <section
       className="handoff-card"
@@ -4786,7 +4788,23 @@ function HandoffCard(props: {
         {handoff.targetProject ?? handoff.targetProviderID} · {handoff.targetRef}
       </p>
       {sent ? (
-        <p className="handoff-message-read">{handoff.message}</p>
+        <>
+          <p
+            className={`handoff-message-read${longMessage && !expanded ? " clamped" : ""}`}
+          >
+            {handoff.message}
+          </p>
+          {longMessage ? (
+            <button
+              className="text-button handoff-message-toggle"
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? "Show less" : "Show full message"}
+            </button>
+          ) : null}
+        </>
       ) : (
         <textarea
           className="handoff-message"
@@ -4799,6 +4817,9 @@ function HandoffCard(props: {
       )}
       {handoff.reason ? (
         <p className="handoff-reason">Why: {handoff.reason}</p>
+      ) : null}
+      {handoff.evidence ? (
+        <p className="handoff-evidence">Evidence: {handoff.evidence}</p>
       ) : null}
       {failed && handoff.error ? (
         <p className="handoff-error" role="alert">

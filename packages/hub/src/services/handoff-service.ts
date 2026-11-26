@@ -26,8 +26,14 @@ export interface ProposeHandoffInput {
   targetRef: string;
   message: string;
   reason?: string;
+  /** Compact evidence reference: queue entry, log line, commit, or run. */
+  evidence?: string;
   /** The calling agent's native session ID, when the transport knows it. */
   callerSessionId?: string;
+  /** Provenance from the calling surface; defaults from the caller hint. */
+  createdBy?: "agent" | "owner";
+  /** The caller's resolved session ref, when known. */
+  createdByRef?: string;
 }
 
 function matchesSession(
@@ -48,8 +54,9 @@ function shortLabel(value: string, max: number): string {
 /**
  * Build the provider-visible receipt that is queued for the source session.
  *
- * The text is model-visible at the session's next turn, so it states plainly
- * that no action is required. The description is the short transcript label.
+ * The model-visible text is deliberately compact: the source agent already
+ * accepted the handoff and does not need the full instruction repeated in its
+ * context. The full payload stays in metadata for audit and rehydration.
  */
 function syntheticReceipt(handoff: Handoff, at: number) {
   const timestamp = new Date(at).toISOString();
@@ -62,13 +69,19 @@ function syntheticReceipt(handoff: Handoff, at: number) {
     text: [
       `Handoff receipt: the owner sent a handoff from this session to "${handoff.targetTitle}" (${handoff.targetRef}) at ${timestamp}.`,
       "No action is required.",
-      "The target received this instruction:",
-      handoff.message,
+      ...(handoff.evidence ? [`Evidence: ${handoff.evidence}`] : []),
     ].join("\n\n"),
     metadata: {
       handoffID: handoff.id,
       sourceRef: handoff.sourceRef,
       targetRef: handoff.targetRef,
+      targetTitle: handoff.targetTitle,
+      message: handoff.message,
+      ...(handoff.reason ? { reason: handoff.reason } : {}),
+      ...(handoff.evidence ? { evidence: handoff.evidence } : {}),
+      ...(handoff.createdBy ? { createdBy: handoff.createdBy } : {}),
+      ...(handoff.createdByRef ? { createdByRef: handoff.createdByRef } : {}),
+      sentAt: at,
     },
   };
 }
@@ -123,6 +136,10 @@ export class HandoffService {
       throw badRequest("A session cannot hand off work to itself");
     }
 
+    const createdBy =
+      input.createdBy ?? (input.callerSessionId ? "agent" : "owner");
+    const createdByRef =
+      input.createdByRef ?? (createdBy === "agent" ? source.ref : undefined);
     const handoff: Handoff = {
       id: this.idFactory(),
       sourceRef: source.ref,
@@ -133,10 +150,12 @@ export class HandoffService {
       ...(target.project ? { targetProject: target.project } : {}),
       message,
       ...(input.reason ? { reason: input.reason.trim() } : {}),
+      ...(input.evidence ? { evidence: input.evidence.trim() } : {}),
       status: "pending",
       createdAt: this.now(),
       updatedAt: this.now(),
-      createdBy: input.callerSessionId ? "agent" : "owner",
+      createdBy,
+      ...(createdByRef ? { createdByRef } : {}),
     };
 
     await this.options.store.update((state) => {

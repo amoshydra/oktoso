@@ -32,7 +32,10 @@ export async function runMcpCommand(
         sourceRef: input.sourceRef,
         targetRef: input.targetRef,
         message: input.message,
+        createdBy: "agent",
+        createdByRef: input.createdByRef ?? input.sourceRef,
         ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.evidence ? { evidence: input.evidence } : {}),
       });
     },
     question: (ref) => client.question(ref),

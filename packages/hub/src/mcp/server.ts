@@ -40,7 +40,10 @@ export interface McpHubApi {
     targetRef: string;
     message: string;
     reason?: string;
+    evidence?: string;
     callerSessionId?: string;
+    createdBy?: "agent" | "owner";
+    createdByRef?: string;
   }): Promise<Handoff>;
   question(ref: string): Promise<QuestionPrompt | null>;
   attention(query?: {
@@ -151,7 +154,11 @@ actions the user has explicitly approved.
 
 When the user asks you to hand work to another session, use handoff_propose.
 It creates a pending card in the source session; it does not send until the
-owner approves it there.`;
+owner approves it there. This is the cross-session message path; sessions_send
+is only available to a write-scoped token and is not required for a handoff.
+When proposing, put the full context and acceptance criteria in message, and a
+compact evidence reference (queue entry, log line, commit, or run ID) in
+evidence.`;
 
 function textResult(value: unknown): CallToolResult {
   return {
@@ -546,15 +553,24 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
       {
         title: "Propose a cross-session handoff",
         description:
-          "Create a pending handoff to another session. The owner reviews and approves it in the source session's chat; this tool never sends immediately.",
+          "Use this to deliver a message to another session. It creates a pending card in the source session's chat; the owner reviews and approves it there. This tool never sends immediately. sessions_send is only available to a write-scoped token and is not required for a handoff.",
         inputSchema: {
           targetRef: z.string().describe("Target session ref"),
           message: z
             .string()
             .min(1)
             .max(8_000)
-            .describe("Exact instruction to send after approval"),
+            .describe(
+              "Exact instruction to send after approval; include context, evidence, and acceptance criteria",
+            ),
           reason: z.string().max(500).optional(),
+          evidence: z
+            .string()
+            .max(500)
+            .optional()
+            .describe(
+              "Compact evidence reference: queue entry, log line, commit, or run ID",
+            ),
           sourceRef: z
             .string()
             .optional()
@@ -562,8 +578,9 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
         },
         annotations: { readOnlyHint: false },
       },
-      async ({ targetRef, message, reason, sourceRef }, extra) => {
-        const source = sourceRef ?? (await callerSourceRef(api, extra));
+      async ({ targetRef, message, reason, evidence, sourceRef }, extra) => {
+        const callerRef = await callerSourceRef(api, extra);
+        const source = sourceRef ?? callerRef;
         if (!source) {
           return errorResult(
             "Could not resolve the caller session. Pass sourceRef with the source session ref.",
@@ -577,11 +594,14 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
               targetRef,
               message,
               sourceRef: source,
+              createdBy: "agent",
+              createdByRef: callerRef ?? source,
               ...(reason ? { reason } : {}),
+              ...(evidence ? { evidence } : {}),
               ...(caller ? { callerSessionId: caller } : {}),
             }),
           {
-            args: { targetRef, message, reason, sourceRef: source },
+            args: { targetRef, message, reason, evidence, sourceRef: source },
             extra,
             target: targetRef,
           },
