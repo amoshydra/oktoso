@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.2.9](https://github.com/amoshydra/oktoso/compare/v0.2.8...v0.2.9) (2026-11-26)
+
+
+### Features
+
+* **assistant:** add a first-class handoff action ([ad5d18b](https://github.com/amoshydra/oktoso/commit/ad5d18b387c4d56455e1f2cd8f7689c5f033e5e9))
+* **assistant:** persist composer and action drafts ([a8e9975](https://github.com/amoshydra/oktoso/commit/a8e9975d72e10306bc475ace72b0296fd967adc9))
+* **auth:** add phone and G2 paired session profiles ([8e14511](https://github.com/amoshydra/oktoso/commit/8e145113269ec42011da335c023df0678204d2c5))
+* **chat:** copy rendered code blocks ([01082d6](https://github.com/amoshydra/oktoso/commit/01082d6817f0289fcff5f8551befb4d34bf53ca6))
+* **chat:** derive file preview roots and artifacts ([552376e](https://github.com/amoshydra/oktoso/commit/552376e1e5b856aaab9dd2c7e43639c2f9ee970e))
+* **chat:** render answered questions in the transcript ([1a64f7a](https://github.com/amoshydra/oktoso/commit/1a64f7a2c4dfa11fe8805d7138e58eaa7bc09a46))
+* **chat:** resolve inline media through file roots ([dec04ab](https://github.com/amoshydra/oktoso/commit/dec04ab749469a55b6535524d726a9198f6c34b2))
+* **even-g2:** add a glasses control panel ([da74998](https://github.com/amoshydra/oktoso/commit/da749980496366d4feef3ad71aa773f01e058072))
+* **even-g2:** add glasses control gestures and list mirror ([c74c0f8](https://github.com/amoshydra/oktoso/commit/c74c0f81b6202865da85e57326740314e6d0a956))
+* **even-g2:** mirror the glasses screen in the control panel ([43c3449](https://github.com/amoshydra/oktoso/commit/43c3449191ae7bc50eeda6faf2f1beca91197553))
+* **even-g2:** polish the phone bridge ([992bf64](https://github.com/amoshydra/oktoso/commit/992bf64aa545fd7e0610effd943f0184e5c367ce))
+* **hub:** add cross-session handoff proposals ([224cf59](https://github.com/amoshydra/oktoso/commit/224cf5961509bd15a40203104122aa85e72e942f))
+* **hub:** improve handoff provenance and context ([580071a](https://github.com/amoshydra/oktoso/commit/580071a0c91fa605bbb87925c6895e20349da7f2))
+* **hub:** queue provider-visible handoff receipts ([304fd4a](https://github.com/amoshydra/oktoso/commit/304fd4a21c9f40469cb697392bbef69cb75d48d9))
+* **mcp:** issue short-lived tokens from the owner assistant ([e6fee51](https://github.com/amoshydra/oktoso/commit/e6fee511cfbe2e6011136fc4acefbc25d64f8af1))
+* **web:** add stale-while-revalidate route data ([84fac20](https://github.com/amoshydra/oktoso/commit/84fac204a04d0e070d327c7b42e472ff36f8c1dd))
+* **web:** cache session transcripts for instant route returns ([6d9f2d7](https://github.com/amoshydra/oktoso/commit/6d9f2d74454d44ef6e7a45b2380f07b349c2848a))
+* **web:** explain handoff cancellations ([eb169c5](https://github.com/amoshydra/oktoso/commit/eb169c57c0f7a7318d553dc1829e330ba4ef8578))
+* **web:** keep sent handoffs as transcript receipts ([7308847](https://github.com/amoshydra/oktoso/commit/7308847e5cd72b1d701e4738f5a624e6f3645b57))
+* **web:** link search and assistant references to messages ([a78f759](https://github.com/amoshydra/oktoso/commit/a78f7594d0854233753790b46ca0b992f67035a2))
+* **web:** persist question and edit/fork drafts ([7f581e5](https://github.com/amoshydra/oktoso/commit/7f581e5b8e2391f504d202c37c4c4975143fdc67))
+
+
+### Bug Fixes
+
+* **assistant:** close on back and scope search to lineage ([4e21665](https://github.com/amoshydra/oktoso/commit/4e216652b8b0617ae92b19e3b27f52a05a7ba2fd))
+* **assistant:** distinguish GPU queue timeouts ([213e0ff](https://github.com/amoshydra/oktoso/commit/213e0ff5883aefd5fdb75d4124212ebc48d19543))
+* **attention:** restore idle-session questions after restart ([104f92a](https://github.com/amoshydra/oktoso/commit/104f92a6673ee6f99775c43419f826c6f6738ed5))
+* **chat:** reserve a lane for the jump pill ([7d3f991](https://github.com/amoshydra/oktoso/commit/7d3f991c6d6d123ba1c5ff448caf3c2af3813cba))
+* **even-g2:** align bridge spacing with the documented scale ([3172749](https://github.com/amoshydra/oktoso/commit/31727492e3ddd2f5c490f8dc4fffcba6372b8963))
+* **even-g2:** keep lists as a six-line marker view ([e696a18](https://github.com/amoshydra/oktoso/commit/e696a184b1c4f08300736418fee1f0ea794c1507))
+* **even-g2:** keep the list mirror window fixed ([0b94177](https://github.com/amoshydra/oktoso/commit/0b94177c3e70e630fe345692145113d322c16232))
+* **even-g2:** stop the firmware scrolling the marker list ([f610262](https://github.com/amoshydra/oktoso/commit/f610262d85b2ddbc0e14f0ae563ab87019453710))
+* **hub:** abort pending handoffs on a new user message ([4263a65](https://github.com/amoshydra/oktoso/commit/4263a6574770032fb8cd6381c4943454f8981b0a))
+* **ui:** polish question fields, media, undo, and inbox actions ([a58513f](https://github.com/amoshydra/oktoso/commit/a58513fdd234c37f4d87ebac80343ed345c0a4d2))
+* **ui:** unclip composer selections and bridge accessibility ([96dcd7c](https://github.com/amoshydra/oktoso/commit/96dcd7cd656c3a4f9b8e280c934df5ce55e77008))
+* **web:** keep chat scroll stable and float the jump pill ([3e0dcf1](https://github.com/amoshydra/oktoso/commit/3e0dcf111d578acacf2b41494361638f9af1ed94))
+* **web:** order sent handoff receipts by time ([59ee26e](https://github.com/amoshydra/oktoso/commit/59ee26ecd43320d3a39beefb387c0f508c85ab11))
+* **web:** remove the jump pill background band ([9775da2](https://github.com/amoshydra/oktoso/commit/9775da2cd929e8953fb96f49edd6a4c980a8f635))
+* **web:** remove the jump pill divider ([b8be252](https://github.com/amoshydra/oktoso/commit/b8be2523deb26496ad1233818e08b2a40d719651))
+* **web:** remove the last message's bottom padding ([cac6cb5](https://github.com/amoshydra/oktoso/commit/cac6cb58e0707199dc6981bb86cbf16f50411b48))
+* **web:** tighten the transcript bottom inset to 8px ([1fceedb](https://github.com/amoshydra/oktoso/commit/1fceedb35a3a01b774e8bb09128d4f1dbaf72433))
+
 ## [0.2.8](https://github.com/amoshydra/oktoso/compare/v0.2.7...v0.2.8) (2026-11-23)
 
 
