@@ -15,10 +15,10 @@
     "docs/prototypes/fonts/ibm-plex-mono-latin-600-normal.woff2": "0d1f0b8d0722224e32e9f28261bdc86c79115be73444ae5eceb73976a1bcdf83",
     "docs/prototypes/fonts/inter-latin-wght-normal.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "docs/brand/banner.html": "518d4827de1ed6256787886ddee1719f65fd82574c0064d20ce3998ed72ff179",
-    "apps/web/src/app/App.tsx": "825ff4c36c905b2b21648d0b2cdd708698fb622476e385203d938020bd3bea22",
+    "apps/web/src/app/App.tsx": "f67ae37f57a0d7773193dee81aab9179ce98c656a1e5aeb9d4628065d0341513",
     "apps/web/src/app/BrandMark.tsx": "8e6372196e6cdb777232190300ed37ef4b4779c85fd87cff4ebc78604362d31b",
     "apps/web/src/app/markdown.ts": "1944e6d25cf87e6311e383a7d23211449c214cff32c19458d908c2c7bbde564e",
-    "apps/web/src/styles.css": "566a82c2ca2e94652f91bf120c83b73668cb568723c4ce4394b2860c2f3813ab",
+    "apps/web/src/styles.css": "b384364ef5ef0949f0fd849dba202d618c9d44c46971cab11f4209e88f6538fb",
     "packages/ui/src/tokens.css": "8d5fb0250d99761e84119d7a756b5eb5571fe905aaaea7d56ce603428678d449",
     "packages/ui/src/base.css": "c2618249480b726427b61a544bab8f5ddadb2236020c2a9208b06ed548d4ccf1"
   },

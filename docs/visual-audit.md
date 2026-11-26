@@ -2056,10 +2056,11 @@ competing history buttons.
 
 ## Cross-session handoff card (2026-11-26)
 
-- A proposed handoff renders above the composer in the source session. It is a
-  compact surface with a 10px uppercase `Handoff to`, the target title at the
-  body role, target project/provider/ref metadata, an editable message, and
-  `Send handoff` / `Cancel`.
+- A proposed handoff renders at the end of the source session transcript,
+  after messages and attention cards, in the same card grammar as an inline
+  question. It has a 10px uppercase `Handoff` type badge, the target title at
+  the 16px card-title role, target project/provider/ref metadata, an editable
+  message, and `Send handoff` / `Cancel`.
 - The message is a textarea at the body role; on mobile it is 16px and the
   actions are 44px. Failed sends keep the card with a danger error line and
   `Retry handoff`; sending disables both actions. A sent card disappears and a

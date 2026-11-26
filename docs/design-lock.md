@@ -1,12 +1,13 @@
-# Design Lock — v1.61
+# Design Lock — v1.62
 
 Status: **frozen**.
 
-- Version: `design-v1.61`
-- Parent: `design-v1.60`
+- Version: `design-v1.62`
+- Parent: `design-v1.61`
 - Date: 2026-11-26
-- Git tag: `design-v1.61`
+- Git tag: `design-v1.62`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.62 scope: the handoff card moves into the transcript.
 - v1.61 scope: cross-session handoff proposals in the source chat.
 - v1.60 scope: pairing without a profile choice; the client declares its profile.
 - v1.59 scope: paired device profiles and the Access credential panel.
@@ -1362,6 +1363,18 @@ radius, or color token.
   propose a handoff; sending still requires the owner’s confirmation.
 - No new type role, spacing step, radius, control, or colour.
 
+## Handoff card in the transcript (2026-11-26)
+
+- The pending and failed handoff card moves from above the composer to the end
+  of the source transcript, after messages and attention cards. It uses the
+  inline attention/question card grammar: a `Handoff` type badge, the target
+  title at the 16px card-title role, project/provider and ref metadata, an
+  editable message, and `Send handoff` / `Cancel`.
+- It scrolls with the transcript. When it arrives and the reader is at the
+  bottom, the transcript scrolls to it. The 44px mobile actions and 16px
+  textarea remain.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1412,3 +1425,5 @@ The `design-v1.59` paired-profile revision was verified in the accessibility e2e
 The `design-v1.60` pairing simplification removes the profile choice from the CLI and pairing page. Normal pairing is `oktoso pair` or `p`; the G2 app declares `g2` when exchanging the code, and a phone/browser defaults to `phone`. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.
 
 The `design-v1.61` handoff proposal was verified in the chat e2e at 1280px: an owner-created handoff appears in the source chat with the target title and editable message, and Send removes the card. Unit tests cover proposal, caller resolution, approval/idempotency, failed retry, cancel, and the one-send path. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.
+
+The `design-v1.62` placement revision keeps the same handoff card but moves it inside the transcript after messages and attention cards. The chat e2e asserts the card is inside `.chat-panel`, shows the target title and editable message, and Send removes it. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.

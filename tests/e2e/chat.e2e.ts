@@ -1850,6 +1850,7 @@ describe("handoff", () => {
     await openSession("Fix auth race in gateway");
     const card = page!.locator(".handoff-card").first();
     await card.waitFor({ state: "visible", timeout: 5_000 });
+    expect(await page!.locator(".chat-panel .handoff-card").count()).toBe(1);
     await expect(card.innerText()).resolves.toContain(
       "Refactor session index",
     );

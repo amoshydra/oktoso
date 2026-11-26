@@ -1364,7 +1364,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.61 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.62 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4682,15 +4682,14 @@ function HandoffCard(props: {
       data-status={handoff.status}
       aria-label={`Handoff to ${handoff.targetTitle}`}
     >
-      <div className="handoff-head">
-        <div>
-          <span className="handoff-label">Handoff to</span>
-          <strong className="handoff-target-title">{handoff.targetTitle}</strong>
-        </div>
+      <div className="attention-top">
+        <span className="type-badge handoff">Handoff</span>
+        <span className="attention-provider">From this session</span>
         <span className={`handoff-status ${handoff.status}`}>
           {failed ? "Failed" : "Pending"}
         </span>
       </div>
+      <div className="handoff-target-title">To {handoff.targetTitle}</div>
       <p className="handoff-meta">
         {handoff.targetProject ?? handoff.targetProviderID} · {handoff.targetRef}
       </p>
@@ -6916,6 +6915,7 @@ function SessionDetail(props: {
   }, [
     atBottom,
     backgroundItems.length,
+    handoffs.length,
     loading,
     stepPanelOpen,
     updateScrollState,
@@ -7182,6 +7182,39 @@ function SessionDetail(props: {
                   </button>
                 </div>
               ) : null}
+
+              {handoffs.length > 0 || handoffError ? (
+                <div className="chat-inline-handoff">
+                  {handoffError ? (
+                    <div className="handoff-error-banner" role="alert">
+                      {handoffError}
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => setHandoffError(undefined)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  ) : null}
+                  {handoffs.map((handoff) => (
+                    <HandoffCard
+                      key={handoff.id}
+                      handoff={handoff}
+                      draft={handoffDrafts[handoff.id] ?? handoff.message}
+                      busy={handoffBusy === handoff.id}
+                      onChange={(value) =>
+                        setHandoffDrafts((current) => ({
+                          ...current,
+                          [handoff.id]: value,
+                        }))
+                      }
+                      onSend={() => void sendHandoff(handoff)}
+                      onCancel={() => void cancelHandoff(handoff)}
+                    />
+                  ))}
+                </div>
+              ) : null}
               </section>
               <div className="chat-jump-band" data-visible={showJump} hidden={!scrollable}>
                 <button
@@ -7268,38 +7301,6 @@ function SessionDetail(props: {
               <span className="sr-only" role="status" aria-live="polite">
                 {handoffNotice}
               </span>
-              {handoffError ? (
-                <div className="handoff-error-banner" role="alert">
-                  {handoffError}
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() => setHandoffError(undefined)}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              ) : null}
-              {handoffs.length > 0 ? (
-                <section className="handoff-panel" aria-label="Pending handoffs">
-                  {handoffs.map((handoff) => (
-                    <HandoffCard
-                      key={handoff.id}
-                      handoff={handoff}
-                      draft={handoffDrafts[handoff.id] ?? handoff.message}
-                      busy={handoffBusy === handoff.id}
-                      onChange={(value) =>
-                        setHandoffDrafts((current) => ({
-                          ...current,
-                          [handoff.id]: value,
-                        }))
-                      }
-                      onSend={() => void sendHandoff(handoff)}
-                      onCancel={() => void cancelHandoff(handoff)}
-                    />
-                  ))}
-                </section>
-              ) : null}
               <span className="sr-only" role="status" aria-live="polite">
                 {queuedItems.length > 0
                   ? `${queuedItems.length} queued message${
