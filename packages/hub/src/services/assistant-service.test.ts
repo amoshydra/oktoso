@@ -2930,6 +2930,138 @@ describe("AssistantService", () => {
     expect(listCalls).toBe(1);
   });
 
+  it("keeps a session search in its lineage unless asked global", async () => {
+    const ops: Session = {
+      ...session,
+      ref: "desktop-opencode:ses_ops",
+      nativeID: "ses_ops",
+      title: "Runtime cleanup",
+      project: "ops",
+      directory: "/home/me/gpu-orchestrator",
+      model: "gpu-orchestrator-runner",
+      status: "idle",
+    };
+    let body: { messages: Array<{ role: string; content: string }> } = {
+      messages: [],
+    };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async () => ({
+          data: [session, ops],
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: {
+        list: async () => ({ data: [] }),
+      } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+
+    const local = await service.postMessage(thread.id, {
+      text: "runtime cleanup",
+    });
+    const localEvents: AssistantEvent[] = [];
+    service.subscribe(local.run.id, 0, (event) => localEvents.push(event));
+    await waitFor(() => localEvents.some((event) => event.type === "done"));
+    const localPrompt =
+      body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(localPrompt).not.toContain("Runtime cleanup");
+
+    const global = await service.postMessage(thread.id, {
+      text: "global runtime cleanup",
+    });
+    const globalEvents: AssistantEvent[] = [];
+    service.subscribe(global.run.id, 0, (event) => globalEvents.push(event));
+    await waitFor(() => globalEvents.some((event) => event.type === "done"));
+    const globalPrompt =
+      body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(globalPrompt).toContain("Runtime cleanup");
+    expect(globalPrompt).toContain("SEARCH (other sessions");
+  });
+
+  it("searches short product tokens such as g2", async () => {
+    let body: { messages: Array<{ role: string; content: string }> } = {
+      messages: [],
+    };
+    const searchPage = {
+      data: [
+        {
+          ref: session.ref,
+          title: session.title,
+          providerID: session.providerID,
+          updatedAt: session.updatedAt,
+          snippet: "G2 UI improvement notes",
+          match: "message" as const,
+          messageID: "m9",
+          role: "user" as const,
+          createdAt: 1,
+          score: 1,
+        },
+      ],
+      cursor: { next: null, previous: null },
+      ready: true,
+      enabled: true,
+    };
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sseResponse([delta("ok"), "data: [DONE]\n\n"]);
+    }) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        list: async () => ({
+          data: [session],
+          cursor: { next: null, previous: null },
+        }),
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: {
+        list: async () => ({ data: [] }),
+      } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      search: { search: async () => searchPage } as never,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "g2" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const prompt =
+      body.messages.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain("G2 UI improvement notes");
+    expect(prompt).toContain("this session and lineage");
+  });
+
   it("backfills as-of from the newest message before each answer", async () => {
     const store = new MemoryStateStore();
     await store.update((state) => {

@@ -18,7 +18,6 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from "@amoshydra/oktoso-contracts";
 import type {
-  AssistantScope,
   AssistantView,
   Attachment,
   Attention,
@@ -83,6 +82,7 @@ import {
   useNavigate,
   useNavigationType,
   useRouteDataKey,
+  type AssistantHistoryState,
   type NavigateOptions,
 } from "./history";
 import {
@@ -329,7 +329,11 @@ function TopbarProgress() {
 }
 
 export function App() {
-  const { route, key: routeKey } = useHistoryLocation();
+  const {
+    route,
+    key: routeKey,
+    assistant: historyAssistant,
+  } = useHistoryLocation();
   const navigationType = useNavigationType();
   const navigate = useNavigate();
   const backTo = useBackTo();
@@ -365,11 +369,9 @@ export function App() {
   const [sidebarVisible, setSidebarVisible] = useState(() =>
     window.matchMedia("(min-width: 761px)").matches,
   );
-  const [assistant, setAssistant] = useState<{
-    scope: AssistantScope;
-    title: string;
-    project?: string;
-  } | null>(null);
+  const [assistant, setAssistant] = useState<AssistantHistoryState | null>(
+    historyAssistant ?? null,
+  );
   const [assistantAvailable, setAssistantAvailable] = useState(false);
   const lastSeq = useRef(0);
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -397,15 +399,8 @@ export function App() {
   }, [client]);
 
   useEffect(() => {
-    if (!assistant) return;
-    if (assistant.scope.kind === "session") {
-      if (!chatOpen || selectedSessionRef !== assistant.scope.sessionRef) {
-        setAssistant(null);
-      }
-    } else if (assistant.scope.kind === "global" && view !== "foundation") {
-      setAssistant(null);
-    }
-  }, [assistant, chatOpen, selectedSessionRef, view]);
+    setAssistant(historyAssistant ?? null);
+  }, [historyAssistant, routeKey]);
 
   const providerEditorRoute =
     route.name === "providers" ? route.editor : undefined;
@@ -572,6 +567,31 @@ export function App() {
     },
     [navigate],
   );
+
+  const openAssistant = useCallback(
+    (next: AssistantHistoryState) => {
+      const current = routeRef.current;
+      const details =
+        current.name === "chat" && current.details ? current : undefined;
+      navigate(details ? { ...details, details: false } : current, {
+        assistant: next,
+        ...(details ? { replace: true } : {}),
+      });
+    },
+    [navigate],
+  );
+
+  const closeAssistant = useCallback(() => {
+    navigate(routeRef.current, { replace: true, assistant: null });
+  }, [navigate]);
+
+  const handleChatBack = useCallback(() => {
+    if (assistant) {
+      closeAssistant();
+      return;
+    }
+    backTo({ name: "sessions" });
+  }, [assistant, backTo, closeAssistant]);
 
   const setDetailsOpen = useCallback(
     (open: boolean) => {
@@ -1040,7 +1060,7 @@ export function App() {
             <button
               className="icon-btn topbar-back"
               type="button"
-              onClick={() => backTo({ name: "sessions" })}
+              onClick={handleChatBack}
               aria-label="Back"
             >
               <Icon name="arrow-left" size={18} />
@@ -1062,10 +1082,10 @@ export function App() {
               }
               onClick={() => {
                 if (assistant) {
-                  setAssistant(null);
+                  closeAssistant();
                   return;
                 }
-                setAssistant({
+                openAssistant({
                   scope: {
                     kind: "session",
                     sessionRef: selectedSessionRef!,
@@ -1073,7 +1093,6 @@ export function App() {
                   title: activeSession.title,
                   project: activeSession.project,
                 });
-                setDetailsOpen(false);
               }}
             >
               Ask
@@ -1088,11 +1107,12 @@ export function App() {
                 assistant?.scope.kind === "global" ? "session-assistant" : undefined
               }
               onClick={() =>
-                setAssistant(
-                  assistant?.scope.kind === "global"
-                    ? null
-                    : { scope: { kind: "global" }, title: "All sessions" },
-                )
+                assistant?.scope.kind === "global"
+                  ? closeAssistant()
+                  : openAssistant({
+                      scope: { kind: "global" },
+                      title: "All sessions",
+                    })
               }
             >
               Ask
@@ -1105,7 +1125,7 @@ export function App() {
               aria-expanded={detailsOpen}
               aria-controls={detailsOpen ? "session-details" : undefined}
               onClick={() => {
-                if (!detailsOpen) setAssistant(null);
+                if (!detailsOpen && assistant) closeAssistant();
                 setDetailsOpen(!detailsOpen);
               }}
             >
@@ -1266,7 +1286,7 @@ export function App() {
                     onOpenSession={openSession}
                     attentionID={route.name === "chat" ? route.attention : undefined}
                     messageID={route.name === "chat" ? route.message : undefined}
-                    onBack={() => backTo({ name: "sessions" })}
+                    onBack={handleChatBack}
                   />
                 </div>
                 </>
@@ -1382,7 +1402,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.73 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.74 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -1414,17 +1434,24 @@ export function App() {
               assistant.scope.kind === "global" ? "dialog" : "dock"
             }
             onOpenSettings={() => {
-              setAssistant(null);
               navigate({ name: "settings" });
             }}
             onOpenMessage={(ref, messageID) => {
-              setAssistant(null);
+              const current = routeRef.current;
+              if (
+                !messageID &&
+                current.name === "chat" &&
+                current.ref === ref
+              ) {
+                closeAssistant();
+                return;
+              }
               openSession(
                 ref,
                 messageID ? { message: messageID } : undefined,
               );
             }}
-            onClose={() => setAssistant(null)}
+            onClose={closeAssistant}
           />
         ) : null}
 

@@ -2166,6 +2166,25 @@ competing history buttons.
   the source link, and opens the focused message. Router tests cover the
   `message` parameter and href round trip.
 
+## Assistant back and session-scope search (2026-11-27)
+
+- Opening the assistant pushes a history entry with its scope and title. The
+  browser back button and the chat topbar back close the dock without leaving
+  the session. A reload starts with the dock closed; back and forward restore
+  the assistant entry. The close control replaces the assistant entry rather
+  than leaving it on the back stack.
+- Opening a referenced message is a separate history entry. Back returns to the
+  same assistant thread, with the answer and source list intact, so another
+  citation can be opened. This is the intended correction loop for a wrong
+  source click.
+- A session assistant searches its own session and lineage by default. It
+  widens to all sessions only for explicit global/other-session/which-session
+  language or a named session ref. The opening SEARCH block says `this session
+  and lineage`; project and global scopes keep their existing breadth.
+- Short product tokens such as `g2` are searchable even though they are two
+  characters; stop words and punctuation-only tokens remain filtered.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Question and edit/fork drafts (2026-11-26)
 
 - Question and attention form fields now keep a structured draft per attention

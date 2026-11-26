@@ -309,6 +309,13 @@ afterEach(async () => {
   await page?.close();
   page = undefined;
 });
+async function ensureAssistantOpen(): Promise<void> {
+  if ((await page!.locator("#assistant-input").count()) === 0) {
+    await page!.locator(".topbar-ask").first().click();
+  }
+  await page!.locator("#assistant-input").waitFor({ timeout: 10_000 });
+}
+
 
 describe("session assistant", () => {
   it("answers inside a read-only dock and keeps the thread", async () => {
@@ -350,10 +357,7 @@ describe("session assistant", () => {
 
     // The thread survives a reload: it is hub state, not a provider session.
     await page!.reload();
-    await page!
-      .getByRole("button", { name: "Ask", exact: true })
-      .waitFor({ timeout: 10_000 });
-    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    await ensureAssistantOpen();
     await page!
       .locator(".assistant-turn.assistant .assistant-turn-text", { hasText: ANSWER })
       .waitFor({ timeout: 10_000 });
@@ -526,8 +530,7 @@ describe("session assistant", () => {
       .locator(".assistant-draft-note", { hasText: "Draft saved" })
       .waitFor({ timeout: 5_000 });
     await page!.reload();
-    await page!.getByRole("button", { name: "Ask", exact: true }).waitFor();
-    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    await ensureAssistantOpen();
     const restoredCard = page!.locator(".assistant-action").last();
     await restoredCard.waitFor({ timeout: 10_000 });
     await expect
@@ -536,7 +539,8 @@ describe("session assistant", () => {
       })
       .toBe("E2E edited reply");
 
-    await restoredCard.locator(".assistant-action-buttons .btn.primary").click();
+    const sendButton = restoredCard.locator(".assistant-action-buttons .btn.primary");
+    await sendButton.click({ timeout: 5_000 });
     await restoredCard
       .locator(".assistant-action-state")
       .waitFor({ timeout: 10_000 });
@@ -546,10 +550,7 @@ describe("session assistant", () => {
 
     // The provider transcript now has the message, not just the dock.
     await page!.reload();
-    await page!.getByRole("button", { name: "Ask", exact: true }).waitFor();
-    await page!
-      .getByRole("button", { name: "Ask", exact: true })
-      .click();
+    await ensureAssistantOpen();
     await page!.locator(".assistant-action.done").waitFor({ timeout: 10_000 });
     expect(await page!.locator(".assistant-action-state").innerText()).toBe("SENT");
   });
@@ -587,6 +588,42 @@ describe("session assistant", () => {
         .locator(".chat-focus-target, .chat-message.is-focused")
         .count(),
     ).toBeGreaterThan(0);
+
+    // Back from the reference returns to the assistant thread so another
+    // citation can be opened without asking again.
+    await page!.goBack();
+    await page!
+      .locator(".assistant-source")
+      .first()
+      .waitFor({ timeout: 10_000 });
+  });
+
+  it("closes the assistant on back without leaving the session", async () => {
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    await page!.locator("#assistant-input").waitFor({ timeout: 10_000 });
+
+    await page!.goBack();
+    await expect
+      .poll(() => page!.locator("#assistant-input").count(), {
+        timeout: 10_000,
+      })
+      .toBe(0);
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
+    expect(page!.url()).toContain("/sessions/");
+
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    await page!.locator("#assistant-input").waitFor({ timeout: 10_000 });
+    await page!.locator(".topbar-back").click();
+    await expect
+      .poll(() => page!.locator("#assistant-input").count(), {
+        timeout: 10_000,
+      })
+      .toBe(0);
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
   });
 
   it("drafts a handoff, sends it, and records the receipt", async () => {
@@ -704,10 +741,7 @@ describe("session assistant", () => {
       .waitFor({ timeout: 5_000 });
 
     await page!.reload();
-    await page!
-      .getByRole("button", { name: "Ask", exact: true })
-      .waitFor({ timeout: 10_000 });
-    await page!.getByRole("button", { name: "Ask", exact: true }).click();
+    await ensureAssistantOpen();
     const restored = page!.locator("#assistant-input");
     await restored.waitFor({ timeout: 10_000 });
     await expect.poll(() => restored.inputValue(), { timeout: 5_000 }).toBe(text);

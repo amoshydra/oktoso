@@ -1,12 +1,13 @@
-# Design Lock — v1.73
+# Design Lock — v1.74
 
 Status: **frozen**.
 
-- Version: `design-v1.73`
-- Parent: `design-v1.72`
-- Date: 2026-11-26
-- Git tag: `design-v1.73`
+- Version: `design-v1.74`
+- Parent: `design-v1.73`
+- Date: 2026-11-27
+- Git tag: `design-v1.74`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.74 scope: assistant back history and session/lineage search scope.
 - v1.73 scope: assistant composer and action-card drafts.
 - v1.72 scope: the floating jump pill and stable chat scrolling.
 - v1.71 scope: message deep links, assistant message references, and fork-from-message.
@@ -1577,6 +1578,22 @@ radius, or color token.
   (`draft:assistant:<scope>`, `draft:assistant-action:<actionID>`), so the
   existing local-data count, clear, and retention cover them.
 
+## Assistant back and session-scope search (2026-11-27)
+
+- Opening Ask pushes a history entry carrying the assistant scope and title.
+  Browser back or the chat topbar back closes the dock and stays in the
+  session. A reload starts with the dock closed; back and forward still restore
+  the assistant entry from history.
+- A referenced message opens as a new history entry. Back returns to the same
+  assistant thread, so another source can be opened without asking again. The
+  close control replaces the assistant entry instead of leaving it on the back
+  stack.
+- A session-scope assistant searches its own session and its lineage by default.
+  It widens to all sessions only when the user explicitly asks for global or
+  other-session search, asks which session holds something, or names another
+  session. Project and global scopes keep their existing breadth.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1651,3 +1668,5 @@ The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, 
 The `design-v1.72` floating-jump revision moves the pill back over the transcript and keeps its 1px divider and a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, the divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.
 
 The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 list-mirror follow-up (2026-11-27) keeps the mirror window fixed while the cursor moves; unit coverage spans the window edges and the G2 e2e checks the first visible row across four down presses. The full gates pass at 993 unit tests and 95 e2e tests, including 13 G2 tests.
+
+The `design-v1.74` assistant-back revision stores the assistant scope in the history entry. Opening Ask pushes it, browser back or the chat topbar back closes the dock without leaving the session, a referenced message opens a new entry so back returns to the same assistant thread, and a reload starts with the dock closed. A session-scope assistant searches its own session and lineage by default; only explicit global/other-session/which-session language or a named session ref widens it to all sessions. Short product tokens such as `g2` are searchable. The assistant e2e covers back-to-close, reference-back-to-thread, and the reload behavior; unit tests cover lineage scoping, explicit global widening, and the `g2` token. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.

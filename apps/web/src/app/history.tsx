@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { AssistantScope } from "@amoshydra/oktoso-contracts";
 import { createID } from "./ids";
 import { DEFAULT_ROUTE, parseRoute, routeHref, type Route } from "./router";
 import { routeDataKey } from "./route-cache";
@@ -14,8 +15,16 @@ import { saveActiveScrolls } from "./scroll-store";
 
 export type NavigationType = "initial" | "push" | "replace" | "pop";
 
+export interface AssistantHistoryState {
+  scope: AssistantScope;
+  title: string;
+  project?: string;
+}
+
 export interface NavigateOptions {
   replace?: boolean;
+  /** Open or close the session assistant on this history entry. */
+  assistant?: AssistantHistoryState | null;
 }
 
 export interface HistoryLocation {
@@ -23,11 +32,13 @@ export interface HistoryLocation {
   key: string;
   index: number;
   href: string;
+  assistant?: AssistantHistoryState;
 }
 
 interface HistoryEntryState {
   key?: string;
   index?: number;
+  assistant?: AssistantHistoryState;
 }
 
 interface HistoryContextValue {
@@ -51,15 +62,37 @@ function currentEntry(): { key: string; index: number } {
   };
 }
 
-function readLocation(): HistoryLocation {
+function readLocation(includeAssistant = true): HistoryLocation {
   const route = parseRoute(window.location.pathname, window.location.search);
   const entry = currentEntry();
+  const state = entryState();
   return {
     route: route ?? DEFAULT_ROUTE,
     key: entry.key,
     index: entry.index,
     href: `${window.location.pathname}${window.location.search}`,
+    ...(includeAssistant &&
+    state.assistant &&
+    typeof state.assistant === "object" &&
+    "scope" in state.assistant
+      ? { assistant: state.assistant }
+      : {}),
   };
+}
+
+/**
+ * A reload does not reopen an assistant that was open before it. Back and
+ * forward still restore it from the adjacent history entry's state.
+ */
+function initialLocation(): HistoryLocation {
+  const initial = readLocation();
+  if (!initial.assistant) return initial;
+  window.history.replaceState(
+    { key: initial.key, index: initial.index },
+    "",
+    initial.href,
+  );
+  return { ...initial, assistant: undefined };
 }
 
 /**
@@ -87,7 +120,7 @@ export function bootstrapBrowserHistory(): void {
 }
 
 export function HistoryProvider(props: { children: ReactNode }) {
-  const [location, setLocation] = useState<HistoryLocation>(readLocation);
+  const [location, setLocation] = useState<HistoryLocation>(initialLocation);
   const [navigationType, setNavigationType] =
     useState<NavigationType>("initial");
 
@@ -116,22 +149,73 @@ export function HistoryProvider(props: { children: ReactNode }) {
     (route: Route, options?: NavigateOptions) => {
       const href = routeHref(route);
       const currentHref = `${window.location.pathname}${window.location.search}`;
-      if (href === currentHref) return;
+      const hasAssistantOption = Boolean(
+        options && Object.prototype.hasOwnProperty.call(options, "assistant"),
+      );
+      const assistant =
+        hasAssistantOption && options?.assistant
+          ? options.assistant
+          : undefined;
+      const currentState = entryState();
 
-      saveActiveScrolls();
-
-      if (options?.replace) {
+      if (href === currentHref) {
+        if (!hasAssistantOption) return;
+        saveActiveScrolls();
+        if (!assistant) {
+          if (!currentState.assistant) return;
+          // Closing uses replace so the assistant entry does not linger.
+          const entry = currentEntry();
+          const next = { key: entry.key, index: entry.index };
+          window.history.replaceState(next, "", href);
+          setLocation({ route, ...next, href });
+          setNavigationType("replace");
+          return;
+        }
+        if (options?.replace) {
+          const entry = currentEntry();
+          const next = { key: entry.key, index: entry.index, assistant };
+          window.history.replaceState(next, "", href);
+          setLocation({ route, ...next, href, assistant });
+          setNavigationType("replace");
+          return;
+        }
         const entry = currentEntry();
-        window.history.replaceState(entry, "", href);
-        setLocation({ route, ...entry, href });
-        setNavigationType("replace");
+        const next = {
+          key: createID(),
+          index: entry.index + 1,
+          assistant,
+        };
+        window.history.pushState(next, "", href);
+        setLocation({ route, ...next, href, assistant });
+        setNavigationType("push");
         return;
       }
 
+      saveActiveScrolls();
       const entry = currentEntry();
-      const next = { key: createID(), index: entry.index + 1 };
+      const next = {
+        key: options?.replace ? entry.key : createID(),
+        index: options?.replace ? entry.index : entry.index + 1,
+        ...(assistant ? { assistant } : {}),
+      };
+      if (options?.replace) {
+        window.history.replaceState(next, "", href);
+        setLocation({
+          route,
+          ...next,
+          href,
+          ...(assistant ? { assistant } : {}),
+        });
+        setNavigationType("replace");
+        return;
+      }
       window.history.pushState(next, "", href);
-      setLocation({ route, ...next, href });
+      setLocation({
+        route,
+        ...next,
+        href,
+        ...(assistant ? { assistant } : {}),
+      });
       setNavigationType("push");
     },
     [],

@@ -448,6 +448,12 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Reopening a session returns to the same thread, including after a reload. One
   thread per session scope is the M1 model; there is no thread list and no new
   button.
+- Opening Ask pushes a history entry. Browser back or the chat topbar back
+  closes the dock and stays in the session; a reload starts with it closed.
+  Back and forward restore the assistant entry. Selecting a referenced message
+  opens a new entry, so back returns to the same assistant thread and another
+  source can be opened without asking again. The close control replaces the
+  assistant entry instead of leaving it on the back stack.
 - The composer offers four suggested questions before the first turn. While a
   run streams, the primary action becomes **Stop**. The footer always reads
   `Read-only · no writes`.
@@ -542,14 +548,14 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   id. Session and project threads do not offer this. Paired browser or device
   sessions cannot mint or reveal tokens; sign in with the owner token to use
   the flow.
-- **Finding across sessions.** Every scope can search all sessions by title,
-  transcript, and metadata (project, directory, model, agent, ref). A hit is
-  named with its session title and ref; the session scope says it cannot read
-  another session's transcript from that thread. Search and read results also
-  attach **Referenced messages** under the answer: a quiet list of title, time,
-  role, and a two-line excerpt. Selecting one closes the dock and opens the
-  session at that message, where the transcript focus bar offers
-  `Fork from here`.
+- **Finding across sessions.** A session thread searches its own session and
+  its lineage by default. It widens to all sessions only when the question
+  explicitly asks for global, other-session, or which-session search, or names
+  another session. Project and global threads keep their existing breadth.
+  Search and read results also attach **Referenced messages** under the answer:
+  a quiet list of title, time, role, and a two-line excerpt. Selecting one
+  closes the dock and opens the session at that message, where the transcript
+  focus bar offers `Fork from here`.
 - **Finding and prompting.** A session ref or `/sessions/<ref>` URL in the
   question attaches that session's metadata and last turns. From project or
   global, the assistant may propose one message to a session present in that

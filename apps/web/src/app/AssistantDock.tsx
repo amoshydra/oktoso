@@ -938,6 +938,7 @@ function ActionCard({
   ) => Promise<boolean>;
 }) {
   const action = turn.action;
+  const cardRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState(action?.text ?? "");
   const [reason, setReason] = useState(action?.reason ?? "");
   const [evidence, setEvidence] = useState(action?.evidence ?? "");
@@ -955,6 +956,12 @@ function ActionCard({
     },
   });
   const actionDraftStatus = draftSlotStatusText(actionDraft.status);
+
+  useEffect(() => {
+    if (!editable) return;
+    cardRef.current?.scrollIntoView({ block: "end" });
+  }, [action?.id, actionDraft.loaded, editable]);
+
   if (!action) return null;
 
   const working = action.status === "deciding";
@@ -985,6 +992,7 @@ function ActionCard({
 
   return (
     <div
+      ref={cardRef}
       className={`assistant-action ${action.status}`}
       role="group"
       aria-label={action.kind === "handoff" ? "Proposed handoff" : "Proposed action"}
