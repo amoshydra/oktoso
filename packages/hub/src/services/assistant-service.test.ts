@@ -1466,6 +1466,44 @@ describe("AssistantService", () => {
     expect(turn?.error).toContain("unavailable");
   });
 
+  it("distinguishes a GPU queue timeout from a model failure", async () => {
+    let attempts = 0;
+    const { service } = build((async () => {
+      attempts += 1;
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: "queue_timeout: no LLM slot within 75s",
+            type: "queue_timeout",
+            code: "queue_timeout",
+          },
+        }),
+        {
+          status: 504,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": "20",
+          },
+        },
+      );
+    }) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "hello" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "error"));
+
+    // A queue timeout already consumed the gateway's wait budget; retrying it
+    // would only double the delay.
+    expect(attempts).toBe(1);
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.error).toContain("GPU queue is busy");
+    expect(turn?.error).toContain("never reached the model");
+    expect(turn?.error).toContain("20 seconds");
+  });
+
   it("reads the agent settings on every run, not at boot", async () => {
     let current = {
       enabled: true,

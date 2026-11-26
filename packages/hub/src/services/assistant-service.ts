@@ -96,6 +96,8 @@ const ACTION_TTL_MS = 24 * 60 * 60 * 1_000;
 /** One retry for a cold or transient model, never after partial text. */
 const MODEL_ATTEMPTS = 2;
 const MODEL_RETRY_DELAY_MS = 750;
+/** Honor a short Retry-After hint without parking the run for the full wait. */
+const MODEL_RETRY_MAX_DELAY_MS = 5_000;
 
 /**
  * Model settings for the hub agent. Falls back to the reply endpoint/model when
@@ -1228,7 +1230,11 @@ export class AssistantService {
           !record.controller.signal.aborted &&
           isRetryableModelError(error);
         if (!canRetry) throw error;
-        await new Promise((resolve) => setTimeout(resolve, MODEL_RETRY_DELAY_MS));
+        const delayMs =
+          lastError instanceof ModelHttpError && lastError.retryAfterMs > 0
+            ? Math.min(lastError.retryAfterMs, MODEL_RETRY_MAX_DELAY_MS)
+            : MODEL_RETRY_DELAY_MS;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         if (record.controller.signal.aborted) throw error;
       }
     }
@@ -1281,11 +1287,22 @@ export class AssistantService {
     );
 
     if (!response.ok) {
-      const message =
-        response.status >= 500
+      const detail = await modelErrorDetail(response);
+      const queueBusy =
+        detail.code === "queue_timeout" || detail.code === "queue_full";
+      const message = queueBusy
+        ? queueBusyMessage(detail)
+        : response.status >= 500
           ? "The assistant model is unavailable right now — it may still be loading or the GPU is busy. Try again."
           : `The model returned HTTP ${response.status}`;
-      throw new ModelHttpError(message, response.status);
+      throw new ModelHttpError(message, response.status, {
+        // A queue timeout already waited the full gateway budget. Retrying it
+        // automatically only doubles the wait; let the user retry explicitly.
+        retryable: queueBusy
+          ? detail.code !== "queue_timeout"
+          : isRetryableStatus(response.status),
+        retryAfterMs: detail.retryAfterMs,
+      });
     }
     if (!response.body) throw new Error("The model returned no response body");
 
@@ -4768,19 +4785,87 @@ function hashPayload(action: AssistantAction): string | undefined {
   return createHash("sha256").update(payload).digest("hex");
 }
 
+interface ModelErrorDetail {
+  code?: string;
+  retryAfterMs: number;
+}
+
+/** Gateway/proxy failures that are worth one retry. */
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
+}
+
+/** Parse Retry-After as seconds or an HTTP date. */
+function parseRetryAfter(value: string | null): number {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1_000);
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : 0;
+}
+
+/**
+ * Read the orchestrator's structured error from a non-2xx model response.
+ * Proxies may return HTML, so every field is optional and failures are silent.
+ */
+async function modelErrorDetail(response: Response): Promise<ModelErrorDetail> {
+  const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
+  try {
+    const text = await response.text();
+    if (!text) return { retryAfterMs };
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object") return { retryAfterMs };
+    const body = parsed as { error?: unknown; code?: unknown; type?: unknown };
+    const error =
+      body.error && typeof body.error === "object"
+        ? (body.error as { code?: unknown; type?: unknown })
+        : body;
+    const code =
+      typeof error.code === "string"
+        ? error.code
+        : typeof error.type === "string"
+          ? error.type
+          : undefined;
+    return { ...(code ? { code } : {}), retryAfterMs };
+  } catch {
+    return { retryAfterMs };
+  }
+}
+
+/** Distinct, actionable hub alert for a saturated GPU queue. */
+function queueBusyMessage(detail: ModelErrorDetail): string {
+  const retry =
+    detail.retryAfterMs > 0
+      ? ` Try again in about ${Math.max(1, Math.ceil(detail.retryAfterMs / 1_000))} seconds.`
+      : " Try again shortly.";
+  if (detail.code === "queue_full") {
+    return `The GPU queue is at capacity.${retry}`;
+  }
+  return (
+    "The GPU queue is busy: no LLM slot was available before the queue " +
+    `timeout, so the request never reached the model.${retry}`
+  );
+}
+
 class ModelHttpError extends Error {
+  readonly retryable: boolean;
+  readonly retryAfterMs: number;
+
   constructor(
     message: string,
     readonly status: number,
+    options: { retryable?: boolean; retryAfterMs?: number } = {},
   ) {
     super(message);
     this.name = "ModelHttpError";
+    this.retryable = options.retryable ?? isRetryableStatus(status);
+    this.retryAfterMs = options.retryAfterMs ?? 0;
   }
 }
 
 function isRetryableModelError(error: unknown): boolean {
   if (error instanceof ModelHttpError) {
-    return error.status >= 500 || error.status === 408 || error.status === 429;
+    return error.retryable;
   }
   if (!(error instanceof Error)) return false;
   if (error.name === "AbortError") return false;
