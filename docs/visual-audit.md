@@ -2183,3 +2183,31 @@ competing history buttons.
   restored after reload, and an edit-and-fork message is restored after reload
   and cleared by Cancel. The full gates pass at 972 unit tests and 88 e2e
   tests, including 12 G2 tests.
+
+## Floating jump pill and stable scroll (2026-11-26)
+
+- The Jump to latest / Input needed pill is absolutely positioned over the
+  bottom-right of the transcript again. It no longer reserves a footer row, so
+  the scroll area gains the full lane height back. A 1px `--border-subtle`
+  rule at the top of the overlay and a short surface fade keep the pill legible
+  while the transcript scrolls underneath.
+- The pill hides at the true bottom, so the newest message sits flush with the
+  composer and is not covered; while scrolled up, the pill floats over the
+  content. No extra bottom padding is added, so initial render has no
+  message-to-composer gap and the divider clears at the bottom.
+- The near-bottom follow threshold drops from 240px to 80px. New pages and
+  streaming updates no longer pull the reader back to the bottom after a small
+  upward scroll.
+- The composer keeps the bottom pinned while it grows: the textarea resize and
+  the scroll correction run in the same layout pass. A multiline draft no
+  longer reveals the jump pill or pushes the latest message out of view.
+- Clicking Jump to latest also re-pins after the smooth scroll settles, so
+  streaming text or a newly loaded page growing mid-scroll cannot leave the
+  pill or divider visible just short of the bottom.
+- Verified in the chat e2e at 1280px: the band is `position: absolute`, the
+  panel height and composer top are unchanged when it appears, its top rule is
+  1px, a four-line draft keeps `scrollTop + clientHeight` at `scrollHeight`,
+  and simulated growth during the jump re-pins to the new bottom. Reviewed at 1440, 1024, 390, and 320px in both themes: no
+  horizontal overflow; the divider and pill stay inside the transcript frame.
+  The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2
+  tests.

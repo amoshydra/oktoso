@@ -5305,16 +5305,22 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
 }
 
 .chat-jump-band {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
   display: flex;
-  flex: 0 0 auto;
   justify-content: flex-end;
-  padding: var(--space-1) var(--space-4);
+  padding: var(--space-1) var(--space-4) var(--space-3);
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface);
+  background: linear-gradient(to top, var(--surface) 58%, transparent);
+  pointer-events: none;
 }
 
 .chat-jump-band[data-visible="false"] {
   border-top-color: transparent;
+  background: transparent;
 }
 
 .chat-jump-band[hidden] {
@@ -5860,7 +5866,7 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   }
 
   .chat-jump-band {
-    padding: var(--space-1) var(--space-3);
+    padding: var(--space-1) var(--space-3) var(--space-3);
   }
 
   .chat-jump-float {

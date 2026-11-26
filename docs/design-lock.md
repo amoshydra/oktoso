@@ -1,12 +1,13 @@
-# Design Lock — v1.71
+# Design Lock — v1.72
 
 Status: **frozen**.
 
-- Version: `design-v1.71`
-- Parent: `design-v1.70`
+- Version: `design-v1.72`
+- Parent: `design-v1.71`
 - Date: 2026-11-26
-- Git tag: `design-v1.71`
+- Git tag: `design-v1.72`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.72 scope: the floating jump pill and stable chat scrolling.
 - v1.71 scope: message deep links, assistant message references, and fork-from-message.
 - v1.70 scope: handoff provenance, evidence, compact receipts, and long-card disclosure.
 - v1.69 scope: the handoff cancellation notice.
@@ -1534,6 +1535,31 @@ radius, or color token.
 - The source list is a list of quiet rows, not a new card family. No new type
   role, spacing step, radius, control, or colour.
 
+## Floating jump pill and stable chat scroll (2026-11-26)
+
+- The Jump to latest / Input needed pill returns to a floating overlay at the
+  bottom-right of the transcript, inside the transcript frame and above the
+  composer. It is absolutely positioned and no longer reserves a footer row, so
+  the visible transcript gains that height back.
+- The overlay keeps a 1px `--border-subtle` divider at its top and a short
+  surface fade behind the pill, so the control reads as a separate layer while
+  the transcript scrolls underneath.
+- The pill hides at the true bottom, so the newest message is not covered while
+  reading there. While scrolled up, the pill floats over the content.
+- New transcript pages and streaming updates only follow the bottom when the
+  reader is within 80px of it; the previous 240px near-bottom threshold is
+  removed. Scrolling up by more than one line no longer resets the transcript.
+- Growing the composer while the reader is at the bottom pins the transcript to
+  the bottom in the same layout pass. Typing a multiline draft no longer
+  reveals the jump pill or moves the latest message out of view.
+- Clicking Jump to latest re-pins after the smooth scroll settles. Streaming
+  text or a newly loaded page growing mid-scroll cannot leave the pill or its
+  divider visible just short of the bottom.
+- Desktop keeps the 32px pill; mobile keeps the 44px target. No new type role,
+  spacing step, radius, control, or colour is added.
+- This supersedes the v1.50 reserved jump lane.
+
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1604,3 +1630,5 @@ The `design-v1.69` cancellation-notice revision explains the disappearance with 
 The `design-v1.70` handoff-quality revision makes agent-facing MCP proposals record `createdBy: "agent"` and a caller ref, adds an optional compact evidence reference to the handoff card and assistant action, makes the source synthetic receipt compact while keeping the full message and metadata in the provider message, and clamps long sent handoff cards to six lines with a `Show full message` / `Show less` disclosure. The chat e2e asserts the compact source receipt and its full metadata, the evidence line, and the long-card disclosure; the assistant e2e edits the evidence field and finds it on the source card. Unit tests cover agent provenance and the compact receipt. The full gates pass at 985 unit tests and 91 e2e tests, including 12 G2 tests.
 
 The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, paged lookup, message/activity focus, a focus bar with `Fork from here`, message-linked search hits, and a **Referenced messages** list on assistant answers. The chat e2e opens a cached message search hit at the message, focuses the row or activity group, and forks from the bar; the assistant e2e cites a matching message and opens it. Router tests cover the message parameter and href round trip. The full gates pass at 986 unit tests and 92 e2e tests, including 12 G2 tests.
+
+The `design-v1.72` floating-jump revision moves the pill back over the transcript and keeps its 1px divider and a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, the divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.

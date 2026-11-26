@@ -1382,7 +1382,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.71 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.72 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4938,7 +4938,11 @@ function SessionDetail(props: {
   const [markingRead, setMarkingRead] = useState(false);
   const restoreScroll = useRef(hasSavedScroll("transcript"));
   const [atBottom, setAtBottom] = useState(() => !restoreScroll.current);
+  const atBottomRef = useRef(atBottom);
   const [showJump, setShowJump] = useState(false);
+  const jumpTimer = useRef<number | undefined>(undefined);
+  const focusBarRef = useRef<HTMLDivElement | null>(null);
+  const [focusBarHeight, setFocusBarHeight] = useState(0);
   const [scrollable, setScrollable] = useState(false);
   const [inlineAttention, setInlineAttention] = useState<Attention[]>([]);
   const attentionSignature = useMemo(
@@ -5335,12 +5339,19 @@ function SessionDetail(props: {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const input = composerInputRef.current;
     if (!input) return;
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
-  }, [draft]);
+    // Growing the composer shrinks the transcript. Keep the reader pinned to
+    // the bottom when that is where they were before typing; otherwise leave
+    // their scroll position alone.
+    const scroller = transcriptRef.current;
+    if (scroller && atBottomRef.current && !stepPanelOpen) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, [draft, stepPanelOpen]);
 
   useEffect(() => {
     if (!contextOpen) return;
@@ -5415,12 +5426,6 @@ function SessionDetail(props: {
 
   const getScroller = () => transcriptRef.current;
 
-  const nearBottom = () => {
-    const scroller = getScroller();
-    if (!scroller) return true;
-    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
-  };
-
   const isAtBottom = () => {
     const scroller = getScroller();
     if (!scroller) return true;
@@ -5439,22 +5444,57 @@ function SessionDetail(props: {
     setScrollable(overflows);
     setShowJump(overflows && !atEnd);
     if (!stepPanelOpen) {
-      setAtBottom(
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80,
-      );
+      const nextAtBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+      atBottomRef.current = nextAtBottom;
+      setAtBottom(nextAtBottom);
     }
   }, [stepPanelOpen]);
 
   const jumpToLatest = () => {
     const scroller = getScroller();
     if (!scroller) return;
+    atBottomRef.current = true;
+    setAtBottom(true);
     scroller.scrollTo({
       top: scroller.scrollHeight,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? "auto"
         : "smooth",
     });
+    // The transcript can grow while the smooth scroll runs (streaming text or
+    // a newly loaded page). Re-pin once it settles so the pill and divider
+    // cannot be left visible just short of the true bottom.
+    if (jumpTimer.current) window.clearTimeout(jumpTimer.current);
+    jumpTimer.current = window.setTimeout(() => {
+      jumpTimer.current = undefined;
+      if (!scroller.isConnected) return;
+      scroller.scrollTop = scroller.scrollHeight;
+      atBottomRef.current = true;
+      setAtBottom(true);
+      updateScrollState();
+    }, 600);
   };
+
+  useLayoutEffect(() => {
+    const bar = focusBarRef.current;
+    if (!bar) {
+      setFocusBarHeight(0);
+      return;
+    }
+    const update = () => setFocusBarHeight(bar.getBoundingClientRect().height);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [messageBarDismissed, props.messageID]);
+
+  useEffect(
+    () => () => {
+      if (jumpTimer.current) window.clearTimeout(jumpTimer.current);
+    },
+    [],
+  );
 
   const cleanupDictation = useCallback(() => {
     if (dictationStopTimer.current) {
@@ -5693,7 +5733,7 @@ function SessionDetail(props: {
         }),
       ]);
       const latest = [...page.data].reverse();
-      const stick = (forceBottom || nearBottom()) && !restoreScroll.current;
+      const stick = (forceBottom || isAtBottom()) && !restoreScroll.current;
       setError(undefined);
       setMessages((current) =>
         replace ? latest : mergeLatestPage(current, latest),
@@ -5979,6 +6019,7 @@ function SessionDetail(props: {
       await refreshLatest(true, true);
       await refreshBranches();
       void refreshHistory();
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setBranchError(
@@ -6011,6 +6052,7 @@ function SessionDetail(props: {
         setHistoryNotice("Draft kept. Show prompt to insert the undone prompt.");
       }
       pendingScroll.current = { mode: "bottom" };
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setHistoryError(
@@ -6040,6 +6082,7 @@ function SessionDetail(props: {
       }
       setHistoryNotice("Turn restored.");
       await refreshLatest(true);
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setHistoryError(
@@ -6084,6 +6127,7 @@ function SessionDetail(props: {
         current ? { ...current, status: "running" } : current,
       );
       await refreshLatest(true);
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setBranchError(
@@ -6105,6 +6149,7 @@ function SessionDetail(props: {
       await refreshLatest(true, true);
       await refreshBranches();
       void refreshHistory();
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setBranchError(
@@ -6402,6 +6447,7 @@ function SessionDetail(props: {
       );
       await refreshInbox();
       await refreshLatest(true);
+      atBottomRef.current = true;
       setAtBottom(true);
     } catch (reason) {
       setSendError(
@@ -6747,23 +6793,27 @@ function SessionDetail(props: {
     const scroller = getScroller();
     if (!scroller) return;
     const observer = new ResizeObserver(() => {
-      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      if (atBottomRef.current && !stepPanelOpen) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
       updateScrollState();
     });
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [session, atBottom, stepPanelOpen, updateScrollState]);
+  }, [session, stepPanelOpen, updateScrollState]);
 
   useEffect(() => {
     if (loading) return;
     const scroller = getScroller();
     if (!scroller) return;
     const frame = requestAnimationFrame(() => {
-      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      if (atBottomRef.current && !stepPanelOpen) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
       updateScrollState();
     });
     return () => cancelAnimationFrame(frame);
-  }, [atBottom, loading, messages, stepPanelOpen, updateScrollState]);
+  }, [loading, messages, stepPanelOpen, updateScrollState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6785,7 +6835,9 @@ function SessionDetail(props: {
     setInlineAttention([]);
     setAttentionBusyID(undefined);
     setAttentionError(undefined);
-    setAtBottom(!restoreScroll.current);
+    const initialAtBottom = !restoreScroll.current;
+    atBottomRef.current = initialAtBottom;
+    setAtBottom(initialAtBottom);
     setShowJump(false);
     setScrollable(false);
     refreshLatest(true)
@@ -7275,12 +7327,13 @@ function SessionDetail(props: {
     const scroller = getScroller();
     if (!scroller) return;
     const frame = requestAnimationFrame(() => {
-      if (atBottom && !stepPanelOpen) scroller.scrollTop = scroller.scrollHeight;
+      if (atBottomRef.current && !stepPanelOpen) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
       updateScrollState();
     });
     return () => cancelAnimationFrame(frame);
   }, [
-    atBottom,
     backgroundItems.length,
     handoffAbortNotice,
     handoffs.length,
@@ -7448,7 +7501,10 @@ function SessionDetail(props: {
                       onOpenSession={props.onOpenSession}
                       onStepOpenChange={(open) => {
                         setStepPanelOpen(open);
-                        if (open) setAtBottom(false);
+                        if (open) {
+                          atBottomRef.current = false;
+                          setAtBottom(false);
+                        }
                       }}
                       subagentStatus={childStatus}
                     />
@@ -7522,7 +7578,10 @@ function SessionDetail(props: {
                         onOpenSession={props.onOpenSession}
                         onStepOpenChange={(open) => {
                           setStepPanelOpen(open);
-                          if (open) setAtBottom(false);
+                          if (open) {
+                            atBottomRef.current = false;
+                            setAtBottom(false);
+                          }
                         }}
                         subagentStatus={childStatus}
                         header={{
@@ -7661,6 +7720,7 @@ function SessionDetail(props: {
               {props.messageID && !messageBarDismissed ? (
                 <div
                   className="chat-focus-bar"
+                  ref={focusBarRef}
                   role="region"
                   aria-label="Focused message"
                 >
@@ -7703,7 +7763,12 @@ function SessionDetail(props: {
                   </button>
                 </div>
               ) : null}
-              <div className="chat-jump-band" data-visible={showJump} hidden={!scrollable}>
+              <div
+                className="chat-jump-band"
+                data-visible={showJump}
+                hidden={!scrollable}
+                style={{ bottom: focusBarHeight }}
+              >
                 <button
                   className="chat-jump-float"
                   type="button"

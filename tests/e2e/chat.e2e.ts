@@ -544,6 +544,13 @@ describe("chat sending", () => {
     expect(middle.rowText).toContain("1 shell running");
 
     await page!.locator(".chat-jump-float").click();
+    // Simulate streaming content growing during the smooth scroll. The jump
+    // must re-pin after it settles, not stop at the old bottom.
+    await page!.locator(".chat-panel").evaluate((element) => {
+      const spacer = document.createElement("div");
+      spacer.style.height = "600px";
+      element.append(spacer);
+    });
     await page!.waitForFunction(
       () => {
         const panel = document.querySelector(".chat-panel")!;
@@ -578,6 +585,14 @@ describe("chat sending", () => {
     expect(bottom.fadeBottom).toBe("0px");
     expect(bottom.jumpHidden).toBe("true");
     expect(bottom.composerTop).toBe(composerTop);
+    expect(await page!.locator(".chat-jump-band").getAttribute("data-visible")).toBe(
+      "false",
+    );
+    expect(
+      await page!
+        .locator(".chat-jump-band")
+        .evaluate((element) => getComputedStyle(element).borderTopColor),
+    ).toMatch(/rgba?\(0, 0, 0, 0\)|transparent/);
   });
 
   it("shows Open WebUI folders and sends an attachment", async () => {
@@ -836,7 +851,7 @@ describe("composer layout", () => {
     ).toBe(0);
   });
 
-  it("keeps the jump in its own band above the composer", async () => {
+  it("floats the jump over the transcript without taking layout height", async () => {
     await openSession("Refactor session index");
     const panel = page!.locator(".chat-panel");
     await page!.locator(".chat-message").first().waitFor({ timeout: 5_000 });
@@ -848,6 +863,17 @@ describe("composer layout", () => {
       undefined,
       { timeout: 5_000 },
     );
+    const before = await page!.evaluate(() => {
+      const panel = document.querySelector(".chat-panel")!.getBoundingClientRect();
+      const composer = document
+        .querySelector(".chat-composer-wrap")!
+        .getBoundingClientRect();
+      return {
+        panelHeight: Math.round(panel.height),
+        composerTop: Math.round(composer.top),
+      };
+    });
+
     await panel.evaluate((element) => {
       element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
       element.dispatchEvent(new Event("scroll", { bubbles: true }));
@@ -861,19 +887,88 @@ describe("composer layout", () => {
     await page!.waitForTimeout(250);
     const geometry = await page!.evaluate(() => {
       const panel = document.querySelector(".chat-panel")!.getBoundingClientRect();
-      const band = document.querySelector(".chat-jump-band")!.getBoundingClientRect();
+      const band = document.querySelector(".chat-jump-band")!;
+      const bandRect = band.getBoundingClientRect();
       const button = document.querySelector(".chat-jump-float")!.getBoundingClientRect();
+      const composer = document
+        .querySelector(".chat-composer-wrap")!
+        .getBoundingClientRect();
       return {
+        panelHeight: Math.round(panel.height),
         panelBottom: Math.round(panel.bottom),
-        bandTop: Math.round(band.top),
-        bandBottom: Math.round(band.bottom),
+        bandPosition: getComputedStyle(band).position,
+        bandBorderTop: getComputedStyle(band).borderTopWidth,
+        bandTop: Math.round(bandRect.top),
+        bandBottom: Math.round(bandRect.bottom),
         buttonTop: Math.round(button.top),
         buttonBottom: Math.round(button.bottom),
+        composerTop: Math.round(composer.top),
       };
     });
-    expect(geometry.bandTop).toBeGreaterThanOrEqual(geometry.panelBottom - 1);
+    expect(geometry.bandPosition).toBe("absolute");
+    expect(geometry.panelHeight).toBe(before.panelHeight);
+    expect(geometry.composerTop).toBe(before.composerTop);
+    expect(geometry.bandBottom).toBeGreaterThanOrEqual(geometry.panelBottom - 1);
+    expect(geometry.bandTop).toBeLessThan(geometry.panelBottom);
+    expect(geometry.bandBorderTop).not.toBe("0px");
     expect(geometry.buttonTop).toBeGreaterThanOrEqual(geometry.bandTop - 1);
     expect(geometry.buttonBottom).toBeLessThanOrEqual(geometry.bandBottom + 1);
+  });
+
+  it("keeps the bottom pinned while the composer grows", async () => {
+    await openSession("Refactor session index");
+    const panel = page!.locator(".chat-panel");
+    await page!.locator(".chat-message").first().waitFor({ timeout: 5_000 });
+    await page!.waitForFunction(
+      () => {
+        const element = document.querySelector(".chat-panel");
+        return Boolean(element && element.scrollHeight > element.clientHeight + 8);
+      },
+      undefined,
+      { timeout: 5_000 },
+    );
+    await panel.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await page!.waitForTimeout(200);
+    const composer = page!.locator(".chat-composer textarea");
+    const beforeHeight = await page!
+      .locator(".chat-composer-wrap")
+      .evaluate((element) => Math.round(element.getBoundingClientRect().height));
+
+    await composer.fill("one\ntwo\nthree\nfour\nfive");
+    await expect
+      .poll(
+        () =>
+          page!.evaluate(() => {
+            const element = document.querySelector(".chat-panel")!;
+            return (
+              element.scrollTop + element.clientHeight >=
+              element.scrollHeight - 2
+            );
+          }),
+        { timeout: 2_000 },
+      )
+      .toBe(true);
+    expect(await page!.locator(".chat-jump-float").getAttribute("data-visible")).toBe(
+      "false",
+    );
+    expect(
+      await page!
+        .locator(".chat-composer-wrap")
+        .evaluate((element) => Math.round(element.getBoundingClientRect().height)),
+    ).toBeGreaterThan(beforeHeight);
+    const gap = await page!.evaluate(() => {
+      const panel = document.querySelector(".chat-panel")!;
+      const last = panel.lastElementChild;
+      if (!last) return -1;
+      return Math.round(
+        panel.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom,
+      );
+    });
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThan(48);
+    await composer.fill("");
   });
 });
 
