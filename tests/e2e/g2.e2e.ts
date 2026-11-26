@@ -371,6 +371,18 @@ describe("G2 hosted app", () => {
       .join("\n");
     expect(mirroredText).toContain("›");
     expect(mirrored.listObject?.length ?? 0).toBe(0);
+    const captures = (mirrored.textObject ?? []).filter(
+      (text: { isEventCapture?: number }) => text.isEventCapture === 1,
+    );
+    expect(captures).toHaveLength(1);
+    expect(captures[0]?.containerName).toBe("capture");
+    expect(captures[0]?.content).toBe(" ");
+    expect(
+      (mirrored.textObject ?? []).find(
+        (text: { containerName?: string }) =>
+          text.containerName === "body",
+      )?.isEventCapture,
+    ).toBe(0);
 
     await current.locator("#glass-preview-header").dblclick();
     await previewMatches(/OKTOSO/);

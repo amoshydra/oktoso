@@ -15,8 +15,10 @@ time; the phone remains the keyboard and the batch fallback.
 > SDK has no setter for the native list selection, so the glasses do not use the
 > native list border. A swipe moves the `›` marker inside a fixed window; the
 > window shifts one row only when the marker crosses an edge, and marker moves
-> update the body in place rather than rebuilding the page. Read "four rows" and
-> "the list scrolls" below as the older native-list layout.
+> update the body in place rather than rebuilding the page. The visible body
+> does not capture input; a one-line capture container owns the gestures, so the
+> firmware never scrolls the text. Read "four rows" and "the list scrolls" below
+> as the older native-list layout.
 
 ---
 

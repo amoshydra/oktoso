@@ -110,7 +110,9 @@ alternative for complex fields.
 - One event-capturing container owns input. The footer is a hint, never a
   button. The G2 page builder accepts only one capture container, and a text tap
   has no container identity; do not reintroduce footer buttons or split capture
-  zones.
+  zones. On a marker list, a one-line capture container owns the gestures and
+  the visible body does not capture, because the firmware natively scrolls a
+  capturing text container that overflows.
 - The marker list contains the agent's choices, then `Type answer`, `More`, and
   `Read chat`. Up to six rows are visible; the window shifts one row only when
   the marker crosses its edge.

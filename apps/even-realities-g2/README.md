@@ -44,7 +44,9 @@ longer replies, and phone-side question forms.
   list selection is host-owned, so the glasses render text rows with a `›`
   marker. The body holds six lines and stays fixed while the marker moves; it
   shifts one row only when the marker crosses the top or bottom edge. Marker
-  moves update the body in place, so a swipe never scrolls the view.
+  moves update the body in place. The visible body does not capture input: a
+  one-line capture container owns the gestures, so the firmware never scrolls
+  the text.
   Expand opens the same panel full-screen; Close or Escape returns. The preview
   keeps the app's 54-column wrapped lines and clips instead of reflowing, so
   content changes never resize it. Actions pulse the phone where supported. The

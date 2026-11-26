@@ -83,7 +83,7 @@ import {
   turnErrorText,
   type FailureInfo,
 } from "./failure";
-import { listPage, minimalPage, textPage } from "./layout";
+import { listPage, markerPage, minimalPage, textPage } from "./layout";
 import {
   forgetPendingSend,
   loadPendingSends,
@@ -5247,7 +5247,7 @@ function mirrorListPage(page: RebuildPageContainer): MirrorPage | undefined {
   phoneListStart = view.start;
   if (!view.body) return undefined;
   return {
-    page: textPage(view.body, container("footer"), container("header")),
+    page: markerPage(view.body, container("footer"), container("header")),
     body: view.body,
   };
 }
@@ -5279,7 +5279,7 @@ function refreshMirrorBody(): void {
   void bridge
     .textContainerUpgrade(
       new TextContainerUpgrade({
-        containerID: 2,
+        containerID: 3,
         containerName: "body",
         content: body,
       }),

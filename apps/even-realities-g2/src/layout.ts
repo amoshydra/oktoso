@@ -90,6 +90,82 @@ export function textPage(
 }
 
 /**
+ * An app-owned marker list.
+ *
+ * The visible body never captures input. A one-line catcher owns the gestures,
+ * so the firmware has no text to scroll: every swipe is a boundary event and the
+ * app moves the marker. The body is clipped if a caller ever overfills it; it
+ * is never scrolled.
+ */
+export function markerPage(
+  body: string,
+  footer: string,
+  header?: string,
+): RebuildPageContainer {
+  return new RebuildPageContainer({
+    containerTotalNum: 4,
+    textObject: [
+      new TextContainerProperty({
+        xPosition: 0,
+        yPosition: 38,
+        width: GLASS_WIDTH,
+        height: 204,
+        borderWidth: 0,
+        borderColor: 5,
+        borderRadius: 0,
+        paddingLength: 0,
+        containerID: 1,
+        containerName: "capture",
+        isEventCapture: 1,
+        content: " ",
+      }),
+      new TextContainerProperty({
+        xPosition: 0,
+        yPosition: 0,
+        width: GLASS_WIDTH,
+        height: 36,
+        borderWidth: 0,
+        borderColor: 5,
+        borderRadius: 0,
+        paddingLength: 4,
+        containerID: 2,
+        containerName: "header",
+        isEventCapture: 0,
+        content: header ?? "OKTOSO",
+      }),
+      new TextContainerProperty({
+        xPosition: 0,
+        yPosition: 38,
+        width: GLASS_WIDTH,
+        height: 204,
+        borderWidth: 0,
+        borderColor: 5,
+        borderRadius: 4,
+        paddingLength: 4,
+        containerID: 3,
+        containerName: "body",
+        isEventCapture: 0,
+        content: body,
+      }),
+      new TextContainerProperty({
+        xPosition: 0,
+        yPosition: FOOTER_Y,
+        width: GLASS_WIDTH,
+        height: FOOTER_HEIGHT,
+        borderWidth: 0,
+        borderColor: 5,
+        borderRadius: 0,
+        paddingLength: 4,
+        containerID: 4,
+        containerName: "footer",
+        isEventCapture: 0,
+        content: footer,
+      }),
+    ],
+  });
+}
+
+/**
  * A list page spec. `showPage` turns it into the app-owned six-line marker
  * list before it reaches the host, so the native list is never painted.
  */

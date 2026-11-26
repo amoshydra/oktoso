@@ -4,6 +4,7 @@ import {
   GLASS_HEIGHT,
   GLASS_WIDTH,
   listPage,
+  markerPage,
   minimalPage,
   textPage,
 } from "./layout";
@@ -90,6 +91,23 @@ describe("G2 frame layout", () => {
       "Two",
       "Three",
     ]);
+  });
+
+  it("gives the marker list a zero-scroll capture target", () => {
+    const page = markerPage("› One\n  Two", "Footer", "LIST");
+    const capture = page.textObject?.find(
+      (container) => container.isEventCapture === 1,
+    );
+    const body = page.textObject?.find(
+      (container) => container.containerName === "body",
+    );
+
+    expect(captures(page)).toBe(1);
+    expect(capture?.containerName).toBe("capture");
+    expect(capture?.content).toBe(" ");
+    expect(body?.isEventCapture).toBe(0);
+    expect(body?.content).toBe("› One\n  Two");
+    assertInsideGlass(page);
   });
 
   it("keeps the empty screen to one line", () => {
