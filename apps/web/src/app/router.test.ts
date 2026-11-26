@@ -105,6 +105,31 @@ describe("parseRoute", () => {
     ).toBe("/sessions/desktop-opencode%3Ases_auth?attention=att_1");
   });
 
+  it("carries a message deep link", () => {
+    expect(
+      parseRoute(
+        "/sessions/desktop-opencode%3Ases_auth",
+        "?message=msg_2167f1db5001WhDT9YJYPDxK0k",
+      ),
+    ).toEqual({
+      name: "chat",
+      ref: "desktop-opencode:ses_auth",
+      details: false,
+      message: "msg_2167f1db5001WhDT9YJYPDxK0k",
+    });
+
+    expect(
+      routeHref({
+        name: "chat",
+        ref: "desktop-opencode:ses_auth",
+        details: false,
+        message: "msg_2167f1db5001WhDT9YJYPDxK0k",
+      }),
+    ).toBe(
+      "/sessions/desktop-opencode%3Ases_auth?message=msg_2167f1db5001WhDT9YJYPDxK0k",
+    );
+  });
+
   it("parses search filters and ignores invalid status values", () => {
     expect(
       parseRoute(

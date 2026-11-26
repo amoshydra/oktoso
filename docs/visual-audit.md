@@ -2144,6 +2144,27 @@ competing history buttons.
   receipt failure, and backfill idempotency, plus user-message abort,
   older-message updates, other-session messages, and sent-handoff safety.
 
+## Message deep links and assistant sources (2026-11-26)
+
+- A chat route may carry `?message=<id>`. The client loads older pages until
+  the message is in the window, scrolls it into view, and highlights the
+  message row or its activity group. A quiet focus bar sits below the scroll
+  region, above the jump lane: `Focused message · <time>`, `Fork from here` when
+  the provider supports fork, `Load older` when the message is outside the
+  window, and Dismiss. The bar uses the existing control and button grammar.
+- The search message results already carry `messageID`; selecting one opens the
+  session at that message. Session results remain session-only. The assistant
+  answer now carries a **Referenced messages** list from its search and read
+  tools: 10px uppercase label, 12px source title, 11px role/ref/time, and a
+  two-line excerpt. Sources are quiet rows, not another set of cards. Selecting
+  one closes the dock and opens the message; the focus bar is the fork surface.
+- No new type role, spacing step, radius, control, or colour.
+- Verified in the chat e2e: a cached message search hit opens the session at
+  `?message=`, the message/activity group is focused, and `Fork from here`
+  creates a new session. The assistant e2e cites a matching message, renders
+  the source link, and opens the focused message. Router tests cover the
+  `message` parameter and href round trip.
+
 ## Question and edit/fork drafts (2026-11-26)
 
 - Question and attention form fields now keep a structured draft per attention

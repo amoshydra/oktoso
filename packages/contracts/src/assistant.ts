@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zMessageRole } from "./messages";
 import { zQuestionRisk } from "./questions";
 
 /**
@@ -181,6 +182,15 @@ export const zAssistantStep = z.object({
   parentId: z.string().optional(),
 });
 
+export const zAssistantSource = z.object({
+  ref: z.string().min(1),
+  title: z.string().min(1),
+  messageID: z.string().min(1).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  role: zMessageRole.optional(),
+  snippet: z.string().optional(),
+});
+
 export const zAssistantTurn = z.object({
   id: z.string().min(1),
   threadId: z.string().min(1),
@@ -193,6 +203,8 @@ export const zAssistantTurn = z.object({
   error: z.string().optional(),
   action: zAssistantAction.optional(),
   context: zAssistantContext.optional(),
+  /** Messages the answer used, for clickable transcript references. */
+  sources: z.array(zAssistantSource).max(8).optional(),
   /** Hub facts: what the run read, which model answered, and any tool it fired. */
   activity: z
     .array(zAssistantStep)
@@ -306,6 +318,7 @@ export type AssistantTurn = z.infer<typeof zAssistantTurn>;
 export type AssistantThreadDetail = z.infer<typeof zAssistantThreadDetail>;
 export type AssistantRunState = z.infer<typeof zAssistantRunState>;
 export type AssistantActionKind = z.infer<typeof zAssistantActionKind>;
+export type AssistantSource = z.infer<typeof zAssistantSource>;
 export type AssistantAnswer = z.infer<typeof zAssistantAnswer>;
 export type AssistantStep = z.infer<typeof zAssistantStep>;
 export type AssistantStepMetrics = z.infer<typeof zAssistantStepMetrics>;

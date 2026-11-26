@@ -1454,8 +1454,34 @@ describe("message search", () => {
       (await page!.locator(".search-hit-snippet").first().innerText()).toLowerCase(),
     ).toContain("refresh");
 
+    const apiHits = await page!.request.get(
+      `${BASE_URL}/api/v1/search?q=refresh&scope=messages`,
+      { headers: { Authorization: `Bearer ${TOKEN}` } },
+    );
+    const apiBody = (await apiHits.json()) as {
+      data?: Array<{ messageID?: string }>;
+    };
+    expect(apiBody.data?.[0]?.messageID).toBeTruthy();
+
     // Opening a hit lands in the session that owns the message.
-    await page!.locator(".search-hit").first().click();
+    const firstHit = page!.locator(".search-hit").first();
+    expect(await firstHit.getAttribute("data-message-id")).toBeTruthy();
+    await firstHit.click();
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
+    expect(page!.url()).toContain("message=");
+    const focusBar = page!.locator(".chat-focus-bar");
+    await focusBar.waitFor({ timeout: 10_000 });
+    await expect
+      .poll(
+        () =>
+          page!
+            .locator(".chat-focus-target, .chat-message.is-focused")
+            .count(),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0);
+    await focusBar.getByRole("button", { name: "Fork from here" }).click();
+    await page!.waitForURL(/ses_fake_fork_/, { timeout: 10_000 });
     await page!.locator(".chat-composer textarea").waitFor({ timeout: 5_000 });
   });
 

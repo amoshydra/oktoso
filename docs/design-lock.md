@@ -1,12 +1,13 @@
-# Design Lock — v1.70
+# Design Lock — v1.71
 
 Status: **frozen**.
 
-- Version: `design-v1.70`
-- Parent: `design-v1.69`
+- Version: `design-v1.71`
+- Parent: `design-v1.70`
 - Date: 2026-11-26
-- Git tag: `design-v1.70`
+- Git tag: `design-v1.71`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.71 scope: message deep links, assistant message references, and fork-from-message.
 - v1.70 scope: handoff provenance, evidence, compact receipts, and long-card disclosure.
 - v1.69 scope: the handoff cancellation notice.
 - v1.68 scope: pending handoffs abort when the source session gets a new user message.
@@ -1516,6 +1517,23 @@ radius, or color token.
   card; only the visual height changes.
 - No new type role, spacing step, radius, control, or colour.
 
+## Message deep links and assistant references (2026-11-26)
+
+- A chat route may carry `?message=<id>`. From search or an assistant reference,
+  the client opens the session, pages older messages until the target is
+  loaded, scrolls it into view, and highlights the row or its activity group.
+- A focus bar below the transcript scroll region names the focused message and
+  offers `Fork from here` when the provider supports fork, `Load older` when
+  the message is outside the loaded window, and Dismiss. Forking before the
+  message opens the new session.
+- Search message rows keep the message identity and open the message rather
+  than only the session. The session assistant attaches a **Referenced
+  messages** list to answers built from search or read tools: a 10px uppercase
+  label, 12px title, 11px role/ref/time, and a two-line excerpt. Selecting a
+  source closes the dock and opens the message.
+- The source list is a list of quiet rows, not a new card family. No new type
+  role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1584,3 +1602,5 @@ The `design-v1.68` abort revision cancels pending handoffs when the source sessi
 The `design-v1.69` cancellation-notice revision explains the disappearance with a quiet inline notice: `Pending handoff cancelled because the session moved on.` for a new user message, or `Handoff cancelled.` for a manual cancel. The notice is dismissible, clears after six seconds, and is announced politely. The chat e2e asserts the notice appears and can be dismissed. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.
 
 The `design-v1.70` handoff-quality revision makes agent-facing MCP proposals record `createdBy: "agent"` and a caller ref, adds an optional compact evidence reference to the handoff card and assistant action, makes the source synthetic receipt compact while keeping the full message and metadata in the provider message, and clamps long sent handoff cards to six lines with a `Show full message` / `Show less` disclosure. The chat e2e asserts the compact source receipt and its full metadata, the evidence line, and the long-card disclosure; the assistant e2e edits the evidence field and finds it on the source card. Unit tests cover agent provenance and the compact receipt. The full gates pass at 985 unit tests and 91 e2e tests, including 12 G2 tests.
+
+The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, paged lookup, message/activity focus, a focus bar with `Fork from here`, message-linked search hits, and a **Referenced messages** list on assistant answers. The chat e2e opens a cached message search hit at the message, focuses the row or activity group, and forks from the bar; the assistant e2e cites a matching message and opens it. Router tests cover the message parameter and href round trip. The full gates pass at 986 unit tests and 92 e2e tests, including 12 G2 tests.

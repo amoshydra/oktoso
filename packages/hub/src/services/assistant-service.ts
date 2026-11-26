@@ -11,6 +11,7 @@ import type {
   AssistantRunAccepted,
   AssistantModels,
   AssistantScope,
+  AssistantSource,
   AssistantStatus,
   AssistantStep,
   AssistantStepKind,
@@ -183,6 +184,8 @@ interface ToolRun {
   metrics?: Record<string, string | number>;
   /** Turns the model actually saw, for the evidence line. */
   reads?: Array<{ ref: string; turn: number }>;
+  /** Messages the tool found, for clickable answer references. */
+  sources?: AssistantSource[];
 }
 
 interface Transcript {
@@ -941,17 +944,25 @@ export class AssistantService {
 
     let text = "";
     let usage: AssistantTurn["usage"];
+    const sources = new Map<string, AssistantSource>();
+    const addSource = (source: AssistantSource) => {
+      const key = `${source.ref}:${source.messageID ?? source.createdAt ?? source.title}`;
+      if (sources.has(key) || sources.size >= 8) return;
+      sources.set(key, source);
+    };
     let built:
       | {
           text: string;
           context: AssistantContext;
           targets: Map<string, string>;
           tools?: AssistantTools;
+          sources?: AssistantSource[];
           transcriptTurns?: number;
         }
       | undefined;
     try {
       built = await this.buildContext(scope, question, sink, model, owner);
+      for (const source of built.sources ?? []) addSource(source);
       const canPropose = this.writesEnabled();
       const history = thread.turns
         .slice(0, -1)
@@ -1059,6 +1070,7 @@ export class AssistantService {
           }
           const started = this.now();
           const outcome = await tools.run(entry.name, entry.arguments);
+          for (const source of outcome.sources ?? []) addSource(source);
           executed += 1;
           toolCalls += 1;
           toolChars += outcome.output.length;
@@ -1126,6 +1138,7 @@ export class AssistantService {
           built.context,
           trace.items(),
           model,
+          [...sources.values()],
         );
         if (turn.action?.status === "pending") {
           this.finishAction(record, turn);
@@ -1143,6 +1156,7 @@ export class AssistantService {
         built.context,
         trace.items(),
         model,
+        [...sources.values()],
       );
       this.finish(record, "done", { turn });
     } catch (error) {
@@ -1163,6 +1177,7 @@ export class AssistantService {
         built?.context,
         trace.items(),
         model,
+        [...sources.values()],
       );
       this.finish(record, state, { turn, message });
     }
@@ -1308,6 +1323,7 @@ export class AssistantService {
     context?: AssistantContext,
     activity?: AssistantStep[],
     model?: string,
+    sources?: AssistantSource[],
   ): Promise<AssistantTurn> {
     return this.appendTurn({
       id: `atn_${randomUUID()}`,
@@ -1321,6 +1337,7 @@ export class AssistantService {
       ...(error ? { error } : {}),
       ...(context ? { context } : {}),
       ...(activity && activity.length > 0 ? { activity } : {}),
+      ...(sources && sources.length > 0 ? { sources } : {}),
     });
   }
 
@@ -1334,6 +1351,7 @@ export class AssistantService {
     context?: AssistantContext,
     activity?: AssistantStep[],
     model?: string,
+    sources?: AssistantSource[],
   ): Promise<AssistantTurn> {
     const action = await this.buildAction(call, scope, targets);
     const turn: AssistantTurn = {
@@ -1348,6 +1366,7 @@ export class AssistantService {
       ...(usage ? { usage } : {}),
       ...(context ? { context } : {}),
       ...(activity && activity.length > 0 ? { activity } : {}),
+      ...(sources && sources.length > 0 ? { sources } : {}),
     };
     await this.appendTurn(turn);
     // `proposed` is audited even when validation failed, so a bad model turn
@@ -2004,6 +2023,7 @@ export class AssistantService {
               ? `“${truncate(query, 80)}” · offset past the ${totalLabel} matches`
               : `“${truncate(query, 80)}” · ${page.length} of ${totalLabel} ${total === 1 ? "hit" : "hits"}${more ? " · more available" : ""}`,
           metrics: { query, hits: page.length, total, ...(more ? { more: 1 } : {}) },
+          sources: page.map(sourceFromSearchHit),
         };
       }
 
@@ -2055,6 +2075,14 @@ export class AssistantService {
           detail: `${session.title} · ${selected.length} ${selected.length === 1 ? "turn" : "turns"} · ${transcriptWindow(transcript, deep)}`,
           metrics: { turns: selected.length },
           reads: selected.map((row) => ({ ref, turn: row.turn })),
+          sources: selected.slice(0, 8).map((row) => ({
+            ref: session.ref,
+            title: session.title,
+            messageID: row.message.id,
+            createdAt: row.message.createdAt,
+            role: row.message.role,
+            snippet: clipText(renderMessageParts(row.message).join("\n"), 180),
+          })),
         };
       }
 
@@ -2272,7 +2300,12 @@ export class AssistantService {
           const offset = Math.max(0, numberArg(args.offset, 0));
           const scan = () => {
             const literal = query.toLowerCase();
-            const found: Array<{ turn: number; line: string }> = [];
+            const found: Array<{
+              turn: number;
+              line: string;
+              message: Message;
+              snippet: string;
+            }> = [];
             for (const row of rows()) {
               const at = row.text.toLowerCase().indexOf(literal);
               if (at < 0) continue;
@@ -2281,6 +2314,8 @@ export class AssistantService {
                 .replace(/\s+/g, " ");
               found.push({
                 turn: row.turn,
+                message: row.message,
+                snippet: `…${snippet}…`,
                 line: `turn ${row.turn} · ${row.role}: …${snippet}…`,
               });
             }
@@ -2320,6 +2355,15 @@ export class AssistantService {
               total: found.length,
               ...(transcript.complete ? {} : { older: 1 }),
             },
+            sources: page.map((entry) => ({
+              ref: sessionRef,
+              title:
+                this.options.sessions.peek(sessionRef)?.title ?? sessionRef,
+              messageID: entry.message.id,
+              createdAt: entry.message.createdAt,
+              role: entry.message.role,
+              snippet: entry.snippet,
+            })),
           };
         }
         case "read_turns": {
@@ -2357,6 +2401,15 @@ export class AssistantService {
             detail: `${selected.length} ${selected.length === 1 ? "turn" : "turns"} · ${window(deep)}`,
             metrics: { turns: selected.length },
             reads: selected.map((row) => ({ ref: sessionRef, turn: row.turn })),
+            sources: selected.slice(0, 8).map((row) => ({
+              ref: sessionRef,
+              title:
+                this.options.sessions.peek(sessionRef)?.title ?? sessionRef,
+              messageID: row.message.id,
+              createdAt: row.message.createdAt,
+              role: row.message.role,
+              snippet: clipText(row.text, 180),
+            })),
           };
         }
         case "list_tool_calls": {
@@ -2474,6 +2527,7 @@ export class AssistantService {
     targets: Map<string, string>;
     /** Present when the scope has one transcript the model can query. */
     tools?: AssistantTools;
+    sources?: AssistantSource[];
     transcriptTurns?: number;
   }> {
     if (scope.kind === "project") {
@@ -2553,6 +2607,7 @@ export class AssistantService {
       ...rendered,
       targets: new Map([[session.ref, session.title]]),
       tools: this.sessionTools(transcript, session.ref),
+      sources: hits.map(sourceFromSearchHit),
       transcriptTurns: messages.length,
     };
   }
@@ -2566,6 +2621,7 @@ export class AssistantService {
     context: AssistantContext;
     targets: Map<string, string>;
     tools?: AssistantTools;
+    sources?: AssistantSource[];
   }> {
     const readStarted = this.now();
     const [page, waiting] = await Promise.all([
@@ -2646,6 +2702,7 @@ export class AssistantService {
       },
       targets,
       tools: this.crossSessionTools(page.data),
+      sources: hits.map(sourceFromSearchHit),
     };
   }
 
@@ -2658,6 +2715,7 @@ export class AssistantService {
     context: AssistantContext;
     targets: Map<string, string>;
     tools?: AssistantTools;
+    sources?: AssistantSource[];
   }> {
     const readStarted = this.now();
     const [page, waiting] = await Promise.all([
@@ -2743,6 +2801,7 @@ export class AssistantService {
       tools: owner && this.options.mcpTokens
         ? this.withTokenTools(this.crossSessionTools(page.data))
         : this.crossSessionTools(page.data),
+      sources: hits.map(sourceFromSearchHit),
     };
   }
 
@@ -3731,6 +3790,17 @@ function orderSearchHits(rows: SearchResult[]): SearchResult[] {
       right.updatedAt - left.updatedAt ||
       left.ref.localeCompare(right.ref),
   );
+}
+
+function sourceFromSearchHit(hit: SearchResult): AssistantSource {
+  return {
+    ref: hit.ref,
+    title: hit.title,
+    ...(hit.messageID ? { messageID: hit.messageID } : {}),
+    ...(hit.createdAt ? { createdAt: hit.createdAt } : {}),
+    ...(hit.role ? { role: hit.role } : {}),
+    ...(hit.snippet ? { snippet: hit.snippet } : {}),
+  };
 }
 
 /** The opening SEARCH block's heading; never imply a complete list. */

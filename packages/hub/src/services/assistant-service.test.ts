@@ -129,6 +129,7 @@ function logger(): Logger {
 function fakeSessions(overrides: Partial<SessionService> = {}): SessionService {
   return {
     get: async () => session,
+    peek: () => session,
     // The provider contract is newest first; the builder restores reading
     // order, so the fake must reverse too.
     messages: async (): Promise<MessagePage> => ({
@@ -1857,6 +1858,15 @@ describe("AssistantService", () => {
     expect(done.turn.text).toBe("The build broke in turn 1.");
     expect(done.turn.context?.toolCalls).toBe(1);
     expect(done.turn.context?.messages).toBe(1);
+    expect(done.turn.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ref: session.ref,
+          title: session.title,
+          messageID: "m1",
+        }),
+      ]),
+    );
     expect(
       done.turn.activity?.some(
         (step) => step.kind === "tool" && step.label === "Read turn 1",

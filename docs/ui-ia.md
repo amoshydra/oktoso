@@ -322,6 +322,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - While a cold page loads, the transcript body shows a skeleton, not the empty state; the panel is `aria-busy` and announces "Loading transcript…" once. The empty state appears only after a successful load returns no messages. A failed load shows the alert and Retry; a failed background refresh keeps the cached window.
 - A running session whose first message is not readable yet reads "The agent is running, but no messages have been written yet." with Retry, and the client re-reads once after a short delay.
 - A "Load older messages" control sits at the top. Scrolling near the top loads the next older page automatically and preserves the reading position. Older pages are prepended in ascending display order.
+- Opening a message deep link (`?message=<id>`, from search or an assistant reference) loads older pages until the message is in the window, scrolls it into view, and highlights the message or its activity group. A focus bar sits below the scroll region, above the jump lane, with `Fork from here` when the provider supports fork, `Load older` when the message is not in the loaded window, and Dismiss. Forking before that message creates a new session and opens it.
 - A **Jump to latest** pill sits in a reserved footer lane at the bottom of the transcript frame, below the scroll area and above the composer, when the transcript scrolls. It reads "Input needed" when blocking attention is waiting below, and that visible text is its accessible name. It fades and lifts in with opacity and transform. The lane stays reserved while the transcript is scrollable, so the pill never covers a message, media, or an action row and scrolling never moves the composer. At the bottom the pill is removed from the tab order, made inert, and hidden from assistive technology; the lane clears its top border.
 - Date separators (`Today`, `Yesterday`, `Oct 26`) group messages by day. Timestamps show the local hour and minute, not seconds.
 - User messages use a subtle shaded block. Assistant messages use the page background with a role label. The labels are `You` and `Agent`.
@@ -536,7 +537,11 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - **Finding across sessions.** Every scope can search all sessions by title,
   transcript, and metadata (project, directory, model, agent, ref). A hit is
   named with its session title and ref; the session scope says it cannot read
-  another session's transcript from that thread.
+  another session's transcript from that thread. Search and read results also
+  attach **Referenced messages** under the answer: a quiet list of title, time,
+  role, and a two-line excerpt. Selecting one closes the dock and opens the
+  session at that message, where the transcript focus bar offers
+  `Fork from here`.
 - **Finding and prompting.** A session ref or `/sessions/<ref>` URL in the
   question attaches that session's metadata and last turns. From project or
   global, the assistant may propose one message to a session present in that
@@ -606,7 +611,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - At 1100px and above the search input, provider filter, and status filter share one toolbar row; the input can grow to 640px. Below that they wrap in source order.
 - A `Scope` control selects **Sessions** or **Messages**; the choice lives in the URL (`?scope=messages`) so the back stack restores it.
 - Sessions searches titles, projects, directories, and agents through the hub session cache. Provider and status filters mirror the Sessions view; results show title, provider, project or directory, status, and unread or attention cues.
-- Messages searches the transcript cache through `GET /api/v1/search`. Provider and status filters apply. Results show the session title, provider, project, role, and the matching excerpt with the query highlighted in `<mark>`.
+- Messages searches the transcript cache through `GET /api/v1/search`. Provider and status filters apply. Results show the session title, provider, project, role, and the matching excerpt with the query highlighted in `<mark>`. Opening a message hit adds `?message=<id>` to the session URL, scrolls that message into view, and shows the focus bar with `Fork from here`.
 - Message search needs the transcript cache: when it is off, the view says so and points at Settings → Local data. While the index catches up, the summary says so and an empty result explains it.
 - Both scopes keep the query, provider, and status in the URL. Typing replaces the history entry; changing a filter or the scope adds one.
 - Returning to a search route renders its last successful result set from the screen cache while the same query refreshes in the background. Cached empty results read `Checking for sessions…` or `Checking messages…` until the refresh settles.

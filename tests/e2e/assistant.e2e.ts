@@ -22,6 +22,7 @@ const HUB_PORT = 8801;
 const TOKEN = "e2e-token-long-enough";
 const BASE_URL = `http://127.0.0.1:${HUB_PORT}`;
 const ANSWER = "The session is waiting on the e2e question.";
+const SEARCH_ANSWER = "The refresh appears in the session.";
 const MARKDOWN_ANSWER = [
   "## Diagnosis",
   "",
@@ -72,9 +73,27 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
         });
-        const wantsAction = body.includes("ACTION:");
-        const wantsHandoff = body.includes("ACTION: handoff");
-        const wantsMarkdown = body.includes("Show it as markdown");
+        let requestMessages: Array<{ role?: string; content?: string | null }> = [];
+        try {
+          const parsed = JSON.parse(body) as {
+            messages?: Array<{ role?: string; content?: string | null }>;
+          };
+          requestMessages = parsed.messages ?? [];
+        } catch {
+          // The fake model still answers a malformed request.
+        }
+        const lastUser =
+          [...requestMessages]
+            .reverse()
+            .find((message) => message.role === "user")?.content ?? "";
+        const question = lastUser.split("\n---\nQUESTION\n").pop() ?? lastUser;
+        const afterTool = requestMessages.some(
+          (message) => message.role === "tool",
+        );
+        const wantsAction = question.includes("ACTION:");
+        const wantsHandoff = question.includes("ACTION: handoff");
+        const wantsSearch = question.includes("SEARCH: refresh");
+        const wantsMarkdown = question.includes("Show it as markdown");
         const frames = wantsHandoff
           ? [
               `data: ${JSON.stringify({
@@ -108,8 +127,37 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
               })}\n\n`,
               "data: [DONE]\n\n",
             ]
-          : wantsAction
+          : wantsSearch && !afterTool
             ? [
+                `data: ${JSON.stringify({
+                  choices: [
+                    {
+                      delta: {
+                        tool_calls: [
+                          {
+                            index: 0,
+                            id: "call_search",
+                            function: {
+                              name: "search_transcript",
+                              arguments: JSON.stringify({
+                                query: "refresh",
+                                limit: 5,
+                              }),
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                })}\n\n`,
+                `data: ${JSON.stringify({
+                  choices: [{ delta: {}, finish_reason: "tool_calls" }],
+                  usage: { prompt_tokens: 42, completion_tokens: 8 },
+                })}\n\n`,
+                "data: [DONE]\n\n",
+              ]
+            : wantsAction
+              ? [
               `data: ${JSON.stringify({
                 choices: [
                   {
@@ -141,7 +189,15 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
           : [
               `data: ${JSON.stringify({
                 choices: [
-                  { delta: { content: wantsMarkdown ? MARKDOWN_ANSWER : ANSWER } },
+                  {
+                    delta: {
+                      content: wantsSearch
+                        ? SEARCH_ANSWER
+                        : wantsMarkdown
+                          ? MARKDOWN_ANSWER
+                          : ANSWER,
+                    },
+                  },
                 ],
               })}\n\n`,
               `data: ${JSON.stringify({
@@ -476,6 +532,41 @@ describe("session assistant", () => {
       .click();
     await page!.locator(".assistant-action.done").waitFor({ timeout: 10_000 });
     expect(await page!.locator(".assistant-action-state").innerText()).toBe("SENT");
+  });
+
+  it("cites a matching message and jumps to it", async () => {
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").fill("SEARCH: refresh");
+    await page!.locator("#assistant-input").press("Enter");
+
+    await page!
+      .locator(".assistant-turn.assistant .assistant-turn-text", {
+        hasText: SEARCH_ANSWER,
+      })
+      .waitFor({ timeout: 15_000 });
+    const source = page!
+      .locator('.assistant-source[href*="ses_auth"][href*="message="]')
+      .first();
+    await source.waitFor({ timeout: 10_000 });
+    const href = await source.getAttribute("href");
+    expect(href).toContain("message=");
+
+    await source.click();
+    await page!.waitForURL(/message=/);
+    const focusBar = page!.locator(".chat-focus-bar");
+    await focusBar.waitFor({ timeout: 10_000 });
+    await expect(focusBar.innerText()).resolves.toContain("Focused");
+    expect(
+      await page!
+        .locator(".chat-focus-target, .chat-message.is-focused")
+        .count(),
+    ).toBeGreaterThan(0);
   });
 
   it("drafts a handoff, sends it, and records the receipt", async () => {

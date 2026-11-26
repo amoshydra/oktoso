@@ -549,8 +549,19 @@ export function App() {
   );
 
   const openSession = useCallback(
-    (ref: string, options?: NavigateOptions) => {
-      navigate({ name: "chat", ref, details: false }, options);
+    (
+      ref: string,
+      options?: NavigateOptions & { message?: string },
+    ) => {
+      navigate(
+        {
+          name: "chat",
+          ref,
+          details: false,
+          ...(options?.message ? { message: options.message } : {}),
+        },
+        options,
+      );
     },
     [navigate],
   );
@@ -1254,6 +1265,7 @@ export function App() {
                     onSessionChange={setActiveSession}
                     onOpenSession={openSession}
                     attentionID={route.name === "chat" ? route.attention : undefined}
+                    messageID={route.name === "chat" ? route.message : undefined}
                     onBack={() => backTo({ name: "sessions" })}
                   />
                 </div>
@@ -1281,7 +1293,9 @@ export function App() {
                 status={route.name === "search" ? route.status : "all"}
                 scope={route.name === "search" ? route.scope : "sessions"}
                 onNavigate={navigateSearch}
-                onOpen={openSession}
+                onOpen={(ref, messageID) =>
+                  openSession(ref, messageID ? { message: messageID } : undefined)
+                }
               />
             ) : view === "providers" ? (
               <div className="providers-layout">
@@ -1368,7 +1382,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.70 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.71 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -1402,6 +1416,13 @@ export function App() {
             onOpenSettings={() => {
               setAssistant(null);
               navigate({ name: "settings" });
+            }}
+            onOpenMessage={(ref, messageID) => {
+              setAssistant(null);
+              openSession(
+                ref,
+                messageID ? { message: messageID } : undefined,
+              );
             }}
             onClose={() => setAssistant(null)}
           />
@@ -3007,7 +3028,7 @@ function SearchView(props: {
   status: SessionStatus | "all";
   scope: SearchScope;
   onNavigate: (next: SearchState, options?: NavigateOptions) => void;
-  onOpen: (ref: string) => void;
+  onOpen: (ref: string, messageID?: string) => void;
 }) {
   const key = useRouteDataKey();
   const [cached] = useState<SearchSnapshot | undefined>(() =>
@@ -3377,7 +3398,8 @@ function SearchView(props: {
                 <button
                   className="search-hit"
                   type="button"
-                  onClick={() => props.onOpen(hit.ref)}
+                  data-message-id={hit.messageID ?? ""}
+                  onClick={() => props.onOpen(hit.ref, hit.messageID)}
                 >
                   <span className="search-hit-head">
                     <span className="search-hit-title">{hit.title}</span>
@@ -4566,6 +4588,7 @@ type PendingScroll =
   | { mode: "preserve"; height: number; top: number };
 
 const MESSAGE_PAGE_SIZE = 200;
+const MAX_MESSAGE_LOOKUP_PAGES = 20;
 const MAX_DICTATION_MS = 120_000;
 
 type DraftStatus = "idle" | "saving" | "saved" | "error";
@@ -4879,6 +4902,7 @@ function SessionDetail(props: {
   onSessionChange: (session: Session | undefined) => void;
   onOpenSession: (ref: string) => void;
   attentionID?: string;
+  messageID?: string;
   onBack: () => void;
 }) {
   const [session, setSession] = useState<Session | undefined>(() =>
@@ -4901,6 +4925,13 @@ function SessionDetail(props: {
   );
   const [checking, setChecking] = useState(Boolean(cachedTranscript));
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [messageLookup, setMessageLookup] = useState<
+    "idle" | "loading" | "missing"
+  >("idle");
+  const lookupMessageRef = useRef<string | undefined>(undefined);
+  const scrolledMessageRef = useRef<string | undefined>(undefined);
+  const [messageBarDismissed, setMessageBarDismissed] = useState(false);
+  const [forkingMessageID, setForkingMessageID] = useState<string>();
   useRevalidationIndicator(checking);
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
@@ -5774,6 +5805,138 @@ function SessionDetail(props: {
       setLoadingOlder(false);
     }
   }, [olderCursor, loadingOlder, props.client, props.sessionRef]);
+
+  useEffect(() => {
+    lookupMessageRef.current = undefined;
+    scrolledMessageRef.current = undefined;
+    setMessageLookup("idle");
+    setMessageBarDismissed(false);
+  }, [props.messageID]);
+
+  useEffect(() => {
+    const target = props.messageID;
+    if (!target) return;
+    if (lookupMessageRef.current === target) return;
+    if (loading) return;
+    if (messages.some((message) => message.id === target)) {
+      lookupMessageRef.current = target;
+      setMessageLookup("idle");
+      return;
+    }
+    if (!olderCursor) {
+      lookupMessageRef.current = target;
+      setMessageLookup("missing");
+      return;
+    }
+    lookupMessageRef.current = target;
+    setMessageLookup("loading");
+    let cancelled = false;
+    let cursor: string | null = olderCursor;
+    void (async () => {
+      let found = false;
+      for (
+        let pageIndex = 0;
+        pageIndex < MAX_MESSAGE_LOOKUP_PAGES && cursor;
+        pageIndex += 1
+      ) {
+        const page = await props.client.messages(props.sessionRef, {
+          limit: MESSAGE_PAGE_SIZE,
+          order: "desc",
+          cursor,
+        });
+        const older = [...page.data].reverse();
+        if (older.length === 0) {
+          cursor = null;
+          break;
+        }
+        setMessages((current) => {
+          const seen = new Set(current.map((message) => message.id));
+          const prepend = older.filter((message) => !seen.has(message.id));
+          return prepend.length > 0 ? [...prepend, ...current] : current;
+        });
+        cursor = page.cursor.next;
+        setOlderCursor(cursor);
+        if (older.some((message) => message.id === target)) {
+          found = true;
+          break;
+        }
+      }
+      if (cancelled) return;
+      setOlderCursor(cursor);
+      setMessageLookup(found ? "idle" : "missing");
+    })().catch((reason) => {
+      if (cancelled) return;
+      setMessageLookup("missing");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to locate the message",
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    messages,
+    olderCursor,
+    props.client,
+    props.messageID,
+    props.sessionRef,
+  ]);
+
+  useEffect(() => {
+    const target = props.messageID;
+    if (!target) {
+      scrolledMessageRef.current = undefined;
+      return;
+    }
+    if (scrolledMessageRef.current === target) return;
+    let element = document.getElementById(`message-${target}`);
+    if (!element) {
+      element = document.querySelector(`[data-message-ids~="${target}"]`);
+    }
+    if (!element) return;
+    scrolledMessageRef.current = target;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const frame = requestAnimationFrame(() => {
+      element!.scrollIntoView({
+        block: "center",
+        behavior: reduced ? "auto" : "smooth",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, props.messageID]);
+
+  const forkFromMessage = useCallback(
+    async (message: Message) => {
+      if (forkingMessageID) return;
+      setForkingMessageID(message.id);
+      setError(undefined);
+      try {
+        const forked = await props.client.forkSession(props.sessionRef, {
+          before: message.id,
+        });
+        props.onOpenSession(forked.ref);
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to fork this session",
+        );
+      } finally {
+        setForkingMessageID(undefined);
+      }
+    },
+    [
+      forkingMessageID,
+      props.client,
+      props.onOpenSession,
+      props.sessionRef,
+    ],
+  );
 
   const refreshBranches = useCallback(async () => {
     if (!branchesSupported) {
@@ -6954,6 +7117,13 @@ function SessionDetail(props: {
     () => mergeHandoffs(transcriptItems, sentHandoffs),
     [transcriptItems, sentHandoffs],
   );
+  const focusedMessage = useMemo(
+    () =>
+      props.messageID
+        ? messages.find((message) => message.id === props.messageID)
+        : undefined,
+    [messages, props.messageID],
+  );
   const composerHint =
     uploadingAttachments > 0
       ? "Uploading attachment…"
@@ -7236,6 +7406,7 @@ function SessionDetail(props: {
                   ) : item.kind === "message" ? (
                     <TranscriptMessage
                       message={item.message}
+                      focused={item.message.id === props.messageID}
                       key={item.message.id}
                       client={props.client}
                       resource={resource}
@@ -7282,14 +7453,35 @@ function SessionDetail(props: {
                       subagentStatus={childStatus}
                     />
                   ) : item.kind === "compaction" ? (
-                    <CompactionRow
-                      message={item.message}
+                    <div
+                      id={`message-${item.message.id}`}
+                      data-message-ids={item.message.id}
+                      className={
+                        item.message.id === props.messageID
+                          ? "chat-focus-target"
+                          : undefined
+                      }
                       key={item.key}
-                      client={props.client}
-                      resource={resource}
-                    />
+                    >
+                      <CompactionRow
+                        message={item.message}
+                        client={props.client}
+                        resource={resource}
+                      />
+                    </div>
                   ) : item.kind === "shell" ? (
-                    <ShellRow message={item.message} key={item.key} />
+                    <div
+                      id={`message-${item.message.id}`}
+                      data-message-ids={item.message.id}
+                      className={
+                        item.message.id === props.messageID
+                          ? "chat-focus-target"
+                          : undefined
+                      }
+                      key={item.key}
+                    >
+                      <ShellRow message={item.message} />
+                    </div>
                   ) : item.kind === "handoff" ? (
                     <HandoffCard
                       key={item.key}
@@ -7308,20 +7500,37 @@ function SessionDetail(props: {
                       onCancel={() => void cancelHandoff(item.handoff)}
                     />
                   ) : (
-                    <ActivityTiles
-                      steps={item.steps}
+                    <div
+                      id={`message-${item.messages[0]?.id}`}
+                      data-message-ids={item.messages
+                        .map((message) => message.id)
+                        .join(" ")}
+                      className={
+                        item.messages.some(
+                          (message) => message.id === props.messageID,
+                        )
+                          ? "chat-focus-target"
+                          : undefined
+                      }
                       key={item.key}
-                      client={props.client}
-                      resource={resource}
-                      onPreviewFile={(path) => setPreviewPath(path)}
-                      onOpenSession={props.onOpenSession}
-                      onStepOpenChange={(open) => {
-                        setStepPanelOpen(open);
-                        if (open) setAtBottom(false);
-                      }}
-                      subagentStatus={childStatus}
-                      header={{ label: "Agent activity", at: item.messages[0]?.createdAt ?? 0 }}
-                    />
+                    >
+                      <ActivityTiles
+                        steps={item.steps}
+                        client={props.client}
+                        resource={resource}
+                        onPreviewFile={(path) => setPreviewPath(path)}
+                        onOpenSession={props.onOpenSession}
+                        onStepOpenChange={(open) => {
+                          setStepPanelOpen(open);
+                          if (open) setAtBottom(false);
+                        }}
+                        subagentStatus={childStatus}
+                        header={{
+                          label: "Agent activity",
+                          at: item.messages[0]?.createdAt ?? 0,
+                        }}
+                      />
+                    </div>
                   ),
                 )
               )}
@@ -7449,6 +7658,51 @@ function SessionDetail(props: {
                 </div>
               ) : null}
               </section>
+              {props.messageID && !messageBarDismissed ? (
+                <div
+                  className="chat-focus-bar"
+                  role="region"
+                  aria-label="Focused message"
+                >
+                  <span className="chat-focus-text" role="status">
+                    {focusedMessage
+                      ? `Focused ${focusedMessage.role === "user" ? "message" : "agent message"} · ${formatTime(focusedMessage.createdAt)}`
+                      : messageLookup === "loading"
+                        ? "Loading message…"
+                        : "Message is outside the loaded transcript."}
+                  </span>
+                  {focusedMessage && sessionProvider?.capabilities.fork ? (
+                    <button
+                      className="btn small primary"
+                      type="button"
+                      disabled={forkingMessageID === focusedMessage.id}
+                      onClick={() => void forkFromMessage(focusedMessage)}
+                    >
+                      {forkingMessageID === focusedMessage.id
+                        ? "Forking…"
+                        : "Fork from here"}
+                    </button>
+                  ) : messageLookup === "missing" && olderCursor ? (
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() => {
+                        lookupMessageRef.current = undefined;
+                        void loadOlder();
+                      }}
+                    >
+                      Load older
+                    </button>
+                  ) : null}
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => setMessageBarDismissed(true)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
               <div className="chat-jump-band" data-visible={showJump} hidden={!scrollable}>
                 <button
                   className="chat-jump-float"
@@ -8541,6 +8795,7 @@ function BranchPicker(props: {
 
 function TranscriptMessage(props: {
   message: Message;
+  focused?: boolean;
   client: HubClient;
   resource: ResourceContext;
   branchPoint?: BranchPoint;
@@ -8586,7 +8841,10 @@ function TranscriptMessage(props: {
   const editCopy = message.role === "user" ? messageCopyText(message) : "";
   const showEdit = Boolean(props.canEdit && editCopy && !send && !props.editing);
   return (
-    <article className={`chat-message ${message.role}`}>
+    <article
+      id={`message-${message.id}`}
+      className={`chat-message ${message.role}${props.focused ? " is-focused" : ""}`}
+    >
       <div className="chat-message-role">
         <span>{message.role === "user" ? "You" : "Agent"}</span>
         <time dateTime={new Date(message.createdAt).toISOString()}>

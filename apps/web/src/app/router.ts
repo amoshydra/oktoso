@@ -13,6 +13,8 @@ export type Route =
       details: boolean;
       preview?: string;
       attention?: string;
+      /** Focus this message in the transcript, e.g. from search or the assistant. */
+      message?: string;
     }
   | {
       name: "search";
@@ -85,12 +87,14 @@ export function parseRoute(pathname: string, search = ""): Route | null {
           ? requested
           : undefined;
       const attention = params.get("attention");
+      const message = params.get("message");
       return {
         name: "chat",
         ref,
         details: params.get("details") === "1",
         ...(preview ? { preview } : {}),
         ...(attention ? { attention } : {}),
+        ...(message && message.length <= 200 ? { message } : {}),
       };
     }
 
@@ -151,6 +155,7 @@ export function routeHref(route: Route): string {
       if (route.details) params.set("details", "1");
       if (route.preview) params.set("preview", route.preview);
       if (route.attention) params.set("attention", route.attention);
+      if (route.message) params.set("message", route.message);
       return withQuery(`/sessions/${encodeURIComponent(route.ref)}`, params);
     }
     case "search": {

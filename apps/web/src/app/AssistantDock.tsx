@@ -12,6 +12,7 @@ import type {
   AssistantAction,
   AssistantEvent,
   AssistantScope,
+  AssistantSource,
   AssistantStep,
   AssistantThreadDetail,
   AssistantTurn,
@@ -42,6 +43,8 @@ export interface AssistantDockProps {
   /** Global threads are a modal dialog; session/project threads dock. */
   presentation?: "dock" | "dialog";
   onOpenSettings?: () => void;
+  /** Jump to a referenced message in the session chat. */
+  onOpenMessage?: (ref: string, messageID?: string) => void;
   onClose: () => void;
 }
 
@@ -72,6 +75,7 @@ export function AssistantDock({
   project,
   presentation = "dock",
   onOpenSettings,
+  onOpenMessage,
   onClose,
 }: AssistantDockProps) {
   const [scope, setScope] = useState<AssistantScope>(initialScope);
@@ -498,6 +502,12 @@ export function AssistantDock({
                   <div className="assistant-turn-text">…</div>
                 )}
                 <TurnMeta turn={turn} />
+                {turn.role === "assistant" && turn.sources?.length ? (
+                  <AssistantSources
+                    sources={turn.sources}
+                    onOpenMessage={onOpenMessage}
+                  />
+                ) : null}
                 {turn.action ? (
                   <ActionCard turn={turn} canWrite={canWriteHere} onDecide={decide} />
                 ) : null}
@@ -822,6 +832,56 @@ function metricLabel(key: string): string {
   return (
     METRIC_LABELS[key] ??
     key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase())
+  );
+}
+
+function AssistantSources(props: {
+  sources: AssistantSource[];
+  onOpenMessage?: (ref: string, messageID?: string) => void;
+}) {
+  return (
+    <div className="assistant-sources" aria-label="Referenced messages">
+      <span className="assistant-sources-label">Referenced messages</span>
+      <ul className="assistant-source-list">
+        {props.sources.map((source) => {
+          const href = `/sessions/${encodeURIComponent(source.ref)}${
+            source.messageID
+              ? `?message=${encodeURIComponent(source.messageID)}`
+              : ""
+          }`;
+          return (
+            <li key={`${source.ref}:${source.messageID ?? source.createdAt ?? source.title}`}>
+              <a
+                className="assistant-source"
+                href={href}
+                onClick={(event) => {
+                  if (!props.onOpenMessage) return;
+                  event.preventDefault();
+                  props.onOpenMessage(source.ref, source.messageID);
+                }}
+              >
+                <span className="assistant-source-head">
+                  <span className="assistant-source-title">{source.title}</span>
+                  {source.createdAt ? (
+                    <span className="assistant-source-time">
+                      {timeLabel(source.createdAt)}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="assistant-source-meta">
+                  {source.role === "user" ? "You" : "Agent"} · {source.ref}
+                </span>
+                {source.snippet ? (
+                  <span className="assistant-source-snippet">
+                    {source.snippet}
+                  </span>
+                ) : null}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
