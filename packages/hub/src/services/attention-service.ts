@@ -32,6 +32,13 @@ export interface AttentionServiceOptions {
 
 const PRIORITY_ORDER = { blocking: 0, high: 1, normal: 2 } as const;
 
+/**
+ * A session view can wait longer than the global cold-start budget: the first
+ * open after a restart is exactly when an idle session's pending question must
+ * reappear, and the cold scan has to visit every known directory.
+ */
+const SESSION_COLD_START_WAIT_MS = 6_000;
+
 export class AttentionService {
   private items = new Map<string, Attention>();
   private lastRefresh = 0;
@@ -81,10 +88,16 @@ export class AttentionService {
       const previous = this.items;
       const next = new Map<string, Attention>();
       const adapters = this.registry.adapters();
+      const coldStart = !this.synced;
       const sessionPromise = this.sessions.list({ limit: 200 });
       const cachedSessions = this.sessions.cached?.() ?? [];
-      const cachedByRef = new Map(
-        cachedSessions.map((session) => [session.ref, session]),
+      // On a cold start the in-memory session cache is empty. Wait for the
+      // fresh page so idle sessions with a pending provider form still get
+      // their directory polled; otherwise only running sessions are queried.
+      const coldStartPage = coldStart ? await sessionPromise : undefined;
+      const knownSessions = coldStartPage?.data ?? cachedSessions;
+      const knownByRef = new Map(
+        knownSessions.map((session) => [session.ref, session]),
       );
       const directoriesByProvider = new Map<string, Set<string>>();
       const addDirectory = (providerID: string, directory: string) => {
@@ -96,8 +109,9 @@ export class AttentionService {
         directories.add(directory);
       };
 
-      for (const session of cachedSessions) {
-        if (session.status === "running" && session.directory) {
+      for (const session of knownSessions) {
+        if (!session.directory) continue;
+        if (coldStart || session.status === "running") {
           addDirectory(session.providerID, session.directory);
         }
       }
@@ -107,7 +121,7 @@ export class AttentionService {
         if (item.type !== "permission" && item.type !== "approval" && item.type !== "question") {
           continue;
         }
-        const session = cachedByRef.get(item.sessionRef);
+        const session = knownByRef.get(item.sessionRef);
         const directory = session?.directory;
         if (directory) {
           const separator = item.sessionRef.indexOf(":");
@@ -153,7 +167,7 @@ export class AttentionService {
         }),
       );
 
-      const sessionPage = await sessionPromise;
+      const sessionPage = coldStartPage ?? (await sessionPromise);
       const sessionByRef = new Map(
         sessionPage.data.map((session) => [session.ref, session]),
       );
@@ -278,7 +292,11 @@ export class AttentionService {
     type?: AttentionType;
     sessionRef?: string;
   } = {}): Promise<AttentionPage> {
-    await this.ensureReady();
+    await this.ensureReady(
+      !this.synced && query.sessionRef
+        ? Math.max(this.coldStartWaitMs, SESSION_COLD_START_WAIT_MS)
+        : this.coldStartWaitMs,
+    );
     let data = [...this.items.values()];
     if (query.type) data = data.filter((item) => item.type === query.type);
     if (query.sessionRef) data = data.filter((item) => item.sessionRef === query.sessionRef);
@@ -400,7 +418,7 @@ export class AttentionService {
     }
   }
 
-  private ensureReady(): Promise<void> {
+  private ensureReady(waitMs = this.coldStartWaitMs): Promise<void> {
     if (this.synced && this.now() - this.lastRefresh < this.ttlMs) {
       return Promise.resolve();
     }
@@ -409,7 +427,7 @@ export class AttentionService {
         error: error instanceof Error ? error.message : String(error),
       });
     });
-    if (!this.synced) return waitAtMost(refresh, this.coldStartWaitMs);
+    if (!this.synced) return waitAtMost(refresh, waitMs);
     void refresh;
     return Promise.resolve();
   }

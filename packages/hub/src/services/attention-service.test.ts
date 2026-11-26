@@ -215,6 +215,58 @@ describe("AttentionService subagent policy", () => {
     expect(calls.get("fishbowl")).toEqual([remoteDir]);
   });
 
+  it("scans an idle session directory on a cold start so a pending question survives a restart", async () => {
+    const directory = "/home/me/atlas";
+    const sessionRef = "desktop-opencode:ses_idle";
+    const sessions = [
+      session({
+        ref: sessionRef,
+        nativeID: "ses_idle",
+        title: "atlas - test questions",
+        status: "idle",
+        directory,
+      }),
+    ];
+    const calls: string[][] = [];
+    const item = attention("question-idle", sessionRef, "question");
+    const adapter = {
+      id: "desktop-opencode",
+      listAttention: vi.fn(async (directories: string[]) => {
+        calls.push(directories);
+        return [item];
+      }),
+    };
+    const registry = {
+      adapters: () => [adapter],
+      timeoutMs: () => 15_000,
+    } as unknown as ProviderRegistry;
+    const sessionService = {
+      list: async () => ({
+        data: sessions,
+        cursor: { previous: null, next: null },
+      }),
+      // The in-memory cache is empty immediately after a hub restart.
+      cached: () => [],
+      markRead: async () => undefined,
+      invalidate: () => undefined,
+    } as unknown as SessionService;
+    const service = new AttentionService(
+      registry,
+      sessionService,
+      new MemoryStateStore(),
+      { publish: async () => ({}) } as unknown as EventBus,
+      logger,
+      { now: () => now },
+    );
+
+    await service.refresh();
+
+    expect(calls[0]).toEqual([directory]);
+    expect(
+      (await service.list()).data.find((entry) => entry.id === "question-idle"),
+    ).toMatchObject({ type: "question", sessionRef, title: "atlas - test questions" });
+  });
+
   it("keeps cached blocking items and stops calling an offline provider", async () => {
     let status: "online" | "offline" = "online";
     let calls = 0;
