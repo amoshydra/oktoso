@@ -2246,6 +2246,15 @@ competing history buttons.
   16px. Reviewed at 1440, 1024, 390, and 320px in both themes: no horizontal
   overflow and no clipped action row. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
+## Last message bottom inset (2026-11-27)
+
+- The last transcript message drops its own 16px bottom padding. Its action row
+  now sits 8px above the frame instead of 24px; inter-message spacing is
+  unchanged. The panel's own 8px inset remains.
+- Verified live at 390px: the last action row measured 8px above the frame,
+  down from 24px. The bottom gap test still passes. The full gates pass at
+  GATES_PLACEHOLDER.
+
 ## Assistant composer and action drafts (2026-11-26)
 
 - The assistant composer now keeps one draft per scope (global, project, or

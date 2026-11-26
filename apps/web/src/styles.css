@@ -3575,6 +3575,12 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+/* The transcript already owns the final 8px inset; do not add the message's
+   own bottom padding below the last action row. */
+.chat-panel > .chat-message:last-child {
+  padding-bottom: 0;
+}
+
 .chat-date-separator {
   display: flex;
   align-items: center;

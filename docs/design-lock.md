@@ -1,12 +1,13 @@
-# Design Lock — v1.76
+# Design Lock — v1.77
 
 Status: **frozen**.
 
-- Version: `design-v1.76`
-- Parent: `design-v1.75`
+- Version: `design-v1.77`
+- Parent: `design-v1.76`
 - Date: 2026-11-27
-- Git tag: `design-v1.76`
+- Git tag: `design-v1.77`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.77 scope: remove the last message's own bottom padding.
 - v1.76 scope: the 8px transcript bottom inset.
 - v1.75 scope: remove the full-width divider above the jump pill.
 - v1.74 scope: assistant back history and session/lineage search scope.
@@ -1583,6 +1584,14 @@ radius, or color token.
 - The change uses the existing `--space-2` step and adds no token, control, or
   colour.
 
+## Last message bottom inset (2026-11-27)
+
+- The last transcript message drops its own 16px bottom padding. Its action row
+  now sits 8px above the frame instead of 24px (`16px message padding + 8px
+  panel inset`). Inter-message spacing is unchanged.
+- The change is scoped to `.chat-panel > .chat-message:last-child` and adds no
+  token, control, or colour.
+
 ## Assistant composer and action drafts (2026-11-26)
 
 - The assistant composer keeps one draft per scope: global, project, or
@@ -1692,6 +1701,8 @@ The `design-v1.72` floating-jump revision moves the pill back over the transcrip
 The `design-v1.75` divider-removal revision deletes the full-width rule above the jump pill; the pill and fade remain, and the chat e2e asserts the band has no top border. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.76` bottom-inset revision reduces the transcript's own bottom padding from 16px to 8px; the measured panel-bottom gap is 9px including the frame. The chat e2e asserts the bottom-pinned gap is at least 8px and below 16px. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
+
+The `design-v1.77` last-message revision removes the final message's 16px bottom padding, so the action row sits 8px above the frame instead of 24px. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 list-mirror follow-up (2026-11-27) keeps the mirror window fixed while the cursor moves; unit coverage spans the window edges and the G2 e2e checks the first visible row across four down presses. The full gates pass at 993 unit tests and 95 e2e tests, including 13 G2 tests.
 
