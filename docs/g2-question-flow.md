@@ -11,6 +11,13 @@ companion. The glasses support choices, sentinel-aware free text, voice, a short
 list of suggested answers, and a multi-question batch answered one question at a
 time; the phone remains the keyboard and the batch fallback.
 
+> **2026-11-27 amendment.** Lists are now app-owned six-line marker lists. The
+> SDK has no setter for the native list selection, so the glasses do not use the
+> native list border. A swipe moves the `›` marker inside a fixed window; the
+> window shifts one row only when the marker crosses an edge, and marker moves
+> update the body in place rather than rebuilding the page. Read "four rows" and
+> "the list scrolls" below as the older native-list layout.
+
 ---
 
 ## 0. Recommendation in one page

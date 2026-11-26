@@ -107,11 +107,13 @@ the chat opens `ANSWER` instead of the reply menu. Provider-native questions use
 the same answer screen as text questions; the Inbox form remains the formal
 alternative for complex fields.
 
-- One event-capturing list owns input. The footer is a hint, never a button.
-  The G2 page builder accepts only one capture container, and a text tap has no
-  container identity; do not reintroduce footer buttons or split capture zones.
-- The list contains the agent's choices, then `Type answer`, `More`, and
-  `Read chat`. Four rows are visible; the list scrolls to the rest.
+- One event-capturing container owns input. The footer is a hint, never a
+  button. The G2 page builder accepts only one capture container, and a text tap
+  has no container identity; do not reintroduce footer buttons or split capture
+  zones.
+- The marker list contains the agent's choices, then `Type answer`, `More`, and
+  `Read chat`. Up to six rows are visible; the window shifts one row only when
+  the marker crosses its edge.
 - A choice sends in one tap. Destructive choices open `CONFIRM` with `Send` /
   `Cancel`.
 - `Type answer` opens `TYPE` and focuses the phone keyboard. The phone question
