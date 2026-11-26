@@ -64,7 +64,7 @@ import {
   type SuggestionTarget,
 } from "./answer-model";
 import { glassInput, type GlassInput } from "./input";
-import { phoneListWindow } from "./phone-list";
+import { phoneListBody } from "./phone-list";
 import { LiveBatcher } from "./live-batch";
 import {
   hasPendingQuestionTool,
@@ -349,7 +349,8 @@ let phoneListStart = 0;
 let previewHeaderText = "";
 let previewBodyText = "";
 let previewFooterText = "";
-let phoneListMode = false;
+let mirrorActive = false;
+let lastMirrorBody = "";
 let previewTapTimer: number | undefined;
 let lastPreviewTapAt = 0;
 let lastPreviewTapX = 0;
@@ -444,8 +445,6 @@ const glassesPreviewFooter = byId<HTMLPreElement>("glass-preview-footer");
 const glassesControlStatus = byId<HTMLParagraphElement>("glasses-control-status");
 const glassesControlPanel = byId<HTMLElement>("glasses-control");
 const glassesExpand = byId<HTMLButtonElement>("glasses-expand");
-const glassesNative = byId<HTMLButtonElement>("glasses-native");
-const glassesControlHint = byId<HTMLParagraphElement>("glasses-control-hint");
 const previewSelection = byId<HTMLDivElement>("preview-selection");
 
 function log(message: string): void {
@@ -4629,40 +4628,20 @@ async function processEvents(): Promise<void> {
     } else if (input?.type === "scroll") {
       if (state.screen === "chat") {
         scrollChat(input.direction);
-      } else if (previewListItems && previewListItems.length > 0) {
-        previewCursor = Math.min(
-          Math.max(0, previewCursor + input.direction),
-          previewListItems.length - 1,
-        );
-        updatePreviewSelection();
-        if (!phoneListMode) {
-          phoneListMode = true;
-          updatePhoneListModeUi();
-        }
-        refreshPhoneListPage();
+      } else if (mirrorActive) {
+        moveMirror(input.direction);
       }
     } else if (input?.type === "list-scroll") {
-      if (previewListItems && previewListItems.length > 0) {
-        previewCursor = Math.min(
-          Math.max(
-            0,
-            input.index ?? previewCursor + input.direction,
-          ),
-          previewListItems.length - 1,
-        );
-        updatePreviewSelection();
-        if (!phoneListMode) {
-          phoneListMode = true;
-          updatePhoneListModeUi();
-        }
-        refreshPhoneListPage();
+      if (mirrorActive) {
+        if (typeof input.index === "number") setMirrorCursor(input.index);
+        else moveMirror(input.direction);
       } else if (state.screen === "chat") {
         scrollChat(input.direction);
       }
     } else if (input?.type === "list-click") {
       handleListClick(input.index);
     } else if (input?.type === "text-click") {
-      if (phoneListMode && previewListItems && previewListItems.length > 0) {
+      if (mirrorActive && previewListItems && previewListItems.length > 0) {
         handleListClick(previewCursor);
       } else {
         handleTextClick();
@@ -5244,49 +5223,88 @@ function previewSummary(body: string, listItems?: string[]): string {
   return body;
 }
 
+interface MirrorPage {
+  page: RebuildPageContainer;
+  body: string;
+}
+
 /**
- * A text mirror for the phone controller.
+ * Turn a host-owned list page into an app-owned marker list.
  *
- * The host owns the native list selection, so the phone cannot move its border
- * through the SDK. A text page with a marker is app-owned: the phone, the
- * glasses surface, and the ring all move the same selection. The native list
- * returns through "Use glasses list".
+ * The SDK has no setter for the native list selection, so the app cannot move
+ * the host's border. Every list is therefore a text page: a swipe moves the
+ * marker inside a fixed window instead of scrolling the view. The body stays
+ * within the six-line container, so the host has nothing to scroll.
  */
-function phoneListPage(): RebuildPageContainer | undefined {
+function mirrorListPage(page: RebuildPageContainer): MirrorPage | undefined {
+  const list = page.listObject?.[0];
+  const items = list?.itemContainer?.itemName;
+  if (!Array.isArray(items) || items.length === 0) return undefined;
+  const container = (name: string): string =>
+    page.textObject?.find((text) => text.containerName === name)?.content ?? "";
+  const summary = previewSummary(container("summary"), items);
+  const view = phoneListBody(summary, items, previewCursor, phoneListStart);
+  phoneListStart = view.start;
+  if (!view.body) return undefined;
+  return {
+    page: textPage(view.body, container("footer"), container("header")),
+    body: view.body,
+  };
+}
+
+function mirrorBody(): string | undefined {
   if (!previewListItems || previewListItems.length === 0) return undefined;
-  const summary = previewSummary(previewBodyText, previewListItems);
-  const summaryLines = summary ? summary.split("\n").length : 0;
-  const visible = Math.max(3, 7 - summaryLines);
-  const total = previewListItems.length;
-  phoneListStart = phoneListWindow(
+  const view = phoneListBody(
+    previewSummary(previewBodyText, previewListItems),
+    previewListItems,
     previewCursor,
-    total,
-    visible,
     phoneListStart,
   );
-  const start = phoneListStart;
-  const rows = previewListItems
-    .slice(start, start + visible)
-    .map((item, offset) => {
-      const marker = start + offset === previewCursor ? "›" : " ";
-      return `${marker} ${clampLine(item, 52)}`;
+  phoneListStart = view.start;
+  return view.body || undefined;
+}
+
+/**
+ * Move the marker without rebuilding the page.
+ *
+ * A rebuild redeclares every container and makes the glasses repaint. Updating
+ * only the body keeps the page settled, which is what stops a swipe from
+ * looking like a scroll.
+ */
+function refreshMirrorBody(): void {
+  if (!bridge || !mirrorActive) return;
+  const body = mirrorBody();
+  if (!body || body === lastMirrorBody) return;
+  lastMirrorBody = body;
+  void bridge
+    .textContainerUpgrade(
+      new TextContainerUpgrade({
+        containerID: 2,
+        containerName: "body",
+        content: body,
+      }),
+    )
+    .catch((error) => {
+      lastMirrorBody = "";
+      log(`Display update failed: ${errorMessage(error)}`);
     });
-  const body = [summary, ...rows].filter((line) => line.length > 0).join("\n");
-  if (!body) return undefined;
-  return textPage(body, previewFooterText, previewHeaderText);
 }
 
-function refreshPhoneListPage(): void {
-  if (!bridge || !phoneListMode) return;
-  const page = phoneListPage();
-  if (page) void showPage(page);
+function moveMirror(direction: -1 | 1): void {
+  if (!previewListItems || previewListItems.length === 0) return;
+  previewCursor = Math.min(
+    Math.max(0, previewCursor + direction),
+    previewListItems.length - 1,
+  );
+  updatePreviewSelection();
+  refreshMirrorBody();
 }
 
-function updatePhoneListModeUi(): void {
-  glassesNative.hidden = !phoneListMode;
-  glassesControlHint.textContent = phoneListMode
-    ? "Phone selection is mirrored on the glasses. Use glasses list to return."
-    : "Tap a row to open it; swipe up or down; double-tap to go back. The buttons work too.";
+function setMirrorCursor(index: number): void {
+  if (!previewListItems || previewListItems.length === 0) return;
+  previewCursor = Math.min(Math.max(0, index), previewListItems.length - 1);
+  updatePreviewSelection();
+  refreshMirrorBody();
 }
 
 function renderPreviewList(): void {
@@ -5461,18 +5479,11 @@ function simulate(action: "up" | "down" | "click" | "double"): void {
     pairingCodeInput.focus();
     return;
   }
-  if (!previewListItems || previewListItems.length === 0) return;
+  if (!mirrorActive || !previewListItems || previewListItems.length === 0) {
+    return;
+  }
   if (action === "up" || action === "down") {
-    previewCursor = Math.min(
-      Math.max(0, previewCursor + (action === "up" ? -1 : 1)),
-      previewListItems.length - 1,
-    );
-    updatePreviewSelection();
-    if (!phoneListMode) {
-      phoneListMode = true;
-      updatePhoneListModeUi();
-    }
-    refreshPhoneListPage();
+    moveMirror(action === "up" ? -1 : 1);
     return;
   }
   handleListClick(previewCursor);
@@ -5499,9 +5510,14 @@ function menuObjectForScreen(): MenuContainerProperty | undefined {
 
 async function showPage(page: RebuildPageContainer): Promise<void> {
   if (!bridge) return;
-  if (phoneListMode && page.listObject && page.listObject.length > 0) {
-    const mirrored = phoneListPage();
-    if (mirrored) page = mirrored;
+  const mirrored = mirrorListPage(page);
+  if (mirrored) {
+    page = mirrored.page;
+    mirrorActive = true;
+    lastMirrorBody = mirrored.body;
+  } else {
+    mirrorActive = false;
+    lastMirrorBody = "";
   }
   // The menu is declared with the page: every rebuild must carry it forward or
   // the OS drops the app's items.
@@ -5580,13 +5596,6 @@ function setupPhone(): void {
   glassesPreview.addEventListener("pointerup", endPreviewGesture);
   glassesPreview.addEventListener("pointercancel", cancelPreviewGesture);
   glassesExpand.addEventListener("click", () => toggleGlassesExpanded());
-  glassesNative.addEventListener("click", () => {
-    phoneListMode = false;
-    updatePhoneListModeUi();
-    lastGlassSignature = "";
-    render();
-  });
-  updatePhoneListModeUi();
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && glassesExpanded) {
       event.preventDefault();

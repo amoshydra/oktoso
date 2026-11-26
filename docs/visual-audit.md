@@ -1943,11 +1943,12 @@ competing history buttons.
 - A **Glasses control** panel below the phone keyboard shows a fixed 2:1
   mirror of the 576×288 screen, the real list rows, and the current selection.
   Tapping a row opens it; swiping up or down moves; double-tapping goes back.
-  Up / Down / Select / Back are the 44px fallback. Up/Down on the phone or
-  glasses switches the glasses list to a text mirror with a `›` marker; **Use
-  glasses list** returns to the native list, because the SDK's native list
-  selection is host-owned. The mirror window stays fixed while the marker
-  moves; it shifts one row only when the marker crosses the top or bottom edge.
+  Up / Down / Select / Back are the 44px fallback. Every list is an app-owned
+  marker list: the SDK's native list selection is host-owned, so the glasses
+  render text rows with a `›` marker. The body holds six lines and stays fixed
+  while the marker moves; it shifts one row only when the marker crosses the
+  top or bottom edge. Marker moves update the body in place, so a swipe never
+  scrolls the view.
   Expand opens the same panel full-screen; Close or Escape returns. The preview
   keeps the app's 54-column wrapped lines and clips instead of reflowing, so
   content changes never change its height. The panel names the glasses bridge

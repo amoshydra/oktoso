@@ -1248,10 +1248,11 @@ radius, or color token.
   body scroll locked, page siblings inert, and Close or Escape returns focus to
   the Expand button. The preview and 44px pad centre at up to 720px; landscape
   gives the larger mirror.
-- Glass list scroll events and the phone's Up/Down switch the glasses list to a
-  text mirror with a `›` marker. The host owns the native list border, so the
-  mirror is app-owned: both directions move the same selection, and **Use
-  glasses list** returns to the native list. Generic scroll still scrolls chat.
+- Every list is an app-owned marker list of six lines. The host owns the native
+  list selection, so lists render as text rows with a `›` marker. The window
+  stays fixed while the marker moves and shifts one row only at an edge. Marker
+  moves update the body in place, so a swipe never scrolls the view. Generic
+  scroll still scrolls chat.
 - Haptics and the bridge status remain. No new type role, spacing step, radius,
   or colour.
 
@@ -1704,6 +1705,6 @@ The `design-v1.76` bottom-inset revision reduces the transcript's own bottom pad
 
 The `design-v1.77` last-message revision removes the final message's 16px bottom padding, so the action row sits 8px above the frame instead of 24px. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
-The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 list-mirror follow-up (2026-11-27) keeps the mirror window fixed while the cursor moves; unit coverage spans the window edges and the G2 e2e checks the first visible row across four down presses. The full gates pass at 993 unit tests and 95 e2e tests, including 13 G2 tests.
+The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 marker-list follow-up (2026-11-27) makes every list an app-owned six-line marker list: the window stays fixed while the marker moves and shifts one row only at an edge, and marker moves update the body in place instead of rebuilding the page. Unit coverage spans the six-line budget and the window edges; the G2 e2e checks the first visible row across four down presses. The full gates pass at 999 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.74` assistant-back revision stores the assistant scope in the history entry. Opening Ask pushes it, browser back or the chat topbar back closes the dock without leaving the session, a referenced message opens a new entry so back returns to the same assistant thread, and a reload starts with the dock closed. A session-scope assistant searches its own session and lineage by default; only explicit global/other-session/which-session language or a named session ref widens it to all sessions. Short product tokens such as `g2` are searchable. The assistant e2e covers back-to-close, reference-back-to-thread, and the reload behavior; unit tests cover lineage scoping, explicit global widening, and the `g2` token. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.

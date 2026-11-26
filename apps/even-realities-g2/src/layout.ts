@@ -89,6 +89,10 @@ export function textPage(
   return new RebuildPageContainer({ containerTotalNum: 3, textObject: texts });
 }
 
+/**
+ * A list page spec. `showPage` turns it into the app-owned six-line marker
+ * list before it reaches the host, so the native list is never painted.
+ */
 export function listPage(
   header: string,
   items: string[],

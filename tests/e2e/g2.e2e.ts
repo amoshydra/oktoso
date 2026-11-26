@@ -137,6 +137,7 @@ beforeEach(async () => {
     const bridge = (window as any).EvenAppBridge;
     const test = ((window as any).__g2 = {
       pages: [] as any[],
+      upgrades: [] as any[],
       audioOpen: false as boolean | undefined,
     });
     const rebuild = bridge.rebuildPageContainer.bind(bridge);
@@ -153,7 +154,20 @@ beforeEach(async () => {
       }
       return true;
     };
-    bridge.textContainerUpgrade = async () => true;
+    bridge.textContainerUpgrade = async (next: any) => {
+      try {
+        const data = next.toJson();
+        const page = test.pages.at(-1);
+        const container = (page?.textObject ?? []).find(
+          (text: any) => text.containerID === data.containerID,
+        );
+        if (container) container.content = data.content;
+        test.upgrades.push(data);
+      } catch {
+        // The last painted page keeps its previous body.
+      }
+      return true;
+    };
     bridge.audioControl = async (open: boolean) => {
       test.audioOpen = open;
       return true;
@@ -201,8 +215,20 @@ async function send(detail: unknown): Promise<void> {
   await requirePage().waitForTimeout(150);
 }
 
+async function previewIndex(): Promise<number> {
+  const text = await requirePage().locator("#preview-selection").innerText();
+  const match = /Preview (\d+)\//.exec(text);
+  return match ? Number(match[1]) - 1 : 0;
+}
+
 async function listTap(index: number): Promise<void> {
-  await send({ listEvent: { eventType: 0, currentSelectItemIndex: index } });
+  const current = await previewIndex();
+  const delta = index - current;
+  const eventType = delta > 0 ? 2 : 1;
+  for (let step = 0; step < Math.abs(delta); step += 1) {
+    await send({ textEvent: { eventType, eventSource: 0 } });
+  }
+  await send({ textEvent: { eventType: 0, eventSource: 0 } });
 }
 
 async function textTap(): Promise<void> {
@@ -229,9 +255,10 @@ async function menuLabels(): Promise<string[]> {
 }
 
 async function listLabels(): Promise<string[]> {
-  const page = await lastPage();
-  const items = page?.listObject?.[0]?.itemContainer;
-  return Array.isArray(items?.itemName) ? items.itemName : [items?.itemName];
+  return requirePage().$$eval(
+    "#glass-preview-list .glass-preview-item",
+    (items) => items.map((item) => item.textContent ?? ""),
+  );
 }
 
 async function tapRowMatching(pattern: RegExp): Promise<void> {
@@ -349,13 +376,6 @@ describe("G2 hosted app", () => {
     await previewMatches(/OKTOSO/);
 
     await current
-      .getByRole("button", { name: "Use glasses list" })
-      .click();
-    await current.waitForTimeout(200);
-    const nativeHome = await lastPage();
-    expect(nativeHome.listObject?.length ?? 0).toBeGreaterThan(0);
-
-    await current
       .getByRole("button", { name: "Expand glasses preview" })
       .click();
     await expect(
@@ -388,16 +408,16 @@ describe("G2 hosted app", () => {
     ).resolves.toBe(false);
   });
 
-  it("follows list scroll events from the glasses", async () => {
+  it("follows a text swipe from the glasses", async () => {
     await expect
       .poll(() => requirePage().locator("#preview-selection").innerText(), {
         timeout: 5_000,
       })
       .toContain("1/");
     await send({
-      listEvent: {
+      textEvent: {
         eventType: 2,
-        currentSelectItemIndex: 1,
+        eventSource: 0,
       },
     });
     await expect
@@ -415,12 +435,10 @@ describe("G2 hosted app", () => {
         timeout: 5_000,
       })
       .toContain("3/");
-    const mirrored = await lastPage();
-    const mirroredText = (mirrored.textObject ?? [])
-      .map((text: { content?: string }) => text.content ?? "")
-      .join("\n");
-    expect(mirroredText).toContain("›");
-    expect(mirrored.listObject?.length ?? 0).toBe(0);
+    const upgrade = await requirePage().evaluate(
+      () => (window as any).__g2.upgrades.at(-1),
+    );
+    expect(String(upgrade?.content ?? "")).toContain("›");
   });
 
   it("keeps the mirrored list window fixed while the cursor moves", async () => {
