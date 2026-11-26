@@ -32,6 +32,9 @@ import type {
   ErrorResponse,
   CreateSessionInput,
   Draft,
+  Handoff,
+  HandoffCreate,
+  HandoffStatus,
   Health,
   InboxPage,
   MessagePage,
@@ -978,6 +981,52 @@ export class HubClient {
       method: "POST",
       body: input,
     });
+  }
+
+  async handoffs(query: {
+    sourceRef?: string;
+    status?: HandoffStatus;
+  } = {}): Promise<Handoff[]> {
+    const params = new URLSearchParams();
+    if (query.sourceRef) params.set("sourceRef", query.sourceRef);
+    if (query.status) params.set("status", query.status);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const response = await this.request<{ data: Handoff[] }>(
+      `/api/v1/handoffs${suffix}`,
+    );
+    return response.data;
+  }
+
+  async createHandoff(input: HandoffCreate): Promise<Handoff> {
+    const response = await this.request<{ data: Handoff }>(
+      "/api/v1/handoffs",
+      { method: "POST", body: input },
+    );
+    return response.data;
+  }
+
+  async updateHandoff(id: string, message: string): Promise<Handoff> {
+    const response = await this.request<{ data: Handoff }>(
+      `/api/v1/handoffs/${encodeURIComponent(id)}`,
+      { method: "PATCH", body: { message } },
+    );
+    return response.data;
+  }
+
+  async approveHandoff(id: string, message?: string): Promise<Handoff> {
+    const response = await this.request<{ data: Handoff }>(
+      `/api/v1/handoffs/${encodeURIComponent(id)}/approve`,
+      { method: "POST", body: message ? { message } : {} },
+    );
+    return response.data;
+  }
+
+  async cancelHandoff(id: string): Promise<Handoff> {
+    const response = await this.request<{ data: Handoff }>(
+      `/api/v1/handoffs/${encodeURIComponent(id)}/cancel`,
+      { method: "POST" },
+    );
+    return response.data;
   }
 
   async attention(query: { type?: AttentionType; sessionRef?: string } = {}): Promise<AttentionPage> {

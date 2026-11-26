@@ -12,6 +12,7 @@ import {
   zLocalRetention,
   zAssistantThread,
   zAssistantTurn,
+  zHandoff,
 } from "@amoshydra/oktoso-contracts";
 
 export const zReadMarker = z.object({
@@ -112,6 +113,8 @@ export const zHubState = z.object({
   }),
   /** Hub-owned assistant threads. Bounded: the oldest thread is dropped. */
   assistantThreads: z.array(zAssistantThreadState).max(50).default([]),
+  /** Pending and recent cross-session handoffs. Bounded. */
+  handoffs: z.array(zHandoff).max(100).default([]),
 });
 
 export type HubState = z.infer<typeof zHubState>;
@@ -145,6 +148,7 @@ export function createInitialState(): HubState {
     transcriptCache: { enabled: false, ttlDays: 7, maxSessions: 500 },
     localRetention: { draftsDays: 0, markersDays: 30, feedbackDays: 30 },
     assistantThreads: [],
+    handoffs: [],
   };
 }
 

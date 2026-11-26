@@ -69,6 +69,7 @@ import { LocalDataService } from "./services/local-data";
 import { AutomationService } from "./services/automation-service";
 import { IdempotencyService } from "./services/idempotency";
 import { SessionActions } from "./services/session-actions";
+import { HandoffService } from "./services/handoff-service";
 import { AssistantService } from "./services/assistant-service";
 import { WebPushTransport } from "./services/web-push-transport";
 import { loadOrCreateVapidKeys } from "./services/vapid";
@@ -702,6 +703,12 @@ async function main(): Promise<void> {
     const questions = new QuestionService(sessions);
     const idempotency = new IdempotencyService(store);
     const actions = new SessionActions(sessions, questions, idempotency);
+    const handoffs = new HandoffService({
+      store,
+      sessions,
+      actions,
+      events: eventBus,
+    });
     const assistantAudit = join(resolve(config.dataDir), "assistant-audit.jsonl");
     const assistant = new AssistantService({
       store,
@@ -830,6 +837,7 @@ async function main(): Promise<void> {
       actions,
       automation,
       assistant,
+      handoffs,
       ...(mcpTokens ? { mcpTokens } : {}),
       logger,
       startedAt,

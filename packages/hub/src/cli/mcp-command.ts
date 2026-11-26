@@ -24,6 +24,17 @@ export async function runMcpCommand(
     sessions: (query) => client.sessions(query),
     session: (ref) => client.session(ref),
     messages: (ref, query) => client.messages(ref, query),
+    proposeHandoff: (input) => {
+      if (!input.sourceRef) {
+        throw new Error("A source session ref is required");
+      }
+      return client.createHandoff({
+        sourceRef: input.sourceRef,
+        targetRef: input.targetRef,
+        message: input.message,
+        ...(input.reason ? { reason: input.reason } : {}),
+      });
+    },
     question: (ref) => client.question(ref),
     attention: (query) => client.attention(query),
     sendMessage: (ref, input, options) =>

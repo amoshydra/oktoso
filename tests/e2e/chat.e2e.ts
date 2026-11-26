@@ -1834,6 +1834,36 @@ describe("transcript loading", () => {
   });
 });
 
+describe("handoff", () => {
+  it("shows a proposed handoff and sends it from the source chat", async () => {
+    const created = await page!.request.post(`${BASE_URL}/api/v1/handoffs`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      data: {
+        sourceRef: "desktop-opencode:ses_auth",
+        targetRef: "desktop-opencode:ses_index",
+        message: "Implement the THREED_LAUNCH_OPTIONS follow-up.",
+        reason: "Handoff from the GPU Orchestrator session.",
+      },
+    });
+    expect(created.ok()).toBe(true);
+
+    await openSession("Fix auth race in gateway");
+    const card = page!.locator(".handoff-card").first();
+    await card.waitFor({ state: "visible", timeout: 5_000 });
+    await expect(card.innerText()).resolves.toContain(
+      "Refactor session index",
+    );
+    await expect(card.locator(".handoff-message").inputValue()).resolves.toBe(
+      "Implement the THREED_LAUNCH_OPTIONS follow-up.",
+    );
+
+    await card.getByRole("button", { name: "Send handoff" }).click();
+    await expect
+      .poll(() => page!.locator(".handoff-card").count(), { timeout: 10_000 })
+      .toBe(0);
+  });
+});
+
 describe("route revalidation", () => {
   it("shows the cached session list while refreshing in the background", async () => {
     const sessionsButton = page!

@@ -304,6 +304,7 @@ Read-only:
 | `questions_get` | Pending question with choices and risk |
 | `automation_list` | Watchers, start templates, dry-run/pause state, recent runs, approvals, and allowed shapes; `runs`/`approvals` default to 10 and cap at 50, `shapes` defaults to 20 and caps at 100 |
 | `approvals_list` | Actions the automation policy escalated to a human; `limit` defaults to 20 and caps at 100 |
+| `handoff_propose` | Propose a cross-session handoff; creates a pending card in the source chat and never sends immediately |
 
 Write (`--allow-write`):
 
@@ -323,6 +324,12 @@ stays inside the hub. Remembered shapes appear as `allowedShapes` and can be
 revoked over HTTP from Settings. A provider-scoped token sees only watchers whose condition names an
 allowed provider, plus watchers without a provider condition; runs, approvals,
 and paused watcher IDs are filtered the same way.
+
+`handoff_propose` is a proposal, not a send. It resolves the caller's source
+session, creates a pending card in that chat, and returns the handoff metadata.
+The owner edits, approves, or cancels the card there; only approval calls the
+normal send path, with a stable handoff idempotency key. The tool is available
+without `--allow-write` because it cannot message the target directly.
 
 ## Controller policy
 

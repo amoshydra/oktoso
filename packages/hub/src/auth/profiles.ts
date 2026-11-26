@@ -5,6 +5,7 @@ export type SessionProfile = (typeof SESSION_PROFILES)[number];
 export const AUTH_SCOPES = [
   "sessions.read",
   "sessions.write",
+  "handoffs",
   "attention.read",
   "attention.act",
   "search.read",

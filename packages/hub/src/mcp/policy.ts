@@ -55,6 +55,11 @@ export function withProviderPolicy(
       assert(ref);
       return api.messages(ref, query);
     },
+    async proposeHandoff(input) {
+      if (input.sourceRef) assert(input.sourceRef);
+      assert(input.targetRef);
+      return api.proposeHandoff(input);
+    },
     async question(ref) {
       assert(ref);
       return api.question(ref);
@@ -167,6 +172,9 @@ export function withSessionPolicy(
     messages: (ref, query) => {
       assert(ref);
       return api.messages(ref, query);
+    },
+    proposeHandoff: async () => {
+      throw new Error("A session-scoped token cannot create handoffs");
     },
     question: (ref) => {
       assert(ref);

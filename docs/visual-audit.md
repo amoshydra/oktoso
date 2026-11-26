@@ -2053,3 +2053,20 @@ competing history buttons.
   provider and settings writes. The Access panel was also checked at 390 and
   320px with no document or panel overflow. The hub unit tests cover scope
   enforcement, legacy phone tokens, G2 pairing, and self-downgrade.
+
+## Cross-session handoff card (2026-11-26)
+
+- A proposed handoff renders above the composer in the source session. It is a
+  compact surface with a 10px uppercase `Handoff to`, the target title at the
+  body role, target project/provider/ref metadata, an editable message, and
+  `Send handoff` / `Cancel`.
+- The message is a textarea at the body role; on mobile it is 16px and the
+  actions are 44px. Failed sends keep the card with a danger error line and
+  `Retry handoff`; sending disables both actions. A sent card disappears and a
+  polite hidden status names the target.
+- The card uses the existing border, surface, radius, and button grammar. It
+  adds no type role, spacing step, radius, or colour.
+- Verified in the chat e2e at 1280px: an owner-created handoff appears in the
+  source chat with the target title and editable message, and Send removes the
+  card. Unit tests cover proposal, caller resolution, approval/idempotency,
+  failed retry, cancel, and the one-send path.

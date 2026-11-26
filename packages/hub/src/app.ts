@@ -24,6 +24,7 @@ import type { SearchService } from "./services/search-service";
 import type { TranscriptCacheService } from "./services/transcript-cache";
 import type { AutomationService } from "./services/automation-service";
 import type { AssistantService } from "./services/assistant-service";
+import type { HandoffService } from "./services/handoff-service";
 import { IdempotencyService } from "./services/idempotency";
 import type { StateStore } from "@amoshydra/oktoso-storage";
 import { ProviderError } from "@amoshydra/oktoso-providers";
@@ -58,6 +59,7 @@ import { registerDiagnosticsRoute } from "./http/routes/diagnostics";
 import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerAutomationRoutes } from "./http/routes/automation";
 import { registerAssistantRoutes } from "./http/routes/assistant";
+import { registerHandoffRoutes } from "./http/routes/handoffs";
 import { registerMcpTokenRoutes } from "./http/routes/mcp-tokens";
 import { registerMcpRoutes } from "./mcp/http";
 import { createServiceMcpApi } from "./mcp/api";
@@ -89,6 +91,8 @@ export interface AppDependencies {
   actions?: SessionActions;
   automation?: AutomationService;
   assistant?: AssistantService;
+  /** Cross-session handoff proposals and approvals. */
+  handoffs?: HandoffService;
   /** Short-lived MCP credentials; absent when MCP is disabled. */
   mcpTokens?: McpTokenService;
   logger: Logger;
@@ -182,6 +186,9 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
   if (deps.assistant) {
     registerAssistantRoutes(app, deps.assistant);
   }
+  if (deps.handoffs) {
+    registerHandoffRoutes(app, deps.handoffs);
+  }
   if (deps.mcpTokens) {
     registerMcpTokenRoutes(app, deps.mcpTokens);
   }
@@ -195,6 +202,7 @@ export function createApp(deps: AppDependencies): Hono<AppEnv> {
       attention: deps.attention,
       actions,
       automation: deps.automation,
+      handoffs: deps.handoffs,
     }),
     ...(deps.mcpTokens ? { tokens: deps.mcpTokens } : {}),
     logger: deps.logger,

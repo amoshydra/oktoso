@@ -1,5 +1,6 @@
 import type { AttentionService } from "../services/attention-service";
 import type { AutomationService } from "../services/automation-service";
+import type { HandoffService } from "../services/handoff-service";
 import type { ProviderRegistry } from "../services/provider-registry";
 import type { QuestionService } from "../services/question-service";
 import type { SessionActions } from "../services/session-actions";
@@ -13,6 +14,7 @@ export interface ServiceMcpApiDependencies {
   attention: AttentionService;
   actions: SessionActions;
   automation?: AutomationService;
+  handoffs?: HandoffService;
 }
 
 /** Adapt the hub's in-process services to the MCP tool surface. */
@@ -30,6 +32,10 @@ export function createServiceMcpApi(
     sessions: async (query) => deps.sessions.list(query ?? {}),
     session: async (ref) => deps.sessions.get(ref),
     messages: async (ref, query) => deps.sessions.messages(ref, query ?? {}),
+    proposeHandoff: async (input) => {
+      if (!deps.handoffs) throw new Error("Handoffs are not available");
+      return deps.handoffs.propose(input);
+    },
     question: async (ref) => deps.questions.get(ref),
     attention: async (query) => deps.attention.list(query ?? {}),
     sendMessage: async (ref, input, options) =>

@@ -14,6 +14,7 @@ import type {
   AutomationSettingsInput,
   AutomationView,
   CreateSessionInput,
+  Handoff,
   HubEvent,
   MessagePage,
   MessagesQuery,
@@ -34,6 +35,13 @@ export interface McpHubApi {
   sessions(query?: SessionListQuery): Promise<SessionPage>;
   session(ref: string): Promise<Session>;
   messages(ref: string, query?: MessagesQuery): Promise<MessagePage>;
+  proposeHandoff(input: {
+    sourceRef?: string;
+    targetRef: string;
+    message: string;
+    reason?: string;
+    callerSessionId?: string;
+  }): Promise<Handoff>;
   question(ref: string): Promise<QuestionPrompt | null>;
   attention(query?: {
     type?: AttentionType;
@@ -108,6 +116,7 @@ export const MCP_READ_TOOL_NAMES = [
   "questions_get",
   "automation_list",
   "approvals_list",
+  "handoff_propose",
 ] as const;
 
 export const MCP_WRITE_TOOL_NAMES = [
@@ -138,7 +147,11 @@ permission requests unless the user explicitly approved them.
 Use a stable idempotencyKey for sessions_send so retries do not double-send.
 Prefer mark_read or a reply over interrupt.
 Use automation_list and approvals_list before approvals_act, and only approve
-actions the user has explicitly approved.`;
+actions the user has explicitly approved.
+
+When the user asks you to hand work to another session, use handoff_propose.
+It creates a pending card in the source session; it does not send until the
+owner approves it there.`;
 
 function textResult(value: unknown): CallToolResult {
   return {
@@ -162,6 +175,27 @@ function errorResult(error: unknown): CallToolResult {
 function callerSessionID(extra: ToolExtra): string | undefined {
   const value = extra._meta?.["ai.opencode/sessionID"];
   return typeof value === "string" && value ? value : undefined;
+}
+
+/** Resolve an OpenCode caller ID to a hub session ref for handoff provenance. */
+async function callerSourceRef(
+  api: McpHubApi,
+  extra: ToolExtra,
+): Promise<string | undefined> {
+  const caller = callerSessionID(extra);
+  if (!caller) return undefined;
+  try {
+    const page = await api.sessions({ q: caller, limit: 50 });
+    const found = page.data.find(
+      (session) =>
+        session.nativeID === caller ||
+        session.ref === caller ||
+        session.ref.endsWith(`:${caller}`),
+    );
+    return found?.ref;
+  } catch {
+    return undefined;
+  }
 }
 
 function assertNotCaller(ref: string, extra: ToolExtra): void {
@@ -503,6 +537,56 @@ export function createOktosoMcpServer(options: OktosoMcpOptions): McpServer {
           },
           { args: { ref, ...query }, extra },
         ),
+    );
+  }
+
+  if (enabled("handoff_propose")) {
+    server.registerTool(
+      "handoff_propose",
+      {
+        title: "Propose a cross-session handoff",
+        description:
+          "Create a pending handoff to another session. The owner reviews and approves it in the source session's chat; this tool never sends immediately.",
+        inputSchema: {
+          targetRef: z.string().describe("Target session ref"),
+          message: z
+            .string()
+            .min(1)
+            .max(8_000)
+            .describe("Exact instruction to send after approval"),
+          reason: z.string().max(500).optional(),
+          sourceRef: z
+            .string()
+            .optional()
+            .describe("Source session ref; inferred from the caller when omitted"),
+        },
+        annotations: { readOnlyHint: false },
+      },
+      async ({ targetRef, message, reason, sourceRef }, extra) => {
+        const source = sourceRef ?? (await callerSourceRef(api, extra));
+        if (!source) {
+          return errorResult(
+            "Could not resolve the caller session. Pass sourceRef with the source session ref.",
+          );
+        }
+        const caller = callerSessionID(extra);
+        return respond(
+          "handoff_propose",
+          async () =>
+            api.proposeHandoff({
+              targetRef,
+              message,
+              sourceRef: source,
+              ...(reason ? { reason } : {}),
+              ...(caller ? { callerSessionId: caller } : {}),
+            }),
+          {
+            args: { targetRef, message, reason, sourceRef: source },
+            extra,
+            target: targetRef,
+          },
+        );
+      },
     );
   }
 

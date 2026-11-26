@@ -1,12 +1,13 @@
-# Design Lock — v1.60
+# Design Lock — v1.61
 
 Status: **frozen**.
 
-- Version: `design-v1.60`
-- Parent: `design-v1.59`
+- Version: `design-v1.61`
+- Parent: `design-v1.60`
 - Date: 2026-11-26
-- Git tag: `design-v1.60`
+- Git tag: `design-v1.61`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.61 scope: cross-session handoff proposals in the source chat.
 - v1.60 scope: pairing without a profile choice; the client declares its profile.
 - v1.59 scope: paired device profiles and the Access credential panel.
 - v1.58 scope: assistant-issued short-lived MCP tokens in the global chat.
@@ -1344,6 +1345,23 @@ radius, or color token.
   `g2`. The profile is visible after pairing in Settings → Access.
 - No new type role, spacing step, radius, control, or colour.
 
+## Cross-session handoffs (2026-11-26)
+
+- An external agent proposes a handoff through `handoff_propose`; the tool is a
+  proposal, never a send. The card appears in the source session’s chat above
+  the composer. The owner edits, sends, or cancels it there.
+- The card shows the target title, project/provider and ref, an editable
+  message, the optional reason, and `Send handoff` / `Cancel`. Failed sends keep
+  the message editable and show the error with `Retry handoff`; a sent card
+  leaves with a polite notice. The textarea is 16px and actions are 44px on
+  mobile.
+- Approval calls the normal send path with a stable handoff idempotency key.
+  The target receives a normal prompt and starts its own turn. No provider
+  write happens at proposal time.
+- Phone has the `handoffs` scope; G2 does not. A read-only MCP token may
+  propose a handoff; sending still requires the owner’s confirmation.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1392,3 +1410,5 @@ The `design-v1.58` assistant-token revision was verified live against a temporar
 The `design-v1.59` paired-profile revision was verified in the accessibility e2e at 1280px: the owner session shows `Owner`, `Scopes: All`, `Never`, and `Admin: Yes`; a freshly paired phone session shows `Phone`, a concrete expiry, and `Admin: No`. Hub tests cover legacy phone tokens, explicit G2 pairing, phone-to-G2 self-downgrade, and `403` for G2 provider/settings writes. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.
 
 The `design-v1.60` pairing simplification removes the profile choice from the CLI and pairing page. Normal pairing is `oktoso pair` or `p`; the G2 app declares `g2` when exchanging the code, and a phone/browser defaults to `phone`. The full gates pass at 966 unit tests and 85 e2e tests, including 12 G2 tests.
+
+The `design-v1.61` handoff proposal was verified in the chat e2e at 1280px: an owner-created handoff appears in the source chat with the target title and editable message, and Send removes the card. Unit tests cover proposal, caller resolution, approval/idempotency, failed retry, cancel, and the one-send path. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.

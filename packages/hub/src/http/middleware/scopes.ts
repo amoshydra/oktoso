@@ -21,6 +21,7 @@ export function requiredApiScope(
     return undefined;
   }
   if (path.startsWith("/api/v1/mcp/tokens")) return "admin";
+  if (path.startsWith("/api/v1/handoffs")) return "handoffs";
   if (path.startsWith("/api/v1/providers")) {
     return isRead(method) ? "providers.read" : "providers.write";
   }

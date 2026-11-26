@@ -109,6 +109,9 @@ function fakeApi(overrides: Partial<McpHubApi> = {}): McpHubApi {
         cursor: { next: null, previous: null },
       }),
     ),
+    proposeHandoff: vi.fn(async () => {
+      throw new Error("not implemented");
+    }),
     question: vi.fn(async (): Promise<QuestionPrompt | null> => null),
     attention: vi.fn(
       async (): Promise<AttentionPage> => ({ data: [attention] }),

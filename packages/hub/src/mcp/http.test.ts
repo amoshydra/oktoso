@@ -327,8 +327,9 @@ describe("hosted MCP route", () => {
     expect(listed.status).toBe(200);
     const body = await listed.json();
     const names = body.result.tools.map((tool: { name: string }) => tool.name);
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(10);
     expect(names).toContain("providers_list");
+    expect(names).toContain("handoff_propose");
     expect(names).not.toContain("sessions_send");
 
     const called = await call(app, "reader-token-long-enough", sessionId, {
@@ -363,8 +364,9 @@ describe("hosted MCP route", () => {
     const names = (await listed.json()).result.tools.map(
       (tool: { name: string }) => tool.name,
     );
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
     expect(names).toContain("sessions_send");
+    expect(names).toContain("handoff_propose");
 
     const sent = await call(app, "controller-token-long-enough", sessionId, {
       jsonrpc: "2.0",

@@ -12,6 +12,8 @@ export const zHubEventType = z.enum([
   "attention.created",
   "attention.updated",
   "attention.resolved",
+  "handoff.created",
+  "handoff.updated",
   "automation.run",
   "automation.approval",
   "provider.status",

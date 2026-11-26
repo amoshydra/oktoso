@@ -3382,6 +3382,7 @@ const ASSISTANT_TOKEN_TOOLS = [
   "sessions_list",
   "sessions_get",
   "sessions_messages",
+  "handoff_propose",
 ];
 
 const zCreateMcpTokenTool = z.object({

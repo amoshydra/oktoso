@@ -28,6 +28,7 @@ import type {
   BranchPoint,
   Diagnostics,
   Health,
+  Handoff,
   HubEvent,
   InboxItem,
   Message,
@@ -282,7 +283,7 @@ function credentialScopes(identity: AuthCheck["auth"]): string {
     return "Sessions · Inbox · Search · Providers (read) · Settings (read) · Approvals · Voice · Events";
   }
   if (identity?.profile === "phone" || identity?.kind === "session") {
-    return "Sessions · Inbox · Search · Providers · Settings · Assistant · Automation · Notifications · Local data · Voice · Events";
+    return "Sessions · Inbox · Handoffs · Search · Providers · Settings · Assistant · Automation · Notifications · Local data · Voice · Events";
   }
   return "Unknown";
 }
@@ -1363,7 +1364,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.60 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.61 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4665,6 +4666,71 @@ function promptFailure(reason: unknown): string {
   return reason instanceof Error ? reason.message : "Unable to send the prompt";
 }
 
+function HandoffCard(props: {
+  handoff: Handoff;
+  draft: string;
+  busy: boolean;
+  onChange: (value: string) => void;
+  onSend: () => void;
+  onCancel: () => void;
+}) {
+  const { handoff } = props;
+  const failed = handoff.status === "failed";
+  return (
+    <section
+      className="handoff-card"
+      data-status={handoff.status}
+      aria-label={`Handoff to ${handoff.targetTitle}`}
+    >
+      <div className="handoff-head">
+        <div>
+          <span className="handoff-label">Handoff to</span>
+          <strong className="handoff-target-title">{handoff.targetTitle}</strong>
+        </div>
+        <span className={`handoff-status ${handoff.status}`}>
+          {failed ? "Failed" : "Pending"}
+        </span>
+      </div>
+      <p className="handoff-meta">
+        {handoff.targetProject ?? handoff.targetProviderID} · {handoff.targetRef}
+      </p>
+      <textarea
+        className="handoff-message"
+        value={props.draft}
+        rows={3}
+        aria-label={`Handoff message to ${handoff.targetTitle}`}
+        onChange={(event) => props.onChange(event.currentTarget.value)}
+      />
+      {handoff.reason ? (
+        <p className="handoff-reason">Why: {handoff.reason}</p>
+      ) : null}
+      {failed && handoff.error ? (
+        <p className="handoff-error" role="alert">
+          {handoff.error}
+        </p>
+      ) : null}
+      <div className="handoff-actions">
+        <button
+          className="btn primary small"
+          type="button"
+          disabled={props.busy || props.draft.trim().length === 0}
+          onClick={props.onSend}
+        >
+          {props.busy ? "Sending…" : failed ? "Retry handoff" : "Send handoff"}
+        </button>
+        <button
+          className="btn small"
+          type="button"
+          disabled={props.busy}
+          onClick={props.onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function SessionDetail(props: {
   client: HubClient;
   sessionRef: string;
@@ -4739,6 +4805,11 @@ function SessionDetail(props: {
   const [retryingTranscript, setRetryingTranscript] = useState(false);
   const autoRetried = useRef(false);
   const [sendError, setSendError] = useState<string>();
+  const [handoffs, setHandoffs] = useState<Handoff[]>([]);
+  const [handoffDrafts, setHandoffDrafts] = useState<Record<string, string>>({});
+  const [handoffBusy, setHandoffBusy] = useState<string>();
+  const [handoffNotice, setHandoffNotice] = useState("");
+  const [handoffError, setHandoffError] = useState<string>();
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [queuedOpen, setQueuedOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState<string>();
@@ -4905,6 +4976,92 @@ function SessionDetail(props: {
     }, 5_000);
     return () => window.clearInterval(timer);
   }, [canQueue, queuedItems.length, refreshInbox, running]);
+
+  const loadHandoffs = useCallback(async () => {
+    const list = await props.client.handoffs({
+      sourceRef: props.sessionRef,
+    });
+    const active = list.filter(
+      (handoff) =>
+        handoff.status === "pending" || handoff.status === "failed",
+    );
+    setHandoffs(active);
+    setHandoffDrafts((current) => {
+      const next: Record<string, string> = {};
+      for (const handoff of active) {
+        next[handoff.id] = current[handoff.id] ?? handoff.message;
+      }
+      return next;
+    });
+  }, [props.client, props.sessionRef]);
+
+  useEffect(() => {
+    void loadHandoffs().catch(() => undefined);
+  }, [loadHandoffs]);
+
+  const handoffLiveSeq = props.events.reduce(
+    (max, event) =>
+      event.type === "handoff.created" || event.type === "handoff.updated"
+        ? Math.max(max, event.seq)
+        : max,
+    0,
+  );
+  useEffect(() => {
+    if (!handoffLiveSeq) return;
+    void loadHandoffs().catch(() => undefined);
+  }, [handoffLiveSeq, loadHandoffs]);
+
+  useEffect(() => {
+    if (!handoffNotice) return;
+    const timer = window.setTimeout(() => setHandoffNotice(""), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [handoffNotice]);
+
+  const sendHandoff = async (handoff: Handoff) => {
+    const message = (handoffDrafts[handoff.id] ?? handoff.message).trim();
+    if (!message) return;
+    setHandoffBusy(handoff.id);
+    setHandoffError(undefined);
+    try {
+      const next = await props.client.approveHandoff(handoff.id, message);
+      if (next.status === "sent") {
+        setHandoffs((current) =>
+          current.filter((entry) => entry.id !== handoff.id),
+        );
+        setHandoffNotice(`Handoff sent to ${next.targetTitle}.`);
+      } else {
+        setHandoffs((current) =>
+          current.map((entry) => (entry.id === next.id ? next : entry)),
+        );
+        setHandoffError(next.error ?? "The handoff could not be sent.");
+      }
+    } catch (reason) {
+      setHandoffError(
+        reason instanceof Error
+          ? reason.message
+          : "The handoff could not be sent.",
+      );
+    } finally {
+      setHandoffBusy(undefined);
+    }
+  };
+
+  const cancelHandoff = async (handoff: Handoff) => {
+    setHandoffBusy(handoff.id);
+    setHandoffError(undefined);
+    try {
+      await props.client.cancelHandoff(handoff.id);
+      setHandoffs((current) =>
+        current.filter((entry) => entry.id !== handoff.id),
+      );
+    } catch (reason) {
+      setHandoffError(
+        reason instanceof Error ? reason.message : "The handoff could not be cancelled.",
+      );
+    } finally {
+      setHandoffBusy(undefined);
+    }
+  };
 
   const inboxLiveSeq =
     props.events.find(
@@ -7108,6 +7265,41 @@ function SessionDetail(props: {
             ) : null}
 
             <div className="chat-composer-wrap">
+              <span className="sr-only" role="status" aria-live="polite">
+                {handoffNotice}
+              </span>
+              {handoffError ? (
+                <div className="handoff-error-banner" role="alert">
+                  {handoffError}
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => setHandoffError(undefined)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
+              {handoffs.length > 0 ? (
+                <section className="handoff-panel" aria-label="Pending handoffs">
+                  {handoffs.map((handoff) => (
+                    <HandoffCard
+                      key={handoff.id}
+                      handoff={handoff}
+                      draft={handoffDrafts[handoff.id] ?? handoff.message}
+                      busy={handoffBusy === handoff.id}
+                      onChange={(value) =>
+                        setHandoffDrafts((current) => ({
+                          ...current,
+                          [handoff.id]: value,
+                        }))
+                      }
+                      onSend={() => void sendHandoff(handoff)}
+                      onCancel={() => void cancelHandoff(handoff)}
+                    />
+                  ))}
+                </section>
+              ) : null}
               <span className="sr-only" role="status" aria-live="polite">
                 {queuedItems.length > 0
                   ? `${queuedItems.length} queued message${

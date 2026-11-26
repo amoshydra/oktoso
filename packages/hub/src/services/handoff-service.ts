@@ -1,0 +1,247 @@
+import { randomUUID } from "node:crypto";
+import type {
+  Handoff,
+  HandoffStatus,
+} from "@amoshydra/oktoso-contracts";
+import type { StateStore } from "@amoshydra/oktoso-storage";
+import { badRequest, conflict, notFound } from "../domain/errors";
+import type { EventBus } from "./event-bus";
+import type { SessionActions } from "./session-actions";
+import type { SessionService } from "./session-service";
+
+const MAX_PENDING_PER_SOURCE = 3;
+
+export interface HandoffServiceOptions {
+  store: StateStore;
+  sessions: SessionService;
+  actions: SessionActions;
+  events: EventBus;
+  now?: () => number;
+  idFactory?: () => string;
+}
+
+export interface ProposeHandoffInput {
+  sourceRef?: string;
+  targetRef: string;
+  message: string;
+  reason?: string;
+  /** The calling agent's native session ID, when the transport knows it. */
+  callerSessionId?: string;
+}
+
+function matchesSession(
+  session: { ref: string; nativeID: string },
+  value: string,
+): boolean {
+  return (
+    session.ref === value ||
+    session.nativeID === value ||
+    session.ref.endsWith(`:${value}`)
+  );
+}
+
+/**
+ * Cross-session work handoffs.
+ *
+ * An agent proposes; the hub stores a pending card in the source session. The
+ * owner edits/approves in that chat, and only then does the hub call the normal
+ * send path with an idempotency key. Proposal alone never messages the target.
+ */
+export class HandoffService {
+  private readonly now: () => number;
+  private readonly idFactory: () => string;
+
+  constructor(private readonly options: HandoffServiceOptions) {
+    this.now = options.now ?? Date.now;
+    this.idFactory = options.idFactory ?? (() => `hnd_${randomUUID()}`);
+  }
+
+  async propose(input: ProposeHandoffInput): Promise<Handoff> {
+    const message = input.message.trim();
+    if (!message) throw badRequest("A handoff message is required");
+    const source = await this.resolveSource(
+      input.sourceRef,
+      input.callerSessionId,
+    );
+    const target = await this.options.sessions.get(input.targetRef);
+    if (source.ref === target.ref) {
+      throw badRequest("A session cannot hand off work to itself");
+    }
+
+    const handoff: Handoff = {
+      id: this.idFactory(),
+      sourceRef: source.ref,
+      sourceTitle: source.title,
+      targetRef: target.ref,
+      targetTitle: target.title,
+      targetProviderID: target.providerID,
+      ...(target.project ? { targetProject: target.project } : {}),
+      message,
+      ...(input.reason ? { reason: input.reason.trim() } : {}),
+      status: "pending",
+      createdAt: this.now(),
+      updatedAt: this.now(),
+      createdBy: input.callerSessionId ? "agent" : "owner",
+    };
+
+    await this.options.store.update((state) => {
+      const pending = state.handoffs.filter(
+        (entry) =>
+          entry.sourceRef === handoff.sourceRef && entry.status === "pending",
+      );
+      if (pending.length >= MAX_PENDING_PER_SOURCE) {
+        throw conflict(
+          `This session already has ${MAX_PENDING_PER_SOURCE} pending handoffs`,
+        );
+      }
+      state.handoffs.unshift(handoff);
+      state.handoffs = state.handoffs.slice(0, 100);
+    });
+    await this.publish("handoff.created", handoff);
+    return handoff;
+  }
+
+  list(query: { sourceRef?: string; status?: HandoffStatus } = {}): Handoff[] {
+    return this.options.store
+      .getState()
+      .handoffs.filter(
+        (handoff) =>
+          (!query.sourceRef || handoff.sourceRef === query.sourceRef) &&
+          (!query.status || handoff.status === query.status),
+      )
+      .sort((left, right) => right.createdAt - left.createdAt);
+  }
+
+  get(id: string): Handoff | undefined {
+    return this.options.store
+      .getState()
+      .handoffs.find((handoff) => handoff.id === id);
+  }
+
+  async update(id: string, message: string): Promise<Handoff> {
+    const trimmed = message.trim();
+    if (!trimmed) throw badRequest("A handoff message is required");
+    const handoff = await this.mutate(id, (entry) => {
+      if (entry.status !== "pending" && entry.status !== "failed") {
+        throw conflict("Only a pending or failed handoff can be edited");
+      }
+      entry.message = trimmed;
+      entry.error = undefined;
+      entry.updatedAt = this.now();
+    });
+    await this.publish("handoff.updated", handoff);
+    return handoff;
+  }
+
+  async cancel(id: string): Promise<Handoff> {
+    const handoff = await this.mutate(id, (entry) => {
+      if (entry.status === "sent" || entry.status === "cancelled") {
+        throw conflict("This handoff is already closed");
+      }
+      entry.status = "cancelled";
+      entry.updatedAt = this.now();
+    });
+    await this.publish("handoff.updated", handoff);
+    return handoff;
+  }
+
+  async approve(id: string, message?: string): Promise<Handoff> {
+    const existing = this.get(id);
+    if (!existing) throw notFound("Handoff not found");
+    if (existing.status === "sent") return existing;
+    if (existing.status === "cancelled") {
+      throw conflict("This handoff was cancelled");
+    }
+    if (existing.status === "sending") {
+      throw conflict("This handoff is already being sent");
+    }
+
+    const text = (message ?? existing.message).trim();
+    if (!text) throw badRequest("A handoff message is required");
+    const sending = await this.mutate(id, (entry) => {
+      entry.message = text;
+      entry.status = "sending";
+      entry.error = undefined;
+      entry.updatedAt = this.now();
+    });
+    await this.publish("handoff.updated", sending);
+
+    try {
+      const result = await this.options.actions.send(
+        sending.targetRef,
+        { text: sending.message },
+        `handoff:${sending.id}`,
+      );
+      if (!result.accepted) {
+        throw new Error("The target session did not accept the handoff");
+      }
+      return await this.mutate(id, (entry) => {
+        entry.status = "sent";
+        entry.sentAt = this.now();
+        entry.updatedAt = this.now();
+        if (result.messageID) entry.sentMessageID = result.messageID;
+      }).then(async (handoff) => {
+        await this.publish("handoff.updated", handoff);
+        return handoff;
+      });
+    } catch (reason) {
+      const failed = await this.mutate(id, (entry) => {
+        entry.status = "failed";
+        entry.error =
+          reason instanceof Error ? reason.message : String(reason);
+        entry.updatedAt = this.now();
+      });
+      await this.publish("handoff.updated", failed);
+      return failed;
+    }
+  }
+
+  private async resolveSource(
+    sourceRef?: string,
+    callerSessionId?: string,
+  ) {
+    const candidates = [sourceRef, callerSessionId].filter(
+      (value): value is string => Boolean(value),
+    );
+    if (candidates.length === 0) {
+      throw badRequest("A source session is required");
+    }
+    for (const candidate of candidates) {
+      try {
+        return await this.options.sessions.get(candidate);
+      } catch {
+        // Fall through to the session search by native ID.
+      }
+      const page = await this.options.sessions.list({
+        q: candidate,
+        limit: 50,
+      });
+      const found = page.data.find((session) =>
+        matchesSession(session, candidate),
+      );
+      if (found) return found;
+    }
+    throw notFound("Source session not found");
+  }
+
+  private async mutate(
+    id: string,
+    mutator: (handoff: Handoff) => void,
+  ): Promise<Handoff> {
+    let result: Handoff | undefined;
+    await this.options.store.update((state) => {
+      const handoff = state.handoffs.find((entry) => entry.id === id);
+      if (!handoff) return;
+      mutator(handoff);
+      result = { ...handoff };
+    });
+    if (!result) throw notFound("Handoff not found");
+    return result;
+  }
+
+  private async publish(type: "handoff.created" | "handoff.updated", handoff: Handoff) {
+    await this.options.events
+      .publish(type, { handoff }, { sessionRef: handoff.sourceRef })
+      .catch(() => undefined);
+  }
+}
