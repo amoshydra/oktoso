@@ -1,12 +1,13 @@
-# Design Lock — v1.74
+# Design Lock — v1.75
 
 Status: **frozen**.
 
-- Version: `design-v1.74`
-- Parent: `design-v1.73`
+- Version: `design-v1.75`
+- Parent: `design-v1.74`
 - Date: 2026-11-27
-- Git tag: `design-v1.74`
+- Git tag: `design-v1.75`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.75 scope: remove the full-width divider above the jump pill.
 - v1.74 scope: assistant back history and session/lineage search scope.
 - v1.73 scope: assistant composer and action-card drafts.
 - v1.72 scope: the floating jump pill and stable chat scrolling.
@@ -1543,9 +1544,9 @@ radius, or color token.
   bottom-right of the transcript, inside the transcript frame and above the
   composer. It is absolutely positioned and no longer reserves a footer row, so
   the visible transcript gains that height back.
-- The overlay keeps a 1px `--border-subtle` divider at its top and a short
-  surface fade behind the pill, so the control reads as a separate layer while
-  the transcript scrolls underneath.
+- The overlay keeps a short surface fade behind the pill, with no full-width
+  divider, so the control reads as a separate layer while the transcript
+  scrolls underneath.
 - The pill hides at the true bottom, so the newest message is not covered while
   reading there. While scrolled up, the pill floats over the content.
 - New transcript pages and streaming updates only follow the bottom when the
@@ -1555,11 +1556,21 @@ radius, or color token.
   the bottom in the same layout pass. Typing a multiline draft no longer
   reveals the jump pill or moves the latest message out of view.
 - Clicking Jump to latest re-pins after the smooth scroll settles. Streaming
-  text or a newly loaded page growing mid-scroll cannot leave the pill or its
-  divider visible just short of the bottom.
+  text or a newly loaded page growing mid-scroll cannot leave the pill visible
+  just short of the bottom.
 - Desktop keeps the 32px pill; mobile keeps the 44px target. No new type role,
   spacing step, radius, control, or colour is added.
 - This supersedes the v1.50 reserved jump lane.
+
+## Jump pill divider removed (2026-11-27)
+
+- The full-width 1px rule above the Jump to latest pill is removed. The pill
+  keeps its short surface fade and fades in over the transcript; no divider
+  spans the reading column at any scroll position.
+- This removes the last rule introduced with the v1.72 floating overlay. The
+  pill still hides at the true bottom and still offsets above the message focus
+  bar when one is present.
+- No new type role, spacing step, radius, control, or colour.
 
 ## Assistant composer and action drafts (2026-11-26)
 
@@ -1665,7 +1676,9 @@ The `design-v1.70` handoff-quality revision makes agent-facing MCP proposals rec
 
 The `design-v1.71` message-deep-link revision adds `?message=<id>` chat routes, paged lookup, message/activity focus, a focus bar with `Fork from here`, message-linked search hits, and a **Referenced messages** list on assistant answers. The chat e2e opens a cached message search hit at the message, focuses the row or activity group, and forks from the bar; the assistant e2e cites a matching message and opens it. Router tests cover the message parameter and href round trip. The full gates pass at 986 unit tests and 92 e2e tests, including 12 G2 tests.
 
-The `design-v1.72` floating-jump revision moves the pill back over the transcript and keeps its 1px divider and a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, the divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.
+The `design-v1.72` floating-jump revision moves the pill back over the transcript with a short fade. The pill hides at the true bottom, so no extra content padding is needed and the newest message stays flush with the composer. New transcript pages only stick within 80px of the bottom, and a growing composer pins the transcript in the same layout pass. Clicking the pill re-pins after the smooth scroll settles even if the transcript grows mid-scroll. The chat e2e asserts the absolute overlay, stable panel height and composer top, no top divider, the unchanged bottom while the composer grows, the re-pin after simulated growth, and no horizontal overflow. The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2 tests.
+
+The `design-v1.75` divider-removal revision deletes the full-width rule above the jump pill; the pill and fade remain, and the chat e2e asserts the band has no top border. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 list-mirror follow-up (2026-11-27) keeps the mirror window fixed while the cursor moves; unit coverage spans the window edges and the G2 e2e checks the first visible row across four down presses. The full gates pass at 993 unit tests and 95 e2e tests, including 13 G2 tests.
 

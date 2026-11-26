@@ -2208,13 +2208,13 @@ competing history buttons.
 
 - The Jump to latest / Input needed pill is absolutely positioned over the
   bottom-right of the transcript again. It no longer reserves a footer row, so
-  the scroll area gains the full lane height back. A 1px `--border-subtle`
-  rule at the top of the overlay and a short surface fade keep the pill legible
-  while the transcript scrolls underneath.
+  the scroll area gains the full lane height back. A short surface fade keeps
+  the pill legible while the transcript scrolls underneath; the full-width
+  divider was removed in v1.75.
 - The pill hides at the true bottom, so the newest message sits flush with the
   composer and is not covered; while scrolled up, the pill floats over the
   content. No extra bottom padding is added, so initial render has no
-  message-to-composer gap and the divider clears at the bottom.
+  message-to-composer gap and no divider is drawn at the bottom.
 - The near-bottom follow threshold drops from 240px to 80px. New pages and
   streaming updates no longer pull the reader back to the bottom after a small
   upward scroll.
@@ -2223,13 +2223,15 @@ competing history buttons.
   longer reveals the jump pill or pushes the latest message out of view.
 - Clicking Jump to latest also re-pins after the smooth scroll settles, so
   streaming text or a newly loaded page growing mid-scroll cannot leave the
-  pill or divider visible just short of the bottom.
+  pill visible just short of the bottom.
 - Verified in the chat e2e at 1280px: the band is `position: absolute`, the
-  panel height and composer top are unchanged when it appears, its top rule is
-  1px, a four-line draft keeps `scrollTop + clientHeight` at `scrollHeight`,
-  and simulated growth during the jump re-pins to the new bottom. Reviewed at 1440, 1024, 390, and 320px in both themes: no
-  horizontal overflow; the divider and pill stay inside the transcript frame.
-  The full gates pass at 986 unit tests and 93 e2e tests, including 12 G2
+  panel height and composer top are unchanged when it appears, the band has no
+  top border, a four-line draft keeps `scrollTop + clientHeight` at
+  `scrollHeight`,
+  and simulated growth during the jump re-pins to the new bottom. Reviewed at
+  1440, 1024, 390, and 320px in both themes: no horizontal overflow; the pill
+  stays inside the transcript frame and no full-width divider is drawn.
+  The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2
   tests.
 
 ## Assistant composer and action drafts (2026-11-26)

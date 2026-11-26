@@ -182,8 +182,9 @@ Activity is derived from the transcript, not a new endpoint.
   transcript and never moves the composer.
 - Jump to latest is a floating pill at the transcript's bottom-right. It fades
   in only when the reader is away from the true bottom and never occupies
-  layout. A 1px divider and short surface fade sit behind it. It hides at the
-  true bottom, so the newest message stays flush with the composer. The
+  layout. A short surface fade sits behind it, with no full-width divider. It
+  hides at the true bottom, so the newest message stays flush with the
+  composer. The
   transcript content fades at overflowing edges through a 24px mask; the panel
   frame stays crisp.
 

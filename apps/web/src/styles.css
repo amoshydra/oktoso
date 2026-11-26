@@ -5313,13 +5313,11 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   display: flex;
   justify-content: flex-end;
   padding: var(--space-1) var(--space-4) var(--space-3);
-  border-top: 1px solid var(--border-subtle);
   background: linear-gradient(to top, var(--surface) 58%, transparent);
   pointer-events: none;
 }
 
 .chat-jump-band[data-visible="false"] {
-  border-top-color: transparent;
   background: transparent;
 }
 

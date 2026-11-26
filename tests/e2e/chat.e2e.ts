@@ -588,11 +588,6 @@ describe("chat sending", () => {
     expect(await page!.locator(".chat-jump-band").getAttribute("data-visible")).toBe(
       "false",
     );
-    expect(
-      await page!
-        .locator(".chat-jump-band")
-        .evaluate((element) => getComputedStyle(element).borderTopColor),
-    ).toMatch(/rgba?\(0, 0, 0, 0\)|transparent/);
   });
 
   it("shows Open WebUI folders and sends an attachment", async () => {
@@ -910,7 +905,7 @@ describe("composer layout", () => {
     expect(geometry.composerTop).toBe(before.composerTop);
     expect(geometry.bandBottom).toBeGreaterThanOrEqual(geometry.panelBottom - 1);
     expect(geometry.bandTop).toBeLessThan(geometry.panelBottom);
-    expect(geometry.bandBorderTop).not.toBe("0px");
+    expect(geometry.bandBorderTop).toBe("0px");
     expect(geometry.buttonTop).toBeGreaterThanOrEqual(geometry.bandTop - 1);
     expect(geometry.buttonBottom).toBeLessThanOrEqual(geometry.bandBottom + 1);
   });
