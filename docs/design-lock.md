@@ -1,12 +1,13 @@
-# Design Lock — v1.68
+# Design Lock — v1.69
 
 Status: **frozen**.
 
-- Version: `design-v1.68`
-- Parent: `design-v1.67`
+- Version: `design-v1.69`
+- Parent: `design-v1.68`
 - Date: 2026-11-26
-- Git tag: `design-v1.68`
+- Git tag: `design-v1.69`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.69 scope: the handoff cancellation notice.
 - v1.68 scope: pending handoffs abort when the source session gets a new user message.
 - v1.67 scope: handoff receipts in transcript time order.
 - v1.66 scope: the assistant handoff action.
@@ -1483,6 +1484,19 @@ radius, or color token.
   left alone. Sent receipts are unaffected.
 - No new type role, spacing step, radius, control, or colour.
 
+## Handoff cancellation notice (2026-11-26)
+
+- When a pending handoff is cancelled, the transcript shows a quiet inline
+  notice at the bottom: `Pending handoff cancelled because the session moved
+  on.` for a new user message, or `Handoff cancelled.` for a manual cancel.
+  The notice is 11px muted text on `surface-2` with a subtle border and a
+  `Dismiss` action. It auto-hides after six seconds and is announced politely.
+- The cancelled card itself leaves the transcript; the notice explains the
+  disappearance without keeping a stale action. A failed handoff still stays
+  for Retry, and a sent receipt is unaffected.
+- The cancel reason is hub metadata (`manual` or `session-advanced`) and does
+  not add a type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1547,3 +1561,5 @@ The `design-v1.66` assistant-handoff revision adds `handoff` as a fourth assista
 The `design-v1.67` ordering revision merges sent handoff receipts into the transcript at their sent time and rebuilds date separators around the combined timeline. Pending, failed, and sending cards stay at the end as actionable cards. The chat e2e sends a prompt after the receipt and asserts the receipt precedes the later message, proving it is ordered by time rather than appended to the bottom. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.
 
 The `design-v1.68` abort revision cancels pending handoffs when the source session receives a new user message, so a stale action does not remain at the bottom. User-message updates only abort proposals created at or before that message; older updates, other sessions, assistant messages, and sent handoffs are left alone. The chat e2e creates a pending proposal, sends a prompt, and asserts the card disappears and the handoff becomes `cancelled`. Unit tests cover the abort path, older-message updates, other-session messages, and sent-handoff safety. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.
+
+The `design-v1.69` cancellation-notice revision explains the disappearance with a quiet inline notice: `Pending handoff cancelled because the session moved on.` for a new user message, or `Handoff cancelled.` for a manual cancel. The notice is dismissible, clears after six seconds, and is announced politely. The chat e2e asserts the notice appears and can be dismissed. The full gates pass at 982 unit tests and 90 e2e tests, including 12 G2 tests.

@@ -188,12 +188,16 @@ export class HandoffService {
     return handoff;
   }
 
-  async cancel(id: string): Promise<Handoff> {
+  async cancel(
+    id: string,
+    reason: "manual" | "session-advanced" = "manual",
+  ): Promise<Handoff> {
     const handoff = await this.mutate(id, (entry) => {
       if (entry.status === "sent" || entry.status === "cancelled") {
         throw conflict("This handoff is already closed");
       }
       entry.status = "cancelled";
+      entry.cancelReason = reason;
       entry.updatedAt = this.now();
     });
     await this.publish("handoff.updated", handoff);
@@ -220,7 +224,7 @@ export class HandoffService {
     const cancelled: Handoff[] = [];
     for (const handoff of pending) {
       try {
-        cancelled.push(await this.cancel(handoff.id));
+        cancelled.push(await this.cancel(handoff.id, "session-advanced"));
       } catch {
         // A concurrent decision may have moved it; leave that outcome alone.
       }

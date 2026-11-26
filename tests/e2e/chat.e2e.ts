@@ -1952,6 +1952,13 @@ describe("handoff", () => {
     await expect
       .poll(() => pending.count(), { timeout: 10_000 })
       .toBe(0);
+    const notice = page!.locator(".handoff-notice");
+    await notice.waitFor({ state: "visible", timeout: 10_000 });
+    await expect(notice.innerText()).resolves.toContain(
+      "Pending handoff cancelled because the session moved on.",
+    );
+    await notice.getByRole("button", { name: "Dismiss" }).click();
+    await expect.poll(() => notice.count()).toBe(0);
     await expect
       .poll(
         async () => {

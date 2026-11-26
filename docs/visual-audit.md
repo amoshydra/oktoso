@@ -2103,6 +2103,11 @@ competing history buttons.
   message; its card leaves the transcript rather than lingering as a stale
   action. A failed proposal stays for explicit Retry, and a sending handoff is
   left alone. Sent receipts are unaffected.
+- The cancellation leaves a quiet inline notice at the bottom:
+  `Pending handoff cancelled because the session moved on.` for a new user
+  message, or `Handoff cancelled.` for a manual cancel. It uses 11px muted text,
+  `surface-2`, a subtle border, and a `Dismiss` action; it clears after six
+  seconds and is announced politely. It is a notice, not another card.
 - When the provider accepted a synthetic receipt, the sent card adds a second
   faint line: `Session receipt queued for its next turn.` The line uses the
   existing 11px hint role and tabular figures. The OpenCode v2 receipt is in the
@@ -2117,11 +2122,12 @@ competing history buttons.
   contains a synthetic item; a reload keeps the receipt. A prompt sent after the
   receipt appears below it, proving the receipt is ordered by time rather than
   appended to the bottom. A second e2e creates a pending proposal, sends a
-  prompt, and asserts the card disappears and the handoff status becomes
-  `cancelled`. Unit tests cover proposal, caller resolution,
-  approval/idempotency, failed retry, cancel, the one-send path, receipt
-  queueing, receipt failure, and backfill idempotency, plus user-message abort,
-  older-message updates, other-session messages, and sent-handoff safety.
+  prompt, asserts the card disappears, the cancellation notice appears and can
+  be dismissed, and the handoff status becomes `cancelled`. Unit tests cover
+  proposal, caller resolution, approval/idempotency, failed retry, cancel, the
+  one-send path, receipt queueing, receipt failure, and backfill idempotency,
+  plus user-message abort, older-message updates, other-session messages, and
+  sent-handoff safety.
 
 ## Question and edit/fork drafts (2026-11-26)
 

@@ -24,6 +24,8 @@ export const zHandoff = z.object({
   sentAt: z.number().int().nonnegative().optional(),
   /** Set when the hub queued a provider-visible receipt for the next turn. */
   receiptQueuedAt: z.number().int().nonnegative().optional(),
+  /** Why the proposal was cancelled; absent for older records. */
+  cancelReason: z.enum(["manual", "session-advanced"]).optional(),
   error: z.string().optional(),
   createdBy: z.string().optional(),
   sentMessageID: z.string().optional(),

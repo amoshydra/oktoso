@@ -1368,7 +1368,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.68 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.69 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -4924,6 +4924,7 @@ function SessionDetail(props: {
   const [handoffDrafts, setHandoffDrafts] = useState<Record<string, string>>({});
   const [handoffBusy, setHandoffBusy] = useState<string>();
   const [handoffNotice, setHandoffNotice] = useState("");
+  const [handoffAbortNotice, setHandoffAbortNotice] = useState("");
   const [handoffError, setHandoffError] = useState<string>();
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [queuedOpen, setQueuedOpen] = useState(false);
@@ -5135,23 +5136,46 @@ function SessionDetail(props: {
     void loadHandoffs().catch(() => undefined);
   }, [loadHandoffs]);
 
-  const handoffLiveSeq = props.events.reduce(
-    (max, event) =>
-      event.type === "handoff.created" || event.type === "handoff.updated"
-        ? Math.max(max, event.seq)
-        : max,
-    0,
-  );
+  const latestHandoffEvent = useMemo(() => {
+    let latest: HubEvent | undefined;
+    for (const event of props.events) {
+      if (
+        event.type !== "handoff.created" &&
+        event.type !== "handoff.updated"
+      ) {
+        continue;
+      }
+      if (event.sessionRef !== props.sessionRef) continue;
+      if (!latest || event.seq > latest.seq) latest = event;
+    }
+    return latest;
+  }, [props.events, props.sessionRef]);
+  const handoffLiveSeq = latestHandoffEvent?.seq ?? 0;
   useEffect(() => {
     if (!handoffLiveSeq) return;
     void loadHandoffs().catch(() => undefined);
-  }, [handoffLiveSeq, loadHandoffs]);
+    if (latestHandoffEvent?.type !== "handoff.updated") return;
+    const handoff = (latestHandoffEvent.data as { handoff?: Handoff } | undefined)
+      ?.handoff;
+    if (handoff?.status !== "cancelled") return;
+    setHandoffAbortNotice(
+      handoff.cancelReason === "session-advanced"
+        ? "Pending handoff cancelled because the session moved on."
+        : "Handoff cancelled.",
+    );
+  }, [handoffLiveSeq, latestHandoffEvent, loadHandoffs]);
 
   useEffect(() => {
     if (!handoffNotice) return;
     const timer = window.setTimeout(() => setHandoffNotice(""), 4_000);
     return () => window.clearTimeout(timer);
   }, [handoffNotice]);
+
+  useEffect(() => {
+    if (!handoffAbortNotice) return;
+    const timer = window.setTimeout(() => setHandoffAbortNotice(""), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [handoffAbortNotice]);
 
   const sendHandoff = async (handoff: Handoff) => {
     const message = (handoffDrafts[handoff.id] ?? handoff.message).trim();
@@ -7067,6 +7091,7 @@ function SessionDetail(props: {
   }, [
     atBottom,
     backgroundItems.length,
+    handoffAbortNotice,
     handoffs.length,
     loading,
     stepPanelOpen,
@@ -7387,6 +7412,19 @@ function SessionDetail(props: {
                       onCancel={() => void cancelHandoff(handoff)}
                     />
                   ))}
+                </div>
+              ) : null}
+
+              {handoffAbortNotice ? (
+                <div className="handoff-notice" role="status">
+                  <span>{handoffAbortNotice}</span>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => setHandoffAbortNotice("")}
+                  >
+                    Dismiss
+                  </button>
                 </div>
               ) : null}
               </section>

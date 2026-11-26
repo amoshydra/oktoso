@@ -277,6 +277,7 @@ describe("HandoffService", () => {
     });
     const cancelled = await service.cancel("hnd_test");
     expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.cancelReason).toBe("manual");
     await expect(service.approve("hnd_test")).rejects.toThrow(/cancelled/);
     expect(send).not.toHaveBeenCalled();
   });
@@ -301,6 +302,9 @@ describe("HandoffService", () => {
     await waitFor(
       () =>
         service.list({ sourceRef: source.ref })[0]?.status === "cancelled",
+    );
+    expect(service.list({ sourceRef: source.ref })[0]?.cancelReason).toBe(
+      "session-advanced",
     );
     expect(service.list({ sourceRef: source.ref })).toHaveLength(1);
   });
