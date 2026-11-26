@@ -331,7 +331,11 @@ The owner edits, approves, or cancels the card there; only approval calls the
 normal send path, with a stable handoff idempotency key. The tool is available
 without `--allow-write` because it cannot message the target directly. The
 source chat keeps sent handoffs as read-only receipts rendered from hub state;
-the hub never injects them into the provider transcript.
+the hub never injects them into the provider transcript as a user message. On
+OpenCode v2, sending also queues a synthetic receipt in the source session with
+`resume:false`; it starts no turn and appears as a provider notice on the
+session's next run. A failed queue does not fail the send, and
+`POST /api/v1/handoffs/:id/receipt` retries it.
 
 ## Controller policy
 

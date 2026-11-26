@@ -662,7 +662,7 @@ fixed-grammar wrap grid.
 ### Files changed
 
 - `packages/contracts/src/messages.ts`: tool `metadata`/`startedAt`/`completedAt`, and the `compaction` part.
-- `packages/providers/src/opencode/adapter.ts`: tool metadata and timings, compaction messages, synthetic still dropped.
+- `packages/providers/src/opencode/adapter.ts`: tool metadata and timings, compaction messages, synthetic records still dropped from the hub transcript.
 - `apps/web/src/app/activity.ts`, `activity.test.ts`: step extraction, families, status, metrics.
 - `apps/web/src/app/metrics.ts`, `metrics.test.ts`: compact numbers, bytes, durations, diffs, pixels.
 - `apps/web/src/app/App.tsx`: `ActivityTiles`, `StepPanel`, `StepBody`, `CompactionRow`; the old activity rows and tool disclosure are gone.
@@ -2068,13 +2068,20 @@ competing history buttons.
   success colour, the left rule turns success, and `Sent <date and time>` uses
   tabular figures. Send and Cancel are removed. The transcript keeps the newest
   five sent receipts per session plus every open proposal.
+- When the provider accepted a synthetic receipt, the sent card adds a second
+  faint line: `Session receipt queued for its next turn.` The line uses the
+  existing 11px hint role and tabular figures. The OpenCode v2 receipt is in the
+  inbox with `resume:false`; it does not start a turn and becomes a synthetic
+  transcript notice on the next run.
 - The card uses the existing border, surface, radius, and button grammar. It
   adds no type role, spacing step, radius, or colour.
 - Verified in the chat e2e at 1280px: an owner-created handoff appears in the
   source chat with the target title and editable message; Send turns it into a
   read-only receipt inside `.chat-panel` with no textarea and no Send action;
-  a reload keeps the receipt. Unit tests cover proposal, caller resolution,
-  approval/idempotency, failed retry, cancel, and the one-send path.
+  the card reports the queued session receipt; the fake provider's source inbox
+  contains a synthetic item; a reload keeps the receipt. Unit tests cover
+  proposal, caller resolution, approval/idempotency, failed retry, cancel, the
+  one-send path, receipt queueing, receipt failure, and backfill idempotency.
 
 ## Question and edit/fork drafts (2026-11-26)
 

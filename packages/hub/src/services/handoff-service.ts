@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   Handoff,
   HandoffStatus,
 } from "@amoshydra/oktoso-contracts";
 import type { StateStore } from "@amoshydra/oktoso-storage";
-import { badRequest, conflict, notFound } from "../domain/errors";
+import { badRequest, conflict, notFound, notImplemented } from "../domain/errors";
 import type { EventBus } from "./event-bus";
 import type { SessionActions } from "./session-actions";
 import type { SessionService } from "./session-service";
@@ -38,6 +38,38 @@ function matchesSession(
     session.nativeID === value ||
     session.ref.endsWith(`:${value}`)
   );
+}
+
+function shortLabel(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+/**
+ * Build the provider-visible receipt that is queued for the source session.
+ *
+ * The text is model-visible at the session's next turn, so it states plainly
+ * that no action is required. The description is the short transcript label.
+ */
+function syntheticReceipt(handoff: Handoff, at: number) {
+  const timestamp = new Date(at).toISOString();
+  return {
+    id: `msg_handoff_${createHash("sha256")
+      .update(handoff.id)
+      .digest("hex")
+      .slice(0, 24)}`,
+    description: shortLabel(`Handoff sent to ${handoff.targetTitle}`, 120),
+    text: [
+      `Handoff receipt: the owner sent a handoff from this session to "${handoff.targetTitle}" (${handoff.targetRef}) at ${timestamp}.`,
+      "No action is required.",
+      "The target received this instruction:",
+      handoff.message,
+    ].join("\n\n"),
+    metadata: {
+      handoffID: handoff.id,
+      sourceRef: handoff.sourceRef,
+      targetRef: handoff.targetRef,
+    },
+  };
 }
 
 /**
@@ -175,11 +207,19 @@ export class HandoffService {
       if (!result.accepted) {
         throw new Error("The target session did not accept the handoff");
       }
+      const sentAt = this.now();
+      // Best effort: the handoff is already sent. A provider without synthetic
+      // notices, or a transient failure, must not turn the send into a failure.
+      const receiptQueued = await this.queueSyntheticReceipt(
+        sending,
+        sentAt,
+      ).catch(() => false);
       return await this.mutate(id, (entry) => {
         entry.status = "sent";
-        entry.sentAt = this.now();
-        entry.updatedAt = this.now();
+        entry.sentAt = sentAt;
+        entry.updatedAt = sentAt;
         if (result.messageID) entry.sentMessageID = result.messageID;
+        if (receiptQueued) entry.receiptQueuedAt = sentAt;
       }).then(async (handoff) => {
         await this.publish("handoff.updated", handoff);
         return handoff;
@@ -194,6 +234,45 @@ export class HandoffService {
       await this.publish("handoff.updated", failed);
       return failed;
     }
+  }
+
+  /**
+   * Queue the provider-visible receipt for an already-sent handoff.
+   *
+   * Sending does this best-effort; this method also backs the manual/backfill
+   * endpoint. The synthetic message ID is deterministic, so a retry does not
+   * add a second notice.
+   */
+  async queueReceipt(id: string): Promise<Handoff> {
+    const existing = this.get(id);
+    if (!existing) throw notFound("Handoff not found");
+    if (existing.status !== "sent") {
+      throw conflict("Only a sent handoff can queue a receipt");
+    }
+    if (existing.receiptQueuedAt) return existing;
+    const queued = await this.queueSyntheticReceipt(
+      existing,
+      existing.sentAt ?? this.now(),
+    );
+    if (!queued) {
+      throw notImplemented("This provider does not expose synthetic notices");
+    }
+    const handoff = await this.mutate(id, (entry) => {
+      entry.receiptQueuedAt = this.now();
+      entry.updatedAt = this.now();
+    });
+    await this.publish("handoff.updated", handoff);
+    return handoff;
+  }
+
+  private async queueSyntheticReceipt(
+    handoff: Handoff,
+    at: number,
+  ): Promise<boolean> {
+    return this.options.sessions.queueSynthetic(
+      handoff.sourceRef,
+      syntheticReceipt(handoff, at),
+    );
   }
 
   private async resolveSource(

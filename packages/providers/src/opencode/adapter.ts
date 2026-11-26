@@ -28,6 +28,7 @@ import type {
   ProviderResourceOpen,
   ProviderResourceOptions,
   ProviderSendInput,
+  ProviderSyntheticInput,
 } from "../types";
 import { ProviderError } from "../errors";
 import { normalizeSessionPath } from "../files";
@@ -349,6 +350,30 @@ export class OpenCodeAdapter implements ProviderAdapter {
       ...(response.data?.id ? { messageID: response.data.id } : {}),
       delivery: response.data?.delivery ?? delivery,
     };
+  }
+
+  async queueSynthetic(
+    ref: string,
+    input: ProviderSyntheticInput,
+    signal: AbortSignal,
+  ): Promise<{ id?: string }> {
+    const nativeID = this.nativeID(ref);
+    const response = await this.request<{ data?: { id?: string } }>(
+      `/api/session/${encodeURIComponent(nativeID)}/synthetic`,
+      {},
+      signal,
+      "POST",
+      {
+        text: input.text,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.metadata ? { metadata: input.metadata } : {}),
+        ...(input.id ? { id: input.id } : {}),
+        // A receipt must never start a turn. The provider delivers it on the
+        // session's next run.
+        resume: false,
+      },
+    );
+    return { ...(response.data?.id ? { id: response.data.id } : {}) };
   }
 
   async forkSession(

@@ -22,6 +22,8 @@ export const zHandoff = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   sentAt: z.number().int().nonnegative().optional(),
+  /** Set when the hub queued a provider-visible receipt for the next turn. */
+  receiptQueuedAt: z.number().int().nonnegative().optional(),
   error: z.string().optional(),
   createdBy: z.string().optional(),
   sentMessageID: z.string().optional(),

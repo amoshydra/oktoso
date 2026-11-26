@@ -1,12 +1,13 @@
-# Design Lock — v1.64
+# Design Lock — v1.65
 
 Status: **frozen**.
 
-- Version: `design-v1.64`
-- Parent: `design-v1.63`
+- Version: `design-v1.65`
+- Parent: `design-v1.64`
 - Date: 2026-11-26
-- Git tag: `design-v1.64`
+- Git tag: `design-v1.65`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.65 scope: provider-visible handoff receipts.
 - v1.64 scope: question and edit/fork draft slots.
 - v1.63 scope: sent handoff receipts in the source transcript.
 - v1.62 scope: the handoff card moves into the transcript.
@@ -1408,6 +1409,28 @@ radius, or color token.
 - No new type role, spacing step, radius, control, or colour. The status lines
   use the existing hint/form-note role.
 
+## Provider-visible handoff receipts (2026-11-26)
+
+- Sending a handoff also queues a provider-supported synthetic receipt in the
+  source session. OpenCode v2 stores it in the inbox with `resume:false`, so it
+  starts no turn; the provider delivers it as a synthetic transcript notice
+  when the session next runs. The source agent sees the receipt in its context
+  at that turn.
+- The receipt names the target and time, says no action is required, and
+  includes the instruction the target received. The provider transcript label
+  is the short `Handoff sent to <target>` description. The receipt is
+  model-visible, so it is written as a status note rather than an instruction.
+- The sent card shows `Session receipt queued for its next turn.` when the
+  provider accepted the receipt. If the provider has no synthetic-message
+  capability, or queueing fails, the send still succeeds and the hub receipt
+  remains the record. A sent handoff can retry through
+  `POST /api/v1/handoffs/:id/receipt`.
+- This supersedes the v1.63 “not injected” note. The hub still does not
+  fabricate a provider user message or alter the sent transcript; it uses the
+  provider's own synthetic-notice API, which is delayed, model-visible, and
+  explicitly not a turn.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1464,3 +1487,5 @@ The `design-v1.62` placement revision keeps the same handoff card but moves it i
 The `design-v1.63` sent-receipt revision keeps the card after approval as a read-only record: the message becomes prose, the status reads `Sent` with a timestamp, and the Send/Cancel actions are gone. The chat e2e sends a handoff, asserts the receipt remains inside `.chat-panel` with the message and without actions, reloads, and asserts the receipt is still there. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.
 
 The `design-v1.64` draft-slot revision is covered in the chat e2e: a question answer typed in the Inbox is restored after reload, and an edit-and-fork message is restored after reload and cleared by Cancel. The full gates pass at 972 unit tests and 88 e2e tests, including 12 G2 tests.
+
+The `design-v1.65` provider-receipt revision queues an OpenCode v2 synthetic notice for a sent handoff with `resume:false`. The notice enters the source inbox without starting a turn and appears as a synthetic transcript notice on the next run; the sent card reports `Session receipt queued for its next turn.` The chat e2e asserts the note, finds the synthetic item in the fake provider's source inbox, and keeps both the receipt and the note after a reload. Unit tests cover receipt queueing, a receipt failure that still leaves the handoff sent, backfill idempotency, and refusal before send. The full gates pass at 976 unit tests and 88 e2e tests, including 12 G2 tests.

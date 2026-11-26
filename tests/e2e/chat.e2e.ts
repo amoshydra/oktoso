@@ -1871,6 +1871,32 @@ describe("handoff", () => {
     expect(
       await receipt.getByRole("button", { name: "Send handoff" }).count(),
     ).toBe(0);
+    await expect(receipt.innerText()).resolves.toContain(
+      "Session receipt queued for its next turn.",
+    );
+
+    await expect
+      .poll(
+        async () => {
+          const response = await page!.request.get(
+            `${providers[0]!.url}/api/session/ses_auth/inbox`,
+          );
+          if (!response.ok()) return false;
+          const body = (await response.json()) as {
+            data?: Array<{
+              type?: string;
+              payload?: { description?: string };
+            }>;
+          };
+          return (body.data ?? []).some(
+            (item) =>
+              item.type === "synthetic" &&
+              item.payload?.description?.startsWith("Handoff sent to"),
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     await page!.reload();
     await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });

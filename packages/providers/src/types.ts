@@ -111,6 +111,22 @@ export interface ProviderSendInput extends SendInput {
   files?: ProviderAttachment[];
 }
 
+/**
+ * A durable synthetic notice for a session's next turn.
+ *
+ * The provider must not start a turn. OpenCode v2 admits it to the inbox and
+ * promotes it to a synthetic transcript notice when the session next runs.
+ */
+export interface ProviderSyntheticInput {
+  text: string;
+  /** Short label shown in the transcript instead of the full text. */
+  description?: string;
+  /** Stored on the message; the model does not see it. */
+  metadata?: Record<string, unknown>;
+  /** Stable provider message ID so a retry does not add a second notice. */
+  id?: string;
+}
+
 export interface ProviderInboxItem {
   id: string;
   type: string;
@@ -137,6 +153,12 @@ export interface ProviderAdapter {
     input: ProviderSendInput,
     signal: AbortSignal,
   ): Promise<SendResult>;
+  /** Queue a synthetic notice without starting a turn. */
+  queueSynthetic?(
+    ref: string,
+    input: ProviderSyntheticInput,
+    signal: AbortSignal,
+  ): Promise<{ id?: string } | void>;
   createSession(input: CreateSessionInput, signal: AbortSignal): Promise<Session>;
 
   interrupt?(ref: string, signal: AbortSignal): Promise<void>;

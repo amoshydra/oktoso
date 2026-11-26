@@ -29,10 +29,22 @@ const target: Session = {
   createdAt: 1,
 };
 
-function setup(sendResult: { accepted: boolean; messageID?: string } = { accepted: true, messageID: "msg_1" }) {
+function setup(
+  sendResult: { accepted: boolean; messageID?: string } = {
+    accepted: true,
+    messageID: "msg_1",
+  },
+  queueResult: boolean | Error = true,
+) {
   const store = new MemoryStateStore();
   const send = vi.fn(async () => sendResult);
   const publish = vi.fn(async () => ({}) as never);
+  const queueSynthetic = vi.fn(
+    async (_ref: string, _input: Record<string, unknown>) => {
+      if (queueResult instanceof Error) throw queueResult;
+      return queueResult;
+    },
+  );
   const sessions = {
     get: vi.fn(async (ref: string) => {
       if (ref === source.ref) return source;
@@ -43,6 +55,7 @@ function setup(sendResult: { accepted: boolean; messageID?: string } = { accepte
       data: [source, target],
       cursor: { next: null, previous: null },
     })),
+    queueSynthetic,
   } as unknown as SessionService;
   const service = new HandoffService({
     store,
@@ -52,7 +65,7 @@ function setup(sendResult: { accepted: boolean; messageID?: string } = { accepte
     now: () => 1_000,
     idFactory: () => "hnd_test",
   });
-  return { service, store, send, publish };
+  return { service, store, send, publish, queueSynthetic };
 }
 
 describe("HandoffService", () => {
@@ -106,7 +119,7 @@ describe("HandoffService", () => {
   });
 
   it("approves by sending once with an idempotency key", async () => {
-    const { service, send, publish } = setup();
+    const { service, send, publish, queueSynthetic } = setup();
     await service.propose({
       sourceRef: source.ref,
       targetRef: target.ref,
@@ -120,10 +133,74 @@ describe("HandoffService", () => {
     );
     expect(sent.status).toBe("sent");
     expect(sent.sentMessageID).toBe("msg_1");
+    expect(sent.receiptQueuedAt).toBe(1_000);
+    expect(queueSynthetic).toHaveBeenCalledWith(
+      source.ref,
+      expect.objectContaining({
+        description: "Handoff sent to 3D Kitchen",
+        text: expect.stringContaining("Final instruction."),
+        metadata: expect.objectContaining({
+          handoffID: "hnd_test",
+          targetRef: target.ref,
+        }),
+      }),
+    );
+    expect(queueSynthetic.mock.calls[0]?.[1].id).toMatch(/^msg_handoff_/);
     expect(publish).toHaveBeenLastCalledWith(
       "handoff.updated",
       { handoff: sent },
       { sessionRef: source.ref },
+    );
+  });
+
+  it("keeps a sent handoff when the receipt cannot be queued", async () => {
+    const { service, queueSynthetic } = setup(
+      { accepted: true, messageID: "msg_1" },
+      new Error("receipt unavailable"),
+    );
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+    });
+    const sent = await service.approve("hnd_test");
+    expect(sent.status).toBe("sent");
+    expect(sent.receiptQueuedAt).toBeUndefined();
+    expect(queueSynthetic).toHaveBeenCalledTimes(1);
+  });
+
+  it("backfills a receipt once for a sent handoff", async () => {
+    const { service, queueSynthetic } = setup(
+      { accepted: true, messageID: "msg_1" },
+      false,
+    );
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+    });
+    const sent = await service.approve("hnd_test");
+    expect(sent.receiptQueuedAt).toBeUndefined();
+
+    queueSynthetic.mockResolvedValueOnce(true);
+    const receipt = await service.queueReceipt("hnd_test");
+    expect(receipt.receiptQueuedAt).toBe(1_000);
+    expect(queueSynthetic).toHaveBeenCalledTimes(2);
+
+    const again = await service.queueReceipt("hnd_test");
+    expect(again.receiptQueuedAt).toBe(1_000);
+    expect(queueSynthetic).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a receipt before the handoff is sent", async () => {
+    const { service } = setup();
+    await service.propose({
+      sourceRef: source.ref,
+      targetRef: target.ref,
+      message: "Initial.",
+    });
+    await expect(service.queueReceipt("hnd_test")).rejects.toThrow(
+      /Only a sent handoff/,
     );
   });
 

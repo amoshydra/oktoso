@@ -69,6 +69,12 @@ export function registerHandoffRoutes(
     return c.json({ data: handoff });
   });
 
+  app.post("/api/v1/handoffs/:id/receipt", async (c) => {
+    return c.json({
+      data: await handoffs.queueReceipt(c.req.param("id")),
+    });
+  });
+
   app.post("/api/v1/handoffs/:id/cancel", async (c) => {
     return c.json({
       data: await handoffs.cancel(c.req.param("id")),

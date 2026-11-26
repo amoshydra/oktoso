@@ -394,7 +394,11 @@ interface FakeOpenCodeInboxItem {
   type: string;
   delivery: "steer" | "queue";
   time: { created: number };
-  payload: { text: string };
+  payload: {
+    text: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 const OPENCODE_INBOX: Record<string, FakeOpenCodeInboxItem[]> = {};
@@ -1207,6 +1211,43 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     });
     response.writeHead(204);
     response.end();
+    return;
+  }
+  const syntheticMatch = path.match(/^\/api\/session\/([^/]+)\/synthetic$/);
+  if (syntheticMatch && request.method === "POST") {
+    const sessionID = syntheticMatch[1] ?? "";
+    if (!OPENCODE_MESSAGES[sessionID]) {
+      sendJson(response, 404, {
+        _tag: "SessionNotFoundError",
+        message: "Session not found",
+      });
+      return;
+    }
+    const body = await readBody(request);
+    const text = typeof body.text === "string" ? body.text : "";
+    const id =
+      typeof body.id === "string" && body.id
+        ? body.id
+        : `msg_synthetic_${Date.now().toString(36)}`;
+    const items = (OPENCODE_INBOX[sessionID] ??= []);
+    const existing = items.find((item) => item.id === id);
+    const item: FakeOpenCodeInboxItem = existing ?? {
+      id,
+      type: "synthetic",
+      delivery: "steer",
+      time: { created: Date.now() },
+      payload: {
+        text,
+        ...(typeof body.description === "string"
+          ? { description: body.description }
+          : {}),
+        ...(body.metadata && typeof body.metadata === "object"
+          ? { metadata: body.metadata as Record<string, unknown> }
+          : {}),
+      },
+    };
+    if (!existing) items.push(item);
+    sendJson(response, 200, { data: { ...item, sessionID } });
     return;
   }
   const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/);

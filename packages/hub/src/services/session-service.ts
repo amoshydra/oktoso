@@ -26,6 +26,7 @@ import {
   type ProviderInboxItem,
   type ProviderResource,
   type ProviderResourceOpen,
+  type ProviderSyntheticInput,
 } from "@amoshydra/oktoso-providers";
 import { AppError, badRequest, conflict, notFound, notImplemented } from "../domain/errors";
 import { mediaMaxBytes, openBufferedResource } from "../http/resource-response";
@@ -739,6 +740,36 @@ export class SessionService {
     const session = this.sessions.get(ref);
     if (session) this.sessions.set(ref, { ...session, status: "running" });
     return result;
+  }
+
+  /**
+   * Queue a synthetic notice for the session's next turn.
+   *
+   * Returns false when the provider has no synthetic-message capability. The
+   * notice never starts a turn; it is delivered by the provider when the
+   * session next runs.
+   */
+  async queueSynthetic(
+    ref: string,
+    input: ProviderSyntheticInput,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const adapter = this.adapterForRef(ref);
+    if (!adapter) throw notFound("Session not found");
+    if (!adapter.queueSynthetic) return false;
+    this.assertProviderAvailable(adapter.id);
+    const operation = operationSignal(
+      this.registry,
+      adapter.id,
+      15_000,
+      5_000,
+    );
+    await adapter.queueSynthetic(
+      ref,
+      input,
+      signal ? AbortSignal.any([operation, signal]) : operation,
+    );
+    return true;
   }
 
   async listBranches(ref: string): Promise<BranchPoint[]> {

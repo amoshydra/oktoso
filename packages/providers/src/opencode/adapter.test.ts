@@ -777,6 +777,14 @@ async function promptServer(): Promise<{
         json(response, 200, { data: { id: "msg_new" } });
         return;
       }
+      if (url.pathname.endsWith("/synthetic")) {
+        json(response, 200, {
+          data: {
+            id: (body as { id?: string } | undefined)?.id ?? "msg_synthetic",
+          },
+        });
+        return;
+      }
       if (url.pathname.endsWith("/inbox")) {
         if (request.method === "GET") {
           json(response, 200, {
@@ -840,6 +848,34 @@ describe("OpenCodeAdapter delivery and inbox", () => {
       AbortSignal.timeout(5_000),
     );
     expect(result.delivery).toBe("steer");
+  });
+
+  it("queues a synthetic notice without resuming", async () => {
+    const { adapter, calls } = await promptServer();
+    const result = await adapter.queueSynthetic(
+      "desktop-opencode:ses_test",
+      {
+        id: "msg_handoff_test",
+        text: "Handoff receipt",
+        description: "Handoff sent to a target",
+        metadata: { handoffID: "hnd_test" },
+      },
+      AbortSignal.timeout(5_000),
+    );
+    expect(result.id).toBe("msg_handoff_test");
+    expect(calls).toEqual([
+      {
+        method: "POST",
+        path: "/api/session/ses_test/synthetic",
+        body: {
+          id: "msg_handoff_test",
+          text: "Handoff receipt",
+          description: "Handoff sent to a target",
+          metadata: { handoffID: "hnd_test" },
+          resume: false,
+        },
+      },
+    ]);
   });
 
   it("lists queued inbox items", async () => {
