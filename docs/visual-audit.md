@@ -2075,3 +2075,22 @@ competing history buttons.
   read-only receipt inside `.chat-panel` with no textarea and no Send action;
   a reload keeps the receipt. Unit tests cover proposal, caller resolution,
   approval/idempotency, failed retry, cancel, and the one-send path.
+
+## Question and edit/fork drafts (2026-11-26)
+
+- Question and attention form fields now keep a structured draft per attention
+  item. The values restore after a route change or reload, and submission
+  clears the slot when the card leaves the surface.
+- The edit-and-fork textarea keeps a text draft per source message. Reopening
+  the same message's edit control restores it; Cancel discards it, and Save &
+  fork moves the text to the new session's composer draft before clearing it.
+- One small hint line reports `Saving draft…`, `Draft saved`, or `Draft not
+  saved` inside the fields. It uses the existing 12px hint role; no new card,
+  type role, spacing step, radius, or colour.
+- Drafts reuse the existing session-draft endpoint with namespaced keys, so
+  the existing local-data count, clear, and retention cover them. No visual
+  change to Settings → Local data.
+- Verified in the chat e2e at 1280px: a question answer typed in the Inbox is
+  restored after reload, and an edit-and-fork message is restored after reload
+  and cleared by Cancel. The full gates pass at 972 unit tests and 88 e2e
+  tests, including 12 G2 tests.

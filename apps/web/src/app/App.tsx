@@ -135,6 +135,10 @@ import {
 } from "./send-queue";
 import { useSendQueue } from "./use-send-queue";
 import {
+  draftSlotStatusText,
+  useDraftSlot,
+} from "./use-draft-slot";
+import {
   createOptimisticMessage,
   isOptimisticMessage,
   optimisticSend,
@@ -1364,7 +1368,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.63 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.64 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -2427,6 +2431,7 @@ function InboxView(props: {
             </div>
             {visibleApprovals.map((approval) => (
               <AttentionCard
+                client={props.client}
                 item={approvalAttention(approval)}
                 key={approval.id}
                 busy={busyID === approval.id}
@@ -2450,6 +2455,7 @@ function InboxView(props: {
               </div>
               {groupItems.map((item) => (
                 <AttentionCard
+                  client={props.client}
                   item={item}
                   key={item.id}
                   busy={busyID === item.id}
@@ -2536,7 +2542,54 @@ function latestQuestionText(messages: Message[]): string | undefined {
   return undefined;
 }
 
+type AttentionDraftPayload = {
+  v: 1;
+  values: Record<string, unknown>;
+};
+
+function attentionInitialValues(
+  fields: NonNullable<Attention["fields"]>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    fields.map((field) => [
+      field.id,
+      field.defaultValue ??
+        (field.type === "boolean"
+          ? false
+          : field.type === "multiselect"
+            ? []
+            : ""),
+    ]),
+  );
+}
+
+function encodeAttentionDraft(values: Record<string, unknown>): string {
+  return JSON.stringify({ v: 1, values } satisfies AttentionDraftPayload);
+}
+
+function decodeAttentionDraft(
+  text: string,
+  fields: NonNullable<Attention["fields"]>,
+): Record<string, unknown> | undefined {
+  if (!text) return undefined;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const payload = parsed as Partial<AttentionDraftPayload>;
+    if (payload.v !== 1 || !payload.values || typeof payload.values !== "object") {
+      return undefined;
+    }
+    const allowed = new Set(fields.map((field) => field.id));
+    return Object.fromEntries(
+      Object.entries(payload.values).filter(([id]) => allowed.has(id)),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 function AttentionCard(props: {
+  client: HubClient;
   item: Attention;
   busy: boolean;
   inline?: boolean;
@@ -2549,23 +2602,48 @@ function AttentionCard(props: {
   continueBusy?: boolean;
 }) {
   const item = props.item;
+  const fields = item.fields ?? [];
+  const hasFields = fields.length > 0;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
-    Object.fromEntries(
-      (item.fields ?? []).map((field) => [
-        field.id,
-        field.defaultValue ??
-          (field.type === "boolean" ? false : field.type === "multiselect" ? [] : ""),
-      ]),
-    ),
+    attentionInitialValues(fields),
   );
-  const hasFields = (item.fields?.length ?? 0) > 0;
+  const touched = useRef(false);
+  const submitted = useRef(false);
+  const draft = useDraftSlot({
+    client: props.client,
+    key: hasFields ? `draft:attention:${item.id}` : undefined,
+    enabled: hasFields,
+    onLoad: (text) => {
+      const saved = decodeAttentionDraft(text, fields);
+      if (!saved) return;
+      setValues((current) => ({
+        ...attentionInitialValues(fields),
+        ...current,
+        ...saved,
+      }));
+    },
+  });
+  const draftStatus = draftSlotStatusText(draft.status);
+  useEffect(() => {
+    if (!draft.loaded || !hasFields || !touched.current) return;
+    draft.save(encodeAttentionDraft(values));
+  }, [draft.loaded, draft.save, hasFields, values]);
+  useEffect(() => {
+    return () => {
+      if (submitted.current) void draft.clear();
+    };
+  }, [draft.clear]);
   const answerAction = item.actions.find((action) => action.id === "answer");
-  const missingRequired = (item.fields ?? []).filter((field) => {
+  const missingRequired = fields.filter((field) => {
     if (!field.required) return false;
     const value = values[field.id];
     return value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
   });
   const actionInput = () => (hasFields ? { fields: values } : {});
+  const setFieldValue = (id: string, value: unknown) => {
+    touched.current = true;
+    setValues((current) => ({ ...current, [id]: value }));
+  };
 
   return (
     <article className={`attention-card ${item.priority === "blocking" ? "blocking" : ""}`}>
@@ -2586,15 +2664,20 @@ function AttentionCard(props: {
 
       {hasFields ? (
         <div className="attention-fields">
-          {item.fields?.map((field) => (
+          {fields.map((field) => (
             <AttentionFieldInput
               field={field}
               key={field.id}
               attentionID={item.id}
               value={values[field.id]}
-              onValue={(value) => setValues((current) => ({ ...current, [field.id]: value }))}
+              onValue={(value) => setFieldValue(field.id, value)}
             />
           ))}
+          {draftStatus ? (
+            <span className="attention-help" role="status">
+              {draftStatus}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -2642,7 +2725,10 @@ function AttentionCard(props: {
                 ? `attention-required-${item.id}`
                 : undefined
             }
-            onClick={() => props.onAction("answer", actionInput())}
+            onClick={() => {
+              submitted.current = true;
+              props.onAction("answer", actionInput());
+            }}
           >
             {answerAction.label}
           </button>
@@ -4886,6 +4972,16 @@ function SessionDetail(props: {
   const [branchError, setBranchError] = useState<string>();
   const [editingMessageID, setEditingMessageID] = useState<string>();
   const [editText, setEditText] = useState("");
+  const editDraft = useDraftSlot({
+    client: props.client,
+    key: editingMessageID
+      ? `draft:edit:${props.sessionRef}:${editingMessageID}`
+      : undefined,
+    enabled: Boolean(editingMessageID),
+    onLoad: (text) => {
+      if (text) setEditText(text);
+    },
+  });
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string>();
   const [dictation, setDictation] = useState<DictationState>({ phase: "idle" });
@@ -6132,6 +6228,7 @@ function SessionDetail(props: {
 
   const cancelEdit = () => {
     if (editBusy) return;
+    void editDraft.clear();
     setEditingMessageID(undefined);
     setEditText("");
     setEditError(undefined);
@@ -6142,10 +6239,12 @@ function SessionDetail(props: {
     setEditBusy(true);
     setEditError(undefined);
     try {
+      await editDraft.flush();
       const forked = await props.client.forkSession(props.sessionRef, {
         before: editingMessageID,
       });
       await props.client.saveDraft(forked.ref, editText.trim());
+      await editDraft.clear();
       setEditingMessageID(undefined);
       setEditText("");
       props.onOpenSession(forked.ref);
@@ -7101,7 +7200,11 @@ function SessionDetail(props: {
                       editText={editText}
                       editBusy={editBusy}
                       editError={editError}
-                      onEditTextChange={setEditText}
+                      editDraftStatus={draftSlotStatusText(editDraft.status)}
+                      onEditTextChange={(value) => {
+                        setEditText(value);
+                        editDraft.save(value);
+                      }}
                       onSaveEdit={() => void saveEdit()}
                       onCancelEdit={cancelEdit}
                       suppressError={Boolean(errorAttention)}
@@ -7154,6 +7257,7 @@ function SessionDetail(props: {
                       key={item.id}
                     >
                       <AttentionCard
+                        client={props.client}
                         item={item}
                         busy={attentionBusyID === item.id}
                         inline
@@ -8305,6 +8409,7 @@ function TranscriptMessage(props: {
   editText?: string;
   editBusy?: boolean;
   editError?: string;
+  editDraftStatus?: string;
   onEditTextChange?: (value: string) => void;
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
@@ -8352,6 +8457,11 @@ function TranscriptMessage(props: {
             <p className="message-edit-note">
               Saves to a new forked session. Attachments are not carried over.
             </p>
+            {props.editDraftStatus ? (
+              <p className="form-note" role="status">
+                {props.editDraftStatus}
+              </p>
+            ) : null}
             {props.editError ? (
               <div className="form-error" role="alert">
                 {props.editError}

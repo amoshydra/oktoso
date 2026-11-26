@@ -1,12 +1,13 @@
-# Design Lock — v1.63
+# Design Lock — v1.64
 
 Status: **frozen**.
 
-- Version: `design-v1.63`
-- Parent: `design-v1.62`
+- Version: `design-v1.64`
+- Parent: `design-v1.63`
 - Date: 2026-11-26
-- Git tag: `design-v1.63`
+- Git tag: `design-v1.64`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.64 scope: question and edit/fork draft slots.
 - v1.63 scope: sent handoff receipts in the source transcript.
 - v1.62 scope: the handoff card moves into the transcript.
 - v1.61 scope: cross-session handoff proposals in the source chat.
@@ -1390,6 +1391,23 @@ radius, or color token.
   from hub state and is not injected into the provider message list.
 - No new type role, spacing step, radius, control, or colour.
 
+## Question and edit/fork drafts (2026-11-26)
+
+- Question and attention form fields keep a structured draft per attention
+  item. Returning to the Inbox or the inline card restores the values after a
+  route change or reload. The existing 12px hint line reports `Saving draft…`,
+  `Draft saved`, or `Draft not saved` inside the fields.
+- The edit-and-fork textarea keeps a draft per source message. Reopening the
+  same message's edit control restores the typed text; Cancel discards it, and
+  Save & fork clears it after copying the text into the new session's composer
+  draft.
+- Drafts reuse the existing session-draft endpoint with namespaced opaque keys
+  (`draft:attention:<id>`, `draft:edit:<sessionRef>:<messageID>`). There is no
+  schema, API, or storage migration; the existing local-data count, clear, and
+  retention cover these slots.
+- No new type role, spacing step, radius, control, or colour. The status lines
+  use the existing hint/form-note role.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1444,3 +1462,5 @@ The `design-v1.61` handoff proposal was verified in the chat e2e at 1280px: an o
 The `design-v1.62` placement revision keeps the same handoff card but moves it inside the transcript after messages and attention cards. The chat e2e asserts the card is inside `.chat-panel`, shows the target title and editable message, and that version removed the card on Send.
 
 The `design-v1.63` sent-receipt revision keeps the card after approval as a read-only record: the message becomes prose, the status reads `Sent` with a timestamp, and the Send/Cancel actions are gone. The chat e2e sends a handoff, asserts the receipt remains inside `.chat-panel` with the message and without actions, reloads, and asserts the receipt is still there. The full gates pass at 972 unit tests and 86 e2e tests, including 12 G2 tests.
+
+The `design-v1.64` draft-slot revision is covered in the chat e2e: a question answer typed in the Inbox is restored after reload, and an edit-and-fork message is restored after reload and cleared by Cancel. The full gates pass at 972 unit tests and 88 e2e tests, including 12 G2 tests.

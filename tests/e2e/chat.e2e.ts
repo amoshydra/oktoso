@@ -2000,3 +2000,113 @@ describe("route revalidation", () => {
     await page!.unroute(sessionsRoute);
   });
 });
+
+describe("drafts", () => {
+  it("restores a question draft after reload", async () => {
+    const id = "attention-draft-e2e";
+    const key = `draft:attention:${id}`;
+    const text = `Question draft ${Date.now()}`;
+    const attentionRoute = "**/api/v1/attention*";
+    await page!.route(attentionRoute, async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              id,
+              sessionRef: "desktop-opencode:ses_auth",
+              type: "question",
+              priority: "blocking",
+              title: "Draft question",
+              summary: "Keep this answer across reloads.",
+              createdAt: Date.now(),
+              actions: [{ id: "answer", label: "Answer", style: "primary" }],
+              fields: [
+                {
+                  id: "notes",
+                  label: "Notes",
+                  type: "textarea",
+                  placeholder: "Type the answer",
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    try {
+      await page!.getByRole("button", { name: "Inbox" }).click();
+      const notes = page!.getByLabel("Notes");
+      await notes.waitFor({ timeout: 5_000 });
+      await notes.fill(text);
+      await expect
+        .poll(() => page!.getByText("Draft saved").count(), {
+          timeout: 3_000,
+        })
+        .toBeGreaterThan(0);
+
+      await page!.reload();
+      const restored = page!.getByLabel("Notes");
+      await restored.waitFor({ timeout: 5_000 });
+      await expect.poll(() => restored.inputValue(), { timeout: 3_000 }).toBe(
+        text,
+      );
+    } finally {
+      await page!.unroute(attentionRoute);
+      await page!.request.delete(
+        `${BASE_URL}/api/v1/sessions/${encodeURIComponent(key)}/draft`,
+        { headers: { Authorization: `Bearer ${TOKEN}` } },
+      );
+    }
+  });
+
+  it("restores an edit-and-fork draft after reload", async () => {
+    const text = `Fork draft ${Date.now()}`;
+    await openSession("Fix auth race in gateway");
+    const edit = page!
+      .getByRole("button", { name: "Edit message and fork the session" })
+      .first();
+    await edit.waitFor({ timeout: 5_000 });
+
+    await edit.click();
+    const editor = page!.getByRole("textbox", { name: "Edit message", exact: true });
+    await editor.waitFor({ timeout: 5_000 });
+    await editor.fill(text);
+    await expect
+      .poll(() => page!.getByText("Draft saved").count(), {
+        timeout: 3_000,
+      })
+      .toBeGreaterThan(0);
+
+    await page!.reload();
+    await page!.locator(".chat-composer textarea").waitFor({ timeout: 10_000 });
+    const restoredEdit = page!
+      .getByRole("button", { name: "Edit message and fork the session" })
+      .first();
+    await restoredEdit.waitFor({ timeout: 5_000 });
+    await restoredEdit.click();
+    const restoredEditor = page!.getByRole("textbox", { name: "Edit message", exact: true });
+    await restoredEditor.waitFor({ timeout: 5_000 });
+    await expect
+      .poll(() => restoredEditor.inputValue(), { timeout: 3_000 })
+      .toBe(text);
+
+    const editPanel = page!.locator(".message-edit");
+    await editPanel.getByRole("button", { name: "Cancel" }).click();
+    await restoredEdit.click();
+    await expect
+      .poll(
+        () =>
+          page!
+            .getByRole("textbox", { name: "Edit message", exact: true })
+            .inputValue(),
+        { timeout: 3_000 },
+      )
+      .not.toBe(text);
+    await page!.locator(".message-edit").getByRole("button", { name: "Cancel" }).click();
+  });
+});
