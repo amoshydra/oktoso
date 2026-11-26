@@ -2209,9 +2209,8 @@ competing history buttons.
 
 - The Jump to latest / Input needed pill is absolutely positioned over the
   bottom-right of the transcript again. It no longer reserves a footer row, so
-  the scroll area gains the full lane height back. A short surface fade keeps
-  the pill legible while the transcript scrolls underneath; the full-width
-  divider was removed in v1.75.
+  the scroll area gains the full lane height back. The pill itself is the only
+  visual element; the background band was removed in v1.78.
 - The pill hides at the true bottom, so the newest message keeps its 8px inset
   above the frame and is not covered; while scrolled up, the pill floats over
   the content. No jump-specific padding is added, so initial render has no
@@ -2253,8 +2252,19 @@ competing history buttons.
   now sits 8px above the frame instead of 24px; inter-message spacing is
   unchanged. The panel's own 8px inset remains.
 - Verified live at 390px: the last action row measured 8px above the frame,
-  down from 24px. The bottom gap test still passes. The full gates pass at
-  GATES_PLACEHOLDER.
+  down from 24px. The bottom gap test still passes. The full gates pass at 995
+  unit tests and 96 e2e tests, including 13 G2 tests.
+
+## Jump pill background band removed (2026-11-27)
+
+- The `.chat-jump-band` wrapper and its surface gradient are removed. The pill
+  is a direct absolutely positioned button at the transcript bottom-right; it
+  has no background block, padding band, border, or divider.
+- The pill still offsets above the focus bar and hides at the true bottom.
+  Panel height, composer position, and the 8px transcript inset are unchanged.
+- Verified live: no `.chat-jump-band` element remains; the button is absolute
+  and sits inside the transcript frame. The full gates pass at 999 unit tests
+  and 96 e2e tests, including 13 G2 tests.
 
 ## Assistant composer and action drafts (2026-11-26)
 

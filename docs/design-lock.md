@@ -1,12 +1,13 @@
-# Design Lock — v1.77
+# Design Lock — v1.78
 
 Status: **frozen**.
 
-- Version: `design-v1.77`
-- Parent: `design-v1.76`
+- Version: `design-v1.78`
+- Parent: `design-v1.77`
 - Date: 2026-11-27
-- Git tag: `design-v1.77`
+- Git tag: `design-v1.78`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.78 scope: remove the jump pill's background band.
 - v1.77 scope: remove the last message's own bottom padding.
 - v1.76 scope: the 8px transcript bottom inset.
 - v1.75 scope: remove the full-width divider above the jump pill.
@@ -1547,9 +1548,8 @@ radius, or color token.
   bottom-right of the transcript, inside the transcript frame and above the
   composer. It is absolutely positioned and no longer reserves a footer row, so
   the visible transcript gains that height back.
-- The overlay keeps a short surface fade behind the pill, with no full-width
-  divider, so the control reads as a separate layer while the transcript
-  scrolls underneath.
+- The pill is a direct absolutely positioned button with no background band or
+  full-width divider, so no surface block covers the transcript underneath.
 - The pill hides at the true bottom, so the newest message is not covered while
   reading there. While scrolled up, the pill floats over the content.
 - New transcript pages and streaming updates only follow the bottom when the
@@ -1592,6 +1592,15 @@ radius, or color token.
   panel inset`). Inter-message spacing is unchanged.
 - The change is scoped to `.chat-panel > .chat-message:last-child` and adds no
   token, control, or colour.
+
+## Jump pill background band removed (2026-11-27)
+
+- The `.chat-jump-band` wrapper is removed. The Jump to latest / Input needed
+  pill is now a direct absolutely positioned button at the transcript's
+  bottom-right; it has no surface gradient, padding band, border, or divider.
+- The pill keeps its offset above the message focus bar, hides at the true
+  bottom, and keeps the 8px transcript bottom inset and last-message rule.
+- No new type role, spacing step, radius, control, or colour.
 
 ## Assistant composer and action drafts (2026-11-26)
 
@@ -1708,3 +1717,5 @@ The `design-v1.77` last-message revision removes the final message's 16px bottom
 The `design-v1.73` assistant-draft revision is covered in the assistant e2e: the Overview composer draft is restored after a reload, and an edited send/handoff action message is restored after a reload and clears when the action is confirmed. Unit tests cover the transient-model retry and the failed-turn history filter. The full gates pass at 988 unit tests and 94 e2e tests, including 12 G2 tests. A G2 marker-list follow-up (2026-11-27) makes every list an app-owned six-line marker list: the window stays fixed while the marker moves and shifts one row only at an edge, and marker moves update the body in place instead of rebuilding the page. Unit coverage spans the six-line budget and the window edges; the G2 e2e checks the first visible row across four down presses. The full gates pass at 999 unit tests and 96 e2e tests, including 13 G2 tests.
 
 The `design-v1.74` assistant-back revision stores the assistant scope in the history entry. Opening Ask pushes it, browser back or the chat topbar back closes the dock without leaving the session, a referenced message opens a new entry so back returns to the same assistant thread, and a reload starts with the dock closed. A session-scope assistant searches its own session and lineage by default; only explicit global/other-session/which-session language or a named session ref widens it to all sessions. Short product tokens such as `g2` are searchable. The assistant e2e covers back-to-close, reference-back-to-thread, and the reload behavior; unit tests cover lineage scoping, explicit global widening, and the `g2` token. The full gates pass at 995 unit tests and 96 e2e tests, including 13 G2 tests.
+
+The `design-v1.78` band-removal revision deletes the `.chat-jump-band` wrapper and its surface gradient. The pill is a direct absolutely positioned button with no background block, padding band, border, or divider; the chat e2e asserts it is absolute, does not change panel height or composer position, and stays inside the transcript. The full gates pass at 999 unit tests and 96 e2e tests, including 13 G2 tests.

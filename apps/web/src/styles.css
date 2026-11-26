@@ -5310,28 +5310,11 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   margin-top: var(--space-3);
 }
 
-.chat-jump-band {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 4;
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-1) var(--space-4) var(--space-3);
-  background: linear-gradient(to top, var(--surface) 58%, transparent);
-  pointer-events: none;
-}
-
-.chat-jump-band[data-visible="false"] {
-  background: transparent;
-}
-
-.chat-jump-band[hidden] {
-  display: none;
-}
-
 .chat-jump-float {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-3);
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -5351,6 +5334,10 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   transition:
     opacity 180ms ease,
     transform 180ms ease;
+}
+
+.chat-jump-float[hidden] {
+  display: none;
 }
 
 .chat-jump-float[data-visible="true"] {
@@ -5869,11 +5856,8 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
     display: none;
   }
 
-  .chat-jump-band {
-    padding: var(--space-1) var(--space-3) var(--space-3);
-  }
-
   .chat-jump-float {
+    right: var(--space-3);
     min-height: 44px;
   }
 

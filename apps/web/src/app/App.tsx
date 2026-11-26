@@ -1402,7 +1402,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.77 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.78 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -7790,25 +7790,20 @@ function SessionDetail(props: {
                   </button>
                 </div>
               ) : null}
-              <div
-                className="chat-jump-band"
+              <button
+                className="chat-jump-float"
+                type="button"
                 data-visible={showJump}
                 hidden={!scrollable}
-                style={{ bottom: focusBarHeight }}
+                aria-hidden={showJump ? undefined : true}
+                tabIndex={showJump ? 0 : -1}
+                inert={!showJump}
+                style={{ bottom: focusBarHeight ? focusBarHeight + 12 : undefined }}
+                onClick={jumpToLatest}
               >
-                <button
-                  className="chat-jump-float"
-                  type="button"
-                  data-visible={showJump}
-                  aria-hidden={showJump ? undefined : true}
-                  tabIndex={showJump ? 0 : -1}
-                  inert={!showJump}
-                  onClick={jumpToLatest}
-                >
-                  {hasBlockingAttention ? "Input needed" : "Jump to latest"}
-                  <Icon name="arrow-down" size={14} />
-                </button>
-              </div>
+                {hasBlockingAttention ? "Input needed" : "Jump to latest"}
+                <Icon name="arrow-down" size={14} />
+              </button>
             </div>
 
             {sendError ? (

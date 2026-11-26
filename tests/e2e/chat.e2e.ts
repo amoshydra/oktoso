@@ -585,7 +585,7 @@ describe("chat sending", () => {
     expect(bottom.fadeBottom).toBe("0px");
     expect(bottom.jumpHidden).toBe("true");
     expect(bottom.composerTop).toBe(composerTop);
-    expect(await page!.locator(".chat-jump-band").getAttribute("data-visible")).toBe(
+    expect(await page!.locator(".chat-jump-float").getAttribute("data-visible")).toBe(
       "false",
     );
   });
@@ -882,32 +882,25 @@ describe("composer layout", () => {
     await page!.waitForTimeout(250);
     const geometry = await page!.evaluate(() => {
       const panel = document.querySelector(".chat-panel")!.getBoundingClientRect();
-      const band = document.querySelector(".chat-jump-band")!;
-      const bandRect = band.getBoundingClientRect();
-      const button = document.querySelector(".chat-jump-float")!.getBoundingClientRect();
+      const button = document.querySelector(".chat-jump-float")!;
+      const buttonRect = button.getBoundingClientRect();
       const composer = document
         .querySelector(".chat-composer-wrap")!
         .getBoundingClientRect();
       return {
         panelHeight: Math.round(panel.height),
         panelBottom: Math.round(panel.bottom),
-        bandPosition: getComputedStyle(band).position,
-        bandBorderTop: getComputedStyle(band).borderTopWidth,
-        bandTop: Math.round(bandRect.top),
-        bandBottom: Math.round(bandRect.bottom),
-        buttonTop: Math.round(button.top),
-        buttonBottom: Math.round(button.bottom),
+        buttonPosition: getComputedStyle(button).position,
+        buttonTop: Math.round(buttonRect.top),
+        buttonBottom: Math.round(buttonRect.bottom),
         composerTop: Math.round(composer.top),
       };
     });
-    expect(geometry.bandPosition).toBe("absolute");
+    expect(geometry.buttonPosition).toBe("absolute");
     expect(geometry.panelHeight).toBe(before.panelHeight);
     expect(geometry.composerTop).toBe(before.composerTop);
-    expect(geometry.bandBottom).toBeGreaterThanOrEqual(geometry.panelBottom - 1);
-    expect(geometry.bandTop).toBeLessThan(geometry.panelBottom);
-    expect(geometry.bandBorderTop).toBe("0px");
-    expect(geometry.buttonTop).toBeGreaterThanOrEqual(geometry.bandTop - 1);
-    expect(geometry.buttonBottom).toBeLessThanOrEqual(geometry.bandBottom + 1);
+    expect(geometry.buttonTop).toBeLessThan(geometry.panelBottom);
+    expect(geometry.buttonBottom).toBeLessThanOrEqual(geometry.panelBottom);
   });
 
   it("keeps the bottom pinned while the composer grows", async () => {
