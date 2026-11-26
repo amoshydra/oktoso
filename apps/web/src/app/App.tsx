@@ -1368,7 +1368,7 @@ export function App() {
                         <p>Frozen reference and runtime build.</p>
                       </div>
                     </div>
-                    <span className="mono">design-v1.66 · v{health?.version ?? "0.1.0"}</span>
+                    <span className="mono">design-v1.67 · v{health?.version ?? "0.1.0"}</span>
                   </article>
                 </section>
                 <AssistantSettingsPanel client={client as HubClient} />
@@ -6897,6 +6897,18 @@ function SessionDetail(props: {
     () => groupTranscript(transcriptMessages),
     [transcriptMessages],
   );
+  const sentHandoffs = useMemo(
+    () => handoffs.filter((handoff) => handoff.status === "sent"),
+    [handoffs],
+  );
+  const openHandoffs = useMemo(
+    () => handoffs.filter((handoff) => handoff.status !== "sent"),
+    [handoffs],
+  );
+  const timelineItems = useMemo(
+    () => mergeHandoffs(transcriptItems, sentHandoffs),
+    [transcriptItems, sentHandoffs],
+  );
   const composerHint =
     uploadingAttachments > 0
       ? "Uploading attachment…"
@@ -7165,14 +7177,14 @@ function SessionDetail(props: {
                 </div>
               ) : phase === "empty" && checking ? (
                 <div className="empty">Checking for messages…</div>
-              ) : phase === "empty" ? (
+              ) : phase === "empty" && timelineItems.length === 0 ? (
                 <div className="empty">
                   {sessionProvider?.capabilities.send === false
                     ? "No messages yet."
                     : "No messages yet. Send the first prompt below."}
                 </div>
               ) : phase === "error" ? null : (
-                transcriptItems.map((item) =>
+                timelineItems.map((item) =>
                   item.kind === "date" ? (
                     <DateSeparator at={item.at} key={item.key} />
                   ) : item.kind === "message" ? (
@@ -7232,6 +7244,23 @@ function SessionDetail(props: {
                     />
                   ) : item.kind === "shell" ? (
                     <ShellRow message={item.message} key={item.key} />
+                  ) : item.kind === "handoff" ? (
+                    <HandoffCard
+                      key={item.key}
+                      handoff={item.handoff}
+                      draft={
+                        handoffDrafts[item.handoff.id] ?? item.handoff.message
+                      }
+                      busy={handoffBusy === item.handoff.id}
+                      onChange={(value) =>
+                        setHandoffDrafts((current) => ({
+                          ...current,
+                          [item.handoff.id]: value,
+                        }))
+                      }
+                      onSend={() => void sendHandoff(item.handoff)}
+                      onCancel={() => void cancelHandoff(item.handoff)}
+                    />
                   ) : (
                     <ActivityTiles
                       steps={item.steps}
@@ -7328,7 +7357,7 @@ function SessionDetail(props: {
                 </div>
               ) : null}
 
-              {handoffs.length > 0 || handoffError ? (
+              {openHandoffs.length > 0 || handoffError ? (
                 <div className="chat-inline-handoff">
                   {handoffError ? (
                     <div className="handoff-error-banner" role="alert">
@@ -7342,7 +7371,7 @@ function SessionDetail(props: {
                       </button>
                     </div>
                   ) : null}
-                  {handoffs.map((handoff) => (
+                  {openHandoffs.map((handoff) => (
                     <HandoffCard
                       key={handoff.id}
                       handoff={handoff}
@@ -8239,7 +8268,63 @@ type TranscriptItem =
   | { kind: "activity"; messages: Message[]; key: string; steps: ActivityStep[] }
   | { kind: "compaction"; message: Message; key: string }
   | { kind: "shell"; message: Message; key: string }
+  | { kind: "handoff"; handoff: Handoff; key: string }
   | { kind: "date"; at: number; key: string };
+
+function transcriptItemAt(item: TranscriptItem): number {
+  switch (item.kind) {
+    case "date":
+      return item.at;
+    case "message":
+      return item.message.createdAt;
+    case "activity":
+      return item.messages[0]?.createdAt ?? 0;
+    case "compaction":
+    case "shell":
+      return item.message.createdAt;
+    case "handoff":
+      return item.handoff.sentAt ?? item.handoff.updatedAt ?? item.handoff.createdAt;
+  }
+}
+
+/**
+ * Merge sent handoff receipts into the transcript by time.
+ *
+ * The provider transcript stays authoritative; a hub-owned receipt sits where
+ * its send happened. Pending and failed handoffs are not merged: they stay at
+ * the end as actionable cards. Date separators are rebuilt so a receipt on a
+ * day with no provider message still gets one.
+ */
+function mergeHandoffs(
+  items: TranscriptItem[],
+  handoffs: Handoff[],
+): TranscriptItem[] {
+  if (handoffs.length === 0) return items;
+  const entries: Array<{ at: number; item: TranscriptItem; order: number }> = [];
+  items.forEach((item, index) => {
+    if (item.kind === "date") return;
+    entries.push({ at: transcriptItemAt(item), item, order: index });
+  });
+  handoffs.forEach((handoff, index) => {
+    entries.push({
+      at: handoff.sentAt ?? handoff.updatedAt ?? handoff.createdAt,
+      item: { kind: "handoff", handoff, key: `handoff:${handoff.id}` },
+      order: items.length + index,
+    });
+  });
+  entries.sort((left, right) => left.at - right.at || left.order - right.order);
+  const merged: TranscriptItem[] = [];
+  let lastDay = "";
+  for (const entry of entries) {
+    const day = new Date(entry.at).toDateString();
+    if (day !== lastDay) {
+      merged.push({ kind: "date", at: entry.at, key: `date:${day}` });
+      lastDay = day;
+    }
+    merged.push(entry.item);
+  }
+  return merged;
+}
 
 function groupTranscript(messages: Message[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];

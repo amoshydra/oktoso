@@ -1,12 +1,13 @@
-# Design Lock — v1.66
+# Design Lock — v1.67
 
 Status: **frozen**.
 
-- Version: `design-v1.66`
-- Parent: `design-v1.65`
+- Version: `design-v1.67`
+- Parent: `design-v1.66`
 - Date: 2026-11-26
-- Git tag: `design-v1.66`
+- Git tag: `design-v1.67`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.67 scope: handoff receipts in transcript time order.
 - v1.66 scope: the assistant handoff action.
 - v1.65 scope: provider-visible handoff receipts.
 - v1.64 scope: question and edit/fork draft slots.
@@ -1453,6 +1454,19 @@ radius, or color token.
 - The card adds no type role, spacing step, radius, control, or colour. It uses
   the existing action card, metadata, textarea, button, and link grammar.
 
+## Handoff receipts in time order (2026-11-26)
+
+- Sent handoff receipts are merged into the transcript at their sent time, not
+  appended after the last message. The hub rebuilds date separators from the
+  combined timeline, so a receipt on a day with no provider message still gets
+  one.
+- Pending, failed, and sending handoffs stay at the end of the transcript as
+  actionable cards. They are not receipts and are not interleaved; an action
+  must remain at the reading edge.
+- The assistant action card is unchanged. This revision affects the source
+  chat transcript.
+- No new type role, spacing step, radius, control, or colour.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1513,3 +1527,5 @@ The `design-v1.64` draft-slot revision is covered in the chat e2e: a question an
 The `design-v1.65` provider-receipt revision queues an OpenCode v2 synthetic notice for a sent handoff with `resume:false`. The notice enters the source inbox without starting a turn and appears as a synthetic transcript notice on the next run; the sent card reports `Session receipt queued for its next turn.` The chat e2e asserts the note, finds the synthetic item in the fake provider's source inbox, and keeps both the receipt and the note after a reload. Unit tests cover receipt queueing, a receipt failure that still leaves the handoff sent, backfill idempotency, and refusal before send. The full gates pass at 976 unit tests and 88 e2e tests, including 12 G2 tests.
 
 The `design-v1.66` assistant-handoff revision adds `handoff` as a fourth assistant action. The action card shows the source and target, keeps the instruction and optional reason editable, sends after one confirmation, and reports `Sent`, the queued receipt, and a link to the source session. The assistant e2e edits the instruction and reason, sends, asserts the receipt line and the fake provider's synthetic inbox item, and finds the edited sent card in the source chat. Unit tests cover the proposal, edited text/reason, send, receipt result, and self-handoff rejection. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.
+
+The `design-v1.67` ordering revision merges sent handoff receipts into the transcript at their sent time and rebuilds date separators around the combined timeline. Pending, failed, and sending cards stay at the end as actionable cards. The chat e2e sends a prompt after the receipt and asserts the receipt precedes the later message, proving it is ordered by time rather than appended to the bottom. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.

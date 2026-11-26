@@ -1908,6 +1908,25 @@ describe("handoff", () => {
         .locator('.chat-panel .handoff-card[data-status="sent"]')
         .innerText(),
     ).resolves.toContain("Implement the THREED_LAUNCH_OPTIONS follow-up.");
+
+    await sendPrompt("After the handoff");
+    await page!
+      .locator(".chat-message.user", { hasText: "After the handoff" })
+      .waitFor({ timeout: 10_000 });
+    const ordered = await page!.locator(".chat-panel").evaluate((panel, text) => {
+      const handoff = panel.querySelector(
+        '.handoff-card[data-status="sent"]',
+      );
+      const later = [...panel.querySelectorAll(".chat-message.user")].find(
+        (element) => element.textContent?.includes(text),
+      );
+      if (!handoff || !later) return false;
+      return Boolean(
+        handoff.compareDocumentPosition(later) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }, "After the handoff");
+    expect(ordered).toBe(true);
   });
 });
 

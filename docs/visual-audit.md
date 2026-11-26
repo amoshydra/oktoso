@@ -2095,7 +2095,10 @@ competing history buttons.
   read-only receipt: the message becomes prose, the status reads `Sent` in the
   success colour, the left rule turns success, and `Sent <date and time>` uses
   tabular figures. Send and Cancel are removed. The transcript keeps the newest
-  five sent receipts per session plus every open proposal.
+  five sent receipts per session plus every open proposal. Sent receipts are
+  merged into the timeline at their sent time; the hub rebuilds date separators
+  around them. Pending, failed, and sending cards stay at the end as actionable
+  cards.
 - When the provider accepted a synthetic receipt, the sent card adds a second
   faint line: `Session receipt queued for its next turn.` The line uses the
   existing 11px hint role and tabular figures. The OpenCode v2 receipt is in the
@@ -2107,9 +2110,11 @@ competing history buttons.
   source chat with the target title and editable message; Send turns it into a
   read-only receipt inside `.chat-panel` with no textarea and no Send action;
   the card reports the queued session receipt; the fake provider's source inbox
-  contains a synthetic item; a reload keeps the receipt. Unit tests cover
-  proposal, caller resolution, approval/idempotency, failed retry, cancel, the
-  one-send path, receipt queueing, receipt failure, and backfill idempotency.
+  contains a synthetic item; a reload keeps the receipt. A prompt sent after the
+  receipt appears below it, proving the receipt is ordered by time rather than
+  appended to the bottom. Unit tests cover proposal, caller resolution,
+  approval/idempotency, failed retry, cancel, the one-send path, receipt
+  queueing, receipt failure, and backfill idempotency.
 
 ## Question and edit/fork drafts (2026-11-26)
 
