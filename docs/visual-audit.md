@@ -1531,6 +1531,34 @@ text block.
   - A cancelled action remains in the thread forever. That is intentional now;
     a "clear decided actions" affordance can wait for a longer thread.
 
+## Assistant handoff action (2026-11-26)
+
+- The handoff action reuses the write-confirmation card. It adds two metadata
+  lines, `From: <source>` and `To: <target>`, plus a faint
+  `project · provider · ref` line. The source is the session whose transcript
+  receives the sent card and synthetic receipt; the target receives the
+  instruction.
+- The instruction reuses the editable message textarea at 14px/16px. An
+  optional `Why` single-line input sits below it under a 10px uppercase label.
+  `Send handoff` is the only primary action; Cancel is unchanged.
+- A missing target, unavailable session, or self-handoff never becomes a
+  pending card; it is a failed proposal with the reason in place. The hub
+  resolves both sessions, so the model cannot invent a target that is not a
+  real session.
+- After confirmation the card reads `Handoff`/`Sent`, keeps the instruction and
+  reason as prose, adds `Session receipt queued for its next turn.` when the
+  source provider accepted the receipt, and links to the source session. The
+  source chat shows the same sent handoff card.
+- The card uses the existing action surface, 2px state edge, metadata role,
+  textarea, buttons, and link grammar. It adds no type role, spacing step,
+  radius, or colour.
+- Verified in the assistant e2e at 1280px: the card shows `From`/`To`, edits
+  the instruction and reason, sends, reaches `Sent`, shows the receipt line,
+  the fake provider's source inbox contains the synthetic item, and the source
+  chat contains the sent card with the edited text and reason. Unit tests
+  cover proposal, edited text/reason, send, receipt result, and self-handoff
+  rejection.
+
 ## Assistant evidence line (2026-11-20)
 
 - The line exists because the context window is invisible. A session assistant

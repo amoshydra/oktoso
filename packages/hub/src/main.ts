@@ -717,6 +717,7 @@ async function main(): Promise<void> {
       attention,
       questions,
       search,
+      handoffs,
       ...(mcpTokens ? { mcpTokens } : {}),
       logger,
       audit: (entry) =>

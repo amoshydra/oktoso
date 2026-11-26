@@ -1,12 +1,13 @@
-# Design Lock — v1.65
+# Design Lock — v1.66
 
 Status: **frozen**.
 
-- Version: `design-v1.65`
-- Parent: `design-v1.64`
+- Version: `design-v1.66`
+- Parent: `design-v1.65`
 - Date: 2026-11-26
-- Git tag: `design-v1.65`
+- Git tag: `design-v1.66`
 - Scope: information architecture, visual language, type scale, spacing, responsive behavior, interaction states, and the static prototype.
+- v1.66 scope: the assistant handoff action.
 - v1.65 scope: provider-visible handoff receipts.
 - v1.64 scope: question and edit/fork draft slots.
 - v1.63 scope: sent handoff receipts in the source transcript.
@@ -1431,6 +1432,27 @@ radius, or color token.
   explicitly not a turn.
 - No new type role, spacing step, radius, control, or colour.
 
+## Assistant handoff action (2026-11-26)
+
+- The session and overview assistants gain a fourth action kind, `handoff`,
+  beside `send`, `answer`, and `interrupt`. The model can draft a handoff after
+  the user asks; it must not send without the confirmation card.
+- The action card reuses the assistant write-confirmation surface. It shows
+  `From: <source>` and `To: <target>` plus a faint project/provider/ref line,
+  the editable instruction, an optional `Why` field, and `Send handoff` /
+  `Cancel`. The hub resolves both sessions before showing the card; a missing
+  target or self-handoff is a failed proposal.
+- Confirming sends the handoff in one step. The card then reads `Handoff` /
+  `Sent`, keeps the instruction and reason as prose, shows
+  `Session receipt queued for its next turn.` when the source accepted the
+  synthetic receipt, and links to the source session. The source chat keeps the
+  sent handoff card.
+- The action is discoverable as a fourth suggested question, `Draft a
+  handoff`. The assistant asks for a missing destination rather than inventing
+  a session ref.
+- The card adds no type role, spacing step, radius, control, or colour. It uses
+  the existing action card, metadata, textarea, button, and link grammar.
+
 ## Change policy
 
 Allowed without a new design version:
@@ -1489,3 +1511,5 @@ The `design-v1.63` sent-receipt revision keeps the card after approval as a read
 The `design-v1.64` draft-slot revision is covered in the chat e2e: a question answer typed in the Inbox is restored after reload, and an edit-and-fork message is restored after reload and cleared by Cancel. The full gates pass at 972 unit tests and 88 e2e tests, including 12 G2 tests.
 
 The `design-v1.65` provider-receipt revision queues an OpenCode v2 synthetic notice for a sent handoff with `resume:false`. The notice enters the source inbox without starting a turn and appears as a synthetic transcript notice on the next run; the sent card reports `Session receipt queued for its next turn.` The chat e2e asserts the note, finds the synthetic item in the fake provider's source inbox, and keeps both the receipt and the note after a reload. Unit tests cover receipt queueing, a receipt failure that still leaves the handoff sent, backfill idempotency, and refusal before send. The full gates pass at 976 unit tests and 88 e2e tests, including 12 G2 tests.
+
+The `design-v1.66` assistant-handoff revision adds `handoff` as a fourth assistant action. The action card shows the source and target, keeps the instruction and optional reason editable, sends after one confirmation, and reports `Sent`, the queued receipt, and a link to the source session. The assistant e2e edits the instruction and reason, sends, asserts the receipt line and the fake provider's synthetic inbox item, and finds the edited sent card in the source chat. Unit tests cover the proposal, edited text/reason, send, receipt result, and self-handoff rejection. The full gates pass at 978 unit tests and 89 e2e tests, including 12 G2 tests.

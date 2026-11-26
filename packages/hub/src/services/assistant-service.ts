@@ -31,6 +31,7 @@ import type { Logger } from "../lib/logger";
 import { badRequest, conflict, notFound } from "../domain/errors";
 import { capActivity, RunTrace, type StepSink } from "./activity";
 import type { AttentionService } from "./attention-service";
+import type { HandoffService } from "./handoff-service";
 import type { QuestionService } from "./question-service";
 import type { SessionActions } from "./session-actions";
 import type { SessionService } from "./session-service";
@@ -135,6 +136,8 @@ export interface AssistantServiceOptions {
   questions: QuestionService;
   /** Optional: transcript search over the cache, used by project/global. */
   search?: SearchService;
+  /** Cross-session handoffs the assistant can draft and send. */
+  handoffs?: HandoffService;
   /** Short-lived MCP credentials the owner can issue from the global chat. */
   mcpTokens?: McpTokenService;
   logger: Logger;
@@ -693,21 +696,28 @@ export class AssistantService {
     }
 
     const text = input.text?.trim();
+    const reason = input.reason?.trim();
     // Reserve the action first: two devices can otherwise both pass the
     // pending check and one can report Cancelled for a message that was sent.
     const reserved = await this.transition(threadId, turnId, "deciding", (action) => ({
       ...action,
-      ...(text && action.kind === "send" ? { text } : {}),
+      ...(text && (action.kind === "send" || action.kind === "handoff")
+        ? { text }
+        : {}),
+      ...(reason !== undefined && action.kind === "handoff"
+        ? { reason: reason || undefined }
+        : {}),
     }));
     const action = reserved.action!;
     const started = Date.now();
     const payloadHash = hashPayload(action);
     const payloadLength = (action.text ?? "").length;
     try {
-      await this.executeAction(action);
+      const result = await this.executeAction(action);
       const done = await this.finishDecision(threadId, turnId, {
         status: "done",
         decidedAt: this.now(),
+        ...(result ?? {}),
       });
       this.audit(threadId, turnId, done.action!, "confirmed", true, Date.now() - started, {
         payloadHash,
@@ -775,10 +785,9 @@ export class AssistantService {
   private async finishDecision(
     threadId: string,
     turnId: string,
-    patch: {
+    patch: Partial<AssistantAction> & {
       status: "done" | "failed";
       decidedAt: number;
-      error?: string;
     },
   ): Promise<AssistantTurn> {
     const updated = await this.options.store.update((state) => {
@@ -795,7 +804,11 @@ export class AssistantService {
     return turn;
   }
 
-  private async executeAction(action: AssistantAction): Promise<void> {
+  private async executeAction(
+    action: AssistantAction,
+  ): Promise<
+    Partial<Pick<AssistantAction, "handoffID" | "receiptQueuedAt">> | void
+  > {
     switch (action.kind) {
       case "send": {
         const text = action.text?.trim();
@@ -806,6 +819,31 @@ export class AssistantService {
           `assistant:${action.id}`,
         );
         return;
+      }
+      case "handoff": {
+        const text = action.text?.trim();
+        if (!text) throw new Error("The proposed handoff is empty");
+        if (!action.targetRef) throw new Error("The handoff target is missing");
+        const handoffs = this.options.handoffs;
+        if (!handoffs) throw new Error("Handoffs are not available");
+        const handoff = await handoffs.propose({
+          sourceRef: action.sessionRef,
+          targetRef: action.targetRef,
+          message: text,
+          ...(action.reason ? { reason: action.reason } : {}),
+        });
+        const sent = await handoffs.approve(handoff.id);
+        if (sent.status !== "sent") {
+          throw new Error(
+            sent.error ?? "The target session did not accept the handoff",
+          );
+        }
+        return {
+          handoffID: sent.id,
+          ...(sent.receiptQueuedAt
+            ? { receiptQueuedAt: sent.receiptQueuedAt }
+            : {}),
+        };
       }
       case "answer": {
         const answers = action.answers ?? [];
@@ -1358,6 +1396,8 @@ export class AssistantService {
       summary?: unknown;
       answers?: unknown;
       sessionRef?: unknown;
+      targetRef?: unknown;
+      reason?: unknown;
     };
     try {
       args = JSON.parse(call.arguments) as typeof args;
@@ -1372,7 +1412,12 @@ export class AssistantService {
     }
 
     const kind = args.kind;
-    if (kind !== "send" && kind !== "answer" && kind !== "interrupt") {
+    if (
+      kind !== "send" &&
+      kind !== "answer" &&
+      kind !== "interrupt" &&
+      kind !== "handoff"
+    ) {
       return {
         ...base,
         kind: "send",
@@ -1386,6 +1431,102 @@ export class AssistantService {
       typeof args.summary === "string" && args.summary.trim().length > 0
         ? args.summary.trim().slice(0, 200)
         : defaultSummary(kind);
+
+    if (kind === "handoff") {
+      const text = typeof args.text === "string" ? args.text.trim() : "";
+      const targetRef =
+        typeof args.targetRef === "string" ? args.targetRef.trim() : "";
+      const sourceRef =
+        scope.kind === "session"
+          ? scope.sessionRef
+          : typeof args.sessionRef === "string"
+            ? args.sessionRef.trim()
+            : "";
+      const reason =
+        typeof args.reason === "string"
+          ? args.reason.trim().slice(0, 500) || undefined
+          : undefined;
+      if (!text) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          error: "The handoff instruction is empty",
+        };
+      }
+      if (!targetRef) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          error: "Name the destination session for the handoff.",
+        };
+      }
+      if (!sourceRef) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          error: "Name the source session for the handoff.",
+        };
+      }
+      const source = await this.options.sessions
+        .get(sourceRef)
+        .catch(() => undefined);
+      if (!source) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          error: "The source session was not found.",
+        };
+      }
+      const target = await this.options.sessions
+        .get(targetRef)
+        .catch(() => undefined);
+      if (!target) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          error: "The destination session was not found.",
+        };
+      }
+      if (source.ref === target.ref) {
+        return {
+          ...base,
+          kind,
+          status: "failed",
+          summary,
+          sessionRef: source.ref,
+          sourceTitle: source.title,
+          targetRef: target.ref,
+          targetTitle: target.title,
+          targetProviderID: target.providerID,
+          ...(target.project ? { targetProject: target.project } : {}),
+          error: "A session cannot hand off work to itself.",
+        };
+      }
+      return {
+        ...base,
+        kind,
+        status: "pending",
+        summary,
+        sessionRef: source.ref,
+        sourceTitle: source.title,
+        targetRef: target.ref,
+        targetTitle: target.title,
+        targetProviderID: target.providerID,
+        ...(target.project ? { targetProject: target.project } : {}),
+        text: text.slice(0, 4_000),
+        ...(reason ? { reason } : {}),
+      };
+    }
 
     if (kind === "send") {
       const text = typeof args.text === "string" ? args.text.trim() : "";
@@ -3351,7 +3492,10 @@ TOOLS (sessions)
 const TARGET_ACTION_RULES = `
 ACTIONS
 - This thread can propose one message to a session listed in SESSIONS, SEARCH, or TARGET SESSION. Put the exact message in text and the session's ref in sessionRef.
-- Before proposing, write one short line naming the target session.
+- This thread can also draft a cross-session handoff. Put the source session's ref in sessionRef and the destination's ref in targetRef. The source is where the sent card and receipt are recorded; the destination receives the instruction.
+- For a handoff, put the exact instruction in text and an optional short why in reason.
+- If the user has not named a source or destination session, ask for it; never invent a session ref.
+- Before proposing, write one short line naming both the source and the target for a handoff, or the target for a message.
 - Never claim it was sent; the user confirms it.
 - Do not propose answers or interrupts from this scope.`;
 
@@ -3359,6 +3503,9 @@ const ACTION_RULES = `
 ACTIONS
 - Before proposing anything, write one short line saying what you propose.
 - The user can ask you to send a message to this session, answer its pending question, or stop a running turn.
+- The user can ask you to draft a handoff from this session to another session. Put the destination's ref in targetRef. This session is always the source.
+- For a handoff, put the exact instruction in text and an optional short why in reason.
+- If the user has not named a destination session, ask for it; never invent a session ref.
 - Do not do it yourself and never claim it happened. Call propose_session_action with exactly one action. The user confirms it in the thread; until then nothing is sent.
 - For send, put the exact message in text. For answer, use the question and choice ids from PENDING QUESTION. For interrupt, no payload.
 - If the user is only asking a question, do not call the tool.`;
@@ -4358,6 +4505,7 @@ function summarizeTool(part: Message["parts"][number]): string {
 
 function defaultSummary(kind: AssistantActionKind): string {
   if (kind === "send") return "Send this reply to the session?";
+  if (kind === "handoff") return "Send this handoff?";
   if (kind === "answer") return "Answer the pending question with this choice?";
   return "Stop the running turn?";
 }
@@ -4369,10 +4517,23 @@ const ACTION_TOOL = {
   parameters: {
     type: "object",
     properties: {
-      kind: { type: "string", enum: ["send", "answer", "interrupt"] },
+      kind: {
+        type: "string",
+        enum: ["send", "answer", "interrupt", "handoff"],
+      },
       text: {
         type: "string",
-        description: "send only: the exact message to send",
+        description:
+          "send/handoff: the exact message or instruction to deliver",
+      },
+      targetRef: {
+        type: "string",
+        description:
+          "handoff only: the exact ref of the destination session from SESSIONS, SEARCH, or TARGET SESSION",
+      },
+      reason: {
+        type: "string",
+        description: "handoff only: an optional short reason for the handoff",
       },
       answers: {
         type: "array",
@@ -4393,7 +4554,7 @@ const ACTION_TOOL = {
       sessionRef: {
         type: "string",
         description:
-          "send outside session scope: the exact ref of one session from SESSIONS, SEARCH, or TARGET SESSION",
+          "send outside session scope: the exact ref of one session from SESSIONS, SEARCH, or TARGET SESSION; handoff outside session scope: the source session ref",
       },
     },
     required: ["kind", "summary"],

@@ -6571,6 +6571,10 @@ html[data-theme="light"] .agent-activity [data-kind="image"] { --kind: #7a6a2a; 
   .assistant-action-text {
     font-size: 16px;
   }
+
+  .assistant-action-reason {
+    font-size: 16px;
+  }
 }
 
 /* --- Assistant thread time markers -------------------------------------- */
@@ -6681,6 +6685,51 @@ button.assistant-scope:hover {
 .assistant-action-target strong {
   color: var(--text);
   font-weight: 500;
+}
+
+.assistant-action-target-meta {
+  margin: calc(var(--space-1) * -1) 0 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.assistant-action-field-label {
+  margin-top: var(--space-1);
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assistant-action-reason {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.assistant-action-reason:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.assistant-action-reason-value {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.assistant-action-receipt {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Assistant model picker --------------------------------------------- */

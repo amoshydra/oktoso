@@ -445,7 +445,7 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
 - Reopening a session returns to the same thread, including after a reload. One
   thread per session scope is the M1 model; there is no thread list and no new
   button.
-- The composer offers three suggested questions before the first turn. While a
+- The composer offers four suggested questions before the first turn. While a
   run streams, the primary action becomes **Stop**. The footer always reads
   `Read-only · no writes`.
 - The hub reports what it read and which model answered as **agent activity**,
@@ -457,13 +457,23 @@ The Sessions view and the chat sidebar share one row component. Above 1100px the
   Project and global threads have no single directory, so they keep the text,
   code, and links without file targets. The question stays plain text.
 - **Writes (M2).** When `assistant.allowWrite` is on, the model may propose one
-  action: send a message, answer a **normal** pending question, or stop the
-  running turn. It may not answer a permission prompt (`destructive` or
-  `sensitive`); that card is a failed proposal with a link to the Inbox, where
-  the command and risk are shown. The proposal renders as an **action card** inside the answer: what
-  would happen, the message text (editable for `send`), one primary action, and
+  action: send a message, answer a **normal** pending question, stop the
+  running turn, or draft a cross-session handoff. It may not answer a
+  permission prompt (`destructive` or `sensitive`); that card is a failed
+  proposal with a link to the Inbox, where the command and risk are shown. The
+  proposal renders as an **action card** inside the answer: what would happen,
+  the message text (editable for `send` and `handoff`), one primary action, and
   Cancel. Nothing is sent until that primary action is pressed, and the card
   records the outcome (`Sent`, `Answered`, `Stopped`, `Cancelled`, `Failed`).
+- A **handoff action card** names the source and destination sessions, shows
+  the destination project/provider/ref metadata, and keeps the instruction and
+  optional `Why` editable. The hub resolves both sessions before the card is
+  shown; a missing target or a self-handoff is a failed proposal with the
+  reason. `Send handoff` confirms and sends in one step, then the card reads
+  `Sent`, adds `Session receipt queued for its next turn.` when the source
+  provider accepted the synthetic receipt, and links to the source session.
+  The source chat keeps the sent handoff card. One action at a time still
+  applies.
 - A pending action expires after 24 hours: the card reads `Expired`, keeps its
   payload, and loses its buttons. A thread is never evicted while an action is
   pending.

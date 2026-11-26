@@ -35,7 +35,12 @@ export const zAssistantThread = z.object({
 
 export const zAssistantRole = z.enum(["user", "assistant"]);
 
-export const zAssistantActionKind = z.enum(["send", "answer", "interrupt"]);
+export const zAssistantActionKind = z.enum([
+  "send",
+  "answer",
+  "interrupt",
+  "handoff",
+]);
 
 export const zAssistantActionStatus = z.enum([
   "pending",
@@ -85,6 +90,19 @@ export const zAssistantAction = z.object({
   text: z.string().optional(),
   /** `send` outside session scope: the session the message is addressed to. */
   sessionTitle: z.string().optional(),
+  /** `handoff`: the source session title, where the sent card is recorded. */
+  sourceTitle: z.string().optional(),
+  /** `handoff`: the destination session. */
+  targetRef: z.string().optional(),
+  targetTitle: z.string().optional(),
+  targetProject: z.string().optional(),
+  targetProviderID: z.string().optional(),
+  /** `handoff`: optional reason shown on the sent card. */
+  reason: z.string().optional(),
+  /** `handoff`: the created handoff, for audit and the source link. */
+  handoffID: z.string().optional(),
+  /** `handoff`: set when the source session accepted a synthetic receipt. */
+  receiptQueuedAt: z.number().int().nonnegative().optional(),
   /** `answer`: the resolved choices, pinned to the question revision. */
   answers: z.array(zAssistantAnswer).optional(),
   /** `answer`: the live questions, so the card shows the payload, not a summary. */
@@ -240,8 +258,10 @@ export const zAssistantStatus = z.object({
 
 export const zAssistantActionDecision = z.object({
   decision: z.enum(["confirm", "cancel"]),
-  /** `send` only: a human edit of the proposed text. */
+  /** `send`/`handoff`: a human edit of the proposed text. */
   text: z.string().trim().min(1).max(4_000).optional(),
+  /** `handoff` only: a human edit of the optional reason. */
+  reason: z.string().trim().max(500).optional(),
 });
 
 export const zAssistantThreadUpdate = z.object({

@@ -10,6 +10,7 @@ import type {
 } from "@amoshydra/oktoso-contracts";
 import { MemoryStateStore } from "@amoshydra/oktoso-storage";
 import { AssistantService, renderContext } from "./assistant-service";
+import type { HandoffService } from "./handoff-service";
 import { createSecretBox } from "../lib/secret-box";
 import { McpTokenService } from "../mcp/tokens";
 import type { AttentionService } from "./attention-service";
@@ -1261,6 +1262,119 @@ describe("AssistantService", () => {
     await service.decide(thread.id, action.turn.id, { decision: "confirm" });
     expect(sent).toHaveLength(1);
     expect(sent[0]?.ref).toBe("desktop-opencode:ses_a");
+  });
+
+  it("drafts a handoff and sends it after confirmation", async () => {
+    const target: Session = {
+      ...session,
+      ref: "desktop-opencode:ses_b",
+      nativeID: "ses_b",
+      title: "Ship the fix",
+    };
+    const proposed: Array<Record<string, unknown>> = [];
+    const approved: string[] = [];
+    const handoffs = {
+      propose: async (input: Record<string, unknown>) => {
+        proposed.push(input);
+        return { id: "hnd_test", status: "pending" };
+      },
+      approve: async (id: string) => {
+        approved.push(id);
+        return { id, status: "sent", receiptQueuedAt: 12_345 };
+      },
+    } as unknown as HandoffService;
+    const fetchImpl = (async () =>
+      toolStream({
+        kind: "handoff",
+        targetRef: target.ref,
+        text: "Continue the fix in the other session.",
+        reason: "The work moved.",
+        summary: "Hand off the fix?",
+      })) as unknown as typeof fetch;
+    const service = new AssistantService({
+      store: new MemoryStateStore(),
+      sessions: fakeSessions({
+        get: async (ref: string) =>
+          ref === target.ref ? target : session,
+      }),
+      actions: { send: async () => ({}) } as unknown as SessionActions,
+      attention: {
+        list: async () => attentionPage,
+      } as unknown as AttentionService,
+      questions: { get: async () => null } as unknown as QuestionService,
+      handoffs,
+      logger: logger(),
+      settings: {
+        enabled: true,
+        baseUrl: "http://model.test/v1",
+        model: "test-model",
+        timeoutMs: 5_000,
+        maxContextMessages: 20,
+        allowWrite: true,
+      },
+      fetchImpl,
+    });
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: session.ref },
+    });
+    const accepted = await service.postMessage(thread.id, {
+      text: "hand this off",
+    });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "action"));
+
+    const event = events.find((entry) => entry.type === "action");
+    if (event?.type !== "action") throw new Error("no action event");
+    expect(event.turn.action).toMatchObject({
+      kind: "handoff",
+      status: "pending",
+      sessionRef: session.ref,
+      sourceTitle: session.title,
+      targetRef: target.ref,
+      targetTitle: target.title,
+      reason: "The work moved.",
+    });
+
+    await service.decide(thread.id, event.turn.id, {
+      decision: "confirm",
+      text: "Edited handoff instruction.",
+      reason: "Edited reason.",
+    });
+    expect(proposed).toEqual([
+      {
+        sourceRef: session.ref,
+        targetRef: target.ref,
+        message: "Edited handoff instruction.",
+        reason: "Edited reason.",
+      },
+    ]);
+    expect(approved).toEqual(["hnd_test"]);
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.action?.status).toBe("done");
+    expect(turn?.action?.handoffID).toBe("hnd_test");
+    expect(turn?.action?.receiptQueuedAt).toBe(12_345);
+  });
+
+  it("refuses a self handoff before it becomes a card", async () => {
+    const service = buildScoped((async () =>
+      toolStream({
+        kind: "handoff",
+        targetRef: "desktop-opencode:ses_a",
+        text: "Nope",
+        summary: "Hand off?",
+      })) as unknown as typeof fetch);
+    const thread = await service.createThread({
+      scope: { kind: "session", sessionRef: "desktop-opencode:ses_a" },
+    });
+    const accepted = await service.postMessage(thread.id, { text: "hand off" });
+    const events: AssistantEvent[] = [];
+    service.subscribe(accepted.run.id, 0, (event) => events.push(event));
+    await waitFor(() => events.some((event) => event.type === "done"));
+
+    const turn = service.getThread(thread.id).turns[1];
+    expect(turn?.action?.status).toBe("failed");
+    expect(turn?.action?.error).toContain("cannot hand off work to itself");
   });
 
   it("refuses a global send to a session that is not in context", async () => {

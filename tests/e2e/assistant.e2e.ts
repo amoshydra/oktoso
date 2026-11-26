@@ -73,9 +73,42 @@ function createFakeModel(): Promise<{ server: Server; url: string }> {
           "Cache-Control": "no-cache",
         });
         const wantsAction = body.includes("ACTION:");
+        const wantsHandoff = body.includes("ACTION: handoff");
         const wantsMarkdown = body.includes("Show it as markdown");
-        const frames = wantsAction
+        const frames = wantsHandoff
           ? [
+              `data: ${JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_handoff",
+                          function: {
+                            name: "propose_session_action",
+                            arguments: JSON.stringify({
+                              kind: "handoff",
+                              targetRef: "desktop-opencode:ses_index",
+                              text: "E2E handoff instruction",
+                              reason: "E2E handoff",
+                              summary: "Hand off the fix?",
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })}\n\n`,
+              `data: ${JSON.stringify({
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+                usage: { prompt_tokens: 42, completion_tokens: 8 },
+              })}\n\n`,
+              "data: [DONE]\n\n",
+            ]
+          : wantsAction
+            ? [
               `data: ${JSON.stringify({
                 choices: [
                   {
@@ -442,5 +475,92 @@ describe("session assistant", () => {
       .click();
     await page!.locator(".assistant-action.done").waitFor({ timeout: 10_000 });
     expect(await page!.locator(".assistant-action-state").innerText()).toBe("SENT");
+  });
+
+  it("drafts a handoff, sends it, and records the receipt", async () => {
+    await page!
+      .getByRole("button", { name: "Ask", exact: true })
+      .click();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await page!.locator("#assistant-input").isEnabled()) break;
+      await page!.waitForTimeout(100);
+    }
+    await page!.locator("#assistant-input").fill("ACTION: handoff");
+    await page!.locator("#assistant-input").press("Enter");
+
+    const card = page!
+      .locator(".assistant-action", { hasText: "Refactor session index" })
+      .last();
+    await card.waitFor({ timeout: 15_000 });
+    expect(await card.locator(".assistant-action-label").innerText()).toBe(
+      "NEEDS YOUR CONFIRMATION",
+    );
+    await expect(
+      card.locator(".assistant-action-target", { hasText: "From:" }).innerText(),
+    ).resolves.toContain("Fix auth race in gateway");
+    await expect(
+      card.locator(".assistant-action-target", { hasText: "To:" }).innerText(),
+    ).resolves.toContain("Refactor session index");
+    expect(await card.locator(".assistant-action-text").inputValue()).toBe(
+      "E2E handoff instruction",
+    );
+    expect(await card.locator(".assistant-action-reason").inputValue()).toBe(
+      "E2E handoff",
+    );
+    await card
+      .locator(".assistant-action-text")
+      .fill("E2E edited handoff instruction");
+    await card
+      .locator(".assistant-action-reason")
+      .fill("E2E edited reason");
+
+    await card.getByRole("button", { name: "Send handoff" }).click();
+    await card.locator(".assistant-action-state").waitFor({ timeout: 10_000 });
+    await expect
+      .poll(() => card.locator(".assistant-action-state").innerText(), {
+        timeout: 10_000,
+      })
+      .toBe("SENT");
+    await expect(
+      card.locator(".assistant-action-receipt").innerText(),
+    ).resolves.toContain("Session receipt queued for its next turn.");
+
+    await expect
+      .poll(
+        async () => {
+          const response = await page!.request.get(
+            `${provider!.url}/api/session/ses_auth/inbox`,
+          );
+          if (!response.ok()) return false;
+          const body = (await response.json()) as {
+            data?: Array<{
+              type?: string;
+              payload?: { description?: string };
+            }>;
+          };
+          return (body.data ?? []).some(
+            (item) =>
+              item.type === "synthetic" &&
+              item.payload?.description?.startsWith("Handoff sent to"),
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+
+    await page!.keyboard.press("Escape");
+    const sentCard = page!.locator(
+      '.chat-panel .handoff-card[data-status="sent"]',
+    );
+    await sentCard.waitFor({ timeout: 10_000 });
+    await expect(sentCard.innerText()).resolves.toContain(
+      "Refactor session index",
+    );
+    await expect(sentCard.innerText()).resolves.toContain(
+      "E2E edited handoff instruction",
+    );
+    await expect(sentCard.innerText()).resolves.toContain(
+      "Why: E2E edited reason",
+    );
   });
 });

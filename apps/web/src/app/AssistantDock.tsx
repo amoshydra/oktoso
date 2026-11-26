@@ -49,12 +49,14 @@ const SUGGESTIONS = [
   "Why is this stuck?",
   "What changed most recently?",
   "Draft a reply for me",
+  "Draft a handoff",
 ];
 
 const ACTION_LABEL: Record<AssistantAction["kind"], string> = {
   send: "Send",
   answer: "Answer",
   interrupt: "Stop turn",
+  handoff: "Handoff",
 };
 
 /**
@@ -322,13 +324,18 @@ export function AssistantDock({
   }, [client, resync, runId]);
 
   const decide = useCallback(
-    async (turn: AssistantTurn, decision: "confirm" | "cancel", text?: string) => {
+    async (
+      turn: AssistantTurn,
+      decision: "confirm" | "cancel",
+      text?: string,
+      reason?: string,
+    ) => {
       if (!thread) return;
       try {
         const updated = await client.decideAssistantAction(
           thread.thread.id,
           turn.id,
-          { decision, ...(text ? { text } : {}) },
+          { decision, ...(text ? { text } : {}), ...(reason !== undefined ? { reason } : {}) },
         );
         setTurns((current) =>
           current.map((entry) => (entry.id === updated.id ? updated : entry)),
@@ -823,19 +830,33 @@ function ActionCard({
     turn: AssistantTurn,
     decision: "confirm" | "cancel",
     text?: string,
+    reason?: string,
   ) => Promise<void>;
 }) {
   const action = turn.action;
   const [text, setText] = useState(action?.text ?? "");
+  const [reason, setReason] = useState(action?.reason ?? "");
   const [saving, setSaving] = useState(false);
   if (!action) return null;
 
   const pending = action.status === "pending";
   const working = action.status === "deciding";
+  const targetMeta = [
+    action.targetProject,
+    action.targetProviderID,
+    action.targetRef,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const decide = async (decision: "confirm" | "cancel") => {
     setSaving(true);
     try {
-      await onDecide(turn, decision, decision === "confirm" ? text : undefined);
+      await onDecide(
+        turn,
+        decision,
+        decision === "confirm" ? text : undefined,
+        decision === "confirm" && action.kind === "handoff" ? reason : undefined,
+      );
     } finally {
       setSaving(false);
     }
@@ -845,7 +866,7 @@ function ActionCard({
     <div
       className={`assistant-action ${action.status}`}
       role="group"
-      aria-label="Proposed action"
+      aria-label={action.kind === "handoff" ? "Proposed handoff" : "Proposed action"}
     >
       <div className="assistant-action-head">
         <span className="assistant-action-label">
@@ -861,12 +882,33 @@ function ActionCard({
           To: <strong>{action.sessionTitle}</strong>
         </p>
       ) : null}
+      {action.kind === "handoff" ? (
+        <>
+          {action.sourceTitle ? (
+            <p className="assistant-action-target">
+              From: <strong>{action.sourceTitle}</strong>
+            </p>
+          ) : null}
+          {action.targetTitle || action.targetRef ? (
+            <>
+              <p className="assistant-action-target">
+                To: <strong>{action.targetTitle ?? action.targetRef}</strong>
+              </p>
+              {targetMeta ? (
+                <p className="assistant-action-target-meta">{targetMeta}</p>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      ) : null}
 
-      {action.kind === "send" ? (
+      {action.kind === "send" || action.kind === "handoff" ? (
         pending ? (
           <>
             <label className="sr-only" htmlFor={`action-${action.id}`}>
-              Message to send
+              {action.kind === "handoff"
+                ? "Handoff instruction"
+                : "Message to send"}
             </label>
             <textarea
               id={`action-${action.id}`}
@@ -876,9 +918,34 @@ function ActionCard({
               maxLength={4_000}
               onChange={(event) => setText(event.target.value)}
             />
+            {action.kind === "handoff" ? (
+              <>
+                <label
+                  className="assistant-action-field-label"
+                  htmlFor={`reason-${action.id}`}
+                >
+                  Why (optional)
+                </label>
+                <input
+                  id={`reason-${action.id}`}
+                  className="assistant-action-reason"
+                  value={reason}
+                  maxLength={500}
+                  placeholder="Why this handoff?"
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </>
+            ) : null}
           </>
         ) : (
-          <p className="assistant-action-value">{action.text}</p>
+          <>
+            <p className="assistant-action-value">{action.text}</p>
+            {action.kind === "handoff" && action.reason ? (
+              <p className="assistant-action-reason-value">
+                Why: {action.reason}
+              </p>
+            ) : null}
+          </>
         )
       ) : null}
 
@@ -916,6 +983,14 @@ function ActionCard({
         <p className="assistant-action-value">{action.text}</p>
       ) : null}
 
+      {action.kind === "handoff" &&
+      action.status === "done" &&
+      action.receiptQueuedAt ? (
+        <p className="assistant-action-receipt">
+          Session receipt queued for its next turn.
+        </p>
+      ) : null}
+
       {action.error ? (
         <p className="assistant-action-error">{action.error}</p>
       ) : null}
@@ -928,6 +1003,17 @@ function ActionCard({
         </a>
       ) : null}
 
+      {action.kind === "handoff" &&
+      action.sessionRef &&
+      (action.status === "done" || action.status === "failed") ? (
+        <a
+          className="assistant-action-link"
+          href={`/sessions/${encodeURIComponent(action.sessionRef)}`}
+        >
+          Open source session
+        </a>
+      ) : null}
+
       {working ? <p className="assistant-action-error">Working…</p> : null}
 
       {pending ? (
@@ -936,16 +1022,22 @@ function ActionCard({
             <button
               className="btn small primary"
               type="button"
-              disabled={saving || (action.kind === "send" && text.trim().length === 0)}
+              disabled={
+                saving ||
+                ((action.kind === "send" || action.kind === "handoff") &&
+                  text.trim().length === 0)
+              }
               onClick={() => void decide("confirm")}
             >
               {saving
                 ? "Working…"
                 : action.kind === "answer" && action.text
                   ? `Answer “${action.text.length > 40 ? `${action.text.slice(0, 40)}…` : action.text}”`
-                  : action.kind === "send" && action.sessionTitle
-                    ? `Send to “${action.sessionTitle.length > 24 ? `${action.sessionTitle.slice(0, 24)}…` : action.sessionTitle}”`
-                    : ACTION_LABEL[action.kind]}
+                  : action.kind === "handoff"
+                    ? "Send handoff"
+                    : action.kind === "send" && action.sessionTitle
+                      ? `Send to “${action.sessionTitle.length > 24 ? `${action.sessionTitle.slice(0, 24)}…` : action.sessionTitle}”`
+                      : ACTION_LABEL[action.kind]}
             </button>
           ) : (
             <span className="assistant-action-error">
@@ -1025,7 +1117,7 @@ function TurnMeta({ turn }: { turn: AssistantTurn }) {
 
 function actionLabel(action: AssistantAction): string {
   if (action.status === "done") {
-    if (action.kind === "send") return "Sent";
+    if (action.kind === "send" || action.kind === "handoff") return "Sent";
     if (action.kind === "answer") return "Answered";
     return "Stopped";
   }
